@@ -12933,160 +12933,166 @@ OL._fvToggleCardSteps = function(resId) {
 };
 
 OL._fvRenderSteps = function(resources) {
-  const canvas  = document.getElementById('fv-content');
-  const svg     = document.getElementById('fv-svg-layer');
-  const data    = OL.getCurrentProjectData();
-  const stages  = data.stages || [];
+  const canvas    = document.getElementById('fv-content');
+  const svg       = document.getElementById('fv-svg-layer');
+  const data      = OL.getCurrentProjectData();
+  const stages    = data.stages || [];
   const workflows = OL.getWorkflows() || [];
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
 
-  // Build stage-ordered resource list (same order as list/flowchart views)
-  const orderedResources = [];
+  const stageFilter = OL._fv.stageFilter || '';
+
+  // ── Group resources by stage, preserving workflow order ──────────────────
+  const stageGroups = [];
   stages.forEach(stage => {
+    if (stageFilter && String(stage.id) !== String(stageFilter)) return;
     const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
-    const assignedIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []).map(String));
-    resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal)
-             .forEach(r => orderedResources.push(r));
+    const assignedIds    = new Set(stageWorkflows.flatMap(w => w.resourceIds || []).map(String));
+    const stageRes       = [];
+    resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0)
+             .forEach(r => stageRes.push(r));
     stageWorkflows.forEach(wf => {
-      (wf.resourceIds || [])
-        .map(id => resources.find(r => String(r.id) === String(id)))
-        .filter(Boolean)
-        .forEach(r => orderedResources.push(r));
+      (wf.resourceIds || []).map(id => resources.find(r => String(r.id) === String(id)))
+        .filter(r => r && !r.isGlobal && (r.steps||[]).length > 0)
+        .forEach(r => stageRes.push(r));
     });
+    if (stageRes.length > 0) stageGroups.push({ stage, resources: stageRes });
   });
-  const placedIds = new Set(orderedResources.map(r => String(r.id)));
-  resources.filter(r => !placedIds.has(String(r.id)) && !r.isGlobal)
-           .forEach(r => orderedResources.push(r));
+  // Resources with no stage
+  const stagedIds  = new Set(stageGroups.flatMap(sg => sg.resources.map(r => String(r.id))));
+  const unstaged   = resources.filter(r => !stagedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0);
+  if (unstaged.length > 0 && !stageFilter) stageGroups.push({ stage: null, resources: unstaged });
 
-  // Only show resources that have steps
-  const activeResources = orderedResources.filter(r => (r.steps || []).length > 0);
-
-  const CARD_W   = 180;  // matches .fv-step-card width in CSS
-  const COL_GAP  = 56;   // horizontal gap between resource columns
-  const STEP_GAP = 18;   // vertical gap between steps within a column
+  const CARD_W   = 180;   // matches .fv-step-card CSS width
+  const STEP_H   = 112;   // card height estimate + gap (content-driven, ~90px card + 22px gap)
+  const COL_GAP  = 52;    // horizontal gap between resource columns within a stage
+  const ZONE_PAD = 18;    // inner padding top/bottom inside each stage zone
+  const ZONE_HDR = 36;    // height for stage label + resource header above first card
+  const STAGE_GAP= 64;    // vertical gap between stage zones
   const PAD_X    = 48;
-  const PAD_Y    = 64;   // top padding — leaves room for column header
+  const PAD_Y    = 36;
 
-  // Assign column x position per resource. Track per-column colIndex to skip
-  // resources with no steps cleanly.
-  let colIndex = 0;
-  const resColX = {};
-  activeResources.forEach(res => {
-    resColX[String(res.id)] = PAD_X + colIndex * (CARD_W + COL_GAP);
-    colIndex++;
-  });
+  const allActiveResources = [];
+  let currentY = PAD_Y;
 
-  activeResources.forEach(res => {
-    const tc   = OL._fvGetType(res.type);
-    const colX = resColX[String(res.id)];
+  stageGroups.forEach(({ stage, resources: stageRes }) => {
+    const maxSteps  = Math.max(...stageRes.map(r => (r.steps||[]).length), 1);
+    const zoneH     = ZONE_PAD + ZONE_HDR + maxSteps * STEP_H + ZONE_PAD;
+    const zoneW     = stageRes.length * (CARD_W + COL_GAP) - COL_GAP + 24;
 
-    // ── Column header ──
-    const stageName = stages.find(s => String(s.id) === String(res.stageId))?.name || '';
-    const header = document.createElement('div');
-    header.style.cssText = `position:absolute;left:${colX}px;top:${PAD_Y - 38}px;
-      width:${CARD_W}px;display:flex;flex-direction:column;gap:2px;`;
-    header.innerHTML = `
-      ${stageName ? `<div style="font-size:8px;font-weight:700;letter-spacing:0.08em;
-                                  text-transform:uppercase;color:var(--text-muted);opacity:0.55;
-                                  padding-left:2px;">${esc(stageName)}</div>` : ''}
-      <div style="display:flex;align-items:center;gap:5px;">
+    // Stage zone background + label
+    if (stage) {
+      const zoneBg = document.createElement('div');
+      zoneBg.style.cssText = `position:absolute;left:${PAD_X - 14}px;top:${currentY}px;
+        width:${zoneW}px;height:${zoneH}px;border-radius:14px;
+        background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.055);
+        pointer-events:none;`;
+      canvas.appendChild(zoneBg);
+
+      const stageLbl = document.createElement('div');
+      stageLbl.style.cssText = `position:absolute;left:${PAD_X}px;top:${currentY + 10}px;
+        font-size:8px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;
+        color:var(--text-muted);opacity:0.4;pointer-events:none;`;
+      stageLbl.textContent = stage.name;
+      canvas.appendChild(stageLbl);
+    }
+
+    const contentTop = currentY + ZONE_PAD + (stage ? 18 : 0);
+
+    stageRes.forEach((res, resIdx) => {
+      const tc   = OL._fvGetType(res.type);
+      const colX = PAD_X + resIdx * (CARD_W + COL_GAP);
+      const colY = contentTop + ZONE_HDR;
+
+      allActiveResources.push(res);
+
+      // Resource column header
+      const hdr = document.createElement('div');
+      hdr.style.cssText = `position:absolute;left:${colX}px;top:${contentTop + 6}px;
+        width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
+      hdr.innerHTML = `
         <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
         <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                      letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                     text-overflow:ellipsis;max-width:${CARD_W - 18}px;">
-          ${esc(res.name)}
-        </span>
-      </div>`;
-    canvas.appendChild(header);
+                     text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
+      canvas.appendChild(hdr);
 
-    (res.steps || []).forEach((step, idx) => {
-      // Pinned steps keep their user-placed coords; all others use column layout
-      const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
-      const x = usePin ? step.coords.x : colX;
-      const y = usePin ? step.coords.y : PAD_Y + idx * (90 + STEP_GAP);
+      (res.steps || []).forEach((step, idx) => {
+        const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
+        const x = usePin ? step.coords.x : colX;
+        const y = usePin ? step.coords.y : colY + idx * STEP_H;
+        if (!usePin) step.coords = { x, y };
 
-      // Update coords so _fvDrawStepConnections can find anchor points
-      if (!usePin) step.coords = { x, y };
+        const appBadge = step.appName
+          ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">${esc(step.appName.substring(0,12))}</span>`
+          : '';
+        const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
+          `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${esc((a.name||'').substring(0,12))}</span>`
+        ).join('');
+        const hasLinks    = (step.links || []).length > 0;
+        const hasExplicit = (step.logic?.out || []).some(l => l.targetId);
 
-      const appBadge = step.appName
-        ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">
-             ${esc(step.appName.substring(0,12))}
-           </span>`
-        : '';
+        const div = document.createElement('div');
+        div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
+        div.id        = `fv-step-${res.id}-${step.id}`;
+        div.dataset.resId  = res.id;
+        div.dataset.stepId = step.id;
+        div.style.left = x + 'px';
+        div.style.top  = y + 'px';
 
-      const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
-        `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">
-           ${esc((a.name || '').substring(0, 12))}
-         </span>`
-      ).join('');
-
-      const hasLinks = (step.links || []).length > 0;
-      const hasExplicit = (step.logic?.out || []).some(l => l.targetId);
-
-      const div = document.createElement('div');
-      div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
-      div.id        = `fv-step-${res.id}-${step.id}`;
-      div.dataset.resId  = res.id;
-      div.dataset.stepId = step.id;
-      div.style.left = x + 'px';
-      div.style.top  = y + 'px';
-
-      div.innerHTML = `
-        <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
-                title="${step.pinned ? 'Unpin' : 'Pin'}"
-                onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
-          ${OL.getLucideSVG(step.pinned ? 'pin' : 'pin-off', 10, 'currentColor')}
-        </button>
-        <div class="fv-step-card-accent" style="background:${tc.color};"></div>
-        <div class="fv-step-card-body"
-             onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
-          <div style="display:flex;align-items:flex-start;gap:7px;">
-            <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
-                         background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
-                         font-size:9px;font-weight:800;display:flex;
-                         align-items:center;justify-content:center;margin-top:1px;">
-              ${idx + 1}
-            </span>
-            <div style="min-width:0;flex:1;">
-              <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
-              <div class="fv-step-badges" style="margin-top:4px;">
-                ${appBadge}${assigneeBadges}
-                ${hasLinks ? `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted);">
-                  ${OL.getLucideSVG('paperclip', 9, 'currentColor')}
-                </span>` : ''}
-                ${hasExplicit ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:var(--accent);">
-                  ${OL.getLucideSVG('arrow-right', 8, 'currentColor')}
-                </span>` : ''}
+        div.innerHTML = `
+          <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
+                  title="${step.pinned ? 'Unpin' : 'Pin'}"
+                  onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
+            ${OL.getLucideSVG(step.pinned ? 'pin' : 'pin-off', 10, 'currentColor')}
+          </button>
+          <div class="fv-step-card-accent" style="background:${tc.color};"></div>
+          <div class="fv-step-card-body"
+               onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
+            <div style="display:flex;align-items:flex-start;gap:7px;">
+              <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
+                           background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
+                           font-size:9px;font-weight:800;display:flex;
+                           align-items:center;justify-content:center;margin-top:1px;">
+                ${idx + 1}
+              </span>
+              <div style="min-width:0;flex:1;">
+                <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
+                <div class="fv-step-badges" style="margin-top:4px;">
+                  ${appBadge}${assigneeBadges}
+                  ${hasLinks    ? `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted);">${OL.getLucideSVG('paperclip',9,'currentColor')}</span>` : ''}
+                  ${hasExplicit ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:var(--accent);">${OL.getLucideSVG('arrow-right',8,'currentColor')}</span>` : ''}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
-        <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
-        <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
-        <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>
-      `;
+          <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
+               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
+          <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
+               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
+          <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
+               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
+          <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
+               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>`;
 
-      OL._fvSetupCardDrag(div, res.id, step.id);
-      canvas.appendChild(div);
+        OL._fvSetupCardDrag(div, res.id, step.id);
+        canvas.appendChild(div);
+      });
     });
+
+    currentY += zoneH + STAGE_GAP;
   });
 
-  // Size canvas to fit all cards
+  // Size canvas
   const cards = Array.from(canvas.querySelectorAll('.fv-step-card'));
-  const maxX = Math.max(...cards.map(el => (parseFloat(el.style.left) || 0) + CARD_W), 800);
-  const maxY = Math.max(...cards.map(el => (parseFloat(el.style.top)  || 0) + 120),   600);
+  const maxX = Math.max(...cards.map(el => (parseFloat(el.style.left)||0) + CARD_W), 800);
   canvas.style.width  = (maxX + PAD_X) + 'px';
-  canvas.style.height = (maxY + PAD_X) + 'px';
+  canvas.style.height = (currentY + PAD_X) + 'px';
 
   requestAnimationFrame(() => {
-    OL._fvDrawStepConnections(activeResources);
+    OL._fvDrawStepConnections(allActiveResources);
   });
 };
 
