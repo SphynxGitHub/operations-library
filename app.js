@@ -13411,30 +13411,36 @@ OL._fvRenderSteps = function(resources) {
           const cardY   = estY;
           const consolCenterX = cardX + cardW / 2;
 
+          // Use first member's type color and step name — all members share the same step
+          const consolTc   = OL._fvGetType(members[0].res.type);
+          const consolName = members[0].step.name || 'Unnamed Step';
+          const consolApp  = members[0].step.appName || '';
+
           const consolEl = document.createElement('div');
           consolEl.className = 'fv-step-card';
           consolEl.id = `fv-consol-${String(groupName).replace(/\W+/g,'-')}`;
           consolEl.style.cssText = `left:${cardX}px;top:${cardY}px;width:${cardW}px;`;
           const isExpanded = OL._fv.expandedGroups.has(groupName);
           consolEl.innerHTML = `
-            <div class="fv-step-card-accent" style="background:var(--accent);"></div>
+            <div class="fv-step-card-accent" style="background:${consolTc.color};"></div>
             <div class="fv-step-card-body fv-consol-header" data-group="${esc(groupName)}"
                  onclick="OL._fvToggleConsolidated(this)" style="cursor:pointer;">
               <div style="display:flex;align-items:flex-start;gap:7px;">
                 <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
-                             background:var(--accent-glow);color:var(--accent);
-                             border:1px solid rgba(61,217,197,0.3);
+                             background:${consolTc.color}22;color:${consolTc.color};
+                             border:1px solid ${consolTc.color}44;
                              font-size:9px;display:flex;align-items:center;
                              justify-content:center;margin-top:1px;">
                   ${OL.getLucideSVG('git-merge',9,'currentColor')}
                 </span>
                 <div style="min-width:0;flex:1;">
-                  <div class="fv-step-name">${esc(groupName)}</div>
+                  <div class="fv-step-name">${esc(consolName)}</div>
                   <div class="fv-step-badges" style="margin-top:4px;">
-                    <span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">×${members.length}</span>
+                    ${consolApp ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">${esc(consolApp.substring(0,12))}</span>` : ''}
+                    <span class="fv-step-badge" style="background:${consolTc.color}22;color:${consolTc.color};">×${members.length}</span>
+                    ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down',10,'var(--text-muted)')}
                   </div>
                 </div>
-                ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down',11,'var(--text-muted)')}
               </div>
             </div>
             <div class="fv-consol-body" style="display:${isExpanded ? 'flex' : 'none'};">
