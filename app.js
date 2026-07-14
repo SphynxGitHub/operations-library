@@ -13401,15 +13401,15 @@ OL._fvRenderSteps = function(resources) {
 
         } else if (item.type === 'consolidated') {
           const { groupName, members } = item;
-          // Size the card to span only the member resource columns, not the full workflow width
+          // Center a standard-width card under the member resource columns
           const memberResources = [...new Set(members.map(m => m.res))];
           const memberXs = memberResources.map(r => resBaseX.get(r)).filter(x => x !== undefined);
-          const leftX  = memberXs.length ? Math.min(...memberXs) - 10 : PAD_X - 10;
-          const rightX = memberXs.length ? Math.max(...memberXs) + CARD_W + 10 : PAD_X + wfWidth;
-          const cardX   = leftX;
-          const cardW   = rightX - leftX;
+          const spanLeft  = memberXs.length ? Math.min(...memberXs) : PAD_X;
+          const spanRight = memberXs.length ? Math.max(...memberXs) + CARD_W : PAD_X + wfWidth;
+          const consolCenterX = (spanLeft + spanRight) / 2;
+          const cardW   = CARD_W;
+          const cardX   = Math.round(consolCenterX - cardW / 2);
           const cardY   = estY;
-          const consolCenterX = cardX + cardW / 2;
 
           // Use first member's type color and step name — all members share the same step
           const consolTc   = OL._fvGetType(members[0].res.type);
