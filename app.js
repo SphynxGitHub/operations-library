@@ -13288,9 +13288,15 @@ OL._fvRenderSteps = function(resources) {
 
         } else if (item.type === 'consolidated') {
           const { groupName, members } = item;
-          const cardX = PAD_X - 10;
-          const cardW = wfWidth + 4;
-          const cardY = estY;
+          // Size the card to span only the member resource columns, not the full workflow width
+          const memberResources = [...new Set(members.map(m => m.res))];
+          const memberXs = memberResources.map(r => resBaseX.get(r)).filter(x => x !== undefined);
+          const leftX  = memberXs.length ? Math.min(...memberXs) - 10 : PAD_X - 10;
+          const rightX = memberXs.length ? Math.max(...memberXs) + CARD_W + 10 : PAD_X + wfWidth;
+          const cardX   = leftX;
+          const cardW   = rightX - leftX;
+          const cardY   = estY;
+          const consolCenterX = cardX + cardW / 2;
 
           const consolEl = document.createElement('div');
           consolEl.className = 'fv-consolidated-card';
@@ -13324,8 +13330,18 @@ OL._fvRenderSteps = function(resources) {
             </div>`;
           canvas.appendChild(consolEl);
 
+          // Invisible anchor divs so _fvDrawStepConnections can find consolidated member steps
+          const consolAnchors = [];
+          members.forEach(m => {
+            const anchor = document.createElement('div');
+            anchor.id = `fv-step-${m.res.id}-${m.step.id}`;
+            anchor.style.cssText = `position:absolute;left:${Math.round(consolCenterX - 1)}px;top:${cardY}px;width:2px;height:1px;pointer-events:none;opacity:0;`;
+            canvas.appendChild(anchor);
+            consolAnchors.push(anchor);
+          });
+
           members.forEach(m => { m.step.coords = { x: cardX, y: cardY }; });
-          seqMeta.push({ type: 'consolidated', el: consolEl, members, cardX, estH: CONSOL_H });
+          seqMeta.push({ type: 'consolidated', el: consolEl, members, cardX, cardW, consolCenterX, estH: CONSOL_H, anchors: consolAnchors });
           estY += CONSOL_H + STEP_GAP;
         }
       });
@@ -13383,8 +13399,13 @@ OL._fvRenderSteps = function(resources) {
 
           } else if (item.type === 'consolidated') {
             item.el.style.top = y + 'px';
+            // Keep anchor divs aligned to top-center of card for arrow targeting
+            item.anchors.forEach(anchor => {
+              anchor.style.top  = y + 'px';
+              anchor.style.left = Math.round(item.consolCenterX - 1) + 'px';
+            });
             item.members.forEach(m => { m.step.coords.y = y; });
-            y += item.el.offsetHeight + STEP_GAP;
+            y += item.el.offsetHeight + STEP_GAP * 2;
             wfBottom = Math.max(wfBottom, y - STEP_GAP);
           }
         });
