@@ -13015,6 +13015,9 @@ OL._fvRenderSteps = function(resources) {
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
 
+  // Persist which consolidated cards are open across re-renders
+  if (!OL._fv.expandedGroups) OL._fv.expandedGroups = new Set();
+
   const stageFilter = OL._fv.stageFilter || '';
 
   // ── Stage → Workflow → Resources (unassigned resources not shown) ────────────
@@ -13302,8 +13305,9 @@ OL._fvRenderSteps = function(resources) {
           consolEl.className = 'fv-consolidated-card';
           consolEl.id = `fv-consol-${String(groupName).replace(/\W+/g,'-')}`;
           consolEl.style.cssText = `left:${cardX}px;top:${cardY}px;width:${cardW}px;`;
+          const isExpanded = OL._fv.expandedGroups.has(groupName);
           consolEl.innerHTML = `
-            <div class="fv-consol-header" onclick="OL._fvToggleConsolidated(this)">
+            <div class="fv-consol-header" data-group="${esc(groupName)}" onclick="OL._fvToggleConsolidated(this)">
               <div style="display:flex;align-items:center;gap:8px;">
                 ${OL.getLucideSVG('git-merge',13,'var(--accent)')}
                 <span style="font-size:11px;font-weight:700;color:var(--text-main);">${esc(groupName)}</span>
@@ -13312,10 +13316,10 @@ OL._fvRenderSteps = function(resources) {
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <span style="font-size:9px;color:var(--text-muted);">${members.map(m=>esc(m.res.name)).join(' · ')}</span>
-                ${OL.getLucideSVG('chevron-down',11,'var(--text-muted)')}
+                ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down',11,'var(--text-muted)')}
               </div>
             </div>
-            <div class="fv-consol-body" style="display:none;">
+            <div class="fv-consol-body" style="display:${isExpanded ? 'flex' : 'none'};">
               ${members.map(m => {
                 const tc = OL._fvGetType(m.res.type);
                 const appBadge = m.step.appName
@@ -13437,20 +13441,17 @@ OL._fvRenderSteps = function(resources) {
 };
 
 OL._fvToggleConsolidated = function(headerEl) {
-  const body   = headerEl.nextElementSibling;
-  const icon   = headerEl.querySelector('svg');
-  const isOpen = body.style.display !== 'none';
-  body.style.display = isOpen ? 'none' : 'flex';
-  // swap chevron icon
-  const chevron = headerEl.querySelector('[data-lucide]');
-  if (chevron) {
-    chevron.setAttribute('data-lucide', isOpen ? 'chevron-down' : 'chevron-up');
-    if (window.lucide) lucide.createIcons();
+  const groupName = headerEl.dataset.group;
+  if (!groupName) return;
+  if (!OL._fv.expandedGroups) OL._fv.expandedGroups = new Set();
+  if (OL._fv.expandedGroups.has(groupName)) {
+    OL._fv.expandedGroups.delete(groupName);
+  } else {
+    OL._fv.expandedGroups.add(groupName);
   }
-  // Trigger connection redraw since card height changed
-  setTimeout(() => OL._fvDrawStepConnections(
-    (OL.getCurrentProjectData().resources||[])
-  ), 50);
+  // Re-render so the measurement pass uses the correct expanded card height
+  // and repositions all cards below it correctly
+  OL.renderVisualizer();
 };
 
 // Set or clear a step's consolidation group
