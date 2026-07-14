@@ -842,11 +842,22 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
                 <nav class="menu">
                     ${masterTabs.map(item => `
                         <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
                             <span class="menu-item">${item.label}</span>
                         </a>
                     `).join('')}
                 </nav>
+                <div style="padding:8px 8px 4px;display:flex;flex-direction:column;gap:4px;">
+                    <button class="btn tiny soft" style="width:100%;justify-content:flex-start;gap:6px;"
+                            onclick="OL.exportMasterBackup()">
+                        ${OL.getLucideSVG('download',12,'currentColor')} Export Backup
+                    </button>
+                    <label class="btn tiny soft" style="width:100%;justify-content:flex-start;gap:6px;cursor:pointer;">
+                        ${OL.getLucideSVG('upload',12,'currentColor')} Import Backup
+                        <input type="file" accept=".json" style="display:none;"
+                               onchange="OL.importMasterBackup(event)">
+                    </label>
+                </div>
             </div>
         ` : client ? `
             <div class="client-nav-zone">
@@ -938,6 +949,96 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     }
     
     if (window.lucide) window.lucide.createIcons();
+};
+
+OL.exportMasterBackup = async function() {
+    try {
+        // Fetch all clients fresh from Firestore so nothing is missed
+        const snap = await db.collection('clients').get();
+        const clients = [];
+        snap.forEach(doc => clients.push({ _id: doc.id, ...doc.data() }));
+
+        const payload = {
+            _version: 1,
+            _exportedAt: new Date().toISOString(),
+            master: JSON.parse(JSON.stringify(state.master)),
+            clients
+        };
+
+        const ts = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15);
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `ol_backup_${ts}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        console.log(`✅ Backup exported: master + ${clients.length} clients`);
+    } catch(e) {
+        alert('❌ Export failed: ' + e.message);
+        console.error(e);
+    }
+};
+
+OL.importMasterBackup = async function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = '';
+
+    let data;
+    try { data = JSON.parse(await file.text()); } catch(e) { alert('Invalid JSON file'); return; }
+
+    // Combined backup format: { _version, master, clients[] }
+    const isCombined = data._version === 1 && data.master && Array.isArray(data.clients);
+
+    // Legacy master-only backup: detect by presence of functions/apps at top level
+    const masterData = isCombined ? data.master : (() => {
+        const d = { ...data };
+        if (d.master && !d.rates) { Object.assign(d, d.master); }
+        delete d.master;
+        return d;
+    })();
+    const clients = isCombined ? data.clients : [];
+
+    const fnCount     = (masterData.functions || []).length;
+    const appCount    = (masterData.apps      || []).length;
+    const varCount    = Object.keys(masterData.rates?.variables || {}).length;
+    const clientCount = clients.length;
+    const exportedAt  = data._exportedAt ? new Date(data._exportedAt).toLocaleString() : 'unknown date';
+
+    if (!confirm(
+        `Restore "${file.name}"?\n` +
+        (data._exportedAt ? `Exported: ${exportedAt}\n` : '') +
+        `\n• ${fnCount} functions\n• ${appCount} apps\n• ${varCount} rate variables` +
+        (clientCount ? `\n• ${clientCount} client projects` : '\n• Master library only (no client data)') +
+        `\n\nThis will overwrite your current data. Cannot be undone.`
+    )) return;
+
+    try {
+        // Restore master
+        await db.collection('systems').doc('main_state').set(masterData);
+        state.master = masterData;
+
+        // Restore clients (if present)
+        if (clients.length) {
+            const batch = db.batch();
+            clients.forEach(c => {
+                const { _id, ...clientData } = c;
+                batch.set(db.collection('clients').doc(_id), clientData);
+            });
+            await batch.commit();
+            clients.forEach(c => {
+                const { _id, ...clientData } = c;
+                state.clients[_id] = clientData;
+            });
+        }
+
+        console.log(`✅ Restored: master + ${clients.length} clients`);
+        alert(`✅ Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
+        window.handleRoute();
+    } catch(e) {
+        alert('❌ Restore failed: ' + e.message);
+        console.error(e);
+    }
 };
 
 window.handleRoute = function () {
