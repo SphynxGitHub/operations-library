@@ -13412,20 +13412,28 @@ OL._fvRenderSteps = function(resources) {
           const consolCenterX = cardX + cardW / 2;
 
           const consolEl = document.createElement('div');
-          consolEl.className = 'fv-consolidated-card';
+          consolEl.className = 'fv-step-card';
           consolEl.id = `fv-consol-${String(groupName).replace(/\W+/g,'-')}`;
           consolEl.style.cssText = `left:${cardX}px;top:${cardY}px;width:${cardW}px;`;
           const isExpanded = OL._fv.expandedGroups.has(groupName);
           consolEl.innerHTML = `
-            <div class="fv-consol-header" data-group="${esc(groupName)}" onclick="OL._fvToggleConsolidated(this)">
-              <div style="display:flex;align-items:center;gap:8px;">
-                ${OL.getLucideSVG('git-merge',13,'var(--accent)')}
-                <span style="font-size:11px;font-weight:700;color:var(--text-main);">${esc(groupName)}</span>
-                <span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.07);
-                             padding:1px 7px;border-radius:99px;">×${members.length}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:9px;color:var(--text-muted);">${members.map(m=>esc(m.res.name)).join(' · ')}</span>
+            <div class="fv-step-card-accent" style="background:var(--accent);"></div>
+            <div class="fv-step-card-body fv-consol-header" data-group="${esc(groupName)}"
+                 onclick="OL._fvToggleConsolidated(this)" style="cursor:pointer;">
+              <div style="display:flex;align-items:flex-start;gap:7px;">
+                <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
+                             background:var(--accent-glow);color:var(--accent);
+                             border:1px solid rgba(61,217,197,0.3);
+                             font-size:9px;display:flex;align-items:center;
+                             justify-content:center;margin-top:1px;">
+                  ${OL.getLucideSVG('git-merge',9,'currentColor')}
+                </span>
+                <div style="min-width:0;flex:1;">
+                  <div class="fv-step-name">${esc(groupName)}</div>
+                  <div class="fv-step-badges" style="margin-top:4px;">
+                    <span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">×${members.length}</span>
+                  </div>
+                </div>
                 ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down',11,'var(--text-muted)')}
               </div>
             </div>
@@ -13540,7 +13548,7 @@ OL._fvRenderSteps = function(resources) {
       curStageY += actualStageH + STAGE_GAP;
     });
 
-    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-consolidated-card'));
+    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
     const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
     const maxY = Math.max(...allCards.map(el => (parseFloat(el.style.top)||0) + el.offsetHeight + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
