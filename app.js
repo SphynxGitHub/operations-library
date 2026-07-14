@@ -13009,240 +13009,439 @@ OL._fvRenderSteps = function(resources) {
   const svg       = document.getElementById('fv-svg-layer');
   const data      = OL.getCurrentProjectData();
   const stages    = data.stages || [];
-  const workflows = OL.getWorkflows() || [];
-  const STEP_GAP  = 14;  // enforced gap between cards after measurement pass
+  const wfAll     = OL.getWorkflows() || [];
+  const STEP_GAP  = 14;
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
 
   const stageFilter = OL._fv.stageFilter || '';
 
-  // ── Group resources by stage, preserving workflow order ──────────────────
+  // ── Stage → Workflow → Resources (unassigned resources not shown) ────────────
   const stageGroups = [];
   stages.forEach(stage => {
     if (stageFilter && String(stage.id) !== String(stageFilter)) return;
-    const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
-    const assignedIds    = new Set(stageWorkflows.flatMap(w => w.resourceIds || []).map(String));
-    const stageRes       = [];
-    resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0)
-             .forEach(r => stageRes.push(r));
-    stageWorkflows.forEach(wf => {
-      (wf.resourceIds || []).map(id => resources.find(r => String(r.id) === String(id)))
-        .filter(r => r && !r.isGlobal && (r.steps||[]).length > 0)
-        .forEach(r => stageRes.push(r));
+    const stageWfs = wfAll.filter(w => String(w.stageId) === String(stage.id));
+    const wfGroups = [];
+    stageWfs.forEach(wf => {
+      const wfRes = (wf.resourceIds || [])
+        .map(id => resources.find(r => String(r.id) === String(id)))
+        .filter(r => r && !r.isGlobal && (r.steps || []).length > 0);
+      if (wfRes.length > 0) wfGroups.push({ workflow: wf, resources: wfRes });
     });
-    if (stageRes.length > 0) stageGroups.push({ stage, resources: stageRes });
+    if (wfGroups.length > 0) stageGroups.push({ stage, wfGroups });
   });
-  // Resources with no stage
-  const stagedIds  = new Set(stageGroups.flatMap(sg => sg.resources.map(r => String(r.id))));
-  const unstaged   = resources.filter(r => !stagedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0);
-  if (unstaged.length > 0 && !stageFilter) stageGroups.push({ stage: null, resources: unstaged });
 
-  // Auto-populate missing sequential next-step links before rendering
   OL._fvAutoLinkSteps(resources);
 
-  const CARD_W    = 180;  // matches .fv-step-card CSS width
-  const COL_GAP   = 52;   // horizontal gap between resource columns within a stage
-  const ZONE_PAD  = 18;   // inner padding top/bottom inside each stage zone
-  const ZONE_HDR  = 36;   // height for resource header above first card
-  const STAGE_GAP = 64;   // vertical gap between stage zones
+  const CARD_W    = 180;
+  const COL_GAP   = 52;
+  const ZONE_PAD  = 20;
+  const ZONE_HDR  = 22;   // stage label height
+  const WF_PAD    = 14;   // padding inside workflow sub-zone
+  const WF_HDR    = 26;   // workflow sub-zone label height
+  const RES_HDR   = 28;   // resource column header height
+  const STAGE_GAP = 48;
+  const WF_GAP    = 20;
   const PAD_X     = 48;
   const PAD_Y     = 36;
-  const EST_STEP  = 100;  // rough initial estimate — corrected by measurement pass
+  const EST_STEP  = 100;
+  const CONSOL_H  = 44;   // estimated collapsed consolidated card height
 
   const allActiveResources = [];
-  // stageMeta tracks DOM elements needed for the measurement-pass reposition
   const stageMeta = [];
   let currentY = PAD_Y;
 
-  stageGroups.forEach(({ stage, resources: stageRes }) => {
-    const maxSteps = Math.max(...stageRes.map(r => (r.steps||[]).length), 1);
-    const estZoneH = ZONE_PAD + (stage ? 18 : 0) + ZONE_HDR + maxSteps * (EST_STEP + STEP_GAP) + ZONE_PAD;
-    const zoneW    = stageRes.length * (CARD_W + COL_GAP) - COL_GAP + 24;
+  // ── Helper: build merged flow sequence for a workflow group ──────────────────
+  // Returns [{type:'columns', sections:[{res,steps:[]}]}, {type:'consolidated', groupName, members:[{res,step}]}, ...]
+  function buildMergedFlow(wfRes) {
+    // Find consolidated groups (stepGroup appearing in >1 resource)
+    const groupMap = {};
+    wfRes.forEach(res => {
+      (res.steps || []).forEach(step => {
+        if (!step.stepGroup) return;
+        if (!groupMap[step.stepGroup]) groupMap[step.stepGroup] = [];
+        groupMap[step.stepGroup].push({ res, step });
+      });
+    });
+    const consolidatedGroups = {};
+    Object.entries(groupMap).forEach(([g, members]) => {
+      if (members.length > 1) consolidatedGroups[g] = members;
+    });
+    const consolidatedIds = new Set(
+      Object.values(consolidatedGroups).flat().map(m => String(m.step.id))
+    );
 
-    let bgEl = null, lblEl = null;
-    if (stage) {
-      bgEl = document.createElement('div');
-      bgEl.style.cssText = `position:absolute;left:${PAD_X - 14}px;top:${currentY}px;
-        width:${zoneW}px;height:${estZoneH}px;border-radius:14px;
-        background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.055);
-        pointer-events:none;`;
-      canvas.appendChild(bgEl);
-
-      lblEl = document.createElement('div');
-      lblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${currentY + 10}px;
-        font-size:8px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;
-        color:var(--text-muted);opacity:0.4;pointer-events:none;`;
-      lblEl.textContent = stage.name;
-      canvas.appendChild(lblEl);
+    if (Object.keys(consolidatedGroups).length === 0) {
+      // No consolidation — single columns section
+      return {
+        consolidatedGroups,
+        sequence: [{ type: 'columns', sections: wfRes.map(res => ({ res, steps: res.steps || [] })) }]
+      };
     }
 
-    const contentTop = currentY + ZONE_PAD + (stage ? 18 : 0);
-    const resMeta    = [];
-
-    // Pre-compute per-resource layout and branch-aware base-X positions
-    const resLayouts = new Map();
-    const resBaseX   = new Map();
-    let cumX = PAD_X;
-    stageRes.forEach(r => {
-      const rLayout = OL._fvLayoutResource(r);
-      resLayouts.set(r, rLayout);
-      resBaseX.set(r, cumX);
-      const maxOffset = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
-      cumX += (1 + maxOffset) * (CARD_W + COL_GAP);
+    // Build per-resource annotated flow
+    const perResFlow = wfRes.map(res => {
+      const flow = [];
+      const seenGroups = new Set();
+      (res.steps || []).forEach(step => {
+        if (consolidatedIds.has(String(step.id))) {
+          const g = Object.entries(consolidatedGroups).find(([, ms]) =>
+            ms.some(m => String(m.step.id) === String(step.id))
+          )?.[0];
+          if (g && !seenGroups.has(g)) { seenGroups.add(g); flow.push({ type: 'consolidated', group: g }); }
+        } else {
+          flow.push({ type: 'step', step });
+        }
+      });
+      return flow;
     });
-    const actualZoneW = Math.max(cumX - PAD_X - COL_GAP + 24, 60);
-    if (bgEl) bgEl.style.width = actualZoneW + 'px';
 
-    stageRes.forEach(res => {
-      const tc     = OL._fvGetType(res.type);
-      const layout = resLayouts.get(res);
-      const colX   = resBaseX.get(res);
-      const colY   = contentTop + ZONE_HDR;
+    // Determine group ordering by min position across resources
+    const groupOrder = Object.keys(consolidatedGroups).sort((a, b) => {
+      const posA = Math.min(...perResFlow.map(f => { const i = f.findIndex(x => x.type === 'consolidated' && x.group === a); return i === -1 ? Infinity : i; }));
+      const posB = Math.min(...perResFlow.map(f => { const i = f.findIndex(x => x.type === 'consolidated' && x.group === b); return i === -1 ? Infinity : i; }));
+      return posA - posB;
+    });
 
-      allActiveResources.push(res);
+    // Build merged sequence
+    const sequence = [];
+    const ptrs = wfRes.map(() => 0);
 
-      const hdrEl = document.createElement('div');
-      hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${contentTop + 6}px;
-        width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
-      hdrEl.innerHTML = `
-        <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
-        <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
-                     letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                     text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
-      canvas.appendChild(hdrEl);
+    groupOrder.forEach(group => {
+      // Collect steps before this group from each resource
+      const sections = wfRes.map((res, ri) => {
+        const steps = [];
+        while (ptrs[ri] < perResFlow[ri].length &&
+               !(perResFlow[ri][ptrs[ri]].type === 'consolidated' && perResFlow[ri][ptrs[ri]].group === group)) {
+          if (perResFlow[ri][ptrs[ri]].type === 'step') steps.push(perResFlow[ri][ptrs[ri]].step);
+          ptrs[ri]++;
+        }
+        if (ptrs[ri] < perResFlow[ri].length) ptrs[ri]++; // skip the group marker
+        return { res, steps };
+      });
+      if (sections.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections });
+      sequence.push({ type: 'consolidated', groupName: group, members: consolidatedGroups[group] });
+    });
 
-      (res.steps || []).forEach((step, idx) => {
-        const li     = layout[step.id] || { colOffset: 0, row: idx, parentId: null };
-        const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
-        const x = usePin ? step.coords.x : colX + li.colOffset * (CARD_W + COL_GAP);
-        const y = usePin ? step.coords.y : colY + li.row * (EST_STEP + STEP_GAP);
-        if (!usePin) step.coords = { x, y };
+    // Remaining steps after last group
+    const trailing = wfRes.map((res, ri) => {
+      const steps = [];
+      while (ptrs[ri] < perResFlow[ri].length) {
+        if (perResFlow[ri][ptrs[ri]].type === 'step') steps.push(perResFlow[ri][ptrs[ri]].step);
+        ptrs[ri]++;
+      }
+      return { res, steps };
+    });
+    if (trailing.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections: trailing });
 
-        const appBadge = step.appName
-          ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">${esc(step.appName.substring(0,12))}</span>`
-          : '';
-        const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
-          `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${esc((a.name||'').substring(0,12))}</span>`
-        ).join('');
-        const hasLinks    = (step.links || []).length > 0;
-        const hasExplicit = (step.logic?.out || []).some(l => l.targetId);
+    return { consolidatedGroups, sequence };
+  }
 
-        const div = document.createElement('div');
-        div.className      = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
-        div.id             = `fv-step-${res.id}-${step.id}`;
-        div.dataset.resId  = res.id;
-        div.dataset.stepId = step.id;
-        div.style.left     = x + 'px';
-        div.style.top      = y + 'px';
+  // ── Render ───────────────────────────────────────────────────────────────────
+  stageGroups.forEach(({ stage, wfGroups }) => {
+    const stageTop = currentY;
+    let stageBgEl = null, stageLblEl = null;
 
-        div.innerHTML = `
-          <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
-                  title="${step.pinned ? 'Unpin' : 'Pin'}"
-                  onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
-            ${OL.getLucideSVG(step.pinned ? 'pin' : 'pin-off', 10, 'currentColor')}
-          </button>
-          <div class="fv-step-card-accent" style="background:${tc.color};"></div>
-          <div class="fv-step-card-body"
-               onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
-            <div style="display:flex;align-items:flex-start;gap:7px;">
-              <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
-                           background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
-                           font-size:9px;font-weight:800;display:flex;
-                           align-items:center;justify-content:center;margin-top:1px;">
-                ${idx + 1}
-              </span>
-              <div style="min-width:0;flex:1;">
-                <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
-                <div class="fv-step-badges" style="margin-top:4px;">
-                  ${appBadge}${assigneeBadges}
-                  ${hasLinks    ? `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted);">${OL.getLucideSVG('paperclip',9,'currentColor')}</span>` : ''}
-                  ${hasExplicit ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:var(--accent);">${OL.getLucideSVG('arrow-right',8,'currentColor')}</span>` : ''}
+    if (stage) {
+      stageBgEl = document.createElement('div');
+      stageBgEl.style.cssText = `position:absolute;left:${PAD_X - 16}px;top:${stageTop}px;
+        width:200px;height:100px;border-radius:14px;
+        background:rgba(255,255,255,0.016);border:1px solid rgba(255,255,255,0.05);
+        pointer-events:none;`;
+      canvas.appendChild(stageBgEl);
+
+      stageLblEl = document.createElement('div');
+      stageLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${stageTop + 10}px;
+        font-size:8px;font-weight:800;letter-spacing:0.11em;text-transform:uppercase;
+        color:var(--text-muted);opacity:0.4;pointer-events:none;`;
+      stageLblEl.textContent = stage.name;
+      canvas.appendChild(stageLblEl);
+    }
+
+    const stageContentTop = stageTop + ZONE_PAD + (stage ? ZONE_HDR : 0);
+    let wfY = stageContentTop;
+    const wfMetaList = [];
+
+    wfGroups.forEach(({ workflow, resources: wfRes }) => {
+      const { sequence } = buildMergedFlow(wfRes);
+
+      // Compute x positions for each resource
+      const resLayouts = new Map();
+      const resBaseX   = new Map();
+      let cumX = PAD_X;
+      wfRes.forEach(r => {
+        const rLayout = OL._fvLayoutResource(r);
+        resLayouts.set(r, rLayout);
+        resBaseX.set(r, cumX);
+        const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
+        cumX += (1 + maxOff) * (CARD_W + COL_GAP);
+      });
+      const wfWidth = Math.max(cumX - PAD_X - COL_GAP + 28, 60);
+      const wfRight = PAD_X + wfWidth;
+
+      // Workflow sub-zone background
+      const wfBgEl = document.createElement('div');
+      wfBgEl.style.cssText = `position:absolute;left:${PAD_X - 10}px;top:${wfY}px;
+        width:${wfWidth + 4}px;height:100px;border-radius:10px;
+        background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.038);
+        pointer-events:none;`;
+      canvas.appendChild(wfBgEl);
+
+      const wfLblEl = document.createElement('div');
+      wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;
+        font-size:9px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
+        color:var(--accent);opacity:0.55;pointer-events:none;`;
+      wfLblEl.textContent = workflow.name;
+      canvas.appendChild(wfLblEl);
+
+      const wfContentTop = wfY + WF_PAD + WF_HDR;
+
+      // Resource headers
+      const resMeta = [];
+      wfRes.forEach(res => {
+        allActiveResources.push(res);
+        const tc   = OL._fvGetType(res.type);
+        const colX = resBaseX.get(res);
+        const hdrEl = document.createElement('div');
+        hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
+          width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
+        hdrEl.innerHTML = `
+          <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
+          <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
+                       letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
+                       text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
+        canvas.appendChild(hdrEl);
+        resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
+      });
+
+      const colY0 = wfContentTop + RES_HDR;
+
+      // Render each sequence item
+      const seqMeta = []; // for measurement pass
+      let estY = colY0;
+
+      sequence.forEach((item, seqIdx) => {
+        if (item.type === 'columns') {
+          const sectionCards = [];
+          item.sections.forEach(({ res, steps }) => {
+            const tc     = OL._fvGetType(res.type);
+            const layout = resLayouts.get(res);
+            const colX   = resBaseX.get(res);
+            steps.forEach((step, idx) => {
+              const li = layout[step.id] || { colOffset: 0, row: idx };
+              const x  = colX + li.colOffset * (CARD_W + COL_GAP);
+              const y  = estY + idx * (EST_STEP + STEP_GAP);
+              step.coords = { x, y };
+
+              const appBadge = step.appName
+                ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">${esc(step.appName.substring(0,12))}</span>`
+                : '';
+              const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
+                `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${esc((a.name||'').substring(0,12))}</span>`
+              ).join('');
+              const groupTag = step.stepGroup
+                ? `<span class="fv-step-group-tag">${esc(step.stepGroup)}</span>`
+                : '';
+
+              const div = document.createElement('div');
+              div.className = 'fv-step-card';
+              div.id = `fv-step-${res.id}-${step.id}`;
+              div.dataset.resId  = res.id;
+              div.dataset.stepId = step.id;
+              div.style.left = x + 'px';
+              div.style.top  = y + 'px';
+              div.innerHTML = `
+                <button class="fv-pin-btn ${step.pinned?'pinned':''}" title="${step.pinned?'Unpin':'Pin'}"
+                        onclick="event.stopPropagation();OL._fvTogglePin('${res.id}','${step.id}')">
+                  ${OL.getLucideSVG(step.pinned?'pin':'pin-off',10,'currentColor')}
+                </button>
+                <div class="fv-step-card-accent" style="background:${tc.color};"></div>
+                <div class="fv-step-card-body" onclick="event.stopPropagation();OL._fvSelectStep('${res.id}','${step.id}')">
+                  <div style="display:flex;align-items:flex-start;gap:7px;">
+                    <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
+                                 background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
+                                 font-size:9px;font-weight:800;display:flex;
+                                 align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
+                    <div style="min-width:0;flex:1;">
+                      <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
+                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}</div>
+                    </div>
+                  </div>
                 </div>
+                <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
+                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
+                <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
+                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
+                <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
+                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
+                <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
+                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>`;
+              OL._fvSetupCardDrag(div, res.id, step.id);
+              canvas.appendChild(div);
+              sectionCards.push({ res, step, el: div, idx });
+            });
+          });
+          const estH = Math.max(...item.sections.map(s => s.steps.length), 1) * (EST_STEP + STEP_GAP);
+          seqMeta.push({ type: 'columns', sectionCards, estH });
+          estY += estH;
+
+        } else if (item.type === 'consolidated') {
+          const { groupName, members } = item;
+          const cardX = PAD_X - 10;
+          const cardW = wfWidth + 4;
+          const cardY = estY;
+
+          const consolEl = document.createElement('div');
+          consolEl.className = 'fv-consolidated-card';
+          consolEl.id = `fv-consol-${String(groupName).replace(/\W+/g,'-')}`;
+          consolEl.style.cssText = `left:${cardX}px;top:${cardY}px;width:${cardW}px;`;
+          consolEl.innerHTML = `
+            <div class="fv-consol-header" onclick="OL._fvToggleConsolidated(this)">
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${OL.getLucideSVG('git-merge',13,'var(--accent)')}
+                <span style="font-size:11px;font-weight:700;color:var(--text-main);">${esc(groupName)}</span>
+                <span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.07);
+                             padding:1px 7px;border-radius:99px;">×${members.length}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:9px;color:var(--text-muted);">${members.map(m=>esc(m.res.name)).join(' · ')}</span>
+                ${OL.getLucideSVG('chevron-down',11,'var(--text-muted)')}
               </div>
             </div>
-          </div>
-          <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
-               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
-          <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
-               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
-          <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
-               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
-          <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
-               onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>`;
+            <div class="fv-consol-body" style="display:none;">
+              ${members.map(m => {
+                const tc = OL._fvGetType(m.res.type);
+                const appBadge = m.step.appName
+                  ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);margin-top:4px;">${esc(m.step.appName.substring(0,14))}</span>`
+                  : '';
+                return `<div class="fv-consol-instance">
+                  <div style="font-size:9px;font-weight:700;color:${tc.color};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">${esc(m.res.name)}</div>
+                  <div style="font-size:11px;color:var(--text-main);line-height:1.3;">${esc(m.step.name||'Unnamed Step')}</div>
+                  ${appBadge}
+                </div>`;
+              }).join('')}
+            </div>`;
+          canvas.appendChild(consolEl);
 
-        OL._fvSetupCardDrag(div, res.id, step.id);
-        canvas.appendChild(div);
+          members.forEach(m => { m.step.coords = { x: cardX, y: cardY }; });
+          seqMeta.push({ type: 'consolidated', el: consolEl, members, cardX, estH: CONSOL_H });
+          estY += CONSOL_H + STEP_GAP;
+        }
       });
 
-      resMeta.push({ res, hdrEl, colX, colY, layout: resLayouts.get(res) });
+      const estWfH = WF_PAD + WF_HDR + RES_HDR + estY - colY0 + WF_PAD;
+      wfMetaList.push({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth });
+      wfY += estWfH + WF_GAP;
     });
 
-    stageMeta.push({ bgEl, lblEl, stage, resMeta, zoneW: actualZoneW });
-    currentY += estZoneH + STAGE_GAP;
+    stageMeta.push({ stageBgEl, stageLblEl, stage, stageTop, wfMetaList });
+    currentY = wfY + STAGE_GAP;
   });
 
-  // Give browser one frame to compute offsetHeight on each card, then reposition
-  // using actual heights so the gap between every pair of cards is exactly STEP_GAP.
+  // ── Measurement pass ─────────────────────────────────────────────────────────
   requestAnimationFrame(() => {
-    let curY = PAD_Y;
+    let curStageY = PAD_Y;
 
-    stageMeta.forEach(({ bgEl, lblEl, stage, resMeta, zoneW }) => {
-      const zoneTop    = curY;
-      const contentTop = zoneTop + ZONE_PAD + (stage ? 18 : 0);
+    stageMeta.forEach(({ stageBgEl, stageLblEl, stage, stageTop, wfMetaList }) => {
+      if (stageLblEl) stageLblEl.style.top = (curStageY + 10) + 'px';
+      if (stageBgEl)  stageBgEl.style.top  = curStageY + 'px';
 
-      if (lblEl) lblEl.style.top = (zoneTop + 10) + 'px';
-      if (bgEl)  bgEl.style.top  = zoneTop + 'px';
+      let wfY = curStageY + ZONE_PAD + (stage ? ZONE_HDR : 0);
+      let stageBottom = wfY;
 
-      let zoneBottom = contentTop + ZONE_HDR;
+      wfMetaList.forEach(({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth }) => {
+        const wfTop     = wfY;
+        const actualColY = wfTop + WF_PAD + WF_HDR + RES_HDR;
 
-      resMeta.forEach(({ res, hdrEl, layout }) => {
-        const actualColY = contentTop + ZONE_HDR;
-        hdrEl.style.top  = (contentTop + 6) + 'px';
+        if (wfLblEl) wfLblEl.style.top = (wfTop + 9) + 'px';
+        if (wfBgEl)  wfBgEl.style.top  = wfTop + 'px';
+        resMeta.forEach(({ hdrEl }) => { hdrEl.style.top = (wfTop + WF_PAD + WF_HDR + 2) + 'px'; });
 
-        // Pass 1: reposition main-path steps (colOffset===0) using actual heights
-        const rowY = {}; // row index → actual y top
         let y = actualColY;
-        (res.steps || []).forEach(step => {
-          const li = layout[step.id];
-          if (!li || li.colOffset !== 0) return; // branch — skip for now
-          const el = document.getElementById(`fv-step-${res.id}-${step.id}`);
-          if (!el) return;
-          if (!step.pinned) { el.style.top = y + 'px'; step.coords.y = y; }
-          rowY[li.row] = parseFloat(el.style.top);
-          y += el.offsetHeight + STEP_GAP;
+        let wfBottom = actualColY;
+
+        seqMeta.forEach(item => {
+          if (item.type === 'columns') {
+            // Group cards by resource, reposition each resource's steps in sequence
+            const byRes = new Map();
+            item.sectionCards.forEach(sc => {
+              if (!byRes.has(sc.res)) byRes.set(sc.res, []);
+              byRes.get(sc.res).push(sc);
+            });
+            let maxBottom = y;
+            byRes.forEach((cards, res) => {
+              let ry = y;
+              cards.forEach(({ step, el }) => {
+                if (!step.pinned) { el.style.top = ry + 'px'; step.coords.y = ry; }
+                ry += el.offsetHeight + STEP_GAP;
+              });
+              maxBottom = Math.max(maxBottom, ry - STEP_GAP);
+            });
+            y = maxBottom + STEP_GAP;
+            wfBottom = Math.max(wfBottom, maxBottom);
+
+          } else if (item.type === 'consolidated') {
+            item.el.style.top = y + 'px';
+            item.members.forEach(m => { m.step.coords.y = y; });
+            y += item.el.offsetHeight + STEP_GAP;
+            wfBottom = Math.max(wfBottom, y - STEP_GAP);
+          }
         });
 
-        // Pass 2: snap branch steps' y to match their parent row
-        (res.steps || []).forEach(step => {
-          const li = layout[step.id];
-          if (!li || li.colOffset === 0) return;
-          const el = document.getElementById(`fv-step-${res.id}-${step.id}`);
-          if (!el || step.pinned) return;
-          const targetY = rowY[li.row] ?? actualColY;
-          el.style.top  = targetY + 'px';
-          step.coords.y = targetY;
-          zoneBottom = Math.max(zoneBottom, targetY + el.offsetHeight);
-        });
-
-        zoneBottom = Math.max(zoneBottom, y - STEP_GAP);
+        const actualWfH = wfBottom - wfTop + WF_PAD * 2;
+        if (wfBgEl) wfBgEl.style.height = actualWfH + 'px';
+        stageBottom = Math.max(stageBottom, wfBottom + WF_PAD * 2);
+        wfY = wfTop + actualWfH + WF_GAP;
       });
 
-      const actualZoneH = zoneBottom - zoneTop + ZONE_PAD;
-      if (bgEl) bgEl.style.height = actualZoneH + 'px';
-
-      curY = zoneTop + actualZoneH + STAGE_GAP;
+      const actualStageH = stageBottom - curStageY + ZONE_PAD;
+      if (stageBgEl) {
+        stageBgEl.style.height = actualStageH + 'px';
+        // Width: widest workflow
+        const maxWfW = Math.max(...wfMetaList.map(w => w.wfWidth), 100);
+        stageBgEl.style.width = (maxWfW + 20) + 'px';
+      }
+      curStageY += actualStageH + STAGE_GAP;
     });
 
-    // Resize canvas to fit measured content
-    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
-    const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + CARD_W), 800);
+    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-consolidated-card'));
+    const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
     const maxY = Math.max(...allCards.map(el => (parseFloat(el.style.top)||0) + el.offsetHeight + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
     canvas.style.height = maxY + 'px';
 
     OL._fvDrawStepConnections(allActiveResources);
   });
+};
+
+OL._fvToggleConsolidated = function(headerEl) {
+  const body   = headerEl.nextElementSibling;
+  const icon   = headerEl.querySelector('svg');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'flex';
+  // swap chevron icon
+  const chevron = headerEl.querySelector('[data-lucide]');
+  if (chevron) {
+    chevron.setAttribute('data-lucide', isOpen ? 'chevron-down' : 'chevron-up');
+    if (window.lucide) lucide.createIcons();
+  }
+  // Trigger connection redraw since card height changed
+  setTimeout(() => OL._fvDrawStepConnections(
+    (OL.getCurrentProjectData().resources||[])
+  ), 50);
+};
+
+// Set or clear a step's consolidation group
+OL._fvSetStepGroup = function(resId, stepId, groupName) {
+  const data = OL.getCurrentProjectData();
+  const res  = (data.localResources || data.resources || []).find(r => String(r.id) === String(resId));
+  if (!res) return;
+  const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+  if (!step) return;
+  step.stepGroup = groupName ? groupName.trim() : undefined;
+  OL.persist();
+  OL.renderVisualizer();
 };
 
 // Draw connections between step cards
