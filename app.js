@@ -180,8 +180,17 @@ OL.sync = function() {
     // 1. Master Registry
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
-            state.master = doc.data();
-            console.log("🏛️ Master Registry Synced");
+            // Guard: don't overwrite in-memory state while a save is pending or just completed.
+            // Without this, a snapshot firing during the 1500ms persist debounce window would
+            // replace state.master with stale Firestore data, then the timer would save that
+            // stale data back — silently wiping any in-memory changes (e.g. new rate variables).
+            const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
+            if (window.saveTimeout || timeSinceLastSave < 5000) {
+                console.log('⏳ Ignoring master snapshot — save in progress or recently completed');
+            } else {
+                state.master = doc.data();
+                console.log("🏛️ Master Registry Synced");
+            }
             const modalOpen = !!document.getElementById('modal-overlay');
             const onMasterRoute = ['resources','apps','functions','vault','rates','resourceTypes','howto','team']
                 .some(r => window.location.hash.includes(r));
