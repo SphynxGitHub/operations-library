@@ -13449,7 +13449,8 @@ OL._fvRenderSteps = function(resources) {
                 const appBadge = m.step.appName
                   ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);margin-top:4px;">${esc(m.step.appName.substring(0,14))}</span>`
                   : '';
-                return `<div class="fv-consol-instance">
+                return `<div class="fv-consol-instance" style="cursor:pointer;"
+                            onclick="event.stopPropagation();OL._fvSelectStep('${m.res.id}','${m.step.id}')">
                   <div style="font-size:9px;font-weight:700;color:${tc.color};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">${esc(m.res.name)}</div>
                   <div style="font-size:11px;color:var(--text-main);line-height:1.3;">${esc(m.step.name||'Unnamed Step')}</div>
                   ${appBadge}
@@ -13458,11 +13459,13 @@ OL._fvRenderSteps = function(resources) {
             </div>`;
           canvas.appendChild(consolEl);
 
-          // Invisible anchor divs so _fvDrawStepConnections can find consolidated member steps
+          // Invisible anchor divs so _fvDrawStepConnections can find consolidated member steps.
+          // data-consol-card-id lets drawConnections use the real card rect when this is the SOURCE.
           const consolAnchors = [];
           members.forEach(m => {
             const anchor = document.createElement('div');
             anchor.id = `fv-step-${m.res.id}-${m.step.id}`;
+            anchor.dataset.consolCardId = consolEl.id;
             anchor.style.cssText = `position:absolute;left:${Math.round(consolCenterX - 1)}px;top:${cardY}px;width:2px;height:1px;pointer-events:none;opacity:0;`;
             canvas.appendChild(anchor);
             consolAnchors.push(anchor);
@@ -13662,7 +13665,9 @@ OL._fvDrawStepConnections = function(resources) {
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
 
-        const fromEl = document.getElementById(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        const fromElRaw = document.getElementById(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        // If fromEl is a consolidated anchor (tiny proxy div), use the real card for exit coords
+        const fromEl = (fromElRaw?.dataset.consolCardId && document.getElementById(fromElRaw.dataset.consolCardId)) || fromElRaw;
         const toEl   = document.getElementById(
           `fv-step-${tResId}-${tStepId}` ||
           // fallback: find by resId + step index if id-based lookup fails
