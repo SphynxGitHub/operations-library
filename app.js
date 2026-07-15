@@ -9713,6 +9713,195 @@ OL.universalPrint = function() {
     }, 500);
 };
 
+OL.printScopingSheet = function() {
+    const client = getActiveClient();
+    if (!client) return;
+    const sheet = client.projectData?.scopingSheets?.[0];
+    if (!sheet) return;
+
+    const clientName = client.meta?.name || 'Scoping Sheet';
+    const date = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+    const baseRate = client.projectData.customBaseRate || state.master.rates?.baseHourlyRate || 300;
+    const vars = state.master.rates?.variables || {};
+
+    // Group items by round
+    const roundGroups = {};
+    (sheet.lineItems || []).forEach(item => {
+        const r = String(item.round || '1');
+        if (!roundGroups[r]) roundGroups[r] = [];
+        roundGroups[r].push(item);
+    });
+    const sortedRounds = Object.keys(roundGroups).sort((a,b) => Number(a) - Number(b));
+
+    // Unit badges for an item (always show in print)
+    const unitBadgesHtml = (item, res) => {
+        const normalize = s => String(s||'').toLowerCase().replace(/\s+/g,'').trim();
+        const resKey = normalize(res?.type);
+        const combined = { ...(item.scopingData || {}), ...(item.customData || {}) };
+        const badges = Object.entries(combined)
+            .filter(([vid, count]) => { const v = vars[vid]; return v && count > 0 && normalize(v.applyTo) === resKey; })
+            .map(([vid, count]) => { const v = vars[vid]; return `<span class="unit-tag">${count} ${esc(v.label)}</span>`; })
+            .join('');
+        return badges ? `<div class="unit-row">${badges}</div>` : '';
+    };
+
+    // Calculate row values
+    const rowGross = (item, res) => OL.calculateBaseFeeWithMultiplier(item, res);
+    const rowNet   = (item, res) => OL.calculateRowFee(item, res);
+
+    // Build rows
+    let totalGross = 0, totalNet = 0;
+    let rowsHtml = '';
+    sortedRounds.forEach(r => {
+        let roundGross = 0, roundNet = 0;
+        let roundRows = '';
+        roundGroups[r].forEach(item => {
+            const res = OL.getResourceById(item.resourceId);
+            if (!res) return;
+            const gross = rowGross(item, res);
+            const net   = rowNet(item, res);
+            const disc  = gross - net;
+            totalGross += gross;
+            totalNet   += net;
+            roundGross += gross;
+            roundNet   += net;
+
+            const multiplierLabel = (() => {
+                const teamMult = item.teamMultiplier ?? state.master.rates?.teamMultiplier ?? 1;
+                const scopeData = item.scopingData || {};
+                const stepCount = scopeData.steps || scopeData.steps_1147 || scopeData.steps_6717 || null;
+                const parts = [];
+                if (teamMult && teamMult !== 1) parts.push(`×${teamMult} team`);
+                return parts.join(' · ') || '—';
+            })();
+
+            roundRows += `<div class="item-row">
+                <div class="item-top">
+                    <div class="item-name">${esc(res.name)}</div>
+                    ${res.description ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
+                    ${unitBadgesHtml(item, res)}
+                </div>
+                <div class="item-meta">
+                    <span style="flex:1;"></span>
+                    <span class="mc-status meta-pill status-${(item.status||'').toLowerCase().replace(/\s+/g,'-')}">${esc(item.status || '—')}</span>
+                    <span class="mc-party meta-pill party">${esc(item.responsibleParty || '—')}</span>
+                    <span class="mc-mult meta-pill muted">${multiplierLabel}</span>
+                    <span class="mc-gross meta-num muted">$${gross.toLocaleString()}</span>
+                    ${disc > 0 ? `<span class="mc-disc meta-num disc">−$${disc.toLocaleString()}</span>` : '<span class="mc-disc meta-num muted" style="opacity:0.3;">—</span>'}
+                    <span class="mc-net meta-num net">$${net.toLocaleString()}</span>
+                </div>
+            </div>`;
+        });
+
+        rowsHtml += `<div class="round-block">
+            <div class="round-header">
+                <span class="round-title">Round ${r}</span>
+                <span class="round-totals">Gross $${roundGross.toLocaleString()} · Net $${roundNet.toLocaleString()}</span>
+            </div>
+            ${roundRows}
+        </div>`;
+    });
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${esc(clientName)} — Scoping Sheet</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
+       color: #0f172a; background: #fff; padding: 28px 32px; }
+@page { size: auto landscape; margin: 12mm 10mm; }
+
+.print-header { display: flex; justify-content: space-between; align-items: flex-end;
+                border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 24px; }
+.ph-title { font-size: 20px; font-weight: 800; }
+.ph-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
+.ph-meta { text-align: right; font-size: 10px; color: #94a3b8; }
+
+/* Column header row */
+.col-header-row { display: flex; align-items: center; gap: 8px;
+                  padding: 4px 10px 4px 12px; border-bottom: 1.5px solid #0f172a;
+                  font-size: 9px; font-weight: 800; text-transform: uppercase;
+                  letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
+.ch-name { flex: 1; }
+.ch-status { width: 70px; }
+.ch-party  { width: 90px; }
+.ch-mult   { width: 60px; }
+.ch-gross  { width: 70px; text-align: right; }
+.ch-disc   { width: 60px; text-align: right; color: #dc2626; }
+.ch-net    { width: 80px; text-align: right; color: #0f172a; font-weight: 900; }
+
+.round-block { margin-bottom: 20px; break-inside: avoid; }
+.round-header { display: flex; justify-content: space-between; align-items: baseline;
+                padding: 6px 10px; background: #f8fafc; border-left: 3px solid #0ea5e9;
+                border-radius: 0 4px 4px 0; margin-bottom: 4px; }
+.round-title { font-size: 10px; font-weight: 800; text-transform: uppercase;
+               letter-spacing: 0.07em; color: #0ea5e9; }
+.round-totals { font-size: 9px; color: #64748b; }
+
+.item-row { border-bottom: 1px solid #f1f5f9; padding: 7px 10px 7px 12px;
+            break-inside: avoid; }
+.item-top { margin-bottom: 5px; }
+.item-name { font-size: 11px; font-weight: 700; color: #0f172a; line-height: 1.3; }
+.item-desc { font-size: 9px; color: #64748b; margin-top: 2px; line-height: 1.4;
+             font-style: italic; }
+.unit-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.unit-tag { font-size: 8px; font-weight: 700; text-transform: uppercase;
+            border: 1px solid #e2e8f0; border-radius: 3px; padding: 1px 6px; color: #475569; }
+
+.item-meta { display: flex; align-items: center; gap: 8px; }
+.meta-pill { font-size: 9px; padding: 2px 7px; border-radius: 99px;
+             border: 1px solid #e2e8f0; color: #475569; white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
+.meta-pill.status-do-now { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.meta-pill.status-do-later { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+.meta-pill.status-don-t-do { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.meta-pill.status-done { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.meta-num { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums;
+            white-space: nowrap; text-align: right; }
+.meta-num.muted { color: #94a3b8; }
+.meta-num.disc { color: #dc2626; }
+.meta-num.net { color: #0f172a; font-weight: 800; }
+/* Fixed widths to match col-header-row */
+.mc-status { width: 70px; flex-shrink: 0; }
+.mc-party  { width: 90px; flex-shrink: 0; }
+.mc-mult   { width: 60px; flex-shrink: 0; }
+.mc-gross  { width: 70px; flex-shrink: 0; }
+.mc-disc   { width: 60px; flex-shrink: 0; }
+.mc-net    { width: 80px; flex-shrink: 0; }
+
+.grand-total { display: flex; justify-content: flex-end; gap: 24px; align-items: baseline;
+               padding: 14px 10px; border-top: 2px solid #0f172a; margin-top: 16px; }
+.gt-label { font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: #64748b; display: block; }
+.gt-val { font-size: 16px; font-weight: 800; }
+.gt-val.net { font-size: 22px; color: #0f172a; }
+</style></head><body>
+<div class="print-header">
+  <div><div class="ph-title">${esc(clientName)}</div><div class="ph-sub">Scoping Sheet</div></div>
+  <div class="ph-meta">Generated ${date}<br>${(sheet.lineItems||[]).length} items</div>
+</div>
+<div class="col-header-row">
+  <span class="ch-name">Deliverable</span>
+  <span class="ch-status">Status</span>
+  <span class="ch-party">Responsible</span>
+  <span class="ch-mult">Multiplier</span>
+  <span class="ch-gross">Gross</span>
+  <span class="ch-disc">Disc</span>
+  <span class="ch-net">Net</span>
+</div>
+${rowsHtml}
+<div class="grand-total">
+  <div><span class="gt-label">Gross</span><span class="gt-val muted">$${totalGross.toLocaleString()}</span></div>
+  <div><span class="gt-label">Final Net</span><span class="gt-val net">$${totalNet.toLocaleString()}</span></div>
+</div>
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=1100,height=850');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+};
+
 OL.renameMatrix = function(anlyId, newName, isMaster) {
     const cleanName = newName.trim();
     if (!cleanName) return;
@@ -20974,7 +21163,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     area.innerHTML = `
     <div class="grand-totals-bar">
       <div class="grand-actions">
-        <button class="btn tiny soft" onclick="OL.universalPrint()">🖨️ PDF</button>
+        <button class="btn tiny soft" onclick="OL.printScopingSheet()">🖨️ PDF</button>
         ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>` : ''}
       </div>
 
