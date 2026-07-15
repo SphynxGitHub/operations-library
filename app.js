@@ -25599,82 +25599,105 @@ OL._printListHtml = function(stages, resources, workflows) {
     return html;
 };
 
-// ── STEPS VIEW (linear, grouped by resource) ───────
+// ── STEPS VIEW (resources as side-by-side columns per workflow, mirroring the visualizer) ──
 OL._printStepsHtml = function(stages, resources, workflows) {
     let html = '';
+    const WF_COLORS = ['#3dd9c5','#7c3aed','#f97316','#38bdf8','#a78bfa','#fb923c','#10b981','#f43f5e'];
+
+    // Build one step row for a column
+    const stepRowHtml = (s, i, res, allResources) => {
+        const tc = OL._fvGetType(res.type);
+        const assignees = (s.assignees || []).map(a => esc(a.name)).join(', ');
+        const logic = (s.logic?.out || []).filter(l => l.targetId && !l._implicit);
+        const crossLinks = logic.map(l => {
+            const lastH = String(l.targetId || '').lastIndexOf('-');
+            if (lastH === -1) return '';
+            const tResId = l.targetId.substring(0, lastH);
+            if (String(tResId) === String(res.id)) return ''; // same-resource next step, skip
+            const tRes  = allResources.find(r => String(r.id) === tResId);
+            const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
+            if (!tRes || !tStep) return '';
+            const types = l.types || [l.type || 'next'];
+            const arrow = types.includes('condition') ? '◆' : types.includes('loop') ? '↺' : types.includes('delay') ? '⏱' : '→';
+            const rule  = l.rule ? `<em>${esc(l.rule)}</em>: ` : '';
+            return `<div style="font-size:8px;color:#7c3aed;margin-top:2px;">${arrow} ${rule}${esc(tRes.name)}</div>`;
+        }).filter(Boolean).join('');
+
+        return `<div style="padding:6px 9px;border-bottom:1px solid #f1f5f9;display:flex;gap:6px;align-items:flex-start;break-inside:avoid;">
+            <div style="width:17px;height:17px;border-radius:50%;background:${tc.color}18;color:${tc.color};
+                        font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">${i + 1}</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:10px;font-weight:600;color:#0f172a;line-height:1.35;">${esc(s.name || 'Unnamed')}</div>
+                ${s.appName ? `<div style="font-size:8px;color:#0284c7;margin-top:1px;">${esc(s.appName)}</div>` : ''}
+                ${assignees ? `<div style="font-size:8px;color:#64748b;margin-top:1px;">${esc(assignees)}</div>` : ''}
+                ${crossLinks}
+            </div>
+        </div>`;
+    };
 
     stages.forEach((stage, si) => {
         const stageWfs = workflows.filter(w => w.stageId === stage.id);
         const assignedIds = new Set(stageWfs.flatMap(w => w.resourceIds || []));
-        const stageResources = [
-            ...stageWfs.flatMap(wf =>
-                (wf.resourceIds || []).map(id => resources.find(r => String(r.id) === id)).filter(Boolean)
-            ),
-            ...resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)))
-        ];
+        const hasContent = stageWfs.some(wf =>
+            (wf.resourceIds || []).some(id => {
+                const r = resources.find(r => String(r.id) === id);
+                return r && (r.steps || []).some(s => !s.isArchived);
+            })
+        );
+        if (!hasContent) return;
 
-        if (!stageResources.length) return;
-
-        html += `<div class="stage-header">
+        html += `<div class="stage-header" style="break-before:auto;">
             <div class="stage-num">${si + 1}</div>
             <div class="stage-name">${esc(stage.name)}</div>
         </div>`;
 
-        stageResources.forEach(res => {
-            const steps = (res.steps || []).filter(s => !s.isArchived);
-            if (!steps.length) return;
-            const tc = OL._fvGetType(res.type);
+        stageWfs.forEach((wf, wfi) => {
+            const wfColor = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+            const wfRes = (wf.resourceIds || [])
+                .map(id => resources.find(r => String(r.id) === id))
+                .filter(r => r && (r.steps || []).some(s => !s.isArchived));
+            if (!wfRes.length) return;
 
-            html += `<div class="res-section">
-                <div class="res-section-header" style="background:${tc.color}12;border-left:3px solid ${tc.color};">
-                    <div>
-                        <div class="res-section-name">${esc(res.name)}</div>
-                        <div class="res-section-type" style="color:${tc.color};">${esc(res.type || 'General')}</div>
+            html += `<div class="wf-label">
+                <div class="wf-dot" style="background:${wfColor};"></div>
+                <div class="wf-name">${esc(wf.name)}</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:20px;break-inside:avoid;">`;
+
+            wfRes.forEach(res => {
+                const steps = (res.steps || []).filter(s => !s.isArchived);
+                const tc = OL._fvGetType(res.type);
+                html += `<div style="flex:1;min-width:0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;break-inside:avoid;">
+                    <div style="padding:7px 9px;background:${tc.color}12;border-bottom:2px solid ${tc.color};">
+                        <div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:${tc.color};">${esc(res.type || 'General')}</div>
+                        <div style="font-size:11px;font-weight:700;color:#0f172a;margin-top:1px;line-height:1.2;">${esc(res.name)}</div>
+                        ${res.appName ? `<div style="font-size:8px;color:#0284c7;margin-top:2px;">${esc(res.appName)}</div>` : ''}
                     </div>
-                    ${res.appName ? `<span style="margin-left:auto;font-size:9px;color:#64748b;">💻 ${esc(res.appName)}</span>` : ''}
-                </div>
-                ${steps.map((s, i) => {
-                    const assignees = (s.assignees || []).map(a => a.name);
-                    const logic = (s.logic?.out || []).filter(l => l.targetId);
-                    const logicTypes = [...new Set(logic.flatMap(l => l.types || [l.type || 'next']))].filter(t => t !== 'next');
+                    ${steps.map((s, i) => stepRowHtml(s, i, res, resources)).join('')}
+                </div>`;
+            });
 
-                    const logicOuts = logic.map(l => {
-                        const lastH = String(l.targetId || '').lastIndexOf('-');
-                        if (lastH === -1) return null;
-                        const tRes  = resources.find(r => String(r.id) === l.targetId.substring(0, lastH));
-                        const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
-                        if (!tRes || !tStep) return null;
-                        const types = (l.types || [l.type || 'next']);
-                        const icon  = types.includes('condition') ? '◆'
-                            : types.includes('loop') ? '↺'
-                            : types.includes('delay') ? '⏱' : '→';
-                        return `<div class="logic-out-item">
-                            <span class="logic-arrow">${icon}</span>
-                            <span style="color:#7c3aed;font-size:9px;">
-                                ${l.rule ? `<em>${esc(l.rule)}</em> → ` : ''}${esc(tRes.name)} › ${esc(tStep.name || 'Step')}
-                            </span>
-                        </div>`;
-                    }).filter(Boolean);
-
-                    return `<div class="step-row">
-                        <div class="step-num" style="background:${tc.color}18;color:${tc.color};">${i + 1}</div>
-                        <div class="step-content">
-                            <div class="step-name">${esc(s.name || 'Unnamed')}</div>
-                            <div class="step-details">
-                                ${s.appName ? `<span class="step-detail-pill step-app-pill">💻 ${esc(s.appName)}</span>` : ''}
-                                ${assignees.map(a => `<span class="step-detail-pill step-assignee-pill">👨‍💼 ${esc(a)}</span>`).join('')}
-                                ${logicTypes.map(t => `<span class="step-detail-pill step-logic-pill">${
-                                    t === 'condition' ? '◆ Condition'
-                                    : t === 'loop' ? '↺ Loop'
-                                    : t === 'delay' ? '⏱ Delay' : t
-                                }</span>`).join('')}
-                            </div>
-                            ${logicOuts.length ? `<div class="logic-out">${logicOuts.join('')}</div>` : ''}
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>`;
+            html += `</div>`; // close flex row
         });
+
+        // Unassigned resources for this stage
+        const unassigned = resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)) && (r.steps || []).some(s => !s.isArchived));
+        if (unassigned.length) {
+            html += `<div class="wf-label"><div class="wf-dot" style="background:#9ca3af;"></div><div class="wf-name">Unassigned</div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:20px;break-inside:avoid;">`;
+            unassigned.forEach(res => {
+                const steps = (res.steps || []).filter(s => !s.isArchived);
+                const tc = OL._fvGetType(res.type);
+                html += `<div style="flex:1;min-width:0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;break-inside:avoid;">
+                    <div style="padding:7px 9px;background:${tc.color}12;border-bottom:2px solid ${tc.color};">
+                        <div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:${tc.color};">${esc(res.type || 'General')}</div>
+                        <div style="font-size:11px;font-weight:700;color:#0f172a;margin-top:1px;">${esc(res.name)}</div>
+                    </div>
+                    ${steps.map((s, i) => stepRowHtml(s, i, res, resources)).join('')}
+                </div>`;
+            });
+            html += `</div>`;
+        }
     });
 
     return html;
