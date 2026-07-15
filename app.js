@@ -13266,8 +13266,10 @@ OL._fvRenderSteps = function(resources) {
       stageLblEl = document.createElement('div');
       stageLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${stageTop + 10}px;
         font-size:8px;font-weight:800;letter-spacing:0.11em;text-transform:uppercase;
-        color:var(--text-muted);opacity:0.4;pointer-events:none;`;
+        color:var(--text-muted);opacity:0.4;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;max-width:260px;cursor:default;`;
       stageLblEl.textContent = stage.name;
+      stageLblEl.title = stage.name;
       canvas.appendChild(stageLblEl);
     }
 
@@ -13303,8 +13305,10 @@ OL._fvRenderSteps = function(resources) {
       const wfLblEl = document.createElement('div');
       wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;
         font-size:9px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
-        color:var(--accent);opacity:0.55;pointer-events:none;`;
+        color:var(--accent);opacity:0.55;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;max-width:${wfWidth - 10}px;cursor:default;`;
       wfLblEl.textContent = workflow.name;
+      wfLblEl.title = workflow.name;
       canvas.appendChild(wfLblEl);
 
       const wfContentTop = wfY + WF_PAD + WF_HDR;
@@ -13320,7 +13324,8 @@ OL._fvRenderSteps = function(resources) {
           width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
         hdrEl.innerHTML = `
           <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
-          <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
+          <span title="${esc(res.name)}"
+                style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                        letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
                        text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
         canvas.appendChild(hdrEl);
