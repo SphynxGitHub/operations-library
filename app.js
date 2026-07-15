@@ -9733,13 +9733,11 @@ OL.printScopingSheet = function() {
     });
     const sortedRounds = Object.keys(roundGroups).sort((a,b) => Number(a) - Number(b));
 
-    // Unit badges for an item (always show in print)
-    const unitBadgesHtml = (item, res) => {
-        const normalize = s => String(s||'').toLowerCase().replace(/\s+/g,'').trim();
-        const resKey = normalize(res?.type);
+    // Unit badges for an item — show all non-zero scoping vars regardless of resource type
+    const unitBadgesHtml = (item) => {
         const combined = { ...(item.scopingData || {}), ...(item.customData || {}) };
         const badges = Object.entries(combined)
-            .filter(([vid, count]) => { const v = vars[vid]; return v && count > 0 && normalize(v.applyTo) === resKey; })
+            .filter(([vid, count]) => { const v = vars[vid]; return v && Number(count) > 0; })
             .map(([vid, count]) => { const v = vars[vid]; return `<span class="unit-tag">${count} ${esc(v.label)}</span>`; })
             .join('');
         return badges ? `<div class="unit-row">${badges}</div>` : '';
@@ -9750,7 +9748,7 @@ OL.printScopingSheet = function() {
     const rowNet   = (item, res) => OL.calculateRowFee(item, res);
 
     // Build rows
-    let totalGross = 0, totalNet = 0;
+    let totalGross = 0, totalNet = 0, totalApproved = 0;
     let rowsHtml = '';
     sortedRounds.forEach(r => {
         let roundGross = 0, roundNet = 0;
@@ -9766,29 +9764,41 @@ OL.printScopingSheet = function() {
             roundGross += gross;
             roundNet   += net;
 
+            // Approved = Do Now + (Sphynx or Joint)
+            const statusLc = (item.status || '').toLowerCase().trim();
+            const partyLc  = (item.responsibleParty || '').toLowerCase().trim();
+            if (statusLc === 'do now' && (partyLc === 'sphynx' || partyLc === 'joint')) {
+                totalApproved += net;
+            }
+
             const multiplierLabel = (() => {
                 const teamMult = item.teamMultiplier ?? state.master.rates?.teamMultiplier ?? 1;
-                const scopeData = item.scopingData || {};
-                const stepCount = scopeData.steps || scopeData.steps_1147 || scopeData.steps_6717 || null;
                 const parts = [];
                 if (teamMult && teamMult !== 1) parts.push(`×${teamMult} team`);
                 return parts.join(' · ') || '—';
             })();
 
+            const pricingHtml = (() => {
+                if (!gross && !net) return '';
+                let s = `<span class="price-gross">$${gross.toLocaleString()}</span>`;
+                if (disc > 0) s += `<span class="price-sep"> − </span><span class="price-disc">$${disc.toLocaleString()} disc</span>`;
+                s += `<span class="price-sep"> → </span><span class="price-net">$${net.toLocaleString()}</span>`;
+                return `<div class="item-pricing">${s}</div>`;
+            })();
+
             roundRows += `<div class="item-row">
-                <div class="item-top">
-                    <div class="item-name">${esc(res.name)}</div>
-                    ${res.description ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
-                    ${unitBadgesHtml(item, res)}
-                </div>
-                <div class="item-meta">
-                    <span style="flex:1;"></span>
-                    <span class="mc-status meta-pill status-${(item.status||'').toLowerCase().replace(/\s+/g,'-')}">${esc(item.status || '—')}</span>
-                    <span class="mc-party meta-pill party">${esc(item.responsibleParty || '—')}</span>
-                    <span class="mc-mult meta-pill muted">${multiplierLabel}</span>
-                    <span class="mc-gross meta-num muted">$${gross.toLocaleString()}</span>
-                    ${disc > 0 ? `<span class="mc-disc meta-num disc">−$${disc.toLocaleString()}</span>` : '<span class="mc-disc meta-num muted" style="opacity:0.3;">—</span>'}
-                    <span class="mc-net meta-num net">$${net.toLocaleString()}</span>
+                <div class="item-body">
+                    <div class="item-main">
+                        <div class="item-name">${esc(res.name)}</div>
+                        ${res.description ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
+                        ${unitBadgesHtml(item)}
+                        ${pricingHtml}
+                    </div>
+                    <div class="item-meta">
+                        <span class="mc-status meta-pill status-${(item.status||'').toLowerCase().replace(/\s+/g,'-')}">${esc(item.status || '—')}</span>
+                        <span class="mc-party meta-pill party">${esc(item.responsibleParty || '—')}</span>
+                        <span class="mc-mult meta-pill muted">${multiplierLabel}</span>
+                    </div>
                 </div>
             </div>`;
         });
@@ -9796,7 +9806,7 @@ OL.printScopingSheet = function() {
         rowsHtml += `<div class="round-block">
             <div class="round-header">
                 <span class="round-title">Round ${r}</span>
-                <span class="round-totals">Gross $${roundGross.toLocaleString()} · Net $${roundNet.toLocaleString()}</span>
+                <span class="round-totals">Gross $${roundGross.toLocaleString()} · Net <strong>$${roundNet.toLocaleString()}</strong></span>
             </div>
             ${roundRows}
         </div>`;
@@ -9816,19 +9826,6 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .ph-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
 .ph-meta { text-align: right; font-size: 10px; color: #94a3b8; }
 
-/* Column header row */
-.col-header-row { display: flex; align-items: center; gap: 8px;
-                  padding: 4px 10px 4px 12px; border-bottom: 1.5px solid #0f172a;
-                  font-size: 9px; font-weight: 800; text-transform: uppercase;
-                  letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
-.ch-name { flex: 1; }
-.ch-status { width: 70px; }
-.ch-party  { width: 90px; }
-.ch-mult   { width: 60px; }
-.ch-gross  { width: 70px; text-align: right; }
-.ch-disc   { width: 60px; text-align: right; color: #dc2626; }
-.ch-net    { width: 80px; text-align: right; color: #0f172a; font-weight: 900; }
-
 .round-block { margin-bottom: 20px; break-inside: avoid; }
 .round-header { display: flex; justify-content: space-between; align-items: baseline;
                 padding: 6px 10px; background: #f8fafc; border-left: 3px solid #0ea5e9;
@@ -9836,62 +9833,54 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .round-title { font-size: 10px; font-weight: 800; text-transform: uppercase;
                letter-spacing: 0.07em; color: #0ea5e9; }
 .round-totals { font-size: 9px; color: #64748b; }
+.round-totals strong { color: #0f172a; font-size: 10px; }
 
 .item-row { border-bottom: 1px solid #f1f5f9; padding: 7px 10px 7px 12px;
             break-inside: avoid; }
-.item-top { margin-bottom: 5px; }
+.item-body { display: flex; align-items: flex-start; gap: 12px; }
+.item-main { flex: 1; min-width: 0; }
 .item-name { font-size: 11px; font-weight: 700; color: #0f172a; line-height: 1.3; }
 .item-desc { font-size: 9px; color: #64748b; margin-top: 2px; line-height: 1.4;
              font-style: italic; }
 .unit-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .unit-tag { font-size: 8px; font-weight: 700; text-transform: uppercase;
             border: 1px solid #e2e8f0; border-radius: 3px; padding: 1px 6px; color: #475569; }
+.item-pricing { margin-top: 4px; font-size: 9px; color: #94a3b8;
+                font-variant-numeric: tabular-nums; }
+.price-gross { color: #94a3b8; }
+.price-disc  { color: #dc2626; }
+.price-net   { color: #0f172a; font-weight: 800; font-size: 10px; }
+.price-sep   { color: #cbd5e1; }
 
-.item-meta { display: flex; align-items: center; gap: 8px; }
+.item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+             flex-shrink: 0; padding-top: 1px; }
 .meta-pill { font-size: 9px; padding: 2px 7px; border-radius: 99px;
-             border: 1px solid #e2e8f0; color: #475569; white-space: nowrap;
-             overflow: hidden; text-overflow: ellipsis; }
+             border: 1px solid #e2e8f0; color: #475569; white-space: nowrap; }
 .meta-pill.status-do-now { background: #dcfce7; border-color: #86efac; color: #15803d; }
 .meta-pill.status-do-later { background: #fef9c3; border-color: #fde047; color: #854d0e; }
 .meta-pill.status-don-t-do { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
 .meta-pill.status-done { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
-.meta-num { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums;
-            white-space: nowrap; text-align: right; }
-.meta-num.muted { color: #94a3b8; }
-.meta-num.disc { color: #dc2626; }
-.meta-num.net { color: #0f172a; font-weight: 800; }
-/* Fixed widths to match col-header-row */
-.mc-status { width: 70px; flex-shrink: 0; }
-.mc-party  { width: 90px; flex-shrink: 0; }
-.mc-mult   { width: 60px; flex-shrink: 0; }
-.mc-gross  { width: 70px; flex-shrink: 0; }
-.mc-disc   { width: 60px; flex-shrink: 0; }
-.mc-net    { width: 80px; flex-shrink: 0; }
+.mc-status { }
+.mc-party  { }
+.mc-mult   { color: #94a3b8; }
 
-.grand-total { display: flex; justify-content: flex-end; gap: 24px; align-items: baseline;
+.grand-total { display: flex; justify-content: flex-end; gap: 32px; align-items: flex-end;
                padding: 14px 10px; border-top: 2px solid #0f172a; margin-top: 16px; }
 .gt-label { font-size: 9px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 0.06em; color: #64748b; display: block; }
-.gt-val { font-size: 16px; font-weight: 800; }
-.gt-val.net { font-size: 22px; color: #0f172a; }
+            letter-spacing: 0.06em; color: #64748b; display: block; margin-bottom: 2px; }
+.gt-val { font-size: 16px; font-weight: 800; color: #64748b; }
+.gt-val.net { color: #0f172a; }
+.gt-val.approved { font-size: 22px; color: #15803d; }
 </style></head><body>
 <div class="print-header">
   <div><div class="ph-title">${esc(clientName)}</div><div class="ph-sub">Scoping Sheet</div></div>
   <div class="ph-meta">Generated ${date}<br>${(sheet.lineItems||[]).length} items</div>
 </div>
-<div class="col-header-row">
-  <span class="ch-name">Deliverable</span>
-  <span class="ch-status">Status</span>
-  <span class="ch-party">Responsible</span>
-  <span class="ch-mult">Multiplier</span>
-  <span class="ch-gross">Gross</span>
-  <span class="ch-disc">Disc</span>
-  <span class="ch-net">Net</span>
-</div>
 ${rowsHtml}
 <div class="grand-total">
-  <div><span class="gt-label">Gross</span><span class="gt-val muted">$${totalGross.toLocaleString()}</span></div>
-  <div><span class="gt-label">Final Net</span><span class="gt-val net">$${totalNet.toLocaleString()}</span></div>
+  <div><span class="gt-label">Gross</span><span class="gt-val">$${totalGross.toLocaleString()}</span></div>
+  <div><span class="gt-label">Net</span><span class="gt-val net">$${totalNet.toLocaleString()}</span></div>
+  <div><span class="gt-label">Approved</span><span class="gt-val approved">$${totalApproved.toLocaleString()}</span></div>
 </div>
 </body></html>`;
 
