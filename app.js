@@ -13683,10 +13683,24 @@ OL._fvDrawStepConnections = function(resources) {
 
         const dx = tx_center - fx_center;
         const dy = ty_center - fy_center;
+        const isCrossResource = String(tResId) !== String(sourceRes.id);
 
-        let fx, fy, tx, ty;
-        if (Math.abs(dy) >= Math.abs(dx)) {
-          // Primarily vertical
+        let fx, fy, tx, ty, isVert;
+        if (isCrossResource) {
+          // Cross-resource: always exit from bottom or right (never top/left) to read as "forward"
+          if (dx > 0) {
+            // Target is to the right — exit right, enter left
+            fx = fRect.right - cRect.left; fy = fy_center;
+            tx = tRect.left  - cRect.left; ty = ty_center;
+            isVert = false;
+          } else {
+            // Target is below (or same column) — exit bottom, enter top
+            fx = fx_center; fy = fRect.bottom - cRect.top;
+            tx = tx_center; ty = tRect.top    - cRect.top;
+            isVert = true;
+          }
+        } else if (Math.abs(dy) >= Math.abs(dx)) {
+          // Same resource, primarily vertical
           if (dy > 0) {
             fx = fx_center; fy = fRect.bottom - cRect.top;
             tx = tx_center; ty = tRect.top    - cRect.top;
@@ -13694,8 +13708,9 @@ OL._fvDrawStepConnections = function(resources) {
             fx = fx_center; fy = fRect.top    - cRect.top;
             tx = tx_center; ty = tRect.bottom - cRect.top;
           }
+          isVert = true;
         } else {
-          // Primarily horizontal
+          // Same resource, primarily horizontal
           if (dx > 0) {
             fx = fRect.right - cRect.left; fy = fy_center;
             tx = tRect.left  - cRect.left; ty = ty_center;
@@ -13703,10 +13718,10 @@ OL._fvDrawStepConnections = function(resources) {
             fx = fRect.left  - cRect.left; fy = fy_center;
             tx = tRect.right - cRect.left; ty = ty_center;
           }
+          isVert = false;
         }
 
-        const tension = Math.max(50, Math.abs(dy > dx ? dy : dx) * 0.4);
-        const isVert  = Math.abs(dy) >= Math.abs(dx);
+        const tension = Math.max(50, Math.abs(isVert ? dy : dx) * 0.4);
         const cp1x = isVert ? fx : fx + (dx > 0 ?  tension : -tension);
         const cp1y = isVert ? fy + (dy > 0 ?  tension : -tension) : fy;
         const cp2x = isVert ? tx : tx + (dx > 0 ? -tension :  tension);
