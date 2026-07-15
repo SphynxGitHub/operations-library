@@ -13507,21 +13507,53 @@ OL._fvRenderSteps = function(resources) {
 
         seqMeta.forEach(item => {
           if (item.type === 'columns') {
-            // Group cards by resource, reposition each resource's steps in sequence
+            // Group cards by resource
             const byRes = new Map();
             item.sectionCards.forEach(sc => {
               if (!byRes.has(sc.res)) byRes.set(sc.res, []);
               byRes.get(sc.res).push(sc);
             });
+
+            // Build lookup: 'resId-stepId' → card, for steps in this section only
+            const cardByKey = new Map();
+            item.sectionCards.forEach(sc => {
+              cardByKey.set(`${sc.res.id}-${sc.step.id}`, sc);
+            });
+
+            // Pass 1: compute natural (independent) Y for each card via simple stacking
+            const naturalTopY = new Map(); // el → top Y from simple stacking
+            byRes.forEach(cards => {
+              let ry = y;
+              cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += el.offsetHeight + STEP_GAP; });
+            });
+
+            // Pass 2: for each cross-resource outbound link within this section,
+            // record the minimum Y (source bottom) the target card must sit at
+            const minY = new Map(); // el → minimum allowed top Y
+            item.sectionCards.forEach(sc => {
+              (sc.step.logic?.out || []).forEach(link => {
+                if (!link.targetId || link._implicit) return;
+                const targetCard = cardByKey.get(String(link.targetId));
+                if (!targetCard || targetCard.res === sc.res) return; // same resource, skip
+                const srcBottom = naturalTopY.get(sc.el) + sc.el.offsetHeight;
+                const prev = minY.get(targetCard.el) || 0;
+                minY.set(targetCard.el, Math.max(prev, srcBottom));
+              });
+            });
+
+            // Pass 3: position each column, honouring minY constraints as steps are stacked
             let maxBottom = y;
-            byRes.forEach((cards, res) => {
+            byRes.forEach(cards => {
               let ry = y;
               cards.forEach(({ step, el }) => {
+                const constraint = minY.get(el);
+                if (constraint !== undefined && constraint > ry) ry = constraint;
                 if (!step.pinned) { el.style.top = ry + 'px'; step.coords.y = ry; }
                 ry += el.offsetHeight + STEP_GAP;
               });
               maxBottom = Math.max(maxBottom, ry - STEP_GAP);
             });
+
             y = maxBottom + STEP_GAP;
             wfBottom = Math.max(wfBottom, maxBottom);
 
