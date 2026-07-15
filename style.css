@@ -1182,52 +1182,105 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
    ============================================================ */
 .print-mode-active textarea, .print-mode-active .matrix-notes-auto, .print-mode-active .modal-textarea { display: none !important; }
 @media print {
-    .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar, .card-delete-btn, .header-actions, .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select, .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle, .drag-handle, .vis-idx, .search-map-container, .col-actions, .toolbar, #balance-button, textarea { display: none !important; }
-    @page { size: auto; margin: 10mm; }
-    html, body, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix { width: 100% !important; height: auto !important; background: white !important; background-color: white !important; border-right: none !important; box-shadow: none !important; color: black !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; filter: none !important; backdrop-filter: none !important; display: block !important; position: relative !important; }
-    .card { background: transparent; }
-    * { overflow: visible !important; -webkit-print-color-adjust: exact; }
-    #mainContent .fs-canvas { display: none !important; }
-    .tiny-select { appearance: none !important; -webkit-appearance: none !important; -moz-appearance: none !important; background-image: none !important; }
-    .tiny-select::-ms-expand { display: none !important; }
-    .grid-header, .grid-row, .round-header-row, .grand-totals-bar { grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 0px !important; gap: 5px !important; page-break-inside: avoid; }
+    /* ── Force light theme regardless of user's dark/light setting ── */
+    :root {
+        --bg: #ffffff;
+        --bg-soft: #f8fafc;
+        --panel: #f1f5f9;
+        --panel-soft: #f8fafc;
+        --panel-border: #e2e8f0;
+        --text-main: #0f172a;
+        --text-dim: #475569;
+        --text-muted: #94a3b8;
+        --line: #e2e8f0;
+        --accent: #0ea5e9;
+        --accent-rgb: 14, 165, 233;
+        --accent-glow: rgba(14,165,233,0.08);
+    }
+
+    /* ── Page setup: landscape for wide scoping grid ── */
+    @page { size: auto landscape; margin: 12mm 10mm; }
+
+    /* ── Hide interactive chrome ── */
+    .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar,
+    .card-delete-btn, .header-actions, .local-tag, div.cards-grid,
+    .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select,
+    .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle,
+    .drag-handle, .vis-idx, .search-map-container, .col-actions, .toolbar,
+    #balance-button, textarea { display: none !important; }
+
+    html, body, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix {
+        width: 100% !important; height: auto !important;
+        background: #fff !important; background-color: #fff !important;
+        border-right: none !important; box-shadow: none !important;
+        color: #0f172a !important; overflow: visible !important;
+        margin: 0 !important; padding: 0 !important;
+        filter: none !important; backdrop-filter: none !important;
+        display: block !important; position: relative !important;
+        font-size: 10pt !important;
+    }
+
+    * { overflow: visible !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    ::-webkit-scrollbar { display: none !important; }
+
+    /* ── Strip all backgrounds to white/transparent ── */
+    .card, .round-header-row, .grand-totals-bar, .category-header-row,
+    .grid-row, .rounds-container, .round-grid, .round-group,
+    td, th { background: transparent !important; background-color: transparent !important; }
+
+    /* ── Scoping grid: fix min-width so header and data rows share same width ── */
+    .scoping-grid, .rounds-container, .round-grid { min-width: 0 !important; width: 100% !important; }
+
+    /* ── Scoping grid columns: 6 visible cols (actions hidden), aligned ── */
+    .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
+        grid-template-columns: 2fr 1fr 120px 70px 70px 80px !important;
+        gap: 4px 10px !important;
+        page-break-inside: avoid;
+    }
+
+    /* ── Input/select reset for print ── */
     .card, .matrix-container { box-shadow: none !important; padding: 0 !important; margin: 0 auto !important; width: 99% !important; max-width: 99% !important; border: none !important; }
-    div.dp-manager-row { border-bottom: 1px solid black !important; margin-bottom: 0; padding: 4pt auto; }
+    div.dp-manager-row { border-bottom: 1px solid #e2e8f0 !important; margin-bottom: 0; }
     .price-input-tiny, input, textarea { border: none !important; }
-    textarea, .price-input-tiny { color: var(--text-main) !important; }
-    .tiny-select { border: none !important; color: var(--text-main) !important; font-weight: bold; }
+    textarea, .price-input-tiny { color: #0f172a !important; }
+    .tiny-select { appearance: none !important; -webkit-appearance: none !important; border: none !important; color: #0f172a !important; font-weight: bold; background: transparent !important; }
+    .tiny-select::-ms-expand { display: none !important; }
     #activeAnalysisMatrix { border-right: none !important; }
-    .matrix-table { margin: 0 auto !important; width: 99% !important; table-layout: fixed !important; border-collapse: collapse !important; border: 1px solid #d3d3d3 !important; font-size: 11.5px; page-break-after: auto; }
-    .matrix-table th, .matrix-table td { border: 1px solid #d3d3d3 !important; box-sizing: border-box !important; padding: 4px !important; }
+
+    /* ── Matrix (analysis) table ── */
+    .matrix-table { margin: 0 auto !important; width: 99% !important; table-layout: fixed !important; border-collapse: collapse !important; border: 1px solid #d3d3d3 !important; font-size: 10px; page-break-after: auto; }
+    .matrix-table th, .matrix-table td { border: 1px solid #d3d3d3 !important; box-sizing: border-box !important; padding: 4px !important; background: transparent !important; }
     .matrix-table th:first-child, .matrix-table td:first-child { width: 30% !important; word-break: break-word !important; }
     .matrix-table th:nth-child(2), .matrix-table td:nth-child(2) { width: 65px !important; }
     .tiny-input, .matrix-score-input { width: 100% !important; text-align: center !important; border: none !important; background: transparent !important; font-family: inherit !important; font-size: 10pt !important; }
-    .category-header-row td { background-color: var(--bg) !important; -webkit-print-color-adjust: exact; }
+    .category-header-row td { background-color: #f8fafc !important; }
     .matrix-table tfoot { display: table-row-group !important; }
     .matrix-table tfoot tr { page-break-inside: avoid; page-break-after: auto; }
     .executive-summary-wrapper { page-break-inside: avoid; margin-top: 30px; }
     .matrix-final-footer { position: relative; margin-top: 50px; page-break-inside: avoid; display: block !important; }
     .matrix-notes-auto::placeholder { color: transparent; opacity: 0 !important; }
-    .matrix-notes-auto, .modal-textarea, .executive-summary-wrapper textarea { display: block !important; height: auto !important; min-height: auto !important; max-height: none !important; overflow: visible !important; border: none !important; padding: 0 !important; margin: 0 !important; line-height: 1.4 !important; white-space: pre-wrap !important; background: transparent !important; color: var(--text-main) !important; -webkit-print-color-adjust: exact; }
+    .matrix-notes-auto, .modal-textarea, .executive-summary-wrapper textarea { display: block !important; height: auto !important; min-height: auto !important; max-height: none !important; overflow: visible !important; border: none !important; padding: 0 !important; margin: 0 !important; line-height: 1.4 !important; white-space: pre-wrap !important; background: transparent !important; color: #0f172a !important; }
     .executive-summary-wrapper, .matrix-card-main { height: auto !important; overflow: visible !important; display: block !important; page-break-inside: auto !important; }
-    ::-webkit-scrollbar { display: none !important; }
-    .print-placeholder { display: block !important; width: 100% !important; height: auto !important; border: none !important; background: transparent !important; color: var(--text-main) !important; font-family: inherit; font-size: 11px; line-height: 1.4; margin: 0; padding: 5px 0; page-break-inside: avoid; text-align: left; }
+    .print-placeholder { display: block !important; width: 100% !important; height: auto !important; border: none !important; background: transparent !important; color: #0f172a !important; font-family: inherit; font-size: 10px; line-height: 1.4; margin: 0; padding: 5px 0; page-break-inside: avoid; text-align: left; }
     .executive-summary-wrapper .print-placeholder { padding: 10px 0; page-break-inside: auto; }
     .print-placeholder:empty { display: none !important; }
+
+    /* ── Flowchart / visualizer views ── */
+    #mainContent .fs-canvas { display: none !important; }
     #workflow-fs-overlay { position: absolute !important; top: 0 !important; left: 0 !important; display: block !important; width: 100% !important; height: auto !important; background: white !important; box-shadow: none !important; z-index: 9999 !important; }
     #vis-links-layer, .vis-path, .trigger-path { display: none !important; }
     .vis-workspace { position: relative !important; display: block !important; background: white !important; padding: 5mm 0 !important; margin: 0 auto .5cm auto !important; width: 100% !important; }
     .vis-trigger-row { display: flex !important; justify-content: center !important; gap: 5mm !important; margin-bottom: 0 !important; }
     .vis-vertical-stack { display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0 !important; margin-bottom: 0; }
     .vis-expanded-editor, .module-nested-steps, .vis-outcomes-area, .edit-panel-wrap { display: block !important; visibility: visible !important; opacity: 1 !important; height: auto !important; max-height: none !important; overflow: visible !important; }
-    .vis-input-ghost, .modal-textarea, .modal-input { border: none !important; padding: 0 !important; background: transparent !important; resize: none !important; overflow: visible !important; color: var(--text-main) !important; font-size: 10pt !important; }
-    .vis-node { border: 1px solid #000 !important; border-radius: 10px; background: #fff !important; box-shadow: none !important; filter: none !important; break-inside: avoid !important; page-break-inside: avoid !important; margin: 0 auto .5cm auto !important; width: 50% !important; max-width: 500px !important; position: relative !important; }
-    .vis-node-header { background: #f5f5f5 !important; border-radius: 10px 10px 0 0; border-bottom: 1pt solid #000 !important; -webkit-print-color-adjust: exact; }
+    .vis-input-ghost, .modal-textarea, .modal-input { border: none !important; padding: 0 !important; background: transparent !important; resize: none !important; overflow: visible !important; color: #0f172a !important; font-size: 10pt !important; }
+    .vis-node { border: 1px solid #cbd5e1 !important; border-radius: 10px; background: #fff !important; box-shadow: none !important; filter: none !important; break-inside: avoid !important; page-break-inside: avoid !important; margin: 0 auto .5cm auto !important; width: 50% !important; max-width: 500px !important; position: relative !important; }
+    .vis-node-header { background: #f8fafc !important; border-radius: 10px 10px 0 0; border-bottom: 1pt solid #e2e8f0 !important; }
     .vis-node-body { padding: 10px 15px !important; font-size: 10pt; font-family: inherit; }
-    .vis-port { padding: 4px 0 !important; border-top: 0.5pt solid #eee !important; }
-    .vis-outcome-chip { padding: 2px 6px !important; border: 0.5pt solid #ccc !important; background: transparent !important; -webkit-print-color-adjust: exact; }
+    .vis-port { padding: 4px 0 !important; border-top: 0.5pt solid #e2e8f0 !important; }
+    .vis-outcome-chip { padding: 2px 6px !important; border: 0.5pt solid #cbd5e1 !important; background: transparent !important; }
     .vis-outcome-label-text { display: block !important; font-size: 10pt !important; text-align: right !important; }
-    .step-group, .vis-node { page-break-inside: avoid !important; break-inside: avoid !important; border: 1pt solid #eee !important; margin-bottom: 5pt; }
+    .step-group, .vis-node { page-break-inside: avoid !important; break-inside: avoid !important; border: 1pt solid #e2e8f0 !important; margin-bottom: 5pt; }
 }
 
 /* ============================================================
