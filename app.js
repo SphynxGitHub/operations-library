@@ -1097,35 +1097,56 @@ OL.importMasterBackup = async function(event) {
 };
 
 window.handleRoute = function() {
-    // 1. Wait for Supabase sync to complete
     if (!state.isCloudSynced) return;
 
-    // 2. Validate Admin Security
     const urlParams = new URLSearchParams(window.location.search);
+    
+    // Strict URL check: Requires ?admin=pizza123 explicitly in the URL OR valid client token
     const hasAdminKey = urlParams.get('admin') === 'pizza123';
-    if (hasAdminKey) sessionStorage.setItem('ol_admin_auth', 'true');
-    const isAuthedAdmin = sessionStorage.getItem('ol_admin_auth') === 'true' || hasAdminKey;
 
     const hash = window.location.hash || '#/';
     const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
     const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    // 3. Security Guard for Root / Master Vault
-    if (!isAuthedAdmin && !isClientRoute) {
+    // 1. Block Root / Master Access if URL is missing ?admin=pizza123
+    if (!hasAdminKey && !isClientRoute) {
         document.body.innerHTML = `
-            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;text-align:center;">
+            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
                 <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                     <div style="font-size:32px;margin-bottom:12px;">🔒</div>
                     <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
                     <p style="font-size:13px;line-height:1.5;color:#718096;">
-                        A valid access token or admin key is required to view this workspace.
+                        A valid access key (?admin=pizza123) is required to view this workspace.
                     </p>
                 </div>
             </div>`;
         return;
     }
 
-    // 4. Route Routing Switch
+    // 2. Block Client Route if token is missing/invalid AND admin key is missing
+    if (isClientRoute && !hasAdminKey) {
+        const client = state.clients[routeClientId];
+        const passedToken = urlParams.get('token') || urlParams.get('key');
+        
+        if (!client || (client.publicToken && client.publicToken !== passedToken)) {
+            document.body.innerHTML = `
+                <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#e53e3e;font-family:sans-serif;text-align:center;">
+                    <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
+                        <div style="font-size:32px;margin-bottom:12px;">🚫</div>
+                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Invalid Client Token</h2>
+                        <p style="font-size:13px;line-height:1.5;color:#718096;">
+                            You do not have permission to view project ${routeClientId}.
+                        </p>
+                    </div>
+                </div>`;
+            return;
+        }
+    }
+
+    // 3. Clear session storage key if present
+    sessionStorage.removeItem('ol_admin_auth');
+
+    // 4. Render Authorized Views
     if (hash === '#/' || hash === '' || hash === '#/dashboard') {
         window.renderClientDashboard();
     } else if (isClientRoute && typeof window.renderClientWorkspace === 'function') {
