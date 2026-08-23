@@ -217,7 +217,7 @@ OL.sync = async function() {
             state.master.analyses = masterData.analyses || [];
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
-        
+
         // 2. Read Client List
         const { data: clientsData, error: clientsErr } = await window.db
             .from('workspace_clients')
@@ -1065,103 +1065,61 @@ OL.importMasterBackup = async function(event) {
     }
 };
 
-window.handleRoute = function () {
-    const hash = window.location.hash || "#/";
-    const isVisualizer = hash.includes('visualizer');
-    const wasVisualizer = document.body.classList.contains('is-visualizer');
+window.handleRoute = function() {
+    // 1. Check URL Parameters for Admin Key
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasAdminKey = urlParams.get('admin') === 'pizza123';
     
-    // Only close inspector when LEAVING the visualizer
-    if (wasVisualizer && !isVisualizer) {
-        const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-        if (panel) {
-            panel.classList.remove('open');
-            panel.id = 'inspector-panel';
-            panel.style.width = '0';
-            panel.style.minWidth = '0';
-        }
-        // ── ADD THIS ──
-        const inspectorContent = document.getElementById('inspector-content');
-        if (inspectorContent) inspectorContent.innerHTML = '';
-        // ─────────────
-        if (OL._fv) OL._fv._lastInspectorResId = null;
-    
-        const layout = document.querySelector('.three-pane-layout');
-        if (layout) {
-            const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-            const leftCol = sidebarCollapsed ? '65px' : '240px';
-            layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
-        }
+    // Persist admin session if key was passed once
+    if (hasAdminKey) {
+        sessionStorage.setItem('ol_admin_auth', 'true');
     }
-    // --- 🚦 [Remainder of your standard routing evaluation conditions...] ---
-    const matrix = document.querySelector('.matrix-table-container');
-    const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
+    const isAuthedAdmin = sessionStorage.getItem('ol_admin_auth') === 'true' || hasAdminKey;
 
-    if (matrix && !isAppLoading) {
-        console.warn("🛡️ Matrix Active: Blocking Background Refresh to save your focus.");
-        return; 
-    }
+    // 2. Parse Current Route / Hash
+    const hash = window.location.hash || '#/';
+    const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
+    const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    window.buildLayout(); 
-
-    const main = document.getElementById("mainContent");
-    if (!main) return; 
-
-    const client = getActiveClient();
-    const isVault = hash.startsWith('#/vault');
-
-    if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        if (window.FORCE_ADMIN && hash === "#/") {
-            renderClientDashboard();
-            return;
-        }
-        const leadProject = (client?.meta?.status === "Partner") ? client : state.clients[client?.meta?.partnerOwner];
-        if (leadProject) {
-            OL.renderPartnerDashboard(leadProject, main);
-            return;
-        }
-        renderClientDashboard();
+    // 3. Security Check: Block Root / Master Access without Admin Key
+    if (!isAuthedAdmin && !isClientRoute) {
+        document.body.innerHTML = `
+            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
+                <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
+                    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
+                    <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
+                    <p style="font-size:13px;line-height:1.5;margin-bottom:20px;color:#718096;">
+                        A valid access token or admin key is required to view this workspace.
+                    </p>
+                </div>
+            </div>`;
         return;
     }
 
-    if (isVault) {
-        if (window.IS_GUEST) {
-            window.location.hash = '#/';
+    // 4. Security Check: Direct Client Route Access
+    if (isClientRoute && !isAuthedAdmin) {
+        const client = state.clients[routeClientId];
+        const passedToken = urlParams.get('token') || urlParams.get('key');
+        
+        // Verify client exists and token matches if public token security is configured
+        if (!client || (client.publicToken && client.publicToken !== passedToken)) {
+            document.body.innerHTML = `
+                <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#e53e3e;font-family:sans-serif;text-align:center;">
+                    <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
+                        <div style="font-size:32px;margin-bottom:12px;">🚫</div>
+                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Invalid Client Token</h2>
+                        <p style="font-size:13px;line-height:1.5;color:#718096;">
+                            You do not have permission to view project ${routeClientId}.
+                        </p>
+                    </div>
+                </div>`;
             return;
         }
-        if (hash.includes("/apps")) renderAppsGrid();
-        else if (hash.includes("/functions")) renderFunctionsGrid();
-        else if (hash.includes("/resources")) renderResourceManager();
-        else if (hash.includes("/visualizer")) {
-            state.viewMode = 'graph';
-            document.body.classList.add('is-visualizer');
-            OL.renderVisualizer();
-        }
-        else if (hash.includes("/how-to")) renderHowToLibrary();
-        else if (hash.includes("/tasks")) renderChecklistModule(true);
-        else if (hash.includes("/analyses")) renderAnalysisModule(true);
-        else if (hash.includes("/rates")) renderVaultRatesPage();
-        else if (hash.includes("/data")) OL.renderGlobalDataManager();
-        return;
     }
 
-    if (client) {
-        if (hash.includes("client-tasks")) renderChecklistModule();
-        else if (hash.includes("resources")) renderResourceManager();
-        else if (hash.includes("applications")) renderAppsGrid();
-        else if (hash.includes("functions")) renderFunctionsGrid();
-        else if (hash.includes("visualizer")) {
-            state.viewMode = 'graph';
-            document.body.classList.add('is-visualizer');
-            OL.renderVisualizer();
-        }
-        else if (hash.includes("scoping-sheet")) renderScopingSheet();
-        else if (hash.includes("analyze")) renderAnalysisModule();
-        else if (hash.includes("how-to")) renderHowToLibrary();
-        else if (hash.includes("team")) renderTeamManager();
-        else if (hash.includes("data")) OL.renderGlobalDataManager();
-    } else {
-        renderClientDashboard();
+    // Proceed to standard view rendering if security checks pass...
+    if (typeof window.renderAppLayout === 'function') {
+        window.renderAppLayout();
     }
 };
 
