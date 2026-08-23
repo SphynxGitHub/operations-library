@@ -41,8 +41,8 @@ const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 //======================= SUPABASE CONFIG & INITIALIZATION =======================//
 
 // 3. Initialize Supabase Client (Replace with your actual keys)
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://kexnnpwjerrnsmifauuo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleG5ucHdqZXJybnNtaWZhdXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDcxNTEsImV4cCI6MjEwMzA4MzE1MX0.BAgC5wN4SKqfqKn0Gt7a53sGvigh_YlaMcQLdaovc08';
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // 4. Initialize State Placeholder
