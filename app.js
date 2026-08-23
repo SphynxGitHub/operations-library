@@ -143,22 +143,22 @@ OL.persist = async function() {
 
 // 6. EVENT BOOTLOADER
 window.addEventListener("load", () => {
-    // 1. Security Check FIRST
-    const allowed = OL.initializeSecurityContext();
-    if (!allowed) return;
+    console.log("🚀 Application Boot Sequence Started");
+
+    // 1. Initialize Security Context
+    OL.initializeSecurityContext();
 
     // 2. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
         state.adminMode = true;
     }
 
-    // 3. Recall Client
+    // 3. Recall Client & Visualizer state safely
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
     if (savedClientId) state.activeClientId = savedClientId;
 
-    // 4. Recall Visualizer depth
-    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id') || null;
+    state.focusedResourceId = sessionStorage.getItem('active_resource_id') || null;
 
     const currentHash = location.hash;
     const isDashboard = currentHash === "" || currentHash === "#/";
@@ -172,16 +172,22 @@ window.addEventListener("load", () => {
         location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
 
-    if (typeof window.buildLayout === 'function') window.buildLayout();
+    // 4. Force build the layout shell (creates #mainContent)
+    if (typeof window.buildLayout === 'function') {
+        window.buildLayout();
+    }
+
+    // 5. Inject loading placeholder into #mainContent
     const mainEl = document.getElementById('mainContent');
     if (mainEl) {
         mainEl.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
                 <div class="fv-spinner"></div>
-                <div style="font-size:13px;letter-spacing:0.05em;">Loading...</div>
+                <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
             </div>`;
     }
 
+    // 6. Start Sync
     OL.sync();
 });
 
