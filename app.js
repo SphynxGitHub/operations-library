@@ -715,11 +715,13 @@ window.buildLayout = function () {
 }
     
   // 1. Dashboard/Non-Context View
-  if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
-        // Only render the Dashboard link if no client context exists
+  // Force build the layout shell if it doesn't exist on the page
+    let shell = root.querySelector('.three-pane-layout');
+
+    if (!shell) {
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
-                <aside class="sidebar"><nav class="menu"><a href="#/" class="active"><i>🏠</i> <span>Dashboard</span></a></nav></aside>
+                <aside class="sidebar"></aside>
                 <main id="mainContent"></main>
                 <aside id="inspector-panel" class="pane-inspector">
                     <div class="sidebar-resizer right-side-handle"></div>
@@ -727,10 +729,10 @@ window.buildLayout = function () {
                         <div id="inspector-content"></div>
                     </div>
                 </aside>
-            </div>`;
-        return;
-    }  
-
+            </div>
+        `;
+    }
+    
   const effectiveAdminMode = isPublic ? false : state.adminMode;
 
   if (!root) return; // Safety guard
