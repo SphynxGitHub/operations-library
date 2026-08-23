@@ -1,6 +1,9 @@
 //======================= GENERAL SECTION =======================//
 
-// 1. MUST BE LINE 1: Define the namespace immediately
+// 1. MUST BE LINE 1: Module Imports (Required for ES Modules)
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+// 2. Define Namespace & Environment Controls
 const OL = window.OL = {};
 
 // 🎨 THEME BOOTLOADER: Run immediately on script load
@@ -35,21 +38,14 @@ const num = (v) => (v === undefined || v === null || v === 0) ? "" : v;
 const esc = (s) => String(s ?? "").replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
 const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 
-// 3. Firebase configuration
-const apiKey = window.GOOGLE_API_KEY;
-const firebaseConfig = {
-  apiKey: apiKey,
-  authDomain: "operations-library-d2fee.firebaseapp.com",
-  projectId: "operations-library-d2fee",
-  storageBucket: "operations-library-d2fee.firebasestorage.app",
-  messagingSenderId: "353128653022",
-  appId: "1:353128653022:web:5e6a11b7c91c8b3446224f",
-  measurementId: "G-B8Q6H7YXHE"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+//======================= SUPABASE CONFIG & INITIALIZATION =======================//
 
-// 4. Initialize the state placeholder
+// 3. Initialize Supabase Client (Replace with your actual keys)
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 4. Initialize State Placeholder
 let state = {
     activeClientId: null,
     viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
@@ -90,47 +86,63 @@ let state = {
 };
 OL.state = state;
 
-// In OL.persist, move lastLocalSave to AFTER the save:
+// 5. SAFE PERSIST ENGINE: Saves local state via Supabase Upsert (No auto-deletions)
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
-    window.lastSyncHash = null;
+    
     window.saveTimeout = setTimeout(async () => {
-        window.saveTimeout = null; // clear so snapshot guard resets after this fires
+        window.saveTimeout = null;
         try {
             console.log("☁️ Background Sync Starting...");
 
-            // Always save master regardless of active client
-            const masterCopy = JSON.parse(JSON.stringify(state.master));
-            await db.collection('systems').doc('main_state').set(masterCopy);
+            // --- Safeguard 1: Master Protection ---
+            if (state.master && Object.keys(state.master).length > 0) {
+                const masterCopy = JSON.parse(JSON.stringify(state.master));
+                const { error: masterErr } = await db.from('workspace_masters').upsert({
+                    id: 'main_state',
+                    exported_at: new Date().toISOString(),
+                    version: masterCopy._version || 1,
+                    rates: masterCopy.rates || {},
+                    resource_types: masterCopy.resourceTypes || [],
+                    datapoints: masterCopy.datapoints || []
+                });
+                if (masterErr) throw masterErr;
+            }
 
+            // --- Safeguard 2: Active Client Protection ---
             const activeId = state.activeClientId;
             if (activeId && state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
-                // localResources is the source of truth — remove legacy alias before save
-                if (clientCopy.projectData) {
-                    delete clientCopy.projectData.resources;
-                }
-                // Never save an incomplete client object
+                if (clientCopy.projectData) delete clientCopy.projectData.resources;
+
+                // ABORT GUARD: Never save an incomplete client object
                 if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
-                    console.error('🛑 PERSIST ABORTED: Incomplete client object, refusing to save');
-                    window.lastLocalSave = Date.now(); // still reset guard so snapshots can resume
+                    console.error('🛑 PERSIST ABORTED: Incomplete client object. Database untouched.');
+                    window.lastLocalSave = Date.now();
                     return;
                 }
-                await db.collection('clients').doc(activeId).set(clientCopy, { merge: true });
+
+                const { error: clientErr } = await db.from('workspace_clients').upsert({
+                    id: activeId,
+                    public_token: clientCopy.publicToken,
+                    created_at: new Date().toISOString()
+                });
+                if (clientErr) throw clientErr;
             }
 
             window.lastLocalSave = Date.now();
             console.log("✅ Background Sync Complete.");
         } catch (error) {
-            console.error("💀 Persistence Error:", error);
+            console.error("💀 Persistence Error:", error.message);
         }
     }, 1500);
 };
 
+// 6. EVENT BOOTLOADER
 window.addEventListener("load", () => {
-    // 1. Security Check FIRST — before anything else loads
+    // 1. Security Check FIRST
     const allowed = OL.initializeSecurityContext();
-    if (!allowed) return; // Stop everything if not authorized
+    if (!allowed) return;
 
     // 2. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
@@ -157,8 +169,6 @@ window.addEventListener("load", () => {
         location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
 
-    // Show a loading skeleton immediately so there's no white screen while
-    // Firebase establishes its connection and fires the first snapshot.
     if (typeof window.buildLayout === 'function') window.buildLayout();
     const mainEl = document.getElementById('mainContent');
     if (mainEl) {
@@ -172,129 +182,68 @@ window.addEventListener("load", () => {
     OL.sync();
 });
 
-OL.sync = function() {
+// 7. READ-ONLY INITIAL SYNC (Safe Read from Supabase)
+OL.sync = async function() {
     if (window.isSyncInitialized) return;
     window.isSyncInitialized = true;
-    console.log("📡 Initializing Unified Collection Sync...");
+    console.log("📡 Fetching Workspace Data from Supabase...");
 
-    // 1. Master Registry
-    db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (doc.exists) {
-            // Guard: don't overwrite in-memory state while a save is pending or just completed.
-            // Without this, a snapshot firing during the 1500ms persist debounce window would
-            // replace state.master with stale Firestore data, then the timer would save that
-            // stale data back — silently wiping any in-memory changes (e.g. new rate variables).
-            const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
-            if (window.saveTimeout || timeSinceLastSave < 5000) {
-                console.log('⏳ Ignoring master snapshot — save in progress or recently completed');
-            } else {
-                state.master = doc.data();
-                console.log("🏛️ Master Registry Synced");
-            }
-            const modalOpen = !!document.getElementById('modal-overlay');
-            const onMasterRoute = ['resources','apps','functions','vault','rates','resourceTypes','howto','team']
-                .some(r => window.location.hash.includes(r));
-            if (!modalOpen && (!state.activeClientId || onMasterRoute)) window.handleRoute();
+    try {
+        // Fetch Master Registry
+        const { data: masterData } = await db.from('workspace_masters').select('*').limit(1).single();
+        if (masterData) {
+            state.master.rates = masterData.rates || state.master.rates;
+            state.master.resourceTypes = masterData.resource_types || state.master.resourceTypes;
+            state.master.datapoints = masterData.datapoints || state.master.datapoints;
+            console.log("🏛️ Master Registry Loaded.");
         }
-    });
 
-    // 2. Active client — full data, real-time
-    const activeId = sessionStorage.getItem('lastActiveClientId');
-    if (activeId) {
-        db.collection('clients').doc(activeId).onSnapshot((doc) => {
-            if (doc.exists) {
-                const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
-                if (window.saveTimeout || timeSinceLastSave < 10000) {
-                    console.log(`⏳ Ignoring client snapshot — save pending: ${!!window.saveTimeout}, ${timeSinceLastSave}ms since last save`);
-                    return;
+        // Fetch Client List
+        const { data: clientsData } = await db.from('workspace_clients').select('*');
+        if (clientsData) {
+            clientsData.forEach(client => {
+                if (!state.clients[client.id]) {
+                    state.clients[client.id] = {
+                        id: client.id,
+                        publicToken: client.public_token,
+                        _metaOnly: true
+                    };
                 }
-                
-                state.clients[activeId] = doc.data();
-                state.activeClientId = activeId;
-                console.log(`👤 Active Client Loaded: ${doc.data()?.meta?.name}`);
-        
-                if (!state.v2) state.v2 = {};
-                const rawSelected = state.clients[activeId].v2?.selectedNodes;
-                state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
-        
-                const modalOpen = !!document.getElementById('modal-overlay');
-                const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
-                                   window.location.hash.includes('analyze');
-                if (!modalOpen && !matrixOpen) window.handleRoute();
-            }
-        });
+            });
+            console.log(`📋 Client Index Loaded: ${clientsData.length} clients`);
+        }
+
+        if (!document.getElementById('modal-overlay')) window.handleRoute();
+    } catch (error) {
+        console.error("❌ Sync Initialization Error:", error.message);
     }
-
-    // 3. Client index — meta only for dashboard
-    db.collection('clients').onSnapshot((querySnapshot) => {
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (state.clients[doc.id]?.projectData) return;
-            state.clients[doc.id] = {
-                id: doc.id,
-                meta: data.meta,
-                modules: data.modules,
-                permissions: data.permissions,
-                publicToken: data.publicToken,
-                sharedMasterIds: data.sharedMasterIds,
-                _metaOnly: true
-            };
-        });
-    
-        console.log(`📋 Client Index Loaded: ${querySnapshot.size} clients`);
-    
-        const modalOpen = !!document.getElementById('modal-overlay');
-
-        // 🎟️ GUEST: Find client by token and attach full listener once
-        if (window.IS_GUEST) {
-            var urlParams2 = new URLSearchParams(window.location.search);
-            var accessToken2 = urlParams2.get('access');
-            var guestClient2 = Object.values(state.clients).find(c => c.publicToken === accessToken2);
-
-            if (guestClient2 && !window._guestListenerAttached) {
-                window._guestListenerAttached = true;
-                var guestId2 = guestClient2.id;
-                state.activeClientId = guestId2;
-                sessionStorage.setItem('lastActiveClientId', guestId2);
-
-                db.collection('clients').doc(guestId2).onSnapshot((doc) => {
-                    if (doc.exists) {
-                        state.clients[guestId2] = doc.data();
-                        state.activeClientId = guestId2;
-                        console.log('👤 Guest Client Full Data Loaded:', doc.data()?.meta?.name);
-                        if (!document.getElementById('modal-overlay')) window.handleRoute();
-                    }
-                });
-            }
-
-            const client = getActiveClient();
-            if (client) {
-                console.log("🎟️ Guest Token Validated:", client.meta.name);
-                const matrixOpen = document.querySelector('.matrix-card-main, .matrix-table') || 
-                                   window.isMatrixActive || state.activeMatrixId;
-                if (!modalOpen && !matrixOpen) window.handleRoute();
-            }
-            return;
-        }
-
-        // 👤 ADMIN: render dashboard if on root
-        if (!modalOpen && (window.location.hash === '#/' || window.location.hash === '')) {
-            window.handleRoute();
-        }
-    });
 };
+
+// 8. RELATIONAL CLIENT FETCH
 OL.loadFullClient = async function(clientId) {
-    // Already have full data
     if (state.clients[clientId] && !state.clients[clientId]._metaOnly) {
         return state.clients[clientId];
     }
     
-    console.log(`📥 Loading full client data: ${clientId}`);
-    const doc = await db.collection('clients').doc(clientId).get();
-    if (doc.exists) {
-        state.clients[clientId] = doc.data();
-        delete state.clients[clientId]._metaOnly;
-    }
+    console.log(`📥 Fetching client records from Supabase: ${clientId}`);
+
+    const [stagesRes, teamRes, resourcesRes] = await Promise.all([
+        db.from('workspace_stages').select('*').eq('client_id', clientId),
+        db.from('team_members').select('*').eq('client_id', clientId),
+        db.from('workspace_resources').select('*').eq('client_id', clientId)
+    ]);
+
+    state.clients[clientId] = {
+        id: clientId,
+        publicToken: state.clients[clientId]?.publicToken || null,
+        projectData: {
+            stages: stagesRes.data || [],
+            teamMembers: teamRes.data || [],
+            localResources: resourcesRes.data || []
+        }
+    };
+
+    delete state.clients[clientId]._metaOnly;
     return state.clients[clientId];
 };
 
