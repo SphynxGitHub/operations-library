@@ -1066,29 +1066,34 @@ OL.importMasterBackup = async function(event) {
 };
 
 window.handleRoute = function() {
-    // 1. Check URL Parameters for Admin Key
+    // 1. Wait for Supabase cloud sync to finish first
+    if (!state.isCloudSynced) {
+        return; 
+    }
+
+    // 2. Check URL Parameters for Admin Key
     const urlParams = new URLSearchParams(window.location.search);
     const hasAdminKey = urlParams.get('admin') === 'pizza123';
     
-    // Persist admin session if key was passed once
     if (hasAdminKey) {
         sessionStorage.setItem('ol_admin_auth', 'true');
     }
     const isAuthedAdmin = sessionStorage.getItem('ol_admin_auth') === 'true' || hasAdminKey;
 
-    // 2. Parse Current Route / Hash
+    // 3. Parse Current Route
     const hash = window.location.hash || '#/';
     const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
     const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    // 3. Security Check: Block Root / Master Access without Admin Key
+    // 4. Block Root / Master Access if not Admin
     if (!isAuthedAdmin && !isClientRoute) {
-        document.body.innerHTML = `
-            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
+        const mainEl = document.getElementById('mainContent') || document.body;
+        mainEl.innerHTML = `
+            <div style="display:flex;height:80vh;align-items:center;justify-content:center;color:#a0aec0;text-align:center;">
                 <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                     <div style="font-size:32px;margin-bottom:12px;">🔒</div>
                     <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
-                    <p style="font-size:13px;line-height:1.5;margin-bottom:20px;color:#718096;">
+                    <p style="font-size:13px;line-height:1.5;color:#718096;">
                         A valid access token or admin key is required to view this workspace.
                     </p>
                 </div>
@@ -1096,20 +1101,20 @@ window.handleRoute = function() {
         return;
     }
 
-    // 4. Security Check: Direct Client Route Access
+    // 5. Verify Direct Client Route Token
     if (isClientRoute && !isAuthedAdmin) {
         const client = state.clients[routeClientId];
         const passedToken = urlParams.get('token') || urlParams.get('key');
         
-        // Verify client exists and token matches if public token security is configured
         if (!client || (client.publicToken && client.publicToken !== passedToken)) {
-            document.body.innerHTML = `
-                <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#e53e3e;font-family:sans-serif;text-align:center;">
+            const mainEl = document.getElementById('mainContent') || document.body;
+            mainEl.innerHTML = `
+                <div style="display:flex;height:80vh;align-items:center;justify-content:center;color:#e53e3e;text-align:center;">
                     <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                         <div style="font-size:32px;margin-bottom:12px;">🚫</div>
                         <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Invalid Client Token</h2>
                         <p style="font-size:13px;line-height:1.5;color:#718096;">
-                            You do not have permission to view project ${routeClientId}.
+                            You do not have permission to view this project.
                         </p>
                     </div>
                 </div>`;
@@ -1117,7 +1122,7 @@ window.handleRoute = function() {
         }
     }
 
-    // Proceed to standard view rendering if security checks pass...
+    // 6. If passed, clear any restriction markup and render dashboard
     if (typeof window.renderAppLayout === 'function') {
         window.renderAppLayout();
     }
