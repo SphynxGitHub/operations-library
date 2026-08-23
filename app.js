@@ -198,46 +198,56 @@ OL.sync = async function() {
     console.log("📡 Fetching Workspace Data from Supabase...");
 
     try {
-        // 1. Fetch Master Registry
-        const { data: masterData } = await db
+        // 1. Read Master Registry
+        const { data: masterData, error: masterErr } = await window.db
             .from('workspace_masters')
             .select('*')
             .maybeSingle();
 
-        if (masterData) {
+        if (masterErr) {
+            console.error("❌ Master Fetch Error:", masterErr.message);
+        } else if (masterData) {
             state.master.rates = masterData.rates || state.master.rates;
-            state.master.resourceTypes = masterData.resource_types || state.master.resourceTypes;
+            state.master.resourceTypes = masterData.resource_types || masterData.resourceTypes || state.master.resourceTypes;
             state.master.datapoints = masterData.datapoints || state.master.datapoints;
             console.log("🏛️ Master Registry Loaded.");
         }
 
-        // 2. Fetch Clients
-        const { data: clientsData, error: clientsErr } = await db
+        // 2. Read Client List
+        const { data: clientsData, error: clientsErr } = await window.db
             .from('workspace_clients')
             .select('*');
 
-        if (clientsData && clientsData.length > 0) {
+        if (clientsErr) {
+            console.error("❌ Clients Fetch Error:", clientsErr.message);
+        } else if (clientsData && clientsData.length > 0) {
             clientsData.forEach(c => {
-                state.clients[c.id] = {
-                    id: c.id,
-                    publicToken: c.public_token || c.publicToken,
-                    meta: c.meta || { name: c.id, status: 'Discovery' },
-                    modules: c.modules || {},
+                const clientId = c.id || c.client_id;
+                if (!clientId) return;
+
+                state.clients[clientId] = {
+                    id: clientId,
+                    publicToken: c.public_token || c.publicToken || c.access_token,
+                    meta: c.meta || { name: clientId, status: 'Discovery' },
+                    modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
                     permissions: c.permissions || {},
                     projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] }
                 };
             });
-            console.log(`📋 Loaded ${clientsData.length} clients from Supabase.`);
+            console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         } else {
-            console.warn("⚠️ Database empty: 0 clients found.");
+            console.warn("⚠️ Supabase returned 0 rows for workspace_clients.");
         }
 
     } catch (error) {
-        console.error("❌ Sync Error:", error);
+        console.error("❌ Sync Initialization Error:", error);
     } finally {
-        // 🚀 MARK SYNC COMPLETE & DRAW DASHBOARD
+        // 3. Unblock Cloud Sync and Render
         state.isCloudSynced = true;
-        if (typeof window.handleRoute === 'function') window.handleRoute();
+        
+        if (typeof window.handleRoute === 'function') {
+            window.handleRoute();
+        }
     }
 };
 
