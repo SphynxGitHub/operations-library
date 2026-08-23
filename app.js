@@ -189,18 +189,29 @@ OL.sync = async function() {
     console.log("📡 Fetching Workspace Data from Supabase...");
 
     try {
-        // Fetch Master Registry
-        const { data: masterData } = await db.from('workspace_masters').select('*').limit(1).single();
-        if (masterData) {
+        // 1. Fetch Master Registry (maybeSingle prevents throwing an error if empty)
+        const { data: masterData, error: masterErr } = await db
+            .from('workspace_masters')
+            .select('*')
+            .limit(1)
+            .maybeSingle();
+
+        if (masterErr) {
+            console.warn("⚠️ Master Registry query notice:", masterErr.message);
+        } else if (masterData) {
             state.master.rates = masterData.rates || state.master.rates;
             state.master.resourceTypes = masterData.resource_types || state.master.resourceTypes;
             state.master.datapoints = masterData.datapoints || state.master.datapoints;
             console.log("🏛️ Master Registry Loaded.");
+        } else {
+            console.log("ℹ️ No master records found. Using local default state.");
         }
 
-        // Fetch Client List
-        const { data: clientsData } = await db.from('workspace_clients').select('*');
-        if (clientsData) {
+        // 2. Fetch Client List
+        const { data: clientsData, error: clientsErr } = await db.from('workspace_clients').select('*');
+        if (clientsErr) {
+            console.warn("⚠️ Clients query notice:", clientsErr.message);
+        } else if (clientsData && clientsData.length > 0) {
             clientsData.forEach(client => {
                 if (!state.clients[client.id]) {
                     state.clients[client.id] = {
@@ -213,9 +224,13 @@ OL.sync = async function() {
             console.log(`📋 Client Index Loaded: ${clientsData.length} clients`);
         }
 
-        if (!document.getElementById('modal-overlay')) window.handleRoute();
+        // 3. Render UI regardless of data availability
+        if (typeof window.handleRoute === 'function') {
+            window.handleRoute();
+        }
     } catch (error) {
-        console.error("❌ Sync Initialization Error:", error.message);
+        console.error("❌ Sync Error:", error.message || error);
+        if (typeof window.handleRoute === 'function') window.handleRoute();
     }
 };
 
