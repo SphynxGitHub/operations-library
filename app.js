@@ -2,8 +2,26 @@
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-// Define Namespace
-const OL = window.OL = {};
+// 1. Initialize Namespace & State Object First
+const OL = window.OL = window.OL || {};
+OL.state = OL.state || { 
+    master: {
+        rates: { baseHourlyRate: 300, teamMultiplier: 1.1, variables: {} },
+        resourceTypes: [],
+        datapoints: [],
+        apps: [],
+        functions: [],
+        taskBlueprints: [],
+        howToLibrary: [],
+        analyses: []
+    }, 
+    clients: {},
+    activeClientId: null,
+    isCloudSynced: false
+};
+
+// 2. Global Pointer Proxy (guarantees window.state === OL.state)
+window.state = OL.state;
 
 // Supabase Credentials
 const SUPABASE_URL = 'https://kexnnpwjerrnsmifauuo.supabase.co';
@@ -207,40 +225,22 @@ OL.sync = async function() {
         if (masterErr) {
             console.error("❌ Master Fetch Error:", masterErr.message);
         } else if (masterData) {
-            state.master.rates = masterData.rates || state.master.rates;
+            OL.state.master.rates = masterData.rates || OL.state.master.rates;
             
-            // Only overwrite if Supabase returns non-empty arrays
             if (Array.isArray(masterData.resource_types) && masterData.resource_types.length > 0) {
-                state.master.resourceTypes = masterData.resource_types;
-            } else if (Array.isArray(masterData.resourceTypes) && masterData.resourceTypes.length > 0) {
-                state.master.resourceTypes = masterData.resourceTypes;
+                OL.state.master.resourceTypes = masterData.resource_types;
             }
-
             if (Array.isArray(masterData.datapoints) && masterData.datapoints.length > 0) {
-                state.master.datapoints = masterData.datapoints;
+                OL.state.master.datapoints = masterData.datapoints;
             }
-
             if (Array.isArray(masterData.apps) && masterData.apps.length > 0) {
-                state.master.apps = masterData.apps;
+                OL.state.master.apps = masterData.apps;
             }
-
             if (Array.isArray(masterData.functions) && masterData.functions.length > 0) {
-                state.master.functions = masterData.functions;
+                OL.state.master.functions = masterData.functions;
             }
 
-            if (Array.isArray(masterData.task_blueprints) && masterData.task_blueprints.length > 0) {
-                state.master.taskBlueprints = masterData.task_blueprints;
-            }
-
-            if (Array.isArray(masterData.how_to_library) && masterData.how_to_library.length > 0) {
-                state.master.howToLibrary = masterData.how_to_library;
-            }
-
-            if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) {
-                state.master.analyses = masterData.analyses;
-            }
-
-            console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
+            console.log(`🏛️ Master Registry Loaded: ${OL.state.master.apps.length} Apps, ${OL.state.master.functions.length} Functions.`);
         }
 
         // 2. Read Client List
@@ -255,7 +255,7 @@ OL.sync = async function() {
                 const clientId = c.id || c.client_id;
                 if (!clientId) return;
 
-                state.clients[clientId] = {
+                OL.state.clients[clientId] = {
                     id: clientId,
                     publicToken: c.public_token || c.publicToken || c.access_token,
                     meta: c.meta || { name: clientId, status: 'Discovery' },
@@ -265,22 +265,12 @@ OL.sync = async function() {
                 };
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
-        } else {
-            console.warn("⚠️ Supabase returned 0 rows for workspace_clients.");
         }
 
     } catch (error) {
         console.error("❌ Sync Initialization Error:", error);
     } finally {
-        // 3. Unblock Cloud Sync
-        state.isCloudSynced = true;
-
-        // 🚀 MANUALLY WIPE SPINNER ELEMENT IF PRESENT
-        const mainEl = document.getElementById('mainContent') || document.getElementById('app') || document.body;
-        if (mainEl && mainEl.innerHTML.includes('Connecting to Registry...')) {
-            mainEl.innerHTML = '';
-        }
-        
+        OL.state.isCloudSynced = true;
         if (typeof window.handleRoute === 'function') {
             window.handleRoute();
         }
@@ -1743,11 +1733,20 @@ OL.getDynamicPartners = function() {
 };
 
 OL.openClientProfileModal = function(clientId) {
-    const client = state.clients[clientId];
+    // 1. Safe state resolution
+    const appState = OL.state || window.state || {};
+    const client = appState.clients?.[clientId];
     if (!client) return;
 
-    const dynamicPartners = OL.getDynamicPartners();
-    const currentPartnerId = client.meta.partnerOwner || "";
+    // 2. Safe metadata resolution with defaults
+    const meta = client.meta || {};
+    const metaName = meta.name || clientId;
+    const metaStatus = meta.status || 'Active';
+    const metaOnboarded = meta.onboarded || 'N/A';
+
+    const dynamicPartners = typeof OL.getDynamicPartners === 'function' ? OL.getDynamicPartners() : [];
+    const currentPartnerId = meta.partnerOwner || "";
+    const currentPartnerObj = currentPartnerId ? appState.clients?.[currentPartnerId] : null;
 
     const partnerDropdownHtml = `
         <div class="card-section" style="margin-top: 20px; padding: 15px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 8px;">
@@ -1759,12 +1758,12 @@ OL.openClientProfileModal = function(clientId) {
                     <option value="">-- No Partner (Direct Sphynx Client) --</option>
                     ${dynamicPartners.map(p => `
                         <option value="${p.id}" ${currentPartnerId === p.id ? 'selected' : ''}>
-                            ${p.logo} ${esc(p.name)}
+                            ${p.logo || '🏢'} ${esc(p.name || p.id)}
                         </option>
                     `).join('')}
                 </select>
                 <p class="tiny muted" style="margin-top: 8px;">
-                    ${currentPartnerId ? `This project is managed under the <b>${state.clients[currentPartnerId]?.meta.name}</b> portfolio.` : 'This is a standalone project.'}
+                    ${currentPartnerId ? `This project is managed under the <b>${esc(currentPartnerObj?.meta?.name || currentPartnerId)}</b> portfolio.` : 'This is a standalone project.'}
                 </p>
             </div>
         </div>
@@ -1772,7 +1771,7 @@ OL.openClientProfileModal = function(clientId) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">Client Profile: ${esc(client.meta.name)}</div>
+            <div class="modal-title-text">Client Profile: ${esc(metaName)}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -1803,8 +1802,8 @@ OL.openClientProfileModal = function(clientId) {
             
             <label class="modal-section-label">Project Metadata</label>
             <div class="card-section">
-                <div class="small">Status: <strong>${client.meta.status}</strong></div>
-                <div class="small">Onboarded: ${client.meta.onboarded}</div>
+                <div class="small">Status: <strong>${esc(metaStatus)}</strong></div>
+                <div class="small">Onboarded: ${esc(metaOnboarded)}</div>
             </div>
 
             <label class="modal-section-label">External Sharing</label>
@@ -1812,8 +1811,8 @@ OL.openClientProfileModal = function(clientId) {
                 <p class="tiny muted">Share this link with the client for read-only access to their tasks.</p>
                 <div style="display:flex; gap:8px; margin-top:8px;">
                     <input type="text" class="modal-input small" readonly 
-                          value="${window.location.origin}${window.location.pathname}?access=${client.publicToken}#/client-tasks">
-                    <button class="btn tiny primary" onclick="OL.copyShareLink('${client.publicToken}')">Copy</button>
+                          value="${window.location.origin}${window.location.pathname}?access=${client.publicToken || ''}#/client-tasks">
+                    <button class="btn tiny primary" onclick="OL.copyShareLink('${client.publicToken || ''}')">Copy</button>
                 </div>
             </div>
 
@@ -1828,7 +1827,12 @@ OL.openClientProfileModal = function(clientId) {
             </div>
         </div>
     `;
-    openModal(html);
+    
+    if (typeof openModal === 'function') {
+        openModal(html);
+    } else if (typeof OL.openModal === 'function') {
+        OL.openModal(html);
+    }
 };
 
 OL.toggleClientModule = function(clientId, moduleId) {
