@@ -1101,14 +1101,14 @@ window.handleRoute = function() {
 
     const urlParams = new URLSearchParams(window.location.search);
     
-    // Strict URL check: Requires ?admin=pizza123 explicitly in the URL OR valid client token
+    // Check if the secret admin key is present in the URL
     const hasAdminKey = urlParams.get('admin') === 'pizza123';
 
     const hash = window.location.hash || '#/';
     const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
     const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    // 1. Block Root / Master Access if URL is missing ?admin=pizza123
+    // 1. Block Root / Master Access if unauthorized
     if (!hasAdminKey && !isClientRoute) {
         document.body.innerHTML = `
             <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
@@ -1116,7 +1116,7 @@ window.handleRoute = function() {
                     <div style="font-size:32px;margin-bottom:12px;">🔒</div>
                     <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
                     <p style="font-size:13px;line-height:1.5;color:#718096;">
-                        A valid access key (?admin=pizza123) is required to view this workspace.
+                        A valid access key is required to view this workspace. Please check your URL or contact an administrator.
                     </p>
                 </div>
             </div>`;
@@ -1133,9 +1133,9 @@ window.handleRoute = function() {
                 <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#e53e3e;font-family:sans-serif;text-align:center;">
                     <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                         <div style="font-size:32px;margin-bottom:12px;">🚫</div>
-                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Invalid Client Token</h2>
+                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Denied</h2>
                         <p style="font-size:13px;line-height:1.5;color:#718096;">
-                            You do not have permission to view project ${routeClientId}.
+                            You do not have permission to view this project resource.
                         </p>
                     </div>
                 </div>`;
