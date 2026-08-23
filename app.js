@@ -189,48 +189,56 @@ OL.sync = async function() {
     console.log("📡 Fetching Workspace Data from Supabase...");
 
     try {
-        // 1. Fetch Master Registry (maybeSingle prevents throwing an error if empty)
+        // 1. Fetch Master Registry
         const { data: masterData, error: masterErr } = await db
             .from('workspace_masters')
             .select('*')
-            .limit(1)
             .maybeSingle();
 
-        if (masterErr) {
-            console.warn("⚠️ Master Registry query notice:", masterErr.message);
-        } else if (masterData) {
+        if (masterData) {
             state.master.rates = masterData.rates || state.master.rates;
             state.master.resourceTypes = masterData.resource_types || state.master.resourceTypes;
             state.master.datapoints = masterData.datapoints || state.master.datapoints;
             console.log("🏛️ Master Registry Loaded.");
-        } else {
-            console.log("ℹ️ No master records found. Using local default state.");
         }
 
-        // 2. Fetch Client List
-        const { data: clientsData, error: clientsErr } = await db.from('workspace_clients').select('*');
+        // 2. Fetch Clients (Map Supabase JSONB columns back to App State)
+        const { data: clientsData, error: clientsErr } = await db
+            .from('workspace_clients')
+            .select('*');
+
         if (clientsErr) {
-            console.warn("⚠️ Clients query notice:", clientsErr.message);
+            console.error("❌ Clients Fetch Error:", clientsErr.message);
         } else if (clientsData && clientsData.length > 0) {
-            clientsData.forEach(client => {
-                if (!state.clients[client.id]) {
-                    state.clients[client.id] = {
-                        id: client.id,
-                        publicToken: client.public_token,
-                        _metaOnly: true
-                    };
-                }
+            clientsData.forEach(c => {
+                state.clients[c.id] = {
+                    id: c.id,
+                    publicToken: c.public_token || c.publicToken,
+                    meta: c.meta || { name: c.id, status: 'Discovery', onboarded: 'N/A' },
+                    modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
+                    permissions: c.permissions || {},
+                    projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] }
+                };
             });
             console.log(`📋 Client Index Loaded: ${clientsData.length} clients`);
+        } else {
+            console.warn("⚠️ No clients returned from Supabase.");
         }
 
-        // 3. Render UI regardless of data availability
-        if (typeof window.handleRoute === 'function') {
-            window.handleRoute();
+        // 3. Mark sync as complete and trigger UI render
+        state.isCloudSynced = true;
+        
+        // Remove loading spinner
+        const mainEl = document.getElementById('mainContent');
+        if (mainEl && mainEl.innerHTML.includes('fv-spinner')) {
+            mainEl.innerHTML = '';
         }
+
+        window.handleRoute();
     } catch (error) {
-        console.error("❌ Sync Error:", error.message || error);
-        if (typeof window.handleRoute === 'function') window.handleRoute();
+        console.error("❌ Sync Initialization Error:", error);
+        state.isCloudSynced = true;
+        window.handleRoute();
     }
 };
 
