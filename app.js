@@ -210,9 +210,14 @@ OL.sync = async function() {
             state.master.rates = masterData.rates || state.master.rates;
             state.master.resourceTypes = masterData.resource_types || masterData.resourceTypes || state.master.resourceTypes;
             state.master.datapoints = masterData.datapoints || state.master.datapoints;
-            console.log("🏛️ Master Registry Loaded.");
+            state.master.apps = masterData.apps || [];
+            state.master.functions = masterData.functions || [];
+            state.master.taskBlueprints = masterData.task_blueprints || masterData.taskBlueprints || [];
+            state.master.howToLibrary = masterData.how_to_library || masterData.howToLibrary || [];
+            state.master.analyses = masterData.analyses || [];
+            console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
-
+        
         // 2. Read Client List
         const { data: clientsData, error: clientsErr } = await window.db
             .from('workspace_clients')
@@ -955,59 +960,108 @@ OL.importMasterBackup = async function(event) {
     event.target.value = '';
 
     let data;
-    try { data = JSON.parse(await file.text()); } catch(e) { alert('Invalid JSON file'); return; }
+    try { 
+        data = JSON.parse(await file.text()); 
+    } catch(e) { 
+        alert('❌ Invalid JSON file'); 
+        return; 
+    }
 
-    // Combined backup format: { _version, master, clients[] }
     const isCombined = data._version === 1 && data.master && Array.isArray(data.clients);
-
-    // Legacy master-only backup: detect by presence of functions/apps at top level
-    const masterData = isCombined ? data.master : (() => {
-        const d = { ...data };
-        if (d.master && !d.rates) { Object.assign(d, d.master); }
-        delete d.master;
-        return d;
-    })();
-    const clients = isCombined ? data.clients : [];
+    const masterData = isCombined ? data.master : (data.master || data);
+    const clientsList = isCombined ? data.clients : (Array.isArray(data.clients) ? data.clients : Object.values(data.clients || {}));
 
     const fnCount     = (masterData.functions || []).length;
-    const appCount    = (masterData.apps      || []).length;
-    const varCount    = Object.keys(masterData.rates?.variables || {}).length;
-    const clientCount = clients.length;
-    const exportedAt  = data._exportedAt ? new Date(data._exportedAt).toLocaleString() : 'unknown date';
+    const appCount    = (masterData.apps || []).length;
+    const clientCount = clientsList.length;
 
     if (!confirm(
-        `Restore "${file.name}"?\n` +
-        (data._exportedAt ? `Exported: ${exportedAt}\n` : '') +
-        `\n• ${fnCount} functions\n• ${appCount} apps\n• ${varCount} rate variables` +
-        (clientCount ? `\n• ${clientCount} client projects` : '\n• Master library only (no client data)') +
-        `\n\nThis will overwrite your current data. Cannot be undone.`
+        `Restore "${file.name}" into Supabase?\n\n` +
+        `• ${appCount} Master Apps\n` +
+        `• ${fnCount} Master Functions\n` +
+        `• ${clientCount} Client Projects\n\n` +
+        `Upload all system data to Supabase?`
     )) return;
 
     try {
-        // Restore master
-        await db.collection('systems').doc('main_state').set(masterData);
-        state.master = masterData;
+        console.log("📡 Uploading Full Firebase Backup to Supabase...");
 
-        // Restore clients (if present)
-        if (clients.length) {
-            const batch = db.batch();
-            clients.forEach(c => {
-                const { _id, ...clientData } = c;
-                batch.set(db.collection('clients').doc(_id), clientData);
-            });
-            await batch.commit();
-            clients.forEach(c => {
-                const { _id, ...clientData } = c;
-                state.clients[_id] = clientData;
-            });
+        // 1. Upload Master Systems (Apps, Functions, Rates, Datapoints, Tasks)
+        if (masterData && Object.keys(masterData).length > 0) {
+            const { error: masterErr } = await window.db
+                .from('workspace_masters')
+                .upsert({
+                    id: 'main_state',
+                    exported_at: new Date().toISOString(),
+                    version: 1,
+                    rates: masterData.rates || {},
+                    resource_types: masterData.resourceTypes || masterData.resource_types || [],
+                    datapoints: masterData.datapoints || [],
+                    apps: masterData.apps || [],
+                    functions: masterData.functions || [],
+                    task_blueprints: masterData.taskBlueprints || masterData.task_blueprints || [],
+                    how_to_library: masterData.howToLibrary || masterData.how_to_library || [],
+                    analyses: masterData.analyses || []
+                });
+
+            if (masterErr) throw masterErr;
+
+            // Load directly into memory state
+            state.master.apps = masterData.apps || [];
+            state.master.functions = masterData.functions || [];
+            state.master.rates = masterData.rates || state.master.rates;
+            state.master.resourceTypes = masterData.resourceTypes || masterData.resource_types || state.master.resourceTypes;
+            state.master.datapoints = masterData.datapoints || state.master.datapoints;
+            state.master.taskBlueprints = masterData.taskBlueprints || masterData.task_blueprints || [];
+            state.master.howToLibrary = masterData.howToLibrary || masterData.how_to_library || [];
+            state.master.analyses = masterData.analyses || [];
+
+            console.log(`🏛️ Master Library Uploaded: ${appCount} Apps, ${fnCount} Functions.`);
         }
 
-        console.log(`✅ Restored: master + ${clients.length} clients`);
-        alert(`✅ Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
+        // 2. Upload Client Projects
+        if (clientsList.length > 0) {
+            const formattedClients = clientsList.map(c => {
+                const clientId = c.id || c._id || ('c-' + Math.random().toString(36).slice(2, 9));
+                return {
+                    id: clientId,
+                    public_token: c.publicToken || c.public_token || ("access_" + Math.random().toString(36).slice(2, 12)),
+                    meta: c.meta || { name: clientId, status: 'Discovery' },
+                    modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
+                    permissions: c.permissions || {},
+                    project_data: c.projectData || c.project_data || { localResources: [], clientTasks: [], localApps: [], localFunctions: [] }
+                };
+            });
+
+            const { error: clientsErr } = await window.db
+                .from('workspace_clients')
+                .upsert(formattedClients);
+
+            if (clientsErr) throw clientsErr;
+
+            formattedClients.forEach(c => {
+                state.clients[c.id] = {
+                    id: c.id,
+                    publicToken: c.public_token,
+                    meta: c.meta,
+                    modules: c.modules,
+                    permissions: c.permissions,
+                    projectData: c.project_data
+                };
+            });
+
+            console.log(`📋 Successfully uploaded ${formattedClients.length} clients to Supabase.`);
+        }
+
+        state.isCloudSynced = true;
+        alert(`✅ Restore Complete!\n\n• ${appCount} Master Apps\n• ${fnCount} Master Functions\n• ${clientCount} Client Projects`);
+
+        window.location.hash = "#/";
         window.handleRoute();
+
     } catch(e) {
         alert('❌ Restore failed: ' + e.message);
-        console.error(e);
+        console.error("Restore Error:", e);
     }
 };
 
