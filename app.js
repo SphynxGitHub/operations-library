@@ -3,6 +3,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 // 1. MUST BE LINE 1: Define the namespace immediately
+window.OL = window.OL || {};
 const OL = window.OL = {};
 
 // 🎨 THEME BOOTLOADER: Run immediately on script load
@@ -998,6 +999,9 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.startsWith('#/vault');
 
+    // Safe OL namespace accessor
+    const ol = window.OL || {};
+
     // 1. Dashboard Routes
     if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
@@ -1017,13 +1021,19 @@ window.handleRoute = function () {
         else if (hash.includes("/visualizer")) {
             state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
-            OL.renderVisualizer();
+            if (typeof renderVisualizer === 'function') renderVisualizer();
+            else if (typeof ol.renderVisualizer === 'function') ol.renderVisualizer();
         }
-        else if (hash.includes("/how-to")) renderHowToLibrary();
+        else if (hash.includes("/how-to")) {
+            if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
+            else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
+        }
         else if (hash.includes("/tasks")) renderChecklistModule(true);
         else if (hash.includes("/analyses")) renderAnalysisModule(true);
         else if (hash.includes("/rates")) renderVaultRatesPage();
-        else if (hash.includes("/data")) OL.renderGlobalDataManager();
+        else if (hash.includes("/data")) {
+            if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
+        }
         return;
     }
 
@@ -1036,19 +1046,22 @@ window.handleRoute = function () {
         else if (hash.includes("visualizer")) {
             state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
-            OL.renderVisualizer();
+            if (typeof renderVisualizer === 'function') renderVisualizer();
+            else if (typeof ol.renderVisualizer === 'function') ol.renderVisualizer();
         }
         else if (hash.includes("scoping-sheet") || hash.includes("scoping")) {
             if (typeof renderScopingSheet === 'function') renderScopingSheet();
-            else if (typeof OL.renderScopingSheet === 'function') OL.renderScopingSheet();
+            else if (typeof ol.renderScopingSheet === 'function') ol.renderScopingSheet();
         }
         else if (hash.includes("analyze")) renderAnalysisModule();
         else if (hash.includes("how-to")) {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
-            else if (typeof OL.renderHowToLibrary === 'function') OL.renderHowToLibrary();
+            else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
         else if (hash.includes("team")) renderTeamManager();
-        else if (hash.includes("data")) OL.renderGlobalDataManager();
+        else if (hash.includes("data")) {
+            if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
+        }
     } else {
         renderClientDashboard();
     }
