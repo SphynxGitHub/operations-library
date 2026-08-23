@@ -305,231 +305,40 @@ OL.loadFullClient = async function(clientId) {
     return state.clients[clientId];
 };
 
-window.renderClientDashboard = function() {
-    const container = document.getElementById("mainContent");
-    if (!container) return;
-    container.style.cssText = '';
-    document.body.classList.remove('is-visualizer');
+OL.switchClient = async function(id) {
+    if (!id) return;
 
-    // Safe state pointer
-    const appState = OL.state || window.state || { clients: {}, master: {} };
-
-    const activeView = appState.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
-    appState.dashboardView = activeView; 
+    const appState = OL.state || window.state || {};
+    appState.activeClientId = id;
+    sessionStorage.setItem('lastActiveClientId', id);
     
-    const activeFilter = appState.dashboardFilter || 'All';
-    let clients = appState.clients ? Object.values(appState.clients) : [];
-    
-    if (activeFilter !== 'All') {
-        clients = clients.filter(c => c.meta?.status === activeFilter);
+    // 1. Show immediate loading state
+    const main = document.getElementById('mainContent');
+    if (main) {
+        main.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:60vh;opacity:0.6;flex-direction:column;gap:12px;">
+                <div style="font-size:28px;">⏳</div>
+                <div style="font-size:13px;color:var(--text-dim, #a0aec0);">Loading workspace data...</div>
+            </div>`;
     }
     
-    if (!appState.isCloudSynced && (!appState.clients || Object.keys(appState.clients).length === 0)) {
-        if (!getActiveClient()) {
-            container.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
-                    <div class="fv-spinner"></div>
-                    <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
-                </div>`;
-            return;
+    try {
+        // 2. Fetch full client payload if loadFullClient exists
+        if (typeof OL.loadFullClient === 'function') {
+            await OL.loadFullClient(id);
         }
+    } catch (err) {
+        console.error(`❌ Failed to load client ${id}:`, err);
     }
-
-    container.innerHTML = `
-        <div class="section-header search-header">
-            <div>
-                <h2>Registry & Command</h2>
-                <div class="small muted">Quick access to projects and master systems</div>
-            </div>
-              
-            <div class="search-map-container">
-                <input type="text" id="global-command-search" class="modal-input" 
-                       placeholder="Search clients or apps..." 
-                       oninput="OL.handleGlobalSearch(this.value)">
-                <div id="global-search-results" class="search-results-overlay"></div>
-            </div>
-
-            <div class="header-actions">
-                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
-                <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
-                <button class="btn small soft" onclick="(OL.state || window.state).dashboardView = (OL.state || window.state).dashboardView === 'list' ? 'cards' : 'list'; 
-                         localStorage.setItem('ol_dashboard_view', (OL.state || window.state).dashboardView); 
-                         renderClientDashboard();"
-                        style="display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="${activeView === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
-                    ${activeView === 'list' ? 'Card View' : 'List View'}
-                </button>
-            </div>
-        </div>
-
-        <div class="filter-bar">
-            ${['All', 'Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(f => `
-                <span class="pill tiny ${activeFilter === f ? 'accent' : 'soft'}" 
-                      style="border: 1px solid ${activeFilter === f ? 'var(--accent)' : 'transparent'}; padding: 4px 12px; border-radius: 20px; cursor:pointer;"
-                      onclick="OL.setDashboardFilter('${f}')">
-                    ${f}
-                </span>
-            `).join('')}
-        </div>
-
-        ${activeView === 'list' ? `
-        <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
     
-            <!-- Vault Row -->
-            <div class="fv-list-item" style="background:var(--panel-soft);border:1px solid var(--panel-border);border-radius:8px;
-                        padding:10px 16px;cursor:pointer;margin-bottom:4px;
-                        border-left:3px solid var(--accent);"
-                 onclick="location.hash='#/vault/apps'">
-                <span style="font-size:13px;font-weight:700;color:var(--accent);">🏛️ Master Vault</span>
-            </div>
-            ${clients.map(client => {
-                const clientName = client.meta?.name || client.id;
-                const clientStatus = client.meta?.status || 'Active';
-                const tasks = (client.projectData?.clientTasks || []);
-                const openTasks = tasks.filter(t => t.status !== 'Done');
-                const doneTasks = tasks.filter(t => t.status === 'Done');
-                const isExpanded = appState.dashboardExpanded?.[client.id] !== false;
-            
-                return `
-                    <div style="margin-bottom:4px;">
-                        <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;
-                                    background:var(--panel-soft);border:1px solid var(--panel-border);
-                                    border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
-                             onclick="OL.switchClient('${client.id}')"
-                             onmouseover="this.style.borderColor='var(--accent)'"
-                             onmouseout="this.style.borderColor='var(--panel-border)'">
-                            <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
-                                        color:#000;display:flex;align-items:center;justify-content:center;
-                                        font-weight:900;font-size:11px;flex-shrink:0;">
-                                ${esc(clientName.substring(0,2).toUpperCase())}
-                            </div>
-                            <div style="flex:1;min-width:0;">
-                                <div style="font-weight:700;font-size:13px;color:var(--text-main);">
-                                    ${esc(clientName)}
-                                </div>
-                                <div style="font-size:10px;color:var(--text-dim);">
-                                    ${openTasks.length} open · ${doneTasks.length} done
-                                </div>
-                            </div>
-                            <span style="font-size:10px;color:var(--text-dim);">${esc(clientStatus)}</span>
-                            ${openTasks.length ? `
-                                <span onclick="event.stopPropagation();
-                                              if(!appState.dashboardExpanded) appState.dashboardExpanded={};
-                                              appState.dashboardExpanded['${client.id}'] = !${isExpanded};
-                                              renderClientDashboard();"
-                                      style="width:20px;height:20px;border-radius:4px;
-                                             background:var(--panel-soft);border:1px solid var(--panel-border);
-                                             display:flex;align-items:center;justify-content:center;
-                                             font-size:11px;font-weight:700;color:var(--text-dim);cursor:pointer;">
-                                    ${isExpanded ? '−' : '+'}
-                                </span>
-                            ` : ''}
-                        </div>
-            
-                        ${isExpanded && openTasks.length ? `
-                            <div style="padding-left:44px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">
-                                ${openTasks.map(task => {
-                                    const statusColors = {
-                                        'Pending':     '#94a3b8',
-                                        'In Progress': '#3b82f6',
-                                        'Blocked':     '#ef4444',
-                                        'Done':        '#22c55e'
-                                    };
-                                    const color = statusColors[task.status || 'Pending'];
-                                    return `
-                                        <div style="display:flex;align-items:center;gap:8px;
-                                                    padding:7px 12px;
-                                                    background:var(--panel-dark);
-                                                    border:1px solid var(--panel-border);
-                                                    border-radius:6px;cursor:pointer;transition:border-color 0.2s;"
-                                             onclick="OL.switchClient('${client.id}');
-                                                      setTimeout(()=>OL.openTaskModal('${task.id}', false), 200);"
-                                             onmouseover="this.style.borderColor='var(--accent)'"
-                                             onmouseout="this.style.borderColor='var(--panel-border)'">
-                                            <div style="width:8px;height:8px;border-radius:50%;
-                                                        background:${color};flex-shrink:0;"></div>
-                                            <span style="font-size:11px;color:var(--text-main);flex:1;">
-                                                ${esc(task.name || task.title)}
-                                            </span>
-                                            ${task.dueDate ? `
-                                                <span style="font-size:10px;color:var(--text-dim);font-family:monospace;">
-                                                    ${new Date(task.dueDate).toLocaleDateString([],{month:'short',day:'numeric'})}
-                                                </span>
-                                            ` : ''}
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('')}
-            </div>
-        ` : `
-            <div class="cards-grid">
-
-            ${clients.map(client => {
-                const clientName = client.meta?.name || client.id;
-                const clientStatus = client.meta?.status || 'Discovery';
-                const clientOnboarded = client.meta?.onboarded || 'N/A';
-                const recentTasks = (client.projectData?.clientTasks || []).slice(-3).reverse();
-
-                return `
-                <div class="card client-card is-clickable" onclick="OL.switchClient('${client.id}')">
-                    <div class="card-header">
-                        <div class="card-title" 
-                             contenteditable="true" 
-                             spellcheck="false"
-                             style="outline: none; border-bottom: 1px dashed transparent; transition: border 0.2s;"
-                             onfocus="this.style.borderBottom='1px dashed var(--accent)'"
-                             onclick="event.stopPropagation()"
-                             onblur="this.style.borderBottom='1px dashed transparent'; OL.updateClientNameInline('${client.id}', this.innerText)"
-                             onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
-                             ${esc(clientName)}
-                        </div>
-                        <select class="status-pill-dropdown" 
-                                onclick="event.stopPropagation()" 
-                                onchange="OL.updateClientStatus('${client.id}', this.value)"
-                                style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
-                            ${['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(status => `
-                                <option value="${status}" ${clientStatus === status ? 'selected' : ''}>${status}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    <div class="card-body">
-                        <div class="hover-preview-zone" style="position:relative; display:inline-block;">
-                            <div class="small muted">Onboarded: ${esc(clientOnboarded)}</div>
-                            <div class="task-preview-tooltip">
-                                <div class="bold tiny accent" style="margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:3px;">Open Tasks</div>
-                                ${recentTasks.length ? recentTasks.map(t => `<div class="tiny muted" style="margin-bottom:2px;">• ${esc(t.name)}</div>`).join('') : '<div class="tiny muted">No recent tasks</div>'}
-                            </div>
-                        </div>
-
-                        <div class="card-footer-actions" style="margin-top:20px;">
-                            <button class="btn small soft flex-1">Enter Project</button>
-                            <button class="btn tiny soft" style="margin-left:8px;"
-                                    onclick="event.stopPropagation(); OL.openClientProfileModal('${client.id}')">
-                                ⚙️
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('')}
-        </div>
-        `}
-    `;
-
-    setTimeout(() => {
-        const metaOnlyClients = Object.values(appState.clients || {}).filter(c => c._metaOnly);
-        if (metaOnlyClients.length > 0) {
-            console.log(`📥 Backfilling ${metaOnlyClients.length} clients...`);
-            Promise.all(metaOnlyClients.map(c => OL.loadFullClient(c.id)))
-                .then(() => {
-                    console.log('✅ All clients loaded');
-                    renderClientDashboard();
-                });
-        }
-    }, 100);
+    // 3. Update hash to include client ID and preserve admin key
+    const currentSearch = window.location.search || '';
+    window.location.href = `${window.location.origin}${window.location.pathname}${currentSearch}#/client/${id}`;
+    
+    // 4. Trigger router
+    if (typeof window.handleRoute === 'function') {
+        window.handleRoute();
+    }
 };
 
 OL.updateAndSync = async function(mutationFn) {
