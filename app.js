@@ -272,8 +272,14 @@ OL.sync = async function() {
     } catch (error) {
         console.error("❌ Sync Initialization Error:", error);
     } finally {
-        // 3. Unblock Cloud Sync and Render
+        // 3. Unblock Cloud Sync
         state.isCloudSynced = true;
+
+        // 🚀 MANUALLY WIPE SPINNER ELEMENT IF PRESENT
+        const mainEl = document.getElementById('mainContent') || document.getElementById('app') || document.body;
+        if (mainEl && mainEl.innerHTML.includes('Connecting to Registry...')) {
+            mainEl.innerHTML = '';
+        }
         
         if (typeof window.handleRoute === 'function') {
             window.handleRoute();
