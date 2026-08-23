@@ -211,14 +211,12 @@ OL.sync = async function() {
             console.log("🏛️ Master Registry Loaded.");
         }
 
-        // 2. Fetch Client List
+        // 2. Fetch Clients
         const { data: clientsData, error: clientsErr } = await db
             .from('workspace_clients')
             .select('*');
 
-        if (clientsErr) {
-            console.error("❌ Clients Fetch Error:", clientsErr.message);
-        } else if (clientsData && clientsData.length > 0) {
+        if (clientsData && clientsData.length > 0) {
             clientsData.forEach(c => {
                 state.clients[c.id] = {
                     id: c.id,
@@ -230,14 +228,14 @@ OL.sync = async function() {
                 };
             });
             console.log(`📋 Loaded ${clientsData.length} clients from Supabase.`);
+        } else {
+            console.warn("⚠️ Database empty: 0 clients found.");
         }
-
-        // 3. Unblock rendering
-        state.isCloudSynced = true;
-        if (typeof window.handleRoute === 'function') window.handleRoute();
 
     } catch (error) {
         console.error("❌ Sync Error:", error);
+    } finally {
+        // 🚀 MARK SYNC COMPLETE & DRAW DASHBOARD
         state.isCloudSynced = true;
         if (typeof window.handleRoute === 'function') window.handleRoute();
     }
@@ -1352,15 +1350,13 @@ window.renderClientDashboard = function() {
     
     // 🛡️ THE LOADING GUARD
     // If we have no clients AND we haven't confirmed the cloud is empty, show loading
-    if (!state.clients || Object.keys(state.clients).length === 0) {
-        if (getActiveClient()) {
-            // Proceed to render...
-        }
-        else {
+    // Show spinner ONLY if cloud sync is still in progress and zero clients exist
+    if (!state.isCloudSynced && (!state.clients || Object.keys(state.clients).length === 0)) {
+        if (!getActiveClient()) {
             container.innerHTML = `
-                <div>
-                    <div class="spinner">⏳</div>
-                    <h3 class="muted">Connecting to Registry...</h3>
+                <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
+                    <div class="fv-spinner"></div>
+                    <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
                 </div>`;
             return;
         }
