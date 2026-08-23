@@ -208,13 +208,38 @@ OL.sync = async function() {
             console.error("❌ Master Fetch Error:", masterErr.message);
         } else if (masterData) {
             state.master.rates = masterData.rates || state.master.rates;
-            state.master.resourceTypes = masterData.resource_types || masterData.resourceTypes || state.master.resourceTypes;
-            state.master.datapoints = masterData.datapoints || state.master.datapoints;
-            state.master.apps = masterData.apps || [];
-            state.master.functions = masterData.functions || [];
-            state.master.taskBlueprints = masterData.task_blueprints || masterData.taskBlueprints || [];
-            state.master.howToLibrary = masterData.how_to_library || masterData.howToLibrary || [];
-            state.master.analyses = masterData.analyses || [];
+            
+            // Only overwrite if Supabase returns non-empty arrays
+            if (Array.isArray(masterData.resource_types) && masterData.resource_types.length > 0) {
+                state.master.resourceTypes = masterData.resource_types;
+            } else if (Array.isArray(masterData.resourceTypes) && masterData.resourceTypes.length > 0) {
+                state.master.resourceTypes = masterData.resourceTypes;
+            }
+
+            if (Array.isArray(masterData.datapoints) && masterData.datapoints.length > 0) {
+                state.master.datapoints = masterData.datapoints;
+            }
+
+            if (Array.isArray(masterData.apps) && masterData.apps.length > 0) {
+                state.master.apps = masterData.apps;
+            }
+
+            if (Array.isArray(masterData.functions) && masterData.functions.length > 0) {
+                state.master.functions = masterData.functions;
+            }
+
+            if (Array.isArray(masterData.task_blueprints) && masterData.task_blueprints.length > 0) {
+                state.master.taskBlueprints = masterData.task_blueprints;
+            }
+
+            if (Array.isArray(masterData.how_to_library) && masterData.how_to_library.length > 0) {
+                state.master.howToLibrary = masterData.how_to_library;
+            }
+
+            if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) {
+                state.master.analyses = masterData.analyses;
+            }
+
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
 
