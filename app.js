@@ -2,35 +2,8 @@
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-// 1. Initialize Namespace & State Object First
-const OL = window.OL = window.OL || {};
-OL.state = OL.state || { 
-    master: {
-        rates: { baseHourlyRate: 300, teamMultiplier: 1.1, variables: {} },
-        resourceTypes: [],
-        datapoints: [],
-        apps: [],
-        functions: [],
-        taskBlueprints: [],
-        howToLibrary: [],
-        analyses: []
-    }, 
-    clients: {},
-    activeClientId: null,
-    isCloudSynced: false
-};
-
-// 2. Global Pointer Proxy (guarantees window.state === OL.state)
-window.state = OL.state;
-
-// Supabase Credentials
-const SUPABASE_URL = 'https://kexnnpwjerrnsmifauuo.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleG5ucHdqZXJybnNtaWZhdXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDcxNTEsImV4cCI6MjEwMzA4MzE1MX0.BAgC5wN4SKqfqKn0Gt7a53sGvigh_YlaMcQLdaovc08';
-
-// Initialize Supabase Client & Attach Globally
-const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-window.db = db;
-window.supabase = db;
+// 1. MUST BE LINE 1: Define the namespace immediately
+const OL = window.OL = {};
 
 // 🎨 THEME BOOTLOADER: Run immediately on script load
 (function initTheme() {
@@ -64,11 +37,15 @@ const num = (v) => (v === undefined || v === null || v === 0) ? "" : v;
 const esc = (s) => String(s ?? "").replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
 const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 
-//======================= SUPABASE CONFIG & INITIALIZATION =======================//
+// 3. Initialize Supabase Client
+const SUPABASE_URL = 'https://kexnnpwjerrnsmifauuo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleG5ucHdqZXJybnNtaWZhdXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDcxNTEsImV4cCI6MjEwMzA4MzE1MX0.BAgC5wN4SKqfqKn0Gt7a53sGvigh_YlaMcQLdaovc08';
+window.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 4. Initialize State Placeholder
+// 4. Initialize the state placeholder
 let state = {
     activeClientId: null,
+    isCloudSynced: false,
     viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
     ui: { 
         showCompleted: false,
@@ -105,78 +82,64 @@ let state = {
     },
     clients: {}
 };
-OL.state = state;
+OL.state = window.state = state;
 
-// 5. SAFE PERSIST ENGINE: Saves local state via Supabase Upsert (No auto-deletions)
+// Persist Changes directly to Supabase
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
-    
+    window.lastSyncHash = null;
     window.saveTimeout = setTimeout(async () => {
         window.saveTimeout = null;
         try {
             console.log("☁️ Background Sync Starting...");
 
-            // --- Safeguard 1: Master Protection ---
-            if (state.master && Object.keys(state.master).length > 0) {
-                const masterCopy = JSON.parse(JSON.stringify(state.master));
-                const { error: masterErr } = await db.from('workspace_masters').upsert({
-                    id: 'main_state',
-                    exported_at: new Date().toISOString(),
-                    version: masterCopy._version || 1,
-                    rates: masterCopy.rates || {},
-                    resource_types: masterCopy.resourceTypes || [],
-                    datapoints: masterCopy.datapoints || []
-                });
-                if (masterErr) throw masterErr;
-            }
+            // Always save master
+            const masterCopy = JSON.parse(JSON.stringify(state.master));
+            await window.db
+                .from('workspace_masters')
+                .upsert({ id: 'main_state', ...masterCopy });
 
-            // --- Safeguard 2: Active Client Protection ---
             const activeId = state.activeClientId;
             if (activeId && state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
-                if (clientCopy.projectData) delete clientCopy.projectData.resources;
-
-                // ABORT GUARD: Never save an incomplete client object
+                if (clientCopy.projectData) {
+                    delete clientCopy.projectData.resources;
+                }
                 if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
-                    console.error('🛑 PERSIST ABORTED: Incomplete client object. Database untouched.');
+                    console.error('🛑 PERSIST ABORTED: Incomplete client object, refusing to save');
                     window.lastLocalSave = Date.now();
                     return;
                 }
-
-                const { error: clientErr } = await db.from('workspace_clients').upsert({
-                    id: activeId,
-                    public_token: clientCopy.publicToken,
-                    created_at: new Date().toISOString()
-                });
-                if (clientErr) throw clientErr;
+                await window.db
+                    .from('workspace_clients')
+                    .upsert({ id: activeId, ...clientCopy });
             }
 
             window.lastLocalSave = Date.now();
             console.log("✅ Background Sync Complete.");
         } catch (error) {
-            console.error("💀 Persistence Error:", error.message);
+            console.error("💀 Persistence Error:", error);
         }
     }, 1500);
 };
 
-// 6. EVENT BOOTLOADER
 window.addEventListener("load", () => {
-    console.log("🚀 Application Boot Sequence Started");
-
-    // 1. Initialize Security Context
-    OL.initializeSecurityContext();
+    // 1. Security Check FIRST
+    const allowed = OL.initializeSecurityContext();
+    if (!allowed) return;
 
     // 2. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
         state.adminMode = true;
     }
 
-    // 3. Recall Client & Visualizer state safely
+    // 3. Recall Client
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
     if (savedClientId) state.activeClientId = savedClientId;
 
-    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id') || null;
-    state.focusedResourceId = sessionStorage.getItem('active_resource_id') || null;
+    // 4. Recall Visualizer depth
+    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
 
     const currentHash = location.hash;
     const isDashboard = currentHash === "" || currentHash === "#/";
@@ -190,12 +153,7 @@ window.addEventListener("load", () => {
         location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
 
-    // 4. Force build the layout shell (creates #mainContent)
-    if (typeof window.buildLayout === 'function') {
-        window.buildLayout();
-    }
-
-    // 5. Inject loading placeholder into #mainContent
+    if (typeof window.buildLayout === 'function') window.buildLayout();
     const mainEl = document.getElementById('mainContent');
     if (mainEl) {
         mainEl.innerHTML = `
@@ -205,18 +163,17 @@ window.addEventListener("load", () => {
             </div>`;
     }
 
-    // 6. Start Sync
     OL.sync();
 });
 
-// 7. READ-ONLY INITIAL SYNC (Safe Read from Supabase)
+// Fetch Data from Supabase
 OL.sync = async function() {
     if (window.isSyncInitialized) return;
     window.isSyncInitialized = true;
-    console.log("📡 Fetching Workspace Data from Supabase...");
+    console.log("📡 Initializing Supabase Unified Workspace Sync...");
 
     try {
-        // 1. Read Master Registry
+        // 1. Fetch Master Registry
         const { data: masterData, error: masterErr } = await window.db
             .from('workspace_masters')
             .select('*')
@@ -225,25 +182,18 @@ OL.sync = async function() {
         if (masterErr) {
             console.error("❌ Master Fetch Error:", masterErr.message);
         } else if (masterData) {
-            OL.state.master.rates = masterData.rates || OL.state.master.rates;
-            
-            if (Array.isArray(masterData.resource_types) && masterData.resource_types.length > 0) {
-                OL.state.master.resourceTypes = masterData.resource_types;
-            }
-            if (Array.isArray(masterData.datapoints) && masterData.datapoints.length > 0) {
-                OL.state.master.datapoints = masterData.datapoints;
-            }
-            if (Array.isArray(masterData.apps) && masterData.apps.length > 0) {
-                OL.state.master.apps = masterData.apps;
-            }
-            if (Array.isArray(masterData.functions) && masterData.functions.length > 0) {
-                OL.state.master.functions = masterData.functions;
-            }
-
-            console.log(`🏛️ Master Registry Loaded: ${OL.state.master.apps.length} Apps, ${OL.state.master.functions.length} Functions.`);
+            state.master.rates = masterData.rates || state.master.rates;
+            if (Array.isArray(masterData.apps) && masterData.apps.length > 0) state.master.apps = masterData.apps;
+            if (Array.isArray(masterData.functions) && masterData.functions.length > 0) state.master.functions = masterData.functions;
+            if (Array.isArray(masterData.resource_types) && masterData.resource_types.length > 0) state.master.resourceTypes = masterData.resource_types;
+            if (Array.isArray(masterData.datapoints) && masterData.datapoints.length > 0) state.master.datapoints = masterData.datapoints;
+            if (Array.isArray(masterData.task_blueprints) && masterData.task_blueprints.length > 0) state.master.taskBlueprints = masterData.task_blueprints;
+            if (Array.isArray(masterData.how_to_library) && masterData.how_to_library.length > 0) state.master.howToLibrary = masterData.how_to_library;
+            if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) state.master.analyses = masterData.analyses;
+            console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
 
-        // 2. Read Client List
+        // 2. Fetch Client List
         const { data: clientsData, error: clientsErr } = await window.db
             .from('workspace_clients')
             .select('*');
@@ -255,7 +205,7 @@ OL.sync = async function() {
                 const clientId = c.id || c.client_id;
                 if (!clientId) return;
 
-                OL.state.clients[clientId] = {
+                state.clients[clientId] = {
                     id: clientId,
                     publicToken: c.public_token || c.publicToken || c.access_token,
                     meta: c.meta || { name: clientId, status: 'Discovery' },
@@ -266,97 +216,76 @@ OL.sync = async function() {
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         }
-
     } catch (error) {
-        console.error("❌ Sync Initialization Error:", error);
+        console.error("❌ Sync Error:", error);
     } finally {
-        OL.state.isCloudSynced = true;
+        state.isCloudSynced = true;
         if (typeof window.handleRoute === 'function') {
             window.handleRoute();
         }
     }
 };
 
-// 8. RELATIONAL CLIENT FETCH
 OL.loadFullClient = async function(clientId) {
-    if (state.clients[clientId] && !state.clients[clientId]._metaOnly) {
+    if (state.clients[clientId] && !state.clients[clientId]._metaOnly && state.clients[clientId].projectData) {
         return state.clients[clientId];
     }
     
-    console.log(`📥 Fetching client records from Supabase: ${clientId}`);
+    console.log(`📥 Loading full client data: ${clientId}`);
+    const { data, error } = await window.db
+        .from('workspace_clients')
+        .select('*')
+        .eq('id', clientId)
+        .maybeSingle();
 
-    const [stagesRes, teamRes, resourcesRes] = await Promise.all([
-        db.from('workspace_stages').select('*').eq('client_id', clientId),
-        db.from('team_members').select('*').eq('client_id', clientId),
-        db.from('workspace_resources').select('*').eq('client_id', clientId)
-    ]);
+    if (error) {
+        console.error(`❌ Error loading client ${clientId}:`, error.message);
+        return state.clients[clientId] || null;
+    }
 
-    state.clients[clientId] = {
-        id: clientId,
-        publicToken: state.clients[clientId]?.publicToken || null,
-        projectData: {
-            stages: stagesRes.data || [],
-            teamMembers: teamRes.data || [],
-            localResources: resourcesRes.data || []
-        }
-    };
-
-    delete state.clients[clientId]._metaOnly;
+    if (data) {
+        state.clients[clientId] = {
+            id: data.id,
+            publicToken: data.public_token || data.publicToken,
+            meta: data.meta || { name: data.id, status: 'Active' },
+            modules: data.modules,
+            permissions: data.permissions,
+            projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] }
+        };
+        delete state.clients[clientId]._metaOnly;
+    }
     return state.clients[clientId];
 };
 
 OL.switchClient = async function(id) {
-    if (!id) return;
-
-    const appState = OL.state || window.state || {};
-    appState.activeClientId = id;
+    state.activeClientId = id;
     sessionStorage.setItem('lastActiveClientId', id);
     
-    // 1. Show immediate loading state
     const main = document.getElementById('mainContent');
-    if (main) {
-        main.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:center;height:60vh;opacity:0.6;flex-direction:column;gap:12px;">
-                <div style="font-size:28px;">⏳</div>
-                <div style="font-size:13px;color:var(--text-dim, #a0aec0);">Loading workspace data...</div>
-            </div>`;
-    }
+    if (main) main.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
+            <div style="text-align:center;">
+                <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                <div>Loading client...</div>
+            </div>
+        </div>`;
     
-    try {
-        // 2. Fetch full client payload if loadFullClient exists
-        if (typeof OL.loadFullClient === 'function') {
-            await OL.loadFullClient(id);
-        }
-    } catch (err) {
-        console.error(`❌ Failed to load client ${id}:`, err);
-    }
+    await OL.loadFullClient(id);
     
-    // 3. Update hash to include client ID and preserve admin key
     const currentSearch = window.location.search || '';
-    window.location.href = `${window.location.origin}${window.location.pathname}${currentSearch}#/client/${id}`;
-    
-    // 4. Trigger router
-    if (typeof window.handleRoute === 'function') {
-        window.handleRoute();
-    }
+    window.location.href = `${window.location.origin}${window.location.pathname}${currentSearch}#/client-tasks`;
+    window.handleRoute();
 };
 
 OL.updateAndSync = async function(mutationFn) {
-    state.isSaving = true; // Shield on
-    
+    state.isSaving = true;
     try {
-        // 1. Run the local data change
         await mutationFn();
-        
-        // 2. Trigger the persist (the actual Firebase write)
         OL.persist();
-        
-        // Note: We don't log "Success" here anymore because persist is debounced
         console.log("📥 Local State Updated. Sync Queued...");
     } catch (error) {
         console.error("❌ Local Mutation Failed:", error);
     } finally {
-        // Shield stays on for 2 seconds to prevent the "Bounce Back" ping
         setTimeout(() => { state.isSaving = false; }, 2000);
     }
 };
@@ -369,10 +298,8 @@ OL.getRegistryIcon = function(type) {
         String(t.type).toLowerCase() === String(type).toLowerCase()
     );
 
-    // If the registry entry has a lucide icon defined, use it
     if (entry && entry.lucideIcon) return entry.lucideIcon;
 
-    // 🎯 Standardized Mapping
     const defaults = {
         zap: "zap",
         form: "file-text",
@@ -391,14 +318,12 @@ OL.getRegistryIcon = function(type) {
     return defaults[type.toLowerCase()] || "file-text";
 };
 
-
 window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
 
     if (!state.clients) return null;
 
-    // 🚀 If we have an explicit activeClientId, use it first
     if (state.activeClientId && state.clients[state.activeClientId]) {
         return state.clients[state.activeClientId];
     }
@@ -416,7 +341,6 @@ window.getActiveClient = function() {
     return null;
 };
 
-// Controls what a user can SEE
 OL.checkPermission = function (tabKey) {
   const client = getActiveClient();
   if (!client) return "full";
@@ -424,14 +348,11 @@ OL.checkPermission = function (tabKey) {
   return client.permissions[tabKey] || "full"; 
 };
 
-// Controls what a user can DO
-// Controls what a user can DO
 OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
     const clientToken = params.get('access'); 
     let adminKeyFromUrl = params.get('admin'); 
 
-    // 1. Client / Guest Mode
     if (clientToken) {
         state.adminMode = false;
         OL.state.adminMode = false;
@@ -440,28 +361,35 @@ OL.initializeSecurityContext = function() {
         return true;
     }
 
-    // 2. Explicit Admin URL Flag
     if (adminKeyFromUrl && adminKeyFromUrl === 'pizza123') {
         state.adminMode = true;
         OL.state.adminMode = true;
         window.IS_GUEST = false; 
-        console.log("🛠️ Admin Mode Active (URL Flag)");
+        console.log("🛠️ Admin Mode Active");
         return true; 
     }
 
-    // 3. Fallback / Default Root Access (Unlocks normal browsing)
-    console.log("🛠️ Defaulting to Admin Dashboard Access");
-    state.adminMode = true;
-    OL.state.adminMode = true;
-    window.IS_GUEST = false;
-    return true;
+    if (!adminKeyFromUrl && !clientToken) {
+        state.adminMode = false;
+        document.body.innerHTML = `
+            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
+                <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
+                    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
+                    <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
+                    <p style="font-size:13px;line-height:1.5;color:#718096;">
+                        A valid access key is required to view this workspace.
+                    </p>
+                </div>
+            </div>`;
+        return false;
+    }
+    
+    return false;
 };
-
-// 4. LAYOUT & ROUTING ENGINE
 
 OL.isAdmin = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.has('admin');
+    return urlParams.get('admin') === 'pizza123';
 };
 
 OL.getAdminQuery = function() {
@@ -754,13 +682,11 @@ window.buildLayout = function () {
 }
     
   // 1. Dashboard/Non-Context View
-  // Force build the layout shell if it doesn't exist on the page
-    let shell = root.querySelector('.three-pane-layout');
-
-    if (!shell) {
+  if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
+        // Only render the Dashboard link if no client context exists
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
-                <aside class="sidebar"></aside>
+                <aside class="sidebar"><nav class="menu"><a href="#/" class="active"><i>🏠</i> <span>Dashboard</span></a></nav></aside>
                 <main id="mainContent"></main>
                 <aside id="inspector-panel" class="pane-inspector">
                     <div class="sidebar-resizer right-side-handle"></div>
@@ -768,10 +694,10 @@ window.buildLayout = function () {
                         <div id="inspector-content"></div>
                     </div>
                 </aside>
-            </div>
-        `;
-    }
-    
+            </div>`;
+        return;
+    }  
+
   const effectiveAdminMode = isPublic ? false : state.adminMode;
 
   if (!root) return; // Safety guard
@@ -915,7 +841,8 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 
     // 3. 🏗️ HARDENED SHELL LOGIC
     // We check for the .three-pane-layout wrapper. If it's missing, we build the full structure.
-  
+    let shell = root.querySelector('.three-pane-layout');
+    
     if (!shell) {
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
@@ -996,231 +923,162 @@ OL.importMasterBackup = async function(event) {
     event.target.value = '';
 
     let data;
-    try { 
-        data = JSON.parse(await file.text()); 
-    } catch(e) { 
-        alert('❌ Invalid JSON file'); 
-        return; 
-    }
+    try { data = JSON.parse(await file.text()); } catch(e) { alert('Invalid JSON file'); return; }
 
+    // Combined backup format: { _version, master, clients[] }
     const isCombined = data._version === 1 && data.master && Array.isArray(data.clients);
-    const masterData = isCombined ? data.master : (data.master || data);
-    const clientsList = isCombined ? data.clients : (Array.isArray(data.clients) ? data.clients : Object.values(data.clients || {}));
+
+    // Legacy master-only backup: detect by presence of functions/apps at top level
+    const masterData = isCombined ? data.master : (() => {
+        const d = { ...data };
+        if (d.master && !d.rates) { Object.assign(d, d.master); }
+        delete d.master;
+        return d;
+    })();
+    const clients = isCombined ? data.clients : [];
 
     const fnCount     = (masterData.functions || []).length;
-    const appCount    = (masterData.apps || []).length;
-    const clientCount = clientsList.length;
+    const appCount    = (masterData.apps      || []).length;
+    const varCount    = Object.keys(masterData.rates?.variables || {}).length;
+    const clientCount = clients.length;
+    const exportedAt  = data._exportedAt ? new Date(data._exportedAt).toLocaleString() : 'unknown date';
 
     if (!confirm(
-        `Restore "${file.name}" into Supabase?\n\n` +
-        `• ${appCount} Master Apps\n` +
-        `• ${fnCount} Master Functions\n` +
-        `• ${clientCount} Client Projects\n\n` +
-        `Upload all system data to Supabase?`
+        `Restore "${file.name}"?\n` +
+        (data._exportedAt ? `Exported: ${exportedAt}\n` : '') +
+        `\n• ${fnCount} functions\n• ${appCount} apps\n• ${varCount} rate variables` +
+        (clientCount ? `\n• ${clientCount} client projects` : '\n• Master library only (no client data)') +
+        `\n\nThis will overwrite your current data. Cannot be undone.`
     )) return;
 
     try {
-        console.log("📡 Uploading Full Firebase Backup to Supabase...");
+        // Restore master
+        await db.collection('systems').doc('main_state').set(masterData);
+        state.master = masterData;
 
-        // 1. Upload Master Systems (Apps, Functions, Rates, Datapoints, Tasks)
-        if (masterData && Object.keys(masterData).length > 0) {
-            const { error: masterErr } = await window.db
-                .from('workspace_masters')
-                .upsert({
-                    id: 'main_state',
-                    exported_at: new Date().toISOString(),
-                    version: 1,
-                    rates: masterData.rates || {},
-                    resource_types: masterData.resourceTypes || masterData.resource_types || [],
-                    datapoints: masterData.datapoints || [],
-                    apps: masterData.apps || [],
-                    functions: masterData.functions || [],
-                    task_blueprints: masterData.taskBlueprints || masterData.task_blueprints || [],
-                    how_to_library: masterData.howToLibrary || masterData.how_to_library || [],
-                    analyses: masterData.analyses || []
-                });
-
-            if (masterErr) throw masterErr;
-
-            // Load directly into memory state
-            state.master.apps = masterData.apps || [];
-            state.master.functions = masterData.functions || [];
-            state.master.rates = masterData.rates || state.master.rates;
-            state.master.resourceTypes = masterData.resourceTypes || masterData.resource_types || state.master.resourceTypes;
-            state.master.datapoints = masterData.datapoints || state.master.datapoints;
-            state.master.taskBlueprints = masterData.taskBlueprints || masterData.task_blueprints || [];
-            state.master.howToLibrary = masterData.howToLibrary || masterData.how_to_library || [];
-            state.master.analyses = masterData.analyses || [];
-
-            console.log(`🏛️ Master Library Uploaded: ${appCount} Apps, ${fnCount} Functions.`);
+        // Restore clients (if present)
+        if (clients.length) {
+            const batch = db.batch();
+            clients.forEach(c => {
+                const { _id, ...clientData } = c;
+                batch.set(db.collection('clients').doc(_id), clientData);
+            });
+            await batch.commit();
+            clients.forEach(c => {
+                const { _id, ...clientData } = c;
+                state.clients[_id] = clientData;
+            });
         }
 
-        // 2. Upload Client Projects
-        if (clientsList.length > 0) {
-            const formattedClients = clientsList.map(c => {
-                const clientId = c.id || c._id || ('c-' + Math.random().toString(36).slice(2, 9));
-                return {
-                    id: clientId,
-                    public_token: c.publicToken || c.public_token || ("access_" + Math.random().toString(36).slice(2, 12)),
-                    meta: c.meta || { name: clientId, status: 'Discovery' },
-                    modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
-                    permissions: c.permissions || {},
-                    project_data: c.projectData || c.project_data || { localResources: [], clientTasks: [], localApps: [], localFunctions: [] }
-                };
-            });
-
-            const { error: clientsErr } = await window.db
-                .from('workspace_clients')
-                .upsert(formattedClients);
-
-            if (clientsErr) throw clientsErr;
-
-            formattedClients.forEach(c => {
-                state.clients[c.id] = {
-                    id: c.id,
-                    publicToken: c.public_token,
-                    meta: c.meta,
-                    modules: c.modules,
-                    permissions: c.permissions,
-                    projectData: c.project_data
-                };
-            });
-
-            console.log(`📋 Successfully uploaded ${formattedClients.length} clients to Supabase.`);
-        }
-
-        state.isCloudSynced = true;
-        alert(`✅ Restore Complete!\n\n• ${appCount} Master Apps\n• ${fnCount} Master Functions\n• ${clientCount} Client Projects`);
-
-        window.location.hash = "#/";
+        console.log(`✅ Restored: master + ${clients.length} clients`);
+        alert(`✅ Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
         window.handleRoute();
-
     } catch(e) {
         alert('❌ Restore failed: ' + e.message);
-        console.error("Restore Error:", e);
+        console.error(e);
     }
 };
 
-window.renderClientWorkspace = OL.renderClientWorkspace = function(clientId) {
-    if (!clientId) clientId = OL.state?.activeClientId;
-    const client = OL.state?.clients?.[clientId];
-
-    // Ensure main layout container exists
-    let mainEl = document.getElementById('mainContent');
-    if (!mainEl) {
-        document.body.innerHTML = `
-            <div id="appLayout" style="display:flex;min-height:100vh;background:var(--bg-main, #0d0f12);color:var(--text-main, #fff);font-family:sans-serif;">
-                <main id="mainContent" style="flex:1;padding:24px;max-width:1400px;margin:0 auto;width:100%;"></main>
-            </div>`;
-        mainEl = document.getElementById('mainContent');
-    }
-
-    if (!client) {
-        mainEl.innerHTML = `
-            <div style="padding:40px;text-align:center;">
-                <h2 style="color:#e53e3e;">Workspace Not Found</h2>
-                <p style="color:#a0aec0;margin-top:8px;">Client ID: ${clientId || 'None specified'}</p>
-                <button onclick="window.location.hash='#/'" style="margin-top:16px;padding:8px 16px;background:#3182ce;color:#fff;border:none;border-radius:6px;cursor:pointer;">
-                    ← Return to Dashboard
-                </button>
-            </div>`;
-        return;
-    }
-
-    OL.state.activeClientId = clientId;
-    const meta = client.meta || {};
-    const name = meta.name || clientId;
-    const status = meta.status || 'Active';
+window.handleRoute = function () {
+    const hash = window.location.hash || "#/";
+    const isVisualizer = hash.includes('visualizer');
+    const wasVisualizer = document.body.classList.contains('is-visualizer');
     
-    const pData = client.projectData || {};
-    const tasks = pData.clientTasks || pData.tasks || [];
-    const resources = pData.localResources || pData.resources || [];
+    // Only close inspector when LEAVING the visualizer
+    if (wasVisualizer && !isVisualizer) {
+        const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
+        if (panel) {
+            panel.classList.remove('open');
+            panel.id = 'inspector-panel';
+            panel.style.width = '0';
+            panel.style.minWidth = '0';
+        }
+        // ── ADD THIS ──
+        const inspectorContent = document.getElementById('inspector-content');
+        if (inspectorContent) inspectorContent.innerHTML = '';
+        // ─────────────
+        if (OL._fv) OL._fv._lastInspectorResId = null;
+    
+        const layout = document.querySelector('.three-pane-layout');
+        if (layout) {
+            const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+            const leftCol = sidebarCollapsed ? '65px' : '240px';
+            layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
+        }
+    }
+    // --- 🚦 [Remainder of your standard routing evaluation conditions...] ---
+    const matrix = document.querySelector('.matrix-table-container');
+    const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
 
-    const currentSearch = window.location.search || '';
+    if (matrix && !isAppLoading) {
+        console.warn("🛡️ Matrix Active: Blocking Background Refresh to save your focus.");
+        return; 
+    }
 
-    mainEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;border-bottom:1px solid #2d3748;padding-bottom:16px;">
-            <div>
-                <a href="${window.location.pathname}${currentSearch}#/" style="color:#3182ce;text-decoration:none;font-size:13px;font-weight:600;">← Back to Dashboard</a>
-                <h1 style="margin:8px 0 0 0;font-size:24px;color:#fff;">${esc(name)}</h1>
-            </div>
-            <div style="display:flex;gap:12px;align-items:center;">
-                <span style="font-size:12px;padding:4px 12px;background:#2d3748;color:#a0aec0;border-radius:12px;">${esc(status)}</span>
-                <button onclick="OL.openClientProfileModal('${clientId}')" style="padding:6px 12px;background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:6px;cursor:pointer;">
-                    ⚙️ Settings
-                </button>
-            </div>
-        </div>
+    window.buildLayout(); 
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-            <!-- Tasks Panel -->
-            <div style="background:#161920;border:1px solid #2d3748;border-radius:8px;padding:20px;">
-                <h3 style="margin:0 0 16px 0;font-size:16px;color:#fff;display:flex;justify-content:space-between;">
-                    <span>📋 Client Tasks</span>
-                    <span style="font-size:12px;color:#a0aec0;">${tasks.length} total</span>
-                </h3>
-                ${tasks.length === 0 ? '<p style="font-size:13px;color:#718096;">No tasks assigned yet.</p>' : `
-                    <div style="display:flex;flex-direction:column;gap:8px;">
-                        ${tasks.slice(0, 10).map(t => `
-                            <div style="padding:10px;background:#222632;border:1px solid #2d3748;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;">
-                                <span>${esc(t.name || t.title)}</span>
-                                <span style="font-size:11px;color:#a0aec0;">${esc(t.status || 'Pending')}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                `}
-            </div>
+    const main = document.getElementById("mainContent");
+    if (!main) return; 
 
-            <!-- Flow Maps / Resources Panel -->
-            <div style="background:#161920;border:1px solid #2d3748;border-radius:8px;padding:20px;">
-                <h3 style="margin:0 0 16px 0;font-size:16px;color:#fff;display:flex;justify-content:space-between;">
-                    <span>🗺️ Resources & Flow Maps</span>
-                    <span style="font-size:12px;color:#a0aec0;">${resources.length} active</span>
-                </h3>
-                ${resources.length === 0 ? '<p style="font-size:13px;color:#718096;">No resources added to this workspace.</p>' : `
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:10px;">
-                        ${resources.map(r => `
-                            <div style="padding:12px;background:#222632;border:1px solid #2d3748;border-radius:6px;">
-                                <div style="font-weight:600;font-size:13px;color:#fff;">${esc(r.name || 'Resource')}</div>
-                                <div style="font-size:11px;color:#a0aec0;margin-top:4px;">${esc(r.type || 'App')}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `}
-            </div>
-        </div>`;
-};
+    const client = getActiveClient();
+    const isVault = hash.startsWith('#/vault');
 
-window.handleRoute = function() {
-    if (!OL.state?.isCloudSynced) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasAdminKey = urlParams.get('admin') === 'pizza123';
-
-    const hash = window.location.hash || '#/';
-    const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
-    const routeClientId = isClientRoute ? hash.split('/')[2] : null;
-
-    // Admin security check
-    if (!hasAdminKey && !isClientRoute) {
-        document.body.innerHTML = `
-            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
-                <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
-                    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
-                    <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
-                    <p style="font-size:13px;line-height:1.5;color:#718096;">A valid access key is required to view this workspace.</p>
-                </div>
-            </div>`;
+    if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        if (window.FORCE_ADMIN && hash === "#/") {
+            renderClientDashboard();
+            return;
+        }
+        const leadProject = (client?.meta?.status === "Partner") ? client : state.clients[client?.meta?.partnerOwner];
+        if (leadProject) {
+            OL.renderPartnerDashboard(leadProject, main);
+            return;
+        }
+        renderClientDashboard();
         return;
     }
 
-    // Direct routing
-    if (isClientRoute && routeClientId) {
-        window.renderClientWorkspace(routeClientId);
+    if (isVault) {
+        if (window.IS_GUEST) {
+            window.location.hash = '#/';
+            return;
+        }
+        if (hash.includes("/apps")) renderAppsGrid();
+        else if (hash.includes("/functions")) renderFunctionsGrid();
+        else if (hash.includes("/resources")) renderResourceManager();
+        else if (hash.includes("/visualizer")) {
+            state.viewMode = 'graph';
+            document.body.classList.add('is-visualizer');
+            OL.renderVisualizer();
+        }
+        else if (hash.includes("/how-to")) renderHowToLibrary();
+        else if (hash.includes("/tasks")) renderChecklistModule(true);
+        else if (hash.includes("/analyses")) renderAnalysisModule(true);
+        else if (hash.includes("/rates")) renderVaultRatesPage();
+        else if (hash.includes("/data")) OL.renderGlobalDataManager();
+        return;
+    }
+
+    if (client) {
+        if (hash.includes("client-tasks")) renderChecklistModule();
+        else if (hash.includes("resources")) renderResourceManager();
+        else if (hash.includes("applications")) renderAppsGrid();
+        else if (hash.includes("functions")) renderFunctionsGrid();
+        else if (hash.includes("visualizer")) {
+            state.viewMode = 'graph';
+            document.body.classList.add('is-visualizer');
+            OL.renderVisualizer();
+        }
+        else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("analyze")) renderAnalysisModule();
+        else if (hash.includes("how-to")) renderHowToLibrary();
+        else if (hash.includes("team")) renderTeamManager();
+        else if (hash.includes("data")) OL.renderGlobalDataManager();
     } else {
-        window.renderClientDashboard();
+        renderClientDashboard();
     }
 };
+
 window.addEventListener("hashchange", handleRoute);
 
 // 4b. HANDLE GLOBAL SEARCH BAR
@@ -1456,25 +1314,29 @@ window.renderClientDashboard = function() {
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
 
-    // Safe state pointer
-    const appState = OL.state || window.state || { clients: {}, master: {} };
-
-    const activeView = appState.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
-    appState.dashboardView = activeView; 
+    const activeView = state.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
+    state.dashboardView = activeView; // keep state in sync
     
-    const activeFilter = appState.dashboardFilter || 'All';
-    let clients = appState.clients ? Object.values(appState.clients) : [];
+    // 🚀 FILTER LOGIC
+    const activeFilter = state.dashboardFilter || 'All';
+    let clients = state.clients ? Object.values(state.clients) : [];
     
+    // Apply Status Filter
     if (activeFilter !== 'All') {
-        clients = clients.filter(c => c.meta?.status === activeFilter);
+        clients = clients.filter(c => c.meta.status === activeFilter);
     }
     
-    if (!appState.isCloudSynced && (!appState.clients || Object.keys(appState.clients).length === 0)) {
-        if (!getActiveClient()) {
+    // 🛡️ THE LOADING GUARD
+    // If we have no clients AND we haven't confirmed the cloud is empty, show loading
+    if (!state.clients || Object.keys(state.clients).length === 0) {
+        if (getActiveClient()) {
+            // Proceed to render...
+        }
+        else {
             container.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
-                    <div class="fv-spinner"></div>
-                    <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
+                <div>
+                    <div class="spinner">⏳</div>
+                    <h3 class="muted">Connecting to Registry...</h3>
                 </div>`;
             return;
         }
@@ -1494,11 +1356,11 @@ window.renderClientDashboard = function() {
                 <div id="global-search-results" class="search-results-overlay"></div>
             </div>
 
-            <div class="header-actions">
+            <div class="header-actions"">
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
                 <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
-                <button class="btn small soft" onclick="(OL.state || window.state).dashboardView = (OL.state || window.state).dashboardView === 'list' ? 'cards' : 'list'; 
-                         localStorage.setItem('ol_dashboard_view', (OL.state || window.state).dashboardView); 
+                <button class="btn small soft" onclick="state.dashboardView = state.dashboardView === 'list' ? 'cards' : 'list'; 
+                         localStorage.setItem('ol_dashboard_view', state.dashboardView); 
                          renderClientDashboard();"
                         style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="${activeView === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
@@ -1510,7 +1372,7 @@ window.renderClientDashboard = function() {
         <div class="filter-bar">
             ${['All', 'Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(f => `
                 <span class="pill tiny ${activeFilter === f ? 'accent' : 'soft'}" 
-                      style="border: 1px solid ${activeFilter === f ? 'var(--accent)' : 'transparent'}; padding: 4px 12px; border-radius: 20px; cursor:pointer;"
+                      style="border: 1px solid ${activeFilter === f ? 'var(--accent)' : 'transparent'}; padding: 4px 12px; border-radius: 20px;"
                       onclick="OL.setDashboardFilter('${f}')">
                     ${f}
                 </span>
@@ -1528,12 +1390,10 @@ window.renderClientDashboard = function() {
                 <span style="font-size:13px;font-weight:700;color:var(--accent);">🏛️ Master Vault</span>
             </div>
             ${clients.map(client => {
-                const clientName = client.meta?.name || client.id;
-                const clientStatus = client.meta?.status || 'Active';
                 const tasks = (client.projectData?.clientTasks || []);
                 const openTasks = tasks.filter(t => t.status !== 'Done');
                 const doneTasks = tasks.filter(t => t.status === 'Done');
-                const isExpanded = appState.dashboardExpanded?.[client.id] !== false;
+                const isExpanded = state.dashboardExpanded?.[client.id] !== false;
             
                 return `
                     <div style="margin-bottom:4px;">
@@ -1546,21 +1406,21 @@ window.renderClientDashboard = function() {
                             <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
                                         color:#000;display:flex;align-items:center;justify-content:center;
                                         font-weight:900;font-size:11px;flex-shrink:0;">
-                                ${esc(clientName.substring(0,2).toUpperCase())}
+                                ${esc(client.meta.name.substring(0,2).toUpperCase())}
                             </div>
                             <div style="flex:1;min-width:0;">
                                 <div style="font-weight:700;font-size:13px;color:var(--text-main);">
-                                    ${esc(clientName)}
+                                    ${esc(client.meta.name)}
                                 </div>
                                 <div style="font-size:10px;color:var(--text-dim);">
                                     ${openTasks.length} open · ${doneTasks.length} done
                                 </div>
                             </div>
-                            <span style="font-size:10px;color:var(--text-dim);">${esc(clientStatus)}</span>
+                            <span style="font-size:10px;color:var(--text-dim);">${esc(client.meta.status)}</span>
                             ${openTasks.length ? `
                                 <span onclick="event.stopPropagation();
-                                              if(!appState.dashboardExpanded) appState.dashboardExpanded={};
-                                              appState.dashboardExpanded['${client.id}'] = !${isExpanded};
+                                              if(!state.dashboardExpanded) state.dashboardExpanded={};
+                                              state.dashboardExpanded['${client.id}'] = !${isExpanded};
                                               renderClientDashboard();"
                                       style="width:20px;height:20px;border-radius:4px;
                                              background:var(--panel-soft);border:1px solid var(--panel-border);
@@ -1614,9 +1474,7 @@ window.renderClientDashboard = function() {
             <div class="cards-grid">
 
             ${clients.map(client => {
-                const clientName = client.meta?.name || client.id;
-                const clientStatus = client.meta?.status || 'Discovery';
-                const clientOnboarded = client.meta?.onboarded || 'N/A';
+                // Get 3 most recent tasks for the hover preview
                 const recentTasks = (client.projectData?.clientTasks || []).slice(-3).reverse();
 
                 return `
@@ -1630,20 +1488,20 @@ window.renderClientDashboard = function() {
                              onclick="event.stopPropagation()"
                              onblur="this.style.borderBottom='1px dashed transparent'; OL.updateClientNameInline('${client.id}', this.innerText)"
                              onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
-                             ${esc(clientName)}
+                             ${esc(client.meta.name)}
                         </div>
                         <select class="status-pill-dropdown" 
                                 onclick="event.stopPropagation()" 
                                 onchange="OL.updateClientStatus('${client.id}', this.value)"
                                 style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
                             ${['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(status => `
-                                <option value="${status}" ${clientStatus === status ? 'selected' : ''}>${status}</option>
+                                <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
                             `).join('')}
                         </select>
                     </div>
                     <div class="card-body">
                         <div class="hover-preview-zone" style="position:relative; display:inline-block;">
-                            <div class="small muted">Onboarded: ${esc(clientOnboarded)}</div>
+                            <div class="small muted">Onboarded: ${client.meta.onboarded}</div>
                             <div class="task-preview-tooltip">
                                 <div class="bold tiny accent" style="margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:3px;">Open Tasks</div>
                                 ${recentTasks.length ? recentTasks.map(t => `<div class="tiny muted" style="margin-bottom:2px;">• ${esc(t.name)}</div>`).join('') : '<div class="tiny muted">No recent tasks</div>'}
@@ -1663,9 +1521,9 @@ window.renderClientDashboard = function() {
         </div>
         `}
     `;
-
+// 🚀 Backfill full data for meta-only clients
     setTimeout(() => {
-        const metaOnlyClients = Object.values(appState.clients || {}).filter(c => c._metaOnly);
+        const metaOnlyClients = Object.values(state.clients).filter(c => c._metaOnly);
         if (metaOnlyClients.length > 0) {
             console.log(`📥 Backfilling ${metaOnlyClients.length} clients...`);
             Promise.all(metaOnlyClients.map(c => OL.loadFullClient(c.id)))
@@ -1810,20 +1668,11 @@ OL.getDynamicPartners = function() {
 };
 
 OL.openClientProfileModal = function(clientId) {
-    // 1. Safe state resolution
-    const appState = OL.state || window.state || {};
-    const client = appState.clients?.[clientId];
+    const client = state.clients[clientId];
     if (!client) return;
 
-    // 2. Safe metadata resolution with defaults
-    const meta = client.meta || {};
-    const metaName = meta.name || clientId;
-    const metaStatus = meta.status || 'Active';
-    const metaOnboarded = meta.onboarded || 'N/A';
-
-    const dynamicPartners = typeof OL.getDynamicPartners === 'function' ? OL.getDynamicPartners() : [];
-    const currentPartnerId = meta.partnerOwner || "";
-    const currentPartnerObj = currentPartnerId ? appState.clients?.[currentPartnerId] : null;
+    const dynamicPartners = OL.getDynamicPartners();
+    const currentPartnerId = client.meta.partnerOwner || "";
 
     const partnerDropdownHtml = `
         <div class="card-section" style="margin-top: 20px; padding: 15px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 8px;">
@@ -1835,12 +1684,12 @@ OL.openClientProfileModal = function(clientId) {
                     <option value="">-- No Partner (Direct Sphynx Client) --</option>
                     ${dynamicPartners.map(p => `
                         <option value="${p.id}" ${currentPartnerId === p.id ? 'selected' : ''}>
-                            ${p.logo || '🏢'} ${esc(p.name || p.id)}
+                            ${p.logo} ${esc(p.name)}
                         </option>
                     `).join('')}
                 </select>
                 <p class="tiny muted" style="margin-top: 8px;">
-                    ${currentPartnerId ? `This project is managed under the <b>${esc(currentPartnerObj?.meta?.name || currentPartnerId)}</b> portfolio.` : 'This is a standalone project.'}
+                    ${currentPartnerId ? `This project is managed under the <b>${state.clients[currentPartnerId]?.meta.name}</b> portfolio.` : 'This is a standalone project.'}
                 </p>
             </div>
         </div>
@@ -1848,7 +1697,7 @@ OL.openClientProfileModal = function(clientId) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">Client Profile: ${esc(metaName)}</div>
+            <div class="modal-title-text">Client Profile: ${esc(client.meta.name)}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -1879,8 +1728,8 @@ OL.openClientProfileModal = function(clientId) {
             
             <label class="modal-section-label">Project Metadata</label>
             <div class="card-section">
-                <div class="small">Status: <strong>${esc(metaStatus)}</strong></div>
-                <div class="small">Onboarded: ${esc(metaOnboarded)}</div>
+                <div class="small">Status: <strong>${client.meta.status}</strong></div>
+                <div class="small">Onboarded: ${client.meta.onboarded}</div>
             </div>
 
             <label class="modal-section-label">External Sharing</label>
@@ -1888,8 +1737,8 @@ OL.openClientProfileModal = function(clientId) {
                 <p class="tiny muted">Share this link with the client for read-only access to their tasks.</p>
                 <div style="display:flex; gap:8px; margin-top:8px;">
                     <input type="text" class="modal-input small" readonly 
-                          value="${window.location.origin}${window.location.pathname}?access=${client.publicToken || ''}#/client-tasks">
-                    <button class="btn tiny primary" onclick="OL.copyShareLink('${client.publicToken || ''}')">Copy</button>
+                          value="${window.location.origin}${window.location.pathname}?access=${client.publicToken}#/client-tasks">
+                    <button class="btn tiny primary" onclick="OL.copyShareLink('${client.publicToken}')">Copy</button>
                 </div>
             </div>
 
@@ -1904,12 +1753,7 @@ OL.openClientProfileModal = function(clientId) {
             </div>
         </div>
     `;
-    
-    if (typeof openModal === 'function') {
-        openModal(html);
-    } else if (typeof OL.openModal === 'function') {
-        OL.openModal(html);
-    }
+    openModal(html);
 };
 
 OL.toggleClientModule = function(clientId, moduleId) {
@@ -22284,20 +22128,61 @@ OL.renderAccessSection = function (ownerId, type) {
         <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
             <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <label class="modal-section-label" style="margin:0;">System Access & Credentials</label>
+                <div class="header-actions">
+                    <button class="btn tiny primary" onclick="document.getElementById('access-search-input').focus()">+ Add Access</button>
+                </div>
             </div>
-            <div class="dp-manager-list">
-                ${connections.map((c) => {
-                    const target = type === "member"
-                        ? allApps.find(a => String(a.id) === String(c.appId))
-                        : allMembers.find(m => String(m.id) === String(c.memberId));
+
+            <div class="dp-manager-list" style="margin-bottom:10px;">
+                ${connections.length === 0 ? '<div class="muted tiny" style="padding:10px; text-align:center; border: 1px dashed var(--line); border-radius:4px;">No credentials linked yet.</div>' : ''}
+                ${connections.map((conn) => {
+                    const linkedObj = type === "member"
+                        ? allApps.find((a) => a.id === conn.appId)
+                        : allMembers.find((m) => m.id === conn.memberId);
+
+                    const jumpTarget = type === "member"
+                        ? `OL.openAppModal('${conn.appId}')`
+                        : `OL.openTeamMemberModal('${conn.memberId}')`;
+
                     return `
-                        <div class="dp-manager-row" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-                            <span style="font-size:12px;">🔑 ${esc(target?.name || "System Access")}</span>
-                            <span class="pill tiny soft" style="font-size:9px;">${esc(c.role || "User")}</span>
+                        <div class="dp-manager-row" style="display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <div style="width: 140px; min-width: 140px; padding: 5px;">
+                                <strong class="is-clickable text-accent" 
+                                        style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" 
+                                        onclick="${jumpTarget}" 
+                                        title="Jump to ${esc(linkedObj?.name)}">
+                                    ${type === "member" ? "💻" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
+                                </strong>
+                            </div>
+
+                            <div style="flex: 1; padding: 5px;">
+                                <input type="text" 
+                                       class="modal-input tiny" 
+                                       style="font-family: monospace; color: white; font-size: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);"
+                                       placeholder="API Key / Secret / Notes..."
+                                       value="${esc(conn.secret || "")}"
+                                       onblur="OL.updateAccessValue('${conn.id}', 'secret', this.value)">
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px; padding: 5px;">
+                                <select class="tiny-select" style="width: 80px;" onchange="OL.updateAccessValue('${conn.id}', 'level', this.value)">
+                                    <option value="Viewer" ${conn.level === "Viewer" ? "selected" : ""}>Viewer</option>
+                                    <option value="Editor" ${conn.level === "Editor" ? "selected" : ""}>Editor</option>
+                                    <option value="Admin" ${conn.level === "Admin" ? "selected" : ""}>Admin</option>
+                                </select>
+                                <button class="card-close" style="position:static; padding: 0 5px;" onclick="OL.removeAccess('${conn.id}', '${ownerId}', '${type}')">×</button>
+                            </div>
                         </div>
                     `;
-                }).join('')}
-                ${connections.length === 0 ? '<div class="tiny muted italic">No access records registered.</div>' : ''}
+                }).join("")}
+            </div>
+
+            <div class="search-map-container" style="margin-top: 15px;">
+                <input type="text" id="access-search-input" class="modal-input" 
+                    placeholder="Type to find ${type === "member" ? "an App" : "a Member"} to grant access..." 
+                    onfocus="OL.filterAccessSearch('${ownerId}', '${type}', '')" 
+                    oninput="OL.filterAccessSearch('${ownerId}', '${type}', this.value)">
+                <div id="access-search-results" class="search-results-overlay"></div>
             </div>
         </div>
     `;
