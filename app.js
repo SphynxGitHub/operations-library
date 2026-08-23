@@ -20453,9 +20453,6 @@ function renderScopingRow (item, idx, showUnits) {
         `;
     }
 
-    // 2. Financial Calculations
-    // Only "Do Now" and "Sphynx/Joint" count towards the totals
-    
     const typeIcon = OL.getRegistryIcon(res.type);
 
     // 2. Financial Calculations
@@ -20466,10 +20463,6 @@ function renderScopingRow (item, idx, showUnits) {
     const isCounted = status === 'do now' && isBillable;
 
     const gross = OL.calculateBaseFeeWithMultiplier(item, res);
-
-    // 🎯 THE FIX: If it's NOT counted (e.g., "Do Later"), 
-    // we set Net to Gross so the discount stays $0, 
-    // rather than setting Net to $0 which creates a massive discount.
     const net = isCounted ? OL.calculateRowFee(item, res) : gross; 
     const discountAmt = gross - net;
 
@@ -20480,6 +20473,7 @@ function renderScopingRow (item, idx, showUnits) {
     const mode = (item.teamMode || 'everyone').toLowerCase();
 
     // 3. Team UI Logic
+    let hoverText = '';
     let teamLabel = '';
     let btnIcon = '👨🏼‍🤝‍👨🏻';
     let btnClass = 'soft';
@@ -20501,7 +20495,7 @@ function renderScopingRow (item, idx, showUnits) {
 
         if (selectedCount > 0) {
             teamLabel = `<span class="tiny muted">Individuals (${selectedCount})</span>`;
-            hoverText = names.join(", "); // Plain text list for the title attribute
+            hoverText = names.join(", ");
         } else {
             teamLabel = '<span class="tiny danger">No members!</span>';
             hoverText = "Click to assign team members";
