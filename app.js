@@ -1101,66 +1101,126 @@ OL.importMasterBackup = async function(event) {
     }
 };
 
+window.renderClientWorkspace = OL.renderClientWorkspace = function(clientId) {
+    if (!clientId) clientId = OL.state?.activeClientId;
+    const client = OL.state?.clients?.[clientId];
+
+    // Ensure main layout container exists
+    let mainEl = document.getElementById('mainContent');
+    if (!mainEl) {
+        document.body.innerHTML = `
+            <div id="appLayout" style="display:flex;min-height:100vh;background:var(--bg-main, #0d0f12);color:var(--text-main, #fff);font-family:sans-serif;">
+                <main id="mainContent" style="flex:1;padding:24px;max-width:1400px;margin:0 auto;width:100%;"></main>
+            </div>`;
+        mainEl = document.getElementById('mainContent');
+    }
+
+    if (!client) {
+        mainEl.innerHTML = `
+            <div style="padding:40px;text-align:center;">
+                <h2 style="color:#e53e3e;">Workspace Not Found</h2>
+                <p style="color:#a0aec0;margin-top:8px;">Client ID: ${clientId || 'None specified'}</p>
+                <button onclick="window.location.hash='#/'" style="margin-top:16px;padding:8px 16px;background:#3182ce;color:#fff;border:none;border-radius:6px;cursor:pointer;">
+                    ← Return to Dashboard
+                </button>
+            </div>`;
+        return;
+    }
+
+    OL.state.activeClientId = clientId;
+    const meta = client.meta || {};
+    const name = meta.name || clientId;
+    const status = meta.status || 'Active';
+    
+    const pData = client.projectData || {};
+    const tasks = pData.clientTasks || pData.tasks || [];
+    const resources = pData.localResources || pData.resources || [];
+
+    const currentSearch = window.location.search || '';
+
+    mainEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;border-bottom:1px solid #2d3748;padding-bottom:16px;">
+            <div>
+                <a href="${window.location.pathname}${currentSearch}#/" style="color:#3182ce;text-decoration:none;font-size:13px;font-weight:600;">← Back to Dashboard</a>
+                <h1 style="margin:8px 0 0 0;font-size:24px;color:#fff;">${esc(name)}</h1>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;">
+                <span style="font-size:12px;padding:4px 12px;background:#2d3748;color:#a0aec0;border-radius:12px;">${esc(status)}</span>
+                <button onclick="OL.openClientProfileModal('${clientId}')" style="padding:6px 12px;background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:6px;cursor:pointer;">
+                    ⚙️ Settings
+                </button>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+            <!-- Tasks Panel -->
+            <div style="background:#161920;border:1px solid #2d3748;border-radius:8px;padding:20px;">
+                <h3 style="margin:0 0 16px 0;font-size:16px;color:#fff;display:flex;justify-content:space-between;">
+                    <span>📋 Client Tasks</span>
+                    <span style="font-size:12px;color:#a0aec0;">${tasks.length} total</span>
+                </h3>
+                ${tasks.length === 0 ? '<p style="font-size:13px;color:#718096;">No tasks assigned yet.</p>' : `
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${tasks.slice(0, 10).map(t => `
+                            <div style="padding:10px;background:#222632;border:1px solid #2d3748;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;">
+                                <span>${esc(t.name || t.title)}</span>
+                                <span style="font-size:11px;color:#a0aec0;">${esc(t.status || 'Pending')}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+
+            <!-- Flow Maps / Resources Panel -->
+            <div style="background:#161920;border:1px solid #2d3748;border-radius:8px;padding:20px;">
+                <h3 style="margin:0 0 16px 0;font-size:16px;color:#fff;display:flex;justify-content:space-between;">
+                    <span>🗺️ Resources & Flow Maps</span>
+                    <span style="font-size:12px;color:#a0aec0;">${resources.length} active</span>
+                </h3>
+                ${resources.length === 0 ? '<p style="font-size:13px;color:#718096;">No resources added to this workspace.</p>' : `
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:10px;">
+                        ${resources.map(r => `
+                            <div style="padding:12px;background:#222632;border:1px solid #2d3748;border-radius:6px;">
+                                <div style="font-weight:600;font-size:13px;color:#fff;">${esc(r.name || 'Resource')}</div>
+                                <div style="font-size:11px;color:#a0aec0;margin-top:4px;">${esc(r.type || 'App')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        </div>`;
+};
+
 window.handleRoute = function() {
-    if (!state.isCloudSynced) return;
+    if (!OL.state?.isCloudSynced) return;
 
     const urlParams = new URLSearchParams(window.location.search);
-    
-    // Check if the secret admin key is present in the URL
     const hasAdminKey = urlParams.get('admin') === 'pizza123';
 
     const hash = window.location.hash || '#/';
     const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
     const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    // 1. Block Root / Master Access if unauthorized
+    // Admin security check
     if (!hasAdminKey && !isClientRoute) {
         document.body.innerHTML = `
             <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
                 <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                     <div style="font-size:32px;margin-bottom:12px;">🔒</div>
                     <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
-                    <p style="font-size:13px;line-height:1.5;color:#718096;">
-                        A valid access key is required to view this workspace. Please check your URL or contact an administrator.
-                    </p>
+                    <p style="font-size:13px;line-height:1.5;color:#718096;">A valid access key is required to view this workspace.</p>
                 </div>
             </div>`;
         return;
     }
 
-    // 2. Block Client Route if token is missing/invalid AND admin key is missing
-    if (isClientRoute && !hasAdminKey) {
-        const client = state.clients[routeClientId];
-        const passedToken = urlParams.get('token') || urlParams.get('key');
-        
-        if (!client || (client.publicToken && client.publicToken !== passedToken)) {
-            document.body.innerHTML = `
-                <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#e53e3e;font-family:sans-serif;text-align:center;">
-                    <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
-                        <div style="font-size:32px;margin-bottom:12px;">🚫</div>
-                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Denied</h2>
-                        <p style="font-size:13px;line-height:1.5;color:#718096;">
-                            You do not have permission to view this project resource.
-                        </p>
-                    </div>
-                </div>`;
-            return;
-        }
-    }
-
-    // 3. Clear session storage key if present
-    sessionStorage.removeItem('ol_admin_auth');
-
-    // 4. Render Authorized Views
-    if (hash === '#/' || hash === '' || hash === '#/dashboard') {
-        window.renderClientDashboard();
-    } else if (isClientRoute && typeof window.renderClientWorkspace === 'function') {
+    // Direct routing
+    if (isClientRoute && routeClientId) {
         window.renderClientWorkspace(routeClientId);
-    } else if (hash.startsWith('#/vault') && typeof window.renderMasterVault === 'function') {
-        window.renderMasterVault();
+    } else {
+        window.renderClientDashboard();
     }
 };
-
 window.addEventListener("hashchange", handleRoute);
 
 // 4b. HANDLE GLOBAL SEARCH BAR
