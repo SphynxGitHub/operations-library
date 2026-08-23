@@ -1097,30 +1097,23 @@ OL.importMasterBackup = async function(event) {
 };
 
 window.handleRoute = function() {
-    // 1. Wait for Supabase cloud sync to finish first
-    if (!state.isCloudSynced) {
-        return; 
-    }
+    // 1. Wait for Supabase sync to complete
+    if (!state.isCloudSynced) return;
 
-    // 2. Check URL Parameters for Admin Key
+    // 2. Validate Admin Security
     const urlParams = new URLSearchParams(window.location.search);
     const hasAdminKey = urlParams.get('admin') === 'pizza123';
-    
-    if (hasAdminKey) {
-        sessionStorage.setItem('ol_admin_auth', 'true');
-    }
+    if (hasAdminKey) sessionStorage.setItem('ol_admin_auth', 'true');
     const isAuthedAdmin = sessionStorage.getItem('ol_admin_auth') === 'true' || hasAdminKey;
 
-    // 3. Parse Current Route
     const hash = window.location.hash || '#/';
     const isClientRoute = hash.startsWith('#/client/') || hash.startsWith('#/c/');
     const routeClientId = isClientRoute ? hash.split('/')[2] : null;
 
-    // 4. Block Root / Master Access if not Admin
+    // 3. Security Guard for Root / Master Vault
     if (!isAuthedAdmin && !isClientRoute) {
-        const mainEl = document.getElementById('mainContent') || document.body;
-        mainEl.innerHTML = `
-            <div style="display:flex;height:80vh;align-items:center;justify-content:center;color:#a0aec0;text-align:center;">
+        document.body.innerHTML = `
+            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;text-align:center;">
                 <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
                     <div style="font-size:32px;margin-bottom:12px;">🔒</div>
                     <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
@@ -1132,30 +1125,13 @@ window.handleRoute = function() {
         return;
     }
 
-    // 5. Verify Direct Client Route Token
-    if (isClientRoute && !isAuthedAdmin) {
-        const client = state.clients[routeClientId];
-        const passedToken = urlParams.get('token') || urlParams.get('key');
-        
-        if (!client || (client.publicToken && client.publicToken !== passedToken)) {
-            const mainEl = document.getElementById('mainContent') || document.body;
-            mainEl.innerHTML = `
-                <div style="display:flex;height:80vh;align-items:center;justify-content:center;color:#e53e3e;text-align:center;">
-                    <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
-                        <div style="font-size:32px;margin-bottom:12px;">🚫</div>
-                        <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Invalid Client Token</h2>
-                        <p style="font-size:13px;line-height:1.5;color:#718096;">
-                            You do not have permission to view this project.
-                        </p>
-                    </div>
-                </div>`;
-            return;
-        }
-    }
-
-    // 6. If passed, clear any restriction markup and render dashboard
-    if (typeof window.renderAppLayout === 'function') {
-        window.renderAppLayout();
+    // 4. Route Routing Switch
+    if (hash === '#/' || hash === '' || hash === '#/dashboard') {
+        window.renderClientDashboard();
+    } else if (isClientRoute && typeof window.renderClientWorkspace === 'function') {
+        window.renderClientWorkspace(routeClientId);
+    } else if (hash.startsWith('#/vault') && typeof window.renderMasterVault === 'function') {
+        window.renderMasterVault();
     }
 };
 
