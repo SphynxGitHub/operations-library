@@ -269,26 +269,30 @@ OL.switchClient = async function(id) {
     sessionStorage.setItem('lastActiveClientId', id);
     
     const main = document.getElementById('mainContent');
-    if (main) main.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
-            <div style="text-align:center;">
-                <div style="font-size:24px;margin-bottom:10px;">⏳</div>
-                <div>Loading client...</div>
-            </div>
-        </div>`;
+    if (main) {
+        main.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
+                <div style="text-align:center;">
+                    <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                    <div>Opening project...</div>
+                </div>
+            </div>`;
+    }
     
     await OL.loadFullClient(id);
     
-    // 🚀 PRESERVE SEARCH PARAMS (e.g. ?access=token)
-    const currentSearch = window.location.search || '';
+    // 🚀 BUILD QUERY PARAMS WITH ACCESS + CLIENT ID
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('client', id); // 👈 Explicitly attach project ID
     
-    // Update hash to route to the client workspace
-    window.location.href = `${window.location.origin}${window.location.pathname}${currentSearch}#/client-tasks`;
+    const newSearch = `?${urlParams.toString()}`;
+    const newUrl = `${window.location.origin}${window.location.pathname}${newSearch}#/client-tasks`;
+
+    // Push new state into browser history and re-route
+    window.history.pushState({}, '', newUrl);
     
-    // Trigger route handler to repaint sidebar and workspace
-    if (typeof window.handleRoute === 'function') {
-        window.handleRoute();
-    }
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+    if (typeof window.handleRoute === 'function') window.handleRoute();
 };
 
 OL.updateAndSync = async function(mutationFn) {
@@ -335,23 +339,30 @@ OL.getRegistryIcon = function(type) {
 window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
+    const clientIdParam = urlParams.get('client'); // 👈 READS EXPLICIT CLIENT PARAM
 
     if (!state.clients) return null;
 
+    // 1. If explicit client ID is in URL
+    if (clientIdParam && state.clients[clientIdParam]) {
+        state.activeClientId = clientIdParam;
+        return state.clients[clientIdParam];
+    }
+
+    // 2. Active client in state
+    if (state.activeClientId && state.clients[state.activeClientId]) {
+        return state.clients[state.activeClientId];
+    }
+
+    // 3. Fallback via access token lookup
     if (accessToken) {
-        // Find client matching the public token or access ID
         const foundClient = Object.values(state.clients).find(c => 
             c.publicToken === accessToken || c.id === accessToken || c.meta?.accessCode === accessToken
         );
-
         if (foundClient) {
             state.activeClientId = foundClient.id;
             return foundClient;
         }
-    }
-
-    if (state.activeClientId && state.clients[state.activeClientId]) {
-        return state.clients[state.activeClientId];
     }
 
     return null;
@@ -22371,4 +22382,2142 @@ OL.updateCredentialStatus = function (clientId, idx, status) {
 };
 
 //============================= HOW TO SECTION ============================== //
+
+window.renderHowToLibrary = OL.renderHowToLibrary = function renderHowToLibrary () {
+    OL.registerView(renderHowToLibrary);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const hash = window.location.hash;
+
+    if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isVaultView = hash.startsWith('#/vault');
+
+    // 1. Data Selection (Master + Project Local)
+    const masterLibrary = state.master.howToLibrary || [];
+    const localLibrary = (client && client.projectData.localHowTo) || [];
+    
+    const visibleGuides = isVaultView 
+        ? masterLibrary 
+        : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
+
+    container.innerHTML = `
+        <div class="section-header" style="display: flex !important; align-items: center; gap: 12px; visibility: visible !important; opacity: 1 !important;">
+            <i data-lucide="library" style="width: 28px; height: 24px; color: var(--accent);"></i>
+            <div style="flex: 1;">
+                <h2 style="margin:0;">${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <div class="small muted">${isVaultView ? 'Global Standards' : `Custom guides for ${esc(client?.meta?.name)}`}</div>
+            </div>
+            
+            <div class="header-actions" style="display: flex !important; gap: 10px !important; align-items: center;">
+                ${isVaultView && isAdmin ? `
+                    <button class="btn primary" style="background: var(--accent) !important; color: black !important; font-weight: bold; display: flex; align-items: center; gap: 6px;" 
+                            onclick="OL.openHowToEditorModal()">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Create Master SOP
+                    </button>
+                    ${OL.viewToggleBtn('howto', 'renderHowToLibrary')}
+                ` : ''}
+
+                ${!isVaultView ? `
+                    <button class="btn small soft" style="display: flex; align-items: center; gap: 6px;" 
+                            onclick="OL.openLocalHowToEditor()">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Local SOP
+                    </button>
+                    ${isAdmin ? `
+                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: flex; align-items: center; gap: 6px;" 
+                                onclick="OL.importHowToToProject()">
+                            <i data-lucide="download-cloud" style="width: 14px; height: 14px;"></i> Import Master
+                        </button>` : ''}
+                ` : ''}
+            </div>
+        </div>
+        ${OL.getViewMode('howto') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                ${visibleGuides.map(ht => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openGuideEditor('${ht.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <i data-lucide="book-open" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;font-size:13px;">${esc(ht.name||'Untitled SOP')}</div>
+                            ${ht.summary ? `<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ht.summary)}</div>` : ''}
+                        </div>
+                        <span class="pill tiny ${String(ht.id).includes('local') ? 'soft' : 'vault'}" style="font-size:8px;">
+                            ${String(ht.id).includes('local') ? 'LOCAL' : 'MASTER'}
+                        </span>
+                        <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.deleteSOP('${client?.id}','${ht.id}')">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `
+        <div class="cards-grid" style="margin-top: 20px;">
+            ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
+        </div>
+        `}
+    `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
+
+// 2. RENDER HOW TO CARDS
+function renderHowToCard(clientId, ht, isClientView) {
+    const client = state.clients[clientId];
+    const isAdmin = window.FORCE_ADMIN === true;
+    
+    const isVaultView = window.location.hash.includes('vault');
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal;
+    const canDelete = isAdmin || isLocal;
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
+
+    return `
+        <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
+             style="cursor: pointer; position: relative;" 
+             onclick="OL.openGuideEditor('${ht.id}')">
+
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="book-open" style="width:14px; height:14px; color:var(--accent); opacity:0.8;"></i>
+                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
+                </div>
+
+                ${canDelete ? `
+                <button class="card-delete-btn" 
+                        style="position:static;"
+                        title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
+                    <i data-lucide="x" style="width:14px; height:14px;"></i>
+                </button>
+                ` : ''}
+            </div>
+            
+            <div class="card-body" style="padding-top: 12px;">
+                <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 10px;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em; display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="${isMaster ? 'shield-check' : 'map-pin'}" style="width:10px; height:10px;"></i>
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer; display:flex; align-items:center; gap:4px;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            <i data-lucide="${isShared ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
+                            ${isShared ? 'Client-Facing' : 'Internal-Only'}
+                        </span>
+                    ` : ''}
+                </div>
+                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; font-size: 11px;">
+                    ${esc(ht.summary || 'No summary provided.')}
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+OL.openGuideEditor = function(htId, draftObj = null) {
+    const mainArea = document.getElementById('mainContent');
+    if (!mainArea) return;
+
+    document.body.classList.add('is-visualizer');
+    mainArea.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0;';
+
+    const hash = window.location.hash;
+    const isVaultMode = hash.includes('vault');
+    const client = getActiveClient();
+
+    // 1. Resolve guide
+    let ht = draftObj;
+    if (!ht) ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client) ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    if (!ht) return;
+
+    // 2. Migrate legacy content to blocks
+    if (!ht.blocks) {
+        ht.blocks = [];
+        if (ht.content && ht.content.trim()) {
+            ht.blocks.push({
+                id: 'blk-' + Date.now(),
+                type: 'text',
+                data: { html: ht.content }
+            });
+        }
+        // don't delete ht.content yet — keep as fallback
+    }
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isLocal = String(ht.id).includes('local');
+    const canEdit = isAdmin || isLocal || String(htId).startsWith('draft');
+
+    OL._ge = { htId: ht.id, canEdit };
+
+    mainArea.innerHTML = `
+        <div id="ge-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--bg);">
+
+            <!-- TOPBAR -->
+            <div id="ge-topbar" style="
+                display:flex;align-items:center;gap:10px;
+                padding:10px 20px;flex-shrink:0;
+                background:var(--panel);border-bottom:1px solid var(--panel-border);
+                min-height:56px;">
+
+                <button class="fv-btn" onclick="OL.closeGuideEditor()" style="gap:6px;">
+                    <i data-lucide="arrow-left" style="width:13px;height:13px;"></i>
+                    Back
+                </button>
+
+                <div style="width:1px;height:20px;background:var(--panel-border);"></div>
+
+                <i data-lucide="book-open" style="width:16px;height:16px;color:var(--accent);flex-shrink:0;"></i>
+                <input type="text"
+                       id="ge-title-input"
+                       value="${esc(ht.name || '')}"
+                       placeholder="Guide title..."
+                       ${!canEdit ? 'readonly' : ''}
+                       style="background:transparent;border:none;outline:none;font-size:16px;
+                              font-weight:700;color:var(--text-main);flex:1;font-family:inherit;"
+                       onblur="OL._geSaveField('name', this.value)">
+
+                <div style="flex:1;"></div>
+
+                ${canEdit ? `
+                    <div style="position:relative;">
+                        <button class="fv-btn" id="ge-add-block-btn"
+                                onclick="OL._geToggleBlockMenu()"
+                                style="gap:6px;background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;">
+                            <i data-lucide="plus" style="width:13px;height:13px;"></i>
+                            Add Block
+                        </button>
+                        <div id="ge-block-menu" style="
+                            display:none;position:absolute;top:calc(100% + 6px);right:0;
+                            background:var(--panel);border:1px solid var(--panel-border);
+                            border-radius:10px;padding:6px;z-index:100;min-width:180px;
+                            box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                            ${[
+                                { type:'text',      icon:'align-left',   label:'Text / HTML' },
+                                { type:'checklist', icon:'check-square', label:'Checklist' },
+                                { type:'image',     icon:'image',        label:'Image' },
+                                { type:'resource',  icon:'link',         label:'Resource Link' },
+                            ].map(b => `
+                                <div onclick="OL._geAddBlock('${b.type}'); OL._geToggleBlockMenu();"
+                                     style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                            border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                                     onmouseover="this.style.background='var(--panel-soft)'"
+                                     onmouseout="this.style.background='transparent'">
+                                    <i data-lucide="${b.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
+                                    <span style="font-size:12px;font-weight:600;color:var(--text-main);">${b.label}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <button class="fv-btn" onclick="OL.closeGuideEditor()"
+                        style="background:var(--panel-soft);color:var(--text-dim);">
+                    <i data-lucide="x" style="width:13px;height:13px;"></i>
+                </button>
+            </div>
+
+            <!-- BODY -->
+            <div id="ge-body" style="display:flex;flex:1;overflow:hidden;">
+
+                <!-- EDITOR COLUMN -->
+                <div id="ge-editor" style="
+                    flex:1;overflow-y:auto;padding:40px;
+                    display:flex;flex-direction:column;gap:12px;
+                    max-width:860px;margin:0 auto;width:100%;">
+
+                    <!-- Summary -->
+                    <input type="text"
+                           placeholder="One-sentence summary..."
+                           value="${esc(ht.summary || '')}"
+                           ${!canEdit ? 'readonly' : ''}
+                           style="background:transparent;border:none;border-bottom:1px solid var(--panel-border);
+                                  outline:none;font-size:13px;color:var(--text-dim);padding:4px 0;
+                                  font-family:inherit;width:100%;"
+                           onblur="OL._geSaveField('summary', this.value)">
+
+                    <div style="height:1px;background:var(--panel-border);margin:8px 0;"></div>
+
+                    <!-- BLOCKS -->
+                    <div id="ge-blocks-container">
+                        ${OL._geRenderAllBlocks(ht)}
+                    </div>
+
+                    ${canEdit ? `
+                        <div style="position:relative;margin-top:8px;">
+                            <div onmousedown="event.preventDefault(); 
+                                             const m=this.nextElementSibling; 
+                                             m.style.display=m.style.display==='block'?'none':'block';"
+                                 style="border:1px dashed var(--panel-border);border-radius:10px;
+                                        padding:20px;text-align:center;cursor:pointer;
+                                        color:var(--text-muted);font-size:12px;transition:all 0.15s;"
+                                 onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                                 onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
+                                <i data-lucide="plus-circle" style="width:16px;height:16px;display:block;margin:0 auto 6px;"></i>
+                                Add a block
+                            </div>
+                            <div style="display:none;position:absolute;top:calc(100% + 6px);left:50%;
+                                        transform:translateX(-50%);background:var(--panel);
+                                        border:1px solid var(--panel-border);border-radius:10px;
+                                        padding:6px;z-index:100;min-width:180px;
+                                        box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                                ${[
+                                    { type:'text',      icon:'align-left',   label:'Text / HTML' },
+                                    { type:'checklist', icon:'check-square', label:'Checklist' },
+                                    { type:'image',     icon:'image',        label:'Image' },
+                                    { type:'resource',  icon:'link',         label:'Resource Link' },
+                                ].map(b => `
+                                    <div onmousedown="event.preventDefault(); OL._geAddBlock('${b.type}'); this.closest('[style*=position]').style.display='none';"
+                                         style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                                border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                                         onmouseover="this.style.background='var(--panel-soft)'"
+                                         onmouseout="this.style.background='transparent'">
+                                        <i data-lucide="${b.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
+                                        <span style="font-size:12px;font-weight:600;color:var(--text-main);">${b.label}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- RIGHT SIDEBAR (metadata) -->
+                <div id="ge-sidebar" style="
+                    width:260px;flex-shrink:0;
+                    border-left:1px solid var(--panel-border);
+                    background:var(--panel-soft);
+                    overflow-y:auto;padding:20px;
+                    display:flex;flex-direction:column;gap:16px;">
+
+                    <!-- Video -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="video" style="width:11px;height:11px;"></i> Training Video
+                        </div>
+                        <input type="text" class="fvi-input"
+                               placeholder="YouTube / Loom / Vimeo URL"
+                               value="${esc(ht.videoUrl || '')}"
+                               ${!canEdit ? 'readonly' : ''}
+                               onblur="OL._geSaveField('videoUrl', this.value); OL._geRefreshVideoPreview(this.value);">
+                        <div id="ge-video-preview" style="margin-top:8px;">
+                            ${ht.videoUrl ? OL.parseVideoEmbed(ht.videoUrl) : ''}
+                        </div>
+                    </div>
+
+                    <!-- Category -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="folder" style="width:11px;height:11px;"></i> Category
+                        </div>
+                        <input type="text" class="fvi-input"
+                               value="${esc(ht.category || 'General')}"
+                               ${!canEdit ? 'readonly' : ''}
+                               onblur="OL._geSaveField('category', this.value)">
+                    </div>
+
+                    <!-- Related Apps -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="smartphone" style="width:11px;height:11px;"></i> Related Apps
+                        </div>
+                        <div id="ge-app-pills" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
+                            ${OL._geRenderAppPills(ht)}
+                        </div>
+                        ${canEdit ? `
+                            <div style="position:relative;">
+                                <input type="text" class="fvi-input" placeholder="Search apps..."
+                                       onfocus="OL._geFilterAppSearch('${ht.id}','')"
+                                       oninput="OL._geFilterAppSearch('${ht.id}',this.value)">
+                                <div id="ge-app-results" class="search-results-overlay" style="position:absolute;z-index:50;width:100%;"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+
+    // Close block menu on outside click
+    document.addEventListener('click', OL._geOutsideClick);
+};
+
+OL._geOutsideClick = function(e) {
+    const menu = document.getElementById('ge-block-menu');
+    const btn  = document.getElementById('ge-add-block-btn');
+    if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+};
+
+OL.closeGuideEditor = function() {
+    document.removeEventListener('click', OL._geOutsideClick);
+    document.body.classList.remove('is-visualizer');
+    const mainArea = document.getElementById('mainContent');
+    if (mainArea) mainArea.style.cssText = '';
+    renderHowToLibrary();
+};
+
+// ── BLOCK MENU TOGGLE ──────────────────────────────
+OL._geToggleBlockMenu = function() {
+    const menu = document.getElementById('ge-block-menu');
+    if (!menu) return;
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+};
+
+// ── SAVE FIELD ─────────────────────────────────────
+OL._geSaveField = function(field, value) {
+    const { htId } = OL._ge;
+    OL.handleHowToSave(htId, field, value);
+};
+
+// ── RESOLVE GUIDE ──────────────────────────────────
+OL._geGetHt = function() {
+    const { htId } = OL._ge;
+    const client = getActiveClient();
+    return (state.master.howToLibrary || []).find(h => h.id === htId)
+        || (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+};
+
+// ── SAVE BLOCKS ────────────────────────────────────
+OL._geSaveBlocks = function() {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    OL.persist();
+};
+
+// ── ADD BLOCK ──────────────────────────────────────
+OL._geAddBlock = function(type) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    if (!ht.blocks) ht.blocks = [];
+
+    const id = 'blk-' + Date.now();
+    const defaults = {
+        text:      { html: '' },
+        checklist: { items: [] },
+        image:     { url: '', caption: '' },
+        resource:  { resourceId: null, resourceName: '', note: '' },
+    };
+
+    ht.blocks.push({ id, type, data: defaults[type] || {} });
+    OL.persist();
+
+    // Re-render just the blocks container
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+        // Focus new block
+        requestAnimationFrame(() => {
+            const newBlock = document.getElementById(`ge-blk-${id}`);
+            if (newBlock) {
+                newBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const input = newBlock.querySelector('textarea, input[type="text"]');
+                if (input) input.focus();
+            }
+        });
+    }
+};
+
+// ── DELETE BLOCK ───────────────────────────────────
+OL._geDeleteBlock = function(blockId) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    ht.blocks = (ht.blocks || []).filter(b => b.id !== blockId);
+    OL.persist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── MOVE BLOCK ─────────────────────────────────────
+OL._geMoveBlock = function(blockId, dir) {
+    const ht = OL._geGetHt();
+    if (!ht || !ht.blocks) return;
+    const idx = ht.blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= ht.blocks.length) return;
+    const tmp = ht.blocks[idx];
+    ht.blocks[idx] = ht.blocks[newIdx];
+    ht.blocks[newIdx] = tmp;
+    OL.persist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── RENDER ALL BLOCKS ──────────────────────────────
+OL._geRenderAllBlocks = function(ht) {
+    const blocks = ht.blocks || [];
+    if (!blocks.length) {
+        return `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:12px;opacity:0.6;">
+            No blocks yet — click <strong>Add Block</strong> above to get started.
+        </div>`;
+    }
+    return blocks.map((b, i) => OL._geRenderBlock(b, i, blocks.length)).join('');
+};
+
+// ── RENDER SINGLE BLOCK ────────────────────────────
+OL._geRenderBlock = function(block, idx, total) {
+    const { canEdit } = OL._ge || {};
+    const controls = canEdit ? `
+        <div class="ge-block-controls" style="
+            position:absolute;top:10px;right:10px;
+            display:none;align-items:center;gap:4px;z-index:10;">
+            <button onclick="OL._geMoveBlock('${block.id}', -1)"
+                    title="Move up" ${idx === 0 ? 'disabled' : ''}
+                    style="width:24px;height:24px;border:1px solid var(--panel-border);
+                           background:var(--panel-soft);border-radius:5px;cursor:pointer;
+                           color:var(--text-dim);display:flex;align-items:center;justify-content:center;
+                           opacity:${idx === 0 ? '0.3' : '1'};">
+                <i data-lucide="chevron-up" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+            <button onclick="OL._geMoveBlock('${block.id}', 1)"
+                    title="Move down" ${idx === total-1 ? 'disabled' : ''}
+                    style="width:24px;height:24px;border:1px solid var(--panel-border);
+                           background:var(--panel-soft);border-radius:5px;cursor:pointer;
+                           color:var(--text-dim);display:flex;align-items:center;justify-content:center;
+                           opacity:${idx === total-1 ? '0.3' : '1'};">
+                <i data-lucide="chevron-down" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+            <button onclick="OL._geDeleteBlock('${block.id}')"
+                    title="Delete block"
+                    style="width:24px;height:24px;border:1px solid rgba(239,68,68,0.3);
+                           background:rgba(239,68,68,0.06);border-radius:5px;cursor:pointer;
+                           color:#ef4444;display:flex;align-items:center;justify-content:center;">
+                <i data-lucide="trash-2" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+        </div>
+    ` : '';
+
+    const inner = OL._geRenderBlockInner(block, canEdit);
+
+    return `
+        <div id="ge-blk-${block.id}"
+             class="ge-block"
+             style="position:relative;background:var(--panel);border:1px solid var(--panel-border);
+                    border-radius:10px;padding:18px 20px;transition:border-color 0.15s;"
+             onmouseenter="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='flex';"
+             onmouseleave="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
+            ${controls}
+            ${inner}
+        </div>
+    `;
+};
+
+// ── RENDER BLOCK INNER BY TYPE ─────────────────────
+OL._geRenderBlockInner = function(block, canEdit) {
+    switch (block.type) {
+
+        case 'text':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="align-left" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Text</span>
+                </div>
+                ${canEdit ? `
+                    <textarea
+                        style="width:100%;min-height:100px;background:var(--panel-soft);
+                               border:1px solid var(--panel-border);border-radius:8px;
+                               color:var(--text-main);font-size:13px;line-height:1.6;
+                               padding:10px 12px;font-family:inherit;resize:vertical;outline:none;
+                               transition:border-color 0.15s;box-sizing:border-box;"
+                        onfocus="this.style.borderColor='var(--accent)'"
+                        onblur="this.style.borderColor='var(--panel-border)';
+                                OL._geUpdateBlockData('${block.id}', {html: this.value})"
+                        placeholder="Type text or paste HTML..."
+                    >${block.data.html || ''}</textarea>
+                    <div style="font-size:9px;color:var(--text-muted);margin-top:4px;opacity:0.6;">
+                        HTML is supported — paste rich content freely.
+                    </div>
+                ` : `
+                    <div style="font-size:13px;line-height:1.7;color:var(--text-main);">
+                        ${block.data.html || '<em style="opacity:0.4;">Empty text block</em>'}
+                    </div>
+                `}
+            `;
+
+        case 'checklist':
+            const items = block.data.items || [];
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="check-square" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Checklist</span>
+                </div>
+                <div id="ge-cl-${block.id}" style="display:flex;flex-direction:column;gap:4px;">
+                    ${items.map((item, i) => OL._geRenderChecklistItem(block.id, item, i)).join('')}
+                </div>
+                ${canEdit ? `
+                    <button onclick="OL._geAddChecklistItem('${block.id}')"
+                            style="display:flex;align-items:center;gap:6px;margin-top:8px;
+                                   background:none;border:1px dashed var(--panel-border);
+                                   border-radius:7px;padding:6px 12px;cursor:pointer;
+                                   color:var(--text-muted);font-size:11px;font-family:inherit;
+                                   width:100%;transition:all 0.15s;"
+                            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                            onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
+                        <i data-lucide="plus" style="width:11px;height:11px;pointer-events:none;"></i>
+                        Add item
+                    </button>
+                ` : ''}
+            `;
+
+        case 'image':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="image" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Image</span>
+                </div>
+                ${canEdit ? `
+                    <input type="text" class="fvi-input" style="margin-bottom:8px;"
+                           placeholder="Paste image URL..."
+                           value="${esc(block.data.url || '')}"
+                           onblur="OL._geUpdateBlockData('${block.id}', {url: this.value, caption: document.getElementById('ge-img-cap-${block.id}')?.value || ''});
+                                   OL._geRefreshImageBlock('${block.id}', this.value)">
+                ` : ''}
+                <div id="ge-img-preview-${block.id}">
+                    ${block.data.url ? `
+                        <img src="${esc(block.data.url)}" alt=""
+                             style="width:100%;border-radius:8px;border:1px solid var(--panel-border);display:block;">
+                    ` : `
+                        <div style="background:var(--panel-soft);border:1px dashed var(--panel-border);
+                                    border-radius:8px;padding:30px;text-align:center;
+                                    color:var(--text-muted);font-size:12px;">
+                            <i data-lucide="image" style="width:24px;height:24px;margin-bottom:8px;display:block;margin:0 auto 8px;opacity:0.4;"></i>
+                            No image URL set
+                        </div>
+                    `}
+                </div>
+                <input type="text" id="ge-img-cap-${block.id}"
+                       class="fvi-input" style="margin-top:8px;"
+                       placeholder="Caption (optional)..."
+                       value="${esc(block.data.caption || '')}"
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL._geUpdateBlockData('${block.id}', {url: document.querySelector('#ge-blk-${block.id} input[type=text]')?.value || '${esc(block.data.url || '')}', caption: this.value})">
+                ${block.data.caption ? `
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic;">
+                        ${esc(block.data.caption)}
+                    </div>
+                ` : ''}
+            `;
+
+        case 'resource':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="link" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Resource Link</span>
+                </div>
+                ${block.data.resourceId ? `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;"
+                         onclick="OL.openResourceModal('${block.data.resourceId}')">
+                        <i data-lucide="workflow" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:12px;color:var(--text-main);">
+                                ${esc(block.data.resourceName || 'Linked Resource')}
+                            </div>
+                            ${block.data.note ? `
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">
+                                    ${esc(block.data.note)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--text-muted);"></i>
+                        ${canEdit ? `
+                            <button onclick="event.stopPropagation();OL._geUpdateBlockData('${block.id}',{resourceId:null,resourceName:'',note:''})"
+                                    style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;">
+                                <i data-lucide="x" style="width:12px;height:12px;pointer-events:none;"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : (canEdit ? `
+                    <div style="position:relative;">
+                        <input type="text" class="fvi-input"
+                               placeholder="Search resources..."
+                               onfocus="OL._geFilterResourceSearch('${block.id}', '')"
+                               oninput="OL._geFilterResourceSearch('${block.id}', this.value)">
+                        <div id="ge-res-results-${block.id}"
+                             class="search-results-overlay"
+                             style="position:absolute;z-index:50;width:100%;"></div>
+                    </div>
+                    <input type="text" class="fvi-input" style="margin-top:6px;"
+                           placeholder="Note about this resource (optional)..."
+                           id="ge-res-note-${block.id}"
+                           onblur="OL._geUpdateBlockData('${block.id}', {note: this.value})">
+                ` : `
+                    <div style="color:var(--text-muted);font-size:12px;font-style:italic;">No resource linked.</div>
+                `)}
+            `;
+
+        default:
+            return `<div style="color:var(--text-muted);font-size:12px;">Unknown block type: ${block.type}</div>`;
+    }
+};
+
+// ── CHECKLIST ITEM ─────────────────────────────────
+OL._geRenderChecklistItem = function(blockId, item, idx) {
+    const { canEdit } = OL._ge || {};
+    return `
+        <div id="ge-cli-${item.id}" style="display:flex;align-items:center;gap:8px;
+             padding:6px 8px;border-radius:7px;transition:background 0.12s;"
+             onmouseover="this.style.background='var(--panel-soft)'"
+             onmouseout="this.style.background='transparent'">
+            <input type="checkbox"
+                   ${item.checked ? 'checked' : ''}
+                   onchange="OL._geToggleChecklistItem('${blockId}', '${item.id}', this.checked)"
+                   style="width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--accent);">
+            ${canEdit ? `
+                <input type="text"
+                       value="${esc(item.text || '')}"
+                       placeholder="Checklist item..."
+                       style="flex:1;background:transparent;border:none;outline:none;
+                              font-size:13px;color:${item.checked ? 'var(--text-muted)' : 'var(--text-main)'};
+                              font-family:inherit;text-decoration:${item.checked ? 'line-through' : 'none'};"
+                       onblur="OL._geUpdateChecklistItem('${blockId}', '${item.id}', 'text', this.value)"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();OL._geAddChecklistItem('${blockId}');}
+                                  if(event.key==='Backspace'&&this.value===''){event.preventDefault();OL._geDeleteChecklistItem('${blockId}','${item.id}');}">
+                <button onclick="OL._geDeleteChecklistItem('${blockId}', '${item.id}')"
+                        style="background:none;border:none;cursor:pointer;
+                               color:var(--text-muted);padding:2px;opacity:0;transition:opacity 0.15s;"
+                        onmouseenter="this.style.opacity='1';this.style.color='#ef4444'"
+                        onmouseleave="this.style.opacity='0'">
+                    <i data-lucide="x" style="width:11px;height:11px;pointer-events:none;"></i>
+                </button>
+            ` : `
+                <span style="flex:1;font-size:13px;
+                             color:${item.checked ? 'var(--text-muted)' : 'var(--text-main)'};
+                             text-decoration:${item.checked ? 'line-through' : 'none'};">
+                    ${esc(item.text || '')}
+                </span>
+            `}
+        </div>
+    `;
+};
+
+// ── CHECKLIST OPERATIONS ───────────────────────────
+OL._geAddChecklistItem = function(blockId) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    const block = (ht.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    if (!block.data.items) block.data.items = [];
+    const newItem = { id: 'cli-' + Date.now(), text: '', checked: false };
+    block.data.items.push(newItem);
+    OL.persist();
+
+    const container = document.getElementById(`ge-cl-${blockId}`);
+    if (container) {
+        container.innerHTML = (block.data.items || [])
+            .map((item, i) => OL._geRenderChecklistItem(blockId, item, i))
+            .join('');
+        if (window.lucide) lucide.createIcons();
+        requestAnimationFrame(() => {
+            const newInput = document.getElementById(`ge-cli-${newItem.id}`)
+                ?.querySelector('input[type=text]');
+            if (newInput) newInput.focus();
+        });
+    }
+};
+
+OL._geToggleChecklistItem = function(blockId, itemId, checked) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    const item = (block?.data?.items || []).find(i => i.id === itemId);
+    if (item) { item.checked = checked; OL.persist(); }
+
+    // Update styling without full re-render
+    const row = document.getElementById(`ge-cli-${itemId}`);
+    if (row) {
+        const input = row.querySelector('input[type=text]');
+        const span  = row.querySelector('span');
+        const el = input || span;
+        if (el) {
+            el.style.color = checked ? 'var(--text-muted)' : 'var(--text-main)';
+            el.style.textDecoration = checked ? 'line-through' : 'none';
+        }
+    }
+};
+
+OL._geUpdateChecklistItem = function(blockId, itemId, field, value) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    const item = (block?.data?.items || []).find(i => i.id === itemId);
+    if (item) { item[field] = value; OL.persist(); }
+};
+
+OL._geDeleteChecklistItem = function(blockId, itemId) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    block.data.items = (block.data.items || []).filter(i => i.id !== itemId);
+    OL.persist();
+
+    const container = document.getElementById(`ge-cl-${blockId}`);
+    if (container) {
+        container.innerHTML = (block.data.items || [])
+            .map((item, i) => OL._geRenderChecklistItem(blockId, item, i))
+            .join('');
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── UPDATE BLOCK DATA ──────────────────────────────
+OL._geUpdateBlockData = function(blockId, newData) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    Object.assign(block.data, newData);
+    OL.persist();
+
+    // Re-render just this block's inner content
+    const blockEl = document.getElementById(`ge-blk-${blockId}`);
+    if (blockEl) {
+        const inner = blockEl.querySelector('.ge-block-inner');
+        if (inner) {
+            inner.innerHTML = OL._geRenderBlockInner(block, OL._ge?.canEdit);
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+};
+
+// ── IMAGE PREVIEW REFRESH ──────────────────────────
+OL._geRefreshImageBlock = function(blockId, url) {
+    const preview = document.getElementById(`ge-img-preview-${blockId}`);
+    if (!preview) return;
+    preview.innerHTML = url
+        ? `<img src="${esc(url)}" alt="" style="width:100%;border-radius:8px;border:1px solid var(--panel-border);display:block;">`
+        : `<div style="background:var(--panel-soft);border:1px dashed var(--panel-border);border-radius:8px;padding:30px;text-align:center;color:var(--text-muted);font-size:12px;">No image URL set</div>`;
+};
+
+// ── VIDEO PREVIEW REFRESH ──────────────────────────
+OL._geRefreshVideoPreview = function(url) {
+    const preview = document.getElementById('ge-video-preview');
+    if (!preview) return;
+    preview.innerHTML = url ? OL.parseVideoEmbed(url) : '';
+};
+
+// ── APP PILLS ──────────────────────────────────────
+OL._geRenderAppPills = function(ht) {
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    return (ht.appIds || []).map(appId => {
+        const app = allApps.find(a => a.id === appId);
+        if (!app) return '';
+        return `
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;
+                         border-radius:99px;font-size:10px;font-weight:600;
+                         background:var(--accent-glow);color:var(--accent);
+                         border:1px solid rgba(56,189,248,0.3);">
+                ${esc(app.name)}
+                <span onclick="OL.toggleHTApp('${ht.id}','${appId}');
+                               document.getElementById('ge-app-pills').innerHTML=OL._geRenderAppPills(OL._geGetHt());
+                               if(window.lucide)lucide.createIcons();"
+                      style="opacity:0.5;cursor:pointer;font-size:12px;line-height:1;">×</span>
+            </span>
+        `;
+    }).join('');
+};
+
+OL._geFilterAppSearch = function(htId, query) {
+    const listEl = document.getElementById('ge-app-results');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase();
+    const client = getActiveClient();
+    const ht = OL._geGetHt();
+    const currentIds = ht?.appIds || [];
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !currentIds.includes(a.id));
+
+    listEl.innerHTML = matches.slice(0, 8).map(app => `
+        <div class="search-result-item"
+             onmousedown="OL.toggleHTApp('${htId}','${app.id}');
+                          document.getElementById('ge-app-pills').innerHTML=OL._geRenderAppPills(OL._geGetHt());
+                          if(window.lucide)lucide.createIcons();
+                          document.getElementById('ge-app-results').innerHTML='';">
+            ${esc(app.name)}
+        </div>
+    `).join('') || '<div class="search-result-item" style="opacity:0.5;">No matches</div>';
+};
+
+// ── RESOURCE SEARCH ────────────────────────────────
+OL._geFilterResourceSearch = function(blockId, query) {
+    const listEl = document.getElementById(`ge-res-results-${blockId}`);
+    if (!listEl) return;
+    const q = (query || '').toLowerCase();
+    const client = getActiveClient();
+    const resources = (client?.projectData?.resources || []).filter(r =>
+        !r.isArchived && r.name.toLowerCase().includes(q)
+    );
+
+    listEl.innerHTML = resources.slice(0, 8).map(res => `
+        <div class="search-result-item"
+             onmousedown="OL._geSetResourceBlock('${blockId}', '${res.id}', '${esc(res.name)}')">
+            ${esc(res.name)}
+            <span style="font-size:9px;color:var(--text-muted);margin-left:6px;">${esc(res.type || '')}</span>
+        </div>
+    `).join('') || '<div class="search-result-item" style="opacity:0.5;">No resources found</div>';
+};
+
+OL._geSetResourceBlock = function(blockId, resId, resName) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+
+    const note = document.getElementById(`ge-res-note-${blockId}`)?.value || '';
+    block.data = { resourceId: resId, resourceName: resName, note };
+    OL.persist();
+
+    // Re-render just this block
+    const blockEl = document.getElementById(`ge-blk-${blockId}`);
+    if (blockEl) {
+        blockEl.innerHTML = (OL._ge?.canEdit ? `
+            <div class="ge-block-controls" style="position:absolute;top:10px;right:10px;display:none;align-items:center;gap:4px;z-index:10;">
+                <button onclick="OL._geDeleteBlock('${blockId}')"
+                        style="width:24px;height:24px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);border-radius:5px;cursor:pointer;color:#ef4444;display:flex;align-items:center;justify-content:center;">
+                    <i data-lucide="trash-2" style="width:11px;height:11px;pointer-events:none;"></i>
+                </button>
+            </div>
+        ` : '') + OL._geRenderBlockInner(block, OL._ge?.canEdit);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+OL.getProjectsSharingSOP = function(sopId) {
+    return Object.values(state.clients || {}).filter(client => 
+        (client.sharedMasterIds || []).includes(sopId)
+    ).map(client => ({
+        id: client.id,
+        name: client.meta?.name || 'Unnamed Client'
+    }));
+};
+
+OL.openLocalHowToEditor = function() {
+    const client = getActiveClient();
+    if (!client) return;
+    const draftId = 'draft-local-ht-' + Date.now();
+    const draftHowTo = { id: draftId, name: '', summary: '', content: '', blocks: [], isDraft: true, isLocal: true };
+    // Save draft first
+    if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+    client.projectData.localHowTo.push(draftHowTo);
+    OL.openGuideEditor(draftId);
+};
+
+OL.openHowToEditorModal = function() {
+    const draftId = 'draft-ht-' + Date.now();
+    const draftHowTo = { id: draftId, name: '', summary: '', content: '', blocks: [], isDraft: true };
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(draftHowTo);
+    OL.openGuideEditor(draftId);
+};
+
+window.OL.promoteLocalSOPToMaster = function(localId) {
+    const client = getActiveClient();
+    const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
+
+    if (!localSOP) return;
+    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
+
+    // 1. Create the Master Copy
+    const masterId = 'ht-vlt-' + Date.now();
+    const masterCopy = {
+        ...JSON.parse(JSON.stringify(localSOP)), 
+        id: masterId,
+        scope: 'global',
+        createdDate: new Date().toISOString()
+    };
+
+    // 2. Add to Global Library
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(masterCopy);
+
+    // 3. Remove Local copy and replace with Shared Master link
+    client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterId);
+
+    OL.persist();
+    OL.closeModal();
+    renderHowToLibrary(); // Refresh grid to show new status
+    
+    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
+};
+
+function renderHTRequirements(ht) {
+    const requirements = ht.requirements || [];
+    const masterFunctions = (state.master?.functions || []);
+    const allGuides = (state.master.howToLibrary || []);
+
+    return requirements.map((req, idx) => `
+        <div class="dp-manager-row" style="flex-direction:column; gap:8px; background:rgba(var(--accent-rgb), 0.05); padding:12px; margin-bottom:10px; border-left:3px solid var(--accent);">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="modal-input tiny" style="flex:2;" placeholder="Action Name (e.g. Provide Login)" 
+                       value="${esc(req.actionName || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'actionName', this.value)">
+                
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'targetId', this.value)">
+                    <option value="">-- Target Function --</option>
+                    ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>⚙️ ${esc(f.name)}</option>`).join('')}
+                </select>
+                <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTRequirement('${ht.id}', ${idx})">×</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'clientGuideId', this.value)">
+                    <option value="">-- Client Helper Guide (SOP) --</option>
+                    ${allGuides.filter(g => g.id !== ht.id).map(g => `<option value="${g.id}" ${req.clientGuideId === g.id ? 'selected' : ''}>📖 ${esc(g.name)}</option>`).join('')}
+                </select>
+                <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Instructions for client..." 
+                       value="${esc(req.description || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'description', this.value)">
+            </div>
+        </div>
+    `).join('') || '<div class="empty-hint">No structured requirements defined.</div>';
+}
+
+// HOW TO AND APP OVERLAP
+OL.toggleHTApp = function(htId, appId) {
+    const client = getActiveClient();
+    let ht = state.master.howToLibrary.find(h => h.id === htId);
+    
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.appIds) ht.appIds = [];
+    const idx = ht.appIds.indexOf(appId);
+    
+    if (idx === -1) ht.appIds.push(appId);
+    else ht.appIds.splice(idx, 1);
+    
+    OL.persist();
+    OL.openGuideEditor(htId);
+};
+
+OL.filterHTAppSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-app-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    // 1. Resolve current guide (to avoid linking to itself)
+    let currentHt = state.master.howToLibrary.find(h => h.id === htId) || 
+                   (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+
+    const currentAppIds = currentHt ? (currentHt.appIds || []) : [];
+
+    // 🚀 2. THE MERGE: Combine Global Master Apps/SOPs with Local Project Apps/SOPs
+    const masterApps = state.master.apps || [];
+    const localApps = client?.projectData?.localApps || [];
+    const allAvailableApps = [...masterApps, ...localApps];
+
+    // 3. Filter based on query and exclude what's already linked
+    const matches = allAvailableApps.filter(a => 
+        a.name.toLowerCase().includes(q) && 
+        !currentAppIds.includes(a.id)
+    );
+    
+    // 4. Render results
+    listEl.innerHTML = matches.map(app => `
+        <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
+            ${String(app.id).includes('local') ? '📍' : '🏛️'} ${esc(app.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No matching items found</div>';
+};
+
+OL.parseVideoEmbed = function(url) {
+    if (!url) return "";
+    
+    // YouTube logic
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) return `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen></iframe>`;
+    
+    // Loom logic
+    const loomMatch = url.match(/(?:https?:\/\/)?(?:www\.)?loom\.com\/share\/([a-zA-Z0-9]+)/);
+    if (loomMatch) return `<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/${loomMatch[1]}" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>`;
+
+    // Vimeo logic
+    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="100%" height="315" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+
+    return `<div class="p-10 tiny warn">Unrecognized video format. Please use Loom, YouTube, or Vimeo.</div>`;
+};
+
+// Toggle a resource ID in the guide's resourceIds array
+OL.toggleHTResource = function(htId, resId) {
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Find the target SOP in Master OR Local
+    let ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.resourceIds) ht.resourceIds = [];
+    const idx = ht.resourceIds.indexOf(resId);
+    
+    if (idx === -1) {
+        ht.resourceIds.push(resId);
+    } else {
+        ht.resourceIds.splice(idx, 1);
+    }
+    
+    OL.persist(); // This will now save the modified object in whichever array it lives in
+    OL.openGuideEditor(htId); 
+};
+
+// Filter the master resource library for the search dropdown
+OL.filterHTResourceSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-resource-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    
+    const availableResources = (state.master.resources || []).filter(res => 
+        res.name.toLowerCase().includes(q) && 
+        !(ht.resourceIds || []).includes(res.id)
+    );
+    
+    listEl.innerHTML = availableResources.map(res => `
+        <div class="search-result-item" onmousedown="OL.toggleHTResource('${htId}', '${res.id}')">
+            🛠️ ${esc(res.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No resources found</div>';
+};
+
+// 4. HANDLE STATUS / EDITING
+OL.toggleSOPSharing = function(clientId, htId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const idx = client.sharedMasterIds.indexOf(htId);
+    if (idx === -1) {
+        client.sharedMasterIds.push(htId);
+    } else {
+        client.sharedMasterIds.splice(idx, 1);
+    }
+
+    OL.persist();
+    renderResourceLibrary(); // Refresh view
+};
+
+// 5. HANDLE EDIT or REMOVE HOW TO
+
+// 🚀 REAL-TIME SURGICAL SYNC
+OL.syncHowToName = function(htId, newName) {
+    const cardTitles = document.querySelectorAll(`.ht-card-title-${htId}`);
+    cardTitles.forEach(el => {
+        el.innerText = newName;
+    });
+};
+
+// UPDATED SAVE LOGIC
+OL.handleHowToSave = function(id, field, value) {
+    const client = getActiveClient();
+    const cleanVal = (typeof value === 'string') ? value.trim() : value;
+    const isVaultMode = window.location.hash.includes('vault');
+    
+    // 1. Resolve Target
+    let ht = state.master.howToLibrary.find(h => h.id === id);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === id);
+    }
+
+    // 🚀 NEW: Initialize MASTER SOP if it's a new draft in the Vault
+    if (!ht && isVaultMode && (id.startsWith('draft') || id.startsWith('vlt'))) {
+        const newMaster = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            scope: "internal", // Default to internal/private
+            appIds: [],
+            resourceIds: []
+        };
+        state.master.howToLibrary.push(newMaster);
+        ht = newMaster;
+        renderHowToLibrary();
+        console.log("🏛️ New Master SOP Initialized in Vault");
+    }
+
+    // 🚀 EXISTING: Initialize LOCAL SOP if it's a new local draft
+    if (!ht && id.includes('local') && client) {
+        if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+        const newLocal = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            appIds: [],
+            resourceIds: []
+        };
+        client.projectData.localHowTo.push(newLocal);
+        ht = newLocal;
+        renderHowToLibrary();
+        console.log("📍 New Local SOP Initialized in Project Data");
+    }
+
+    if (ht) {
+        ht[field] = cleanVal;
+
+        // 🔒 TERMINOLOGY SYNC: If scope becomes internal, revoke client sharing
+        if (field === 'scope' && cleanVal === 'internal') {
+            Object.values(state.clients).forEach(c => {
+                if (c.sharedMasterIds) {
+                    c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
+                }
+            });
+            console.log("🔒 Revoked sharing for internal guide.");
+        }
+
+        OL.persist();
+        
+        // 🔄 Surgical UI Sync for name
+        if (field === 'name') {
+            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal || "New SOP");
+        }
+    } else {
+        console.error("❌ SAVE FAILED: No SOP or Client Context found for ID:", id);
+    }
+};
+
+OL.deleteSOP = function(clientId, htId) {
+    const isVaultView = window.location.hash.includes('vault');
+    const isLocal = String(htId).includes('local');
+    const client = state.clients[clientId];
+    
+    // 1. Backlink Check (Only for permanent deletes)
+    if (isVaultView || isLocal) {
+        const backlinks = OL.getSOPBacklinks(htId);
+        if (backlinks.length > 0) {
+            const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
+            if (!confirm(`⚠️ WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
+        }
+    }
+
+    // 2. Resolve Guide Name
+    let guide;
+    if (isLocal && client) {
+        guide = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    } else {
+        guide = (state.master.howToLibrary || []).find(h => h.id === htId);
+    }
+    if (!guide) return;
+
+    // 3. Contextual Execution
+    if (isVaultView) {
+        // --- MASTER VAULT DELETE ---
+        if (!confirm(`⚠️ PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
+        
+        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+        // Scrub the ID from every single client's shared list
+        Object.values(state.clients).forEach(c => {
+            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
+        });
+        console.log("🗑️ Master Source Deleted:", htId);
+
+    } else if (isLocal) {
+        // --- LOCAL PROJECT DELETE ---
+        if (!confirm(`Delete local SOP "${guide.name}"?`)) return;
+        if (client) {
+            client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        }
+        console.log("🗑️ Local SOP Deleted:", htId);
+
+    } else {
+        // --- MASTER UNLINK (Revoke Access) ---
+        if (!confirm(`Remove "${guide.name}" from this project?\n\nThe guide will remain safe in your Master Vault.`)) return;
+        if (client && client.sharedMasterIds) {
+            client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== htId);
+        }
+        console.log("🔒 Master SOP Unlinked from Client:", clientId);
+    }
+
+    // 4. Finalize
+    OL.persist();
+    renderHowToLibrary();
+};
+
+// 6. HANDLE SYNCING TO MASTER AND VICE VERSA
+OL.importHowToToProject = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📚 Link Master SOP</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Click to view guides..." 
+                       onfocus="OL.filterMasterHowToImport('')"
+                       oninput="OL.filterMasterHowToImport(this.value)" 
+                       autofocus>
+                <div id="master-howto-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterHowToImport = function(query) {
+    const listEl = document.getElementById("master-howto-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const alreadyShared = client?.sharedMasterIds || [];
+
+    const available = (state.master.howToLibrary || []).filter(ht => 
+        ht.name.toLowerCase().includes(q) && !alreadyShared.includes(ht.id)
+    );
+
+    listEl.innerHTML = available.map(ht => `
+        <div class="search-result-item" onmousedown="OL.toggleSOPSharing('${client.id}', '${ht.id}'); OL.closeModal();">
+            📖 ${esc(ht.name)}
+        </div>
+    `).join('') || `<div class="search-result-item muted">No unlinked guides found.</div>`;
+};
+
+//=======================HOW-TO RESOURCES OVERLAP ====================//
+OL.getSOPBacklinks = function(sopId) {
+    const client = getActiveClient();
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    const links = [];
+
+    allResources.forEach(res => {
+        // Check Triggers
+        (res.triggers || []).forEach((trig, idx) => {
+            if ((trig.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Trigger', detail: trig.name });
+            }
+        });
+        // Check Steps
+        (res.steps || []).forEach(step => {
+            if ((step.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Step', detail: step.text });
+            }
+        });
+    });
+    return links;
+};
+
+//======================= HOW-TO TASKS OVERLAP ========================//
+
+OL.filterTaskHowToSearch = function(taskId, query, isVault) {
+    const container = document.getElementById('task-howto-results');
+    if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+
+    const client = getActiveClient();
+    const q = (query || "").toLowerCase().trim();
+    
+    // 1. Resolve current task to find existing links
+    const task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+    
+    const existingIds = task?.howToIds || [];
+
+    // 2. Filter available guides (exclude existing)
+    const results = (state.master.howToLibrary || []).filter(guide => {
+        const matches = (guide.name || "").toLowerCase().includes(q);
+        const alreadyLinked = existingIds.includes(guide.id);
+        return matches && !alreadyLinked;
+    });
+
+    if (results.length === 0) {
+        container.innerHTML = `<div class="search-result-item muted">No unlinked guides found.</div>`;
+        return;
+    }
+
+    container.innerHTML = results.map(guide => `
+        <div class="search-result-item is-clickable" 
+             onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault})">
+            📖 ${esc(guide.name)}
+        </div>
+    `).join('');
+};
+
+OL.toggleTaskHowTo = function(event, taskId, howToId, isVault) {
+    if (event) event.stopPropagation();
+    const client = getActiveClient();
+    
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+
+    const guide = (state.master.howToLibrary || []).find(g => g.id === howToId);
+
+    if (task && guide) {
+        if (!task.howToIds) task.howToIds = [];
+        const idx = task.howToIds.indexOf(howToId);
+        
+        if (idx === -1) {
+            // 🚀 LINKING: Add ID and Sync Content
+            task.howToIds.push(howToId);
+            
+            // Append Prework and Items Needed to the task description
+            const syncNotice = `\n\n--- Linked SOP: ${guide.name} ---`;
+            const itemsText = guide.itemsNeeded ? `\n📦 Items Needed: ${guide.itemsNeeded}` : "";
+            const preworkText = guide.prework ? `\n⚡ Required Prework: ${guide.prework}` : "";
+            
+            task.description = (task.description || "") + syncNotice + itemsText + preworkText;
+        } else {
+            // UNLINKING: Remove ID
+            task.howToIds.splice(idx, 1);
+        }
+        
+        OL.persist();
+        OL.openTaskModal(taskId, isVault); 
+    }
+};
+
+// Add a new empty requirement object to a guide
+OL.addHTRequirement = function(htId) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht) return;
+
+    // Initialize the requirements array if it doesn't exist
+    if (!ht.requirements) ht.requirements = [];
+
+    // Push a new requirement structure
+    ht.requirements.push({
+        actionName: "",
+        targetType: "function", // Default to function-based resolution
+        targetId: "",           // Will hold the Function ID
+        clientGuideId: "",      // Will hold the Helper SOP ID
+        description: ""
+    });
+
+    OL.persist(); // Sync to storage
+    OL.openGuideEditor(htId); // Refresh the modal to show the new row
+};
+
+OL.updateHTReq = function(htId, index, field, value) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements || !ht.requirements[index]) return;
+
+    ht.requirements[index][field] = value;
+
+    // We persist, but we don't necessarily need to re-open the modal 
+    // for text inputs to avoid losing focus, unless it's a dropdown change.
+    OL.persist();
+    
+    if (field === 'targetId' || field === 'clientGuideId') {
+        OL.openGuideEditor(htId);
+    }
+};
+
+// Remove a requirement from the list
+OL.removeHTRequirement = function(htId, index) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements) return;
+
+    ht.requirements.splice(index, 1);
+    
+    OL.persist();
+    OL.openGuideEditor(htId);
+};
+
+// =========================HOW TO SCOPING OVERLAP=====================================
+OL.resolveRequirementTarget = function(requirement) {
+    const client = getActiveClient();
+    if (requirement.targetType === 'app') return requirement.targetId;
+
+    if (requirement.targetType === 'function') {
+        // Find the client's app that is the "Primary" for this function
+        const localApps = client.projectData.localApps || [];
+        const primaryApp = localApps.find(app => 
+            app.functionIds?.some(m => (m.id === requirement.targetId && m.status === 'primary'))
+        );
+        return primaryApp ? primaryApp.id : null;
+    }
+    return null;
+};
+
+OL.deployRequirementsFromResource = function(resourceId) {
+    const client = getActiveClient();
+    // Find the Master Guide linked to this Resource
+    const guide = (state.master.howToLibrary || []).find(ht => (ht.resourceIds || []).includes(resourceId));
+    
+    if (!guide || !guide.requirements || guide.requirements.length === 0) return;
+
+    guide.requirements.forEach(req => {
+        // Resolve the target App by looking for the "Primary" mapping for the Function
+        const targetAppId = OL.resolveRequirementTarget(req);
+        const allApps = [...state.master.apps, ...(client.projectData.localApps || [])];
+        const targetAppName = allApps.find(a => a.id === targetAppId)?.name || "System";
+
+        const newTask = {
+            id: 'tm-' + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: `${req.actionName || 'Requirement'} (${targetAppName})`,
+            description: req.description || `Required for ${guide.name} implementation.`,
+            status: "Pending",
+            appIds: targetAppId ? [targetAppId] : [],
+            howToIds: req.clientGuideId ? [req.clientGuideId] : [], // Attach the Helper Guide
+            createdDate: new Date().toISOString()
+        };
+
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+        client.projectData.clientTasks.push(newTask);
+    });
+    
+    OL.persist();
+};
+
+// hashchange listener already registered near the top of the file
+
+// 🛑 GLOBAL REFRESH SHIELD
+// This stops the browser from navigating if a drop fails or is mishandled
+['dragover', 'drop'].forEach(eventName => {
+    window.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
+
+
+/*======================= DATAPOINTS =============================*/
+state.ui.activeWorkbenchTab = 'flows'; // Default tab
+
+OL.renderGlobalDataManager = function() {
+    OL.registerView(OL.renderGlobalDataManager);
+    const container = document.getElementById("mainContent");
+    if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+
+    const isVaultMode = window.location.hash.includes('vault');
+    const client = getActiveClient();
+
+    const sourcePool = (isVaultMode || !client) 
+        ? (state.master.datapoints || []) 
+        : (client.projectData.localDatapoints || []);
+
+    const datapoints = sourcePool.filter(d => !d.isBundle);
+    const bundles = sourcePool.filter(d => d.isBundle);
+
+    container.innerHTML = `
+        <div class="section-header" style="display: flex; align-items: center; gap: 12px; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--line);">
+            <i data-lucide="database" style="width: 28px; height: 24px; color: var(--accent);"></i>
+            <div style="flex: 1;">
+                <h2 style="font-size: 24px; letter-spacing: -0.5px; margin: 0;">Data Architecture Manager</h2>
+                <div class="small muted" style="margin-top: 4px;">Standardize fields and drag them into bundles to organize technical requirements.</div>
+            </div>
+            <div class="header-actions" style="display: flex; gap: 8px;">
+                ${!isVaultMode ? `
+                    <button class="btn primary" style="background:#38bdf8; color:black; display: flex; align-items: center; gap: 6px;" onclick="OL.openMasterDataImporter()">
+                        <i data-lucide="download-cloud" style="width: 14px; height: 14px;"></i> Import Master
+                    </button>` : ''}
+                <button class="btn small soft" style="display: flex; align-items: center; gap: 6px;" onclick="OL.addNewDatapoint(true)">
+                    <i data-lucide="package-plus" style="width: 14px; height: 14px;"></i> New Bundle
+                </button>
+                <button class="btn primary" style="display: flex; align-items: center; gap: 6px;" onclick="OL.addNewDatapoint(false)">
+                    <i data-lucide="plus" style="width: 14px; height: 14px;"></i> New Field
+                </button>
+            </div>
+        </div>
+
+        <div class="data-manager-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+            
+            <div class="data-column">
+                <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <i data-lucide="list" style="width: 12px; height: 12px; opacity: 0.5;"></i>
+                    <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
+                </div>
+                <div id="master-fields-list">
+                    ${datapoints.map(dp => {
+                        const parentBundles = bundles.filter(b => (b.childIds || []).includes(dp.id));
+                        const protectedFields = [
+                            '{householdName}', '{folderName}', '{firstName}', '{lastName}', 
+                            '{email}', '{phone}', '{phoneType}', '{homeAddress}', '{mailingAddress}'
+                        ];
+                        const isProtected = protectedFields.includes(dp.key);
+
+                        return `
+                            <div class="data-field-card draggable-field" 
+                                draggable="true"
+                                onclick="OL.openDataDetailModal('${dp.id}')"
+                                ondragstart="OL.handleFieldDragStart(event, '${dp.id}')"
+                                style="display: flex; align-items: center; justify-content: space-between; 
+                                        padding: 10px 15px; margin-bottom: 8px; 
+                                        background: rgba(255,255,255,0.03); border: 1px solid var(--line); 
+                                        border-radius: 6px; cursor: pointer; transition: 0.2s;">
+                                
+                                <div style="display:flex; align-items:center; gap:12px; flex: 1;">
+                                    <i data-lucide="grip-vertical" style="width: 14px; height: 14px; opacity: 0.2; cursor: grab;" onmousedown="event.stopPropagation()"></i>
+                                    <div style="min-width: 0;">
+                                        <div class="bold" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            <i data-lucide="${dp.linkToResource ? 'link' : 'tag'}" style="width: 12px; height: 12px; color: var(--accent); opacity: 0.8;"></i>
+                                            ${esc(dp.name)}
+                                        </div>
+                                        <div class="tiny muted" style="font-family: monospace; opacity:0.5; font-size: 9px; padding-left: 18px;">${dp.key}</div>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <div class="pills-row" style="gap:3px;">
+                                        ${parentBundles.map(b => `
+                                            <span class="pill tiny soft" style="padding: 2px 4px;" title="Included in ${esc(b.name)}">
+                                                <i data-lucide="package" style="width: 8px; height: 8px;"></i>
+                                            </span>`).join('')}
+                                    </div>
+                                    
+                                    ${!isProtected ? `
+                                        <button class="card-delete-btn" 
+                                                style="position:static; opacity: 0.4; display: flex; align-items: center; justify-content: center;" 
+                                                onclick="event.stopPropagation(); OL.deleteMasterDatapointById('${dp.id}')">
+                                            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                                        </button>
+                                    ` : `
+                                        <span title="System Protected Field" style="opacity: 0.2; width: 22px; display: flex; justify-content: center;">
+                                            <i data-lucide="lock" style="width: 12px; height: 12px;"></i>
+                                        </span>
+                                    `}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="data-column">
+                <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <i data-lucide="layers" style="width: 12px; height: 12px; opacity: 0.5;"></i>
+                    <b class="tiny muted uppercase" style="letter-spacing: 1px;">System Bundles</b>
+                </div>
+                <div id="bundles-list">
+                    ${bundles.map(bn => `
+                        <div class="bundle-drop-zone" 
+                             id="bundle-zone-${bn.id}"
+                             ondragover="OL.handleBundleDragOver(event)"
+                             ondragleave="OL.handleBundleDragLeave(event)"
+                             ondrop="OL.handleFieldDropOnBundle(event, '${bn.id}')"
+                             style="margin-bottom: 15px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); transition: 0.2s;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="package" style="width: 18px; height: 18px; color: var(--accent);"></i>
+                                    <div>
+                                        <div class="bold" style="color: var(--accent); font-size: 14px;">${esc(bn.name)}</div>
+                                        <div class="tiny muted">${(bn.childIds || []).length} Fields Linked</div>
+                                    </div>
+                                </div>
+                                <button class="btn-icon-tiny" style="display: flex; align-items: center; justify-content: center;" onclick="OL.deleteMasterDatapointById('${bn.id}')">
+                                    <i data-lucide="x" style="width: 12px; height: 12px;"></i>
+                                </button>
+                            </div>
+                            <div class="pills-row" style="gap:5px;">
+                                ${(bn.childIds || []).map(cid => {
+                                    const child = datapoints.find(d => d.id === cid);
+                                    return child ? `
+                                        <span class="pill tiny soft" style="font-size:9px; display: flex; align-items: center; gap: 6px;">
+                                            ${esc(child.name)} 
+                                            <i data-lucide="x-circle" class="is-clickable" onclick="OL.removeFieldFromBundle('${bn.id}', '${child.id}')" style="width: 10px; height: 10px; opacity:0.5;"></i>
+                                        </span>` : '';
+                                }).join('')}
+                                ${bn.childIds?.length === 0 ? '<div class="tiny muted italic">Drag fields here to group...</div>' : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
+
+OL.openMasterDataImporter = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🏛️ Import Master Data Tags</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Search master fields or bundles..." 
+                       onfocus="OL.filterMasterDataImport('')"
+                       oninput="OL.filterMasterDataImport(this.value)" 
+                       autofocus>
+                <div id="master-data-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterDataImport = function(query) {
+    const listEl = document.getElementById("master-data-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // Get IDs already in the local project to prevent duplicates
+    const localIds = (client?.projectData?.localDatapoints || []).map(d => d.masterRefId || d.id);
+    
+    // Filter Master Library
+    const available = (state.master.datapoints || []).filter(dp => 
+        (dp.name.toLowerCase().includes(q) || (dp.key && dp.key.toLowerCase().includes(q))) &&
+        !localIds.includes(dp.id)
+    ).sort((a, b) => (a.isBundle === b.isBundle) ? a.name.localeCompare(b.name) : a.isBundle ? -1 : 1);
+
+    listEl.innerHTML = available.map(dp => `
+        <div class="search-result-item" onmousedown="OL.executeDataImport('${dp.id}')">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span>${dp.isBundle ? '📦' : '🏷️'}</span>
+                    <div>
+                        <div class="bold">${esc(dp.name)}</div>
+                        <div class="tiny muted">${dp.isBundle ? (dp.childIds?.length || 0) + ' Fields' : dp.key}</div>
+                    </div>
+                </div>
+                <span class="pill tiny vault">MASTER</span>
+            </div>
+        </div>
+    `).join('') || `<div class="search-result-item muted">No unlinked tags found.</div>`;
+};
+
+OL.executeDataImport = async function(masterId) {
+    const client = getActiveClient();
+    const template = state.master.datapoints.find(d => d.id === masterId);
+    if (!client || !template) return;
+
+    await OL.updateAndSync(() => {
+        // Deep clone the tag/bundle
+        const newTag = JSON.parse(JSON.stringify(template));
+        
+        // Localize it
+        newTag.masterRefId = masterId; // Link back to master
+        newTag.id = (newTag.isBundle ? 'local-bundle-' : 'local-dp-') + Date.now();
+        
+        if (!client.projectData.localDatapoints) client.projectData.localDatapoints = [];
+        client.projectData.localDatapoints.push(newTag);
+        
+        // 🚀 SMART BUNDLE IMPORT:
+        // If importing a bundle, we should also import all the individual fields within it
+        if (newTag.isBundle && template.childIds) {
+            template.childIds.forEach(childMasterId => {
+                const childTemplate = state.master.datapoints.find(d => d.id === childMasterId);
+                const alreadyLocal = client.projectData.localDatapoints.find(ld => ld.masterRefId === childMasterId);
+                
+                if (childTemplate && !alreadyLocal) {
+                    const localChild = JSON.parse(JSON.stringify(childTemplate));
+                    localChild.masterRefId = childMasterId;
+                    localChild.id = 'local-dp-' + Date.now() + Math.random();
+                    client.projectData.localDatapoints.push(localChild);
+                }
+            });
+        }
+    });
+
+    OL.closeModal();
+    OL.renderGlobalDataManager();
+    console.log(`✅ Imported Master Data: ${template.name}`);
+};
+
+// Internal Helper for Field Rows
+function renderDataRow(dp, allBundles) {
+    const parentBundles = allBundles.filter(b => (b.childIds || []).includes(dp.id));
+    return `
+        <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${dp.id}')">
+                <div class="bold" style="font-size: 13px;">🏷️ ${esc(dp.name)}</div>
+                <div class="tiny muted" style="font-family: monospace;">${dp.key}</div>
+            </div>
+            <div class="pills-row" style="flex: 1; justify-content: flex-end;">
+                ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:8px;">📦 ${esc(b.name)}</span>`).join('')}
+                <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')">🔍</button>
+            </div>
+        </div>
+    `;
+}
+
+// Internal Helper for Bundle Rows
+function renderBundleRow(bn, allFields) {
+    const childCount = (bn.childIds || []).length;
+    return `
+        <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${bn.id}')">
+                <div class="bold" style="color: #fbbf24;">📦 ${esc(bn.name)}</div>
+                <div class="tiny muted">${childCount} linked fields</div>
+            </div>
+            <button class="btn tiny soft" onclick="OL.editBundle('${bn.id}')">Map Fields</button>
+        </div>
+    `;
+}
+
+OL.openDataDetailModal = function(id) {
+    const client = getActiveClient();
+    const sourcePool = [...(state.master.datapoints || []), ...(client?.projectData?.localDatapoints || [])];
+    const dp = sourcePool.find(d => String(d.id) === String(id));
+    
+    if (!dp) return console.error("❌ Data Tag not found:", id);
+
+    // 🕵️ Find Project Backlinks
+    const usage = [];
+    const projectResources = client?.projectData?.localResources || [];
+    projectResources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            if ((step.datapoints || []).some(d => d.id === id)) {
+                usage.push({ resId: res.id, resName: res.name, stepName: step.name });
+            }
+        });
+    });
+    const linkedResource = dp.linkToResource ? 
+        (client?.projectData?.localResources || []).find(r => r.name === dp.linkToResource) : null;
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">${dp.isBundle ? '📦' : '🏷️'} ${esc(dp.name)}</div>
+        </div>
+        <div class="modal-body">
+            ${linkedResource ? `
+                <div class="card-section" style="background: rgba(56, 189, 248, 0.1); border: 1px solid #38bdf8; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div class="tiny accent bold uppercase" style="margin-bottom: 5px;">Linked Logic Source</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>📖 ${esc(linkedResource.name)}</span>
+                        <button class="btn tiny primary" onclick="OL.openResourceModal('${linkedResource.id}')">View Rules ➔</button>
+                    </div>
+                </div>
+            ` : ''}
+
+            <div class="card-section">
+                <label class="modal-section-label">📉 DATA USAGE & FLOW</label>
+                ${OL.renderDataFlowMiniMap(id)}
+            </div>
+
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📍 PROJECT BACKLINKS</label>
+                <div class="dp-manager-list">
+                    ${usage.map(u => `
+                        <div class="pill soft is-clickable" style="margin-bottom:5px; display:flex; justify-content:space-between;" onclick="OL.openResourceModal('${u.resId}')">
+                            <span><b>${esc(u.resName)}</b> › ${esc(u.stepName)}</span>
+                            <span class="tiny accent">View Card ➔</span>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">Not currently mapped to any project resources.</div>'}
+                </div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+// 🕸️ The Data Flow Mini-Map
+OL.renderDataFlowMiniMap = function(dataId) {
+    const client = getActiveClient();
+    const resources = client?.projectData?.localResources || [];
+    const nodes = [];
+
+    // Find resources that provide or require this data
+    resources.forEach(res => {
+        const isUsed = (res.steps || []).some(s => (s.datapoints || []).some(d => d.id === dataId));
+        if (isUsed) nodes.push(res);
+    });
+
+    return `
+        <div class="mini-map-grid" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; padding:20px; background:rgba(0,0,0,0.2); border-radius:8px;">
+            ${nodes.map((n, i) => `
+                <div class="mini-node muted" style="min-width:100px; border-color:var(--accent);">
+                    <div class="tiny bold">${esc(n.name)}</div>
+                </div>
+                ${i < nodes.length - 1 ? '<div class="mini-arrow">→</div>' : ''}
+            `).join('') || '<div class="tiny muted">No flow detected.</div>'}
+        </div>
+    `;
+};
+
+OL.addNewDatapoint = function(isBundle = false) {
+    const name = prompt(`Enter ${isBundle ? 'Bundle' : 'Field'} Name:`);
+    if (!name) return;
+
+    const id = (isBundle ? 'bundle-' : 'dp-') + Date.now();
+    const key = `{${name.replace(/\s+/g, '').toLowerCase()}}`;
+    
+    state.master.datapoints.push({
+        id: id,
+        name: name,
+        key: isBundle ? null : key,
+        isBundle: isBundle,
+        childIds: isBundle ? [] : null,
+        category: 'General'
+    });
+
+    OL.persist();
+    OL.renderGlobalDataManager();
+};
+
+OL.updateMasterDatapoint = function(index, field, value) {
+    if (value === 'new') {
+        const newCat = prompt("Enter new category name:");
+        value = newCat || 'General';
+    }
+    
+    state.master.datapoints[index][field] = value;
+    OL.persist();
+    OL.renderGlobalDataManager();
+    OL.renderWorkbenchItemsOnly();
+};
+
+OL.deleteMasterDatapointById = function(id) {
+    if (!confirm("Permanently delete this item?")) return;
+    state.master.datapoints = state.master.datapoints.filter(d => d.id !== id);
+    OL.persist();
+    OL.renderGlobalDataManager();
+};
+
+OL.editBundle = function(bundleId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    const allDps = state.master.datapoints.filter(d => !d.isBundle);
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📦 Edit Bundle: ${esc(bundle.name)}</div>
+        </div>
+        <div class="modal-body">
+            <div class="dp-manager-list">
+                ${allDps.map(dp => {
+                    const isChecked = (bundle.childIds || []).includes(dp.id);
+                    return `
+                        <label class="dp-manager-row" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} 
+                                   onchange="OL.toggleDpInBundle('${bundleId}', '${dp.id}')">
+                            <span>${esc(dp.name)}</span>
+                            <span class="tiny muted" style="margin-left:auto;">${dp.category}</span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+            <button class="btn primary full-width" style="margin-top:20px;" onclick="OL.renderGlobalDataManager()">Back to Library</button>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.toggleDpInBundle = function(bundleId, dpId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (!bundle.childIds) bundle.childIds = [];
+    
+    const idx = bundle.childIds.indexOf(dpId);
+    if (idx === -1) bundle.childIds.push(dpId);
+    else bundle.childIds.splice(idx, 1);
+    
+    OL.persist();
+    OL.editBundle(bundleId);
+};
+
+OL.removeStepDatapoint = async function(resId, stepId, idx) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    
+    if (step && step.datapoints) {
+        const dp = step.datapoints[idx];
+        
+        // 🚀 SMART NAV: If it's a naming tag, left-clicking the text jumps to the resource
+        // We only splice if they click the '×' (handled in the HTML string below)
+        step.datapoints.splice(idx, 1);
+        await OL.persist();
+        OL._fvRefreshInspector(resId, stepId);
+        OL.renderVisualizer();
+    }
+};
+
+OL.renderDataTagPills = function(resId, stepId, datapoints) {
+    const client = getActiveClient();
+    return datapoints.map((dp, idx) => {
+        // Find if this tag points to a specific naming/hierarchy resource
+        let jumpAction = "";
+        if (dp.linkToResource) {
+            const targetRes = (client?.projectData?.localResources || []).find(r => r.name === dp.linkToResource);
+            if (targetRes) {
+                jumpAction = `onclick="event.stopPropagation(); OL.openResourceModal('${targetRes.id}')"`;
+            }
+        }
+
+        return `
+            <div class="pill purple" ${jumpAction} 
+                 style="background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; display:flex; align-items:center; gap:5px; cursor:${jumpAction ? 'pointer' : 'default'}; padding: 4px 8px; border-radius: 4px;">
+                <span style="font-size:10px;">${dp.linkToResource ? '🔗' : '🏷️'} ${esc(dp.name)}</span>
+                <b class="is-clickable" style="opacity:0.5; padding: 0 4px; font-size: 12px;" 
+                   onclick="event.stopPropagation(); OL.removeStepDatapoint('${resId}', '${stepId}', ${idx})">×</b>
+            </div>
+        `;
+    }).join('');
+};
+
+OL.traceDataLineage = function(dataId) {
+    if (!dataId) return OL.setTraceMode(null, null);
+    
+    const client = getActiveClient();
+    const resources = client.projectData.localResources;
+    
+    // Highlight every node that contains this data ID
+    const pathIds = resources.filter(res => 
+        (res.steps || []).some(s => (s.datapoints || []).some(d => d.id === dataId))
+    ).map(r => String(r.id));
+
+    state.v2.activeTrace = { mode: 'data-trace', resId: dataId };
+    state.v2.highlightedIds = pathIds;
+    
+    OL.renderVisualizer();
+};
+
+// 1. Drag Start
+OL.handleFieldDragStart = function(e, fieldId) {
+    e.dataTransfer.setData("application/sphynx-field-id", fieldId);
+    e.currentTarget.style.opacity = '0.4';
+};
+
+// 2. Drag Over (Visual feedback)
+OL.handleBundleDragOver = function(e) {
+    e.preventDefault();
+    const zone = e.currentTarget;
+    zone.style.borderColor = 'var(--accent)';
+    zone.style.background = 'rgba(var(--accent-rgb), 0.05)';
+};
+
+// 3. Drag Leave (Reset feedback)
+OL.handleBundleDragLeave = function(e) {
+    const zone = e.currentTarget;
+    zone.style.borderColor = 'var(--line)';
+    zone.style.background = 'rgba(255,255,255,0.02)';
+};
+
+// 4. Drop (Execute Mapping)
+OL.handleFieldDropOnBundle = async function(e, bundleId) {
+    e.preventDefault();
+    OL.handleBundleDragLeave(e);
+    
+    const fieldId = e.dataTransfer.getData("application/sphynx-field-id");
+    if (!fieldId) return;
+
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (bundle) {
+        if (!bundle.childIds) bundle.childIds = [];
+        if (!bundle.childIds.includes(fieldId)) {
+            bundle.childIds.push(fieldId);
+            await OL.persist();
+            OL.renderGlobalDataManager();
+            console.log(`🔗 Linked ${fieldId} to Bundle ${bundleId}`);
+        }
+    }
+};
+
+// 5. Remove Mapping
+OL.removeFieldFromBundle = async function(bundleId, fieldId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (bundle && bundle.childIds) {
+        bundle.childIds = bundle.childIds.filter(id => id !== fieldId);
+        await OL.persist();
+        OL.renderGlobalDataManager();
+    }
+};
+
+// IMPORT ZAP AUDIT
+OL.processZapLogic = function(zap, isMaster = false) {
+    const client = getActiveClient();
+    const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const dataLibrary = isMaster ? state.master.datapoints : (client.projectData.localDatapoints || []);
+
+    const transformedSteps = zap.steps.map((s, i) => {
+        const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
+        const stepLinks = [];
+        const stepDatapoints = [];
+
+        if (s.mappings) {
+            s.mappings.forEach(m => {
+                const fieldLower = (m.label || m.field || "").toLowerCase();
+                const idFields = ['spreadsheet', 'folder', 'file', 'form', 'board', 'database'];
+
+                // 🏗️ INFRASTRUCTURE DISCOVERY
+                if (idFields.some(f => fieldLower.includes(f)) && m.value && !m.value.includes('{{')) {
+                    let existingRes = library.find(r => r.externalUrl && r.externalUrl.includes(m.value));
+                    if (!existingRes) {
+                        let genUrl = fieldLower.includes('folder') ? `https://drive.google.com/drive/u/1/folders/${m.value}` : `https://docs.google.com/spreadsheets/d/${m.value}`;
+                        existingRes = {
+                            id: (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5),
+                            name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
+                            type: fieldLower.includes('folder') ? 'Folder' : 'Spreadsheet',
+                            externalUrl: genUrl,
+                            isGlobal: true, coords: null, stageId: null
+                        };
+                        library.push(existingRes);
+                    }
+                    stepLinks.push({ id: existingRes.id, name: existingRes.name, type: existingRes.type });
+                }
+
+                // 🏷️ DATA TAG DISCOVERY
+                if (m.value && m.value.includes('{{')) {
+                    const rawName = m.label || m.field || "Unknown";
+                    const cleanName = rawName.replace(/_/g, ' ').trim();
+                    let tag = dataLibrary.find(d => d.name.toLowerCase() === cleanName.toLowerCase());
+                    if (!tag) {
+                        tag = { id: 'dp-' + Date.now() + Math.random().toString(36).substr(2, 5), name: cleanName, category: 'Auto-Discovered' };
+                        dataLibrary.push(tag);
+                    }
+                    if (!stepDatapoints.some(d => d.id === tag.id)) stepDatapoints.push(tag);
+                }
+            });
+        }
+
+        return {
+            id: "step_" + Date.now() + "_" + i,
+            name: s.title || "Untitled Step",
+            appName: cleanAppName,
+            assignees: (i === 0) ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] : [{ id: 'zap-auto', name: 'Zapier', type: 'app' }],
+            logic: { in: [], out: [] },
+            links: stepLinks,
+            datapoints: stepDatapoints
+        };
+    });
+
+    return {
+        id: (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5),
+        type: 'Zap',
+        archetype: 'Multi-Step',
+        name: `⚡ ${zap.zapName}`,
+        steps: transformedSteps,
+        isExpanded: true
+    };
+};
 
