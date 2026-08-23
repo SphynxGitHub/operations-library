@@ -20436,7 +20436,10 @@ function renderScopingRow (item, idx, showUnits) {
         return `
             <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05); padding: 8px 10px;">
                 <div class="col-expand">
-                    <div class="row-title text-danger">⚠️ Missing Resource</div>
+                    <div class="row-title text-danger" style="display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="alert-triangle" style="width:14px; height:14px; color:#ef4444;"></i>
+                        Missing Resource
+                    </div>
                     <div class="tiny muted">Item: ${item.id}</div>
                 </div>
                 <div class="col-status">N/A</div>
@@ -20446,7 +20449,9 @@ function renderScopingRow (item, idx, showUnits) {
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
                     ${isAdmin ? `
-                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
+                        <button class="card-delete-btn" style="opacity: 0.3; display:flex; align-items:center; justify-center;" onclick="OL.removeFromScopeByID('${item.id}')">
+                            <i data-lucide="x" style="width:14px; height:14px;"></i>
+                        </button>
                     ` : ''}
                 </div>
             </div>
@@ -20475,19 +20480,19 @@ function renderScopingRow (item, idx, showUnits) {
     // 3. Team UI Logic
     let hoverText = '';
     let teamLabel = '';
-    let btnIcon = '👨🏼‍🤝‍👨🏻';
+    let btnIcon = `<i data-lucide="users" style="width:14px; height:14px;"></i>`;
     let btnClass = 'soft';
     const multiplierHtml = `<span class="multiplier-tag">${OL.getMultiplierDisplay(item)}</span>`;
 
     if (mode === 'global') {
         teamLabel = '<span class="tiny muted italic">Global Item</span>';
         hoverText = "Applies to the entire project scope";
-        btnIcon = '🌎';
+        btnIcon = `<i data-lucide="globe" style="width:14px; height:14px;"></i>`;
         btnClass = 'accent';
     } else if (mode === 'individual') {
         const selectedIds = item.teamIds || []; 
         const selectedCount = selectedIds.length;
-        btnIcon = '👨‍💼';
+        btnIcon = `<i data-lucide="user" style="width:14px; height:14px;"></i>`;
         btnClass = 'primary';
         const names = selectedIds
             .map(id => projectTeam.find(tm => tm.id === id)?.name || "Unknown")
@@ -20507,10 +20512,13 @@ function renderScopingRow (item, idx, showUnits) {
     }
 
     const teamBtnAttr = isAdmin 
-    ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
-    : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
+    ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}" style="display:inline-flex; align-items:center; justify-content:center; padding: 4px 6px;"` 
+    : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9; display:inline-flex; align-items:center; justify-content:center; padding: 4px 6px;"`;
 
     const isTarget = state.scopingFilterActive && String(item.resourceId) === String(state.scopingTargetId);
+
+    // Refresh Lucide icons after DOM insertion
+    setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 0);
 
     return `
         <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
@@ -20573,7 +20581,9 @@ function renderScopingRow (item, idx, showUnits) {
 
         <div class="col-actions">
             ${isAdmin ? `
-                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
+                <button class="card-delete-btn" style="opacity: 0.3; display:flex; align-items:center; justify-content:center;" onclick="OL.removeFromScopeByID('${item.id}')">
+                    <i data-lucide="x" style="width:14px; height:14px;"></i>
+                </button>
             ` : ''}
         </div>
     </div>
