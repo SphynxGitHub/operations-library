@@ -951,12 +951,24 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     if (window.lucide) window.lucide.createIcons();
 };
 
+// ── FIXED: OL.exportMasterBackup (was using Firestore db.collection) ──
 OL.exportMasterBackup = async function() {
     try {
-        // Fetch all clients fresh from Firestore so nothing is missed
-        const snap = await db.collection('clients').get();
-        const clients = [];
-        snap.forEach(doc => clients.push({ _id: doc.id, ...doc.data() }));
+        // Fetch all clients fresh from Supabase so nothing is missed
+        const { data: clientRows, error } = await window.db
+            .from('workspace_clients')
+            .select('*');
+
+        if (error) throw error;
+
+        const clients = (clientRows || []).map(row => ({
+            _id: row.id,
+            public_token: row.public_token,
+            meta: row.meta,
+            modules: row.modules,
+            permissions: row.permissions,
+            project_data: row.project_data,
+        }));
 
         const payload = {
             _version: 1,
@@ -979,6 +991,7 @@ OL.exportMasterBackup = async function() {
     }
 };
 
+// ── FIXED: OL.importMasterBackup (was using Firestore db.collection/doc/batch) ──
 OL.importMasterBackup = async function(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -1014,21 +1027,57 @@ OL.importMasterBackup = async function(event) {
     )) return;
 
     try {
-        // Restore master
-        await db.collection('systems').doc('main_state').set(masterData);
+        // Restore master — map camelCase to the same snake_case columns OL.persist() uses
+        const masterPayload = {
+            id: 'main_state',
+            exported_at: new Date().toISOString(),
+            rates: masterData.rates || {},
+            apps: masterData.apps || [],
+            functions: masterData.functions || [],
+            resource_types: masterData.resourceTypes || [],
+            datapoints: masterData.datapoints || [],
+            task_blueprints: masterData.taskBlueprints || [],
+            how_to_library: masterData.howToLibrary || [],
+            analyses: masterData.analyses || []
+        };
+
+        const { error: masterErr } = await window.db
+            .from('workspace_masters')
+            .upsert(masterPayload, { onConflict: 'id' });
+
+        if (masterErr) throw masterErr;
         state.master = masterData;
 
-        // Restore clients (if present)
+        // Restore clients (if present) — Supabase upsert replaces .batch()
         if (clients.length) {
-            const batch = db.batch();
-            clients.forEach(c => {
+            const clientPayloads = clients.map(c => {
                 const { _id, ...clientData } = c;
-                batch.set(db.collection('clients').doc(_id), clientData);
+                return {
+                    id: _id,
+                    public_token: clientData.public_token ?? clientData.publicToken ?? null,
+                    meta: clientData.meta || {},
+                    modules: clientData.modules || {},
+                    permissions: clientData.permissions || {},
+                    project_data: clientData.project_data ?? clientData.projectData ?? {}
+                };
             });
-            await batch.commit();
+
+            const { error: clientErr } = await window.db
+                .from('workspace_clients')
+                .upsert(clientPayloads, { onConflict: 'id' });
+
+            if (clientErr) throw clientErr;
+
             clients.forEach(c => {
                 const { _id, ...clientData } = c;
-                state.clients[_id] = clientData;
+                state.clients[_id] = {
+                    id: _id,
+                    publicToken: clientData.public_token ?? clientData.publicToken,
+                    meta: clientData.meta || { name: _id, status: 'Active' },
+                    modules: clientData.modules,
+                    permissions: clientData.permissions,
+                    projectData: clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] }
+                };
             });
         }
 
