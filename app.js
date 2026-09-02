@@ -21574,14 +21574,20 @@ OL.createNewVarForType = function (label, typeKey) {
 
 OL.updateVarRate = async function(key, field, val) {
     if (!state.master.rates.variables[key]) return;
-    
+ 
     state.master.rates.variables[key][field] = field === 'value' ? parseFloat(val) || 0 : val.trim();
-    
-    // Use update with dot notation instead of full persist
-    var updateObj = {};
-    updateObj['rates.variables.' + key] = state.master.rates.variables[key];
-    
-    await db.collection('systems').doc('main_state').update(updateObj);
+ 
+    // Supabase has no dot-notation partial update — write back the whole rates object,
+    // same pattern OL.persist() already uses for master data.
+    const { error } = await window.db
+        .from('workspace_masters')
+        .update({ rates: state.master.rates })
+        .eq('id', 'main_state');
+ 
+    if (error) {
+        console.error('❌ Rate save failed:', error.message);
+        return;
+    }
     console.log('✅ Variable saved:', key, field, val);
 };
 
