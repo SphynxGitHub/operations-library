@@ -16638,53 +16638,63 @@ OL.toggleMasterExpand = function(forceExpand = null) {
 OL.closeModal = function() {
     window.isMatrixActive = false;
     const quickInput = document.getElementById('quick-step-input');
-    
-    // 1. 🤖 AUTO-SAVE CHECK (Keep your existing logic)
+ 
     if (quickInput && quickInput.value.trim().length > 2) {
         const resId = quickInput.getAttribute('data-res-id');
         const valToSave = quickInput.value;
-        quickInput.value = ""; 
+        quickInput.value = "";
         console.log("💾 Auto-saving draft before close...");
         OL.commitQuickStep(resId, valToSave);
-        return; 
+        return;
     }
-
-    // 2. 🧹 STANDARD CLOSE & CLEANUP
+ 
     const layer = document.getElementById('modal-layer');
     if (layer) {
         layer.style.display = 'none';
         layer.innerHTML = '';
     }
-
-    // 3. RESET STATE
+ 
     OL.isSavingStep = false;
-    OL.quickAddState = { 
-        name: "", app: "", appId: null, 
-        assignee: [], links: [], target: null, 
-        delay: 0, note: "", rule: "" 
+    OL.quickAddState = {
+        name: "", app: "", appId: null,
+        assignee: [], links: [], target: null,
+        delay: 0, note: "", rule: ""
     };
-
-    // 🚩 THE FIX: Context-Aware Refresh
+ 
     const hash = window.location.hash;
-
+ 
+    // 🎯 Preserve scroll position across the refresh, whichever branch below fires.
+    const scrollHost = document.getElementById('mainContent');
+    const savedScrollTop = scrollHost ? scrollHost.scrollTop : 0;
+    const restoreScroll = () => {
+        requestAnimationFrame(() => {
+            const host = document.getElementById('mainContent');
+            if (host) host.scrollTop = savedScrollTop;
+        });
+    };
+ 
     if (hash.includes('resources')) {
-        // If on Project Resources or Vault Resources, stay there and refresh the list
         if (typeof renderResourceManager === "function") renderResourceManager();
-    } 
+        restoreScroll();
+    }
     else if (hash.includes('applications') || hash.includes('apps')) {
-        // If on Project Apps or Vault Apps, stay there and refresh the grid
         if (typeof renderAppsGrid === "function") renderAppsGrid();
+        restoreScroll();
+    }
+    // 🚀 THE FIX: this branch was missing entirely, so Functions-page modal
+    // closes fell through to the heavy window.handleRoute() path below.
+    else if (hash.includes('functions')) {
+        if (typeof renderFunctionsGrid === "function") renderFunctionsGrid();
+        restoreScroll();
     }
     else if (hash.includes('analyze')) {
-        // If in Analysis tab, refresh the cards
         if (typeof renderAnalysisModule === "function") renderAnalysisModule();
+        restoreScroll();
     }
     else if (hash.includes('visualizer')) {
-        // ONLY render the Flow Map if we are actually ON the visualizer route
         if (typeof OL.renderVisualizer === "function") OL.renderVisualizer();
     }
     else {
-        // Fallback for dashboard or other views
         window.handleRoute();
     }
 };
@@ -17349,69 +17359,76 @@ OL.selectMenuOption = function(label, subType = null, appId = null) {
 
 OL.isSavingStep = false; // Global flag
 
+
 OL.commitQuickStep = async function(resId) {
     if (OL.isSavingStep) return;
-    
+ 
     const input = document.getElementById('quick-step-input');
     if (!input) return;
-
+ 
     const taskName = input.value.split('/')[0].trim();
-    const s = OL.quickAddState; // Shortcut to our draft state
-
+    const s = OL.quickAddState;
+ 
     if (!taskName && !s.note) {
         OL.isSavingStep = false;
-        OL.closeModal(); 
+        OL.closeModal();
         return;
     }
-
+ 
     OL.isSavingStep = true;
-    input.value = ""; 
-
+    input.value = "";
+ 
+    let succeeded = false;
+ 
     try {
         const newStep = {
             id: "step_" + Date.now(),
             name: taskName || "Untitled Action",
-            
-            // 💻 App Alignment: Inspector uses .appId
-            appId: s.appId || null, 
+            appId: s.appId || null,
             appName: s.app || null,
-
-            // 👨‍💼 Assignee Alignment: Inspector uses .assignees (Array)
-            assignees: Array.isArray(s.assignee) ? s.assignee : [], 
-
-            // 📝 Note Alignment: Inspector uses .description
-            description: s.note || "", 
-            
-            // ⏱ Timing & Logic
+            assignees: Array.isArray(s.assignee) ? s.assignee : [],
+            description: s.note || "",
             timingValue: parseInt(s.delay) || 0,
-            timingType: 'after_prev', 
+            timingType: 'after_prev',
             dueDate: s.due || null,
             rule: s.rule || "",
             logic: { in: [], out: [] },
-            links: [],
-            links: s.links || [],         // 📖 Attached Guides/Assets Array
-            targetResourceId: s.target?.id || null, // 🎯 The Milestone ID
+            links: s.links || [],
+            targetResourceId: s.target?.id || null,
             targetResourceName: s.target?.name || null,
         };
-
+ 
         const client = getActiveClient();
         const isVault = window.location.hash.includes('vault');
         const resourcePool = isVault ? state.master.resources : client.projectData.localResources;
         const resource = resourcePool.find(r => String(r.id) === String(resId));
-
+ 
         if (resource) {
             if (!resource.steps) resource.steps = [];
             resource.steps.push(newStep);
             resource.isExpanded = true;
-
-            await OL.persist(); 
+ 
+            await OL.persist();
             if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+            succeeded = true;
         }
     } catch (err) {
         console.error("❌ Power Add Sync Failure:", err);
     } finally {
         OL.isSavingStep = false;
-        OL.closeModal();
+ 
+        // 🚀 THE FIX: go back to the Resource Modal you were already in,
+        // instead of routing away to the underlying page.
+        const modalLayer = document.getElementById('modal-layer');
+        if (modalLayer) {
+            modalLayer.style.display = 'none';
+            modalLayer.innerHTML = '';
+        }
+        if (succeeded && resId) {
+            OL.openResourceModal(resId);
+        } else {
+            OL.closeModal();
+        }
     }
 };
 
@@ -17777,10 +17794,27 @@ OL.getResourceIcon = function(type) {
 
 // 🔍 Open Inspector
 OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
+    const onVisualizer = window.location.hash.includes('visualizer');
+ 
+    // 🚀 THE FIX: outside the Visualizer, "open inspector" for a resource
+    // should just open the normal full Resource Modal — the docked 380px
+    // panel only makes sense alongside the flow-map canvas.
+    if (!onVisualizer) {
+        if (resId && stepTarget === null) {
+            return OL.openResourceModal(resId);
+        }
+        if (resId && stepTarget !== null) {
+            // Step-level deep link from outside the visualizer: open the
+            // resource modal — there's no flow-map canvas to dock next to.
+            return OL.openResourceModal(resId);
+        }
+        return;
+    }
+    
     const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;
-
+ 
     // 🎯 RESTORE INTERNAL SCROLL LAYER VISIBILITY
     panel.style.overflow = '';
     const scrollContent = panel.querySelector('.inspector-scroll-content');
@@ -17801,6 +17835,22 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
     }
 
+    try {
+        OL._buildInspectorContent(resId, stepTarget, mode, panel, content, data, resources);
+    } catch (err) {
+        console.error("❌ Inspector render failed:", err);
+        content.innerHTML = `
+            <div style="padding:24px;color:#ef4444;font-size:12px;line-height:1.6;">
+                <strong>Inspector failed to render.</strong><br>
+                ${esc(err.message || String(err))}
+                <div style="margin-top:10px;opacity:0.6;font-size:10px;">
+                    Check the browser console for the full stack trace.
+                </div>
+            </div>`;
+    }
+};
+
+OL._buildInspectorContent(resId, stepTarget, mode, panel, content, data, resources) {
     // 📑 2. STEP DETAIL MODE
     // 🚀 FIX: Using stepTarget to check against null
     if (resId && stepTarget !== null) { 
@@ -18631,35 +18681,63 @@ OL._fvRefreshInspector = function(resId, stepId) {
     });
 };
 
-OL.filterAppSearch = function(parentId, stepId, query) {
-    const resultsOverlay = document.getElementById('app-search-results');
+OL.filterAppSearch = function(parentId, stepId, arg3, arg4) {
+    // Two calling conventions exist in the codebase:
+    //   (parentId, stepId, query)                  → step-level search, results in #app-search-results
+    //   (parentId, stepId, isResourceLevel, query)  → resource-level search, results in #res-app-results
+    let query, isResourceLevel;
+    if (arg4 !== undefined) {
+        isResourceLevel = !!arg3;
+        query = arg4;
+    } else {
+        isResourceLevel = false;
+        query = arg3;
+    }
+ 
+    const resultsId = isResourceLevel ? 'res-app-results' : 'app-search-results';
+    const resultsOverlay = document.getElementById(resultsId);
     if (!resultsOverlay) return;
-
-    const q = (query || "").toLowerCase().trim();
+ 
+    const q = String(query || "").toLowerCase().trim();
     const client = getActiveClient();
     const localApps = client?.projectData?.localApps || [];
     const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
-
+ 
     if (matches.length === 0) {
         resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No apps found.</div>`;
         resultsOverlay.style.display = 'block';
         return;
     }
-
+ 
+    const selectFn = isResourceLevel ? 'OL.selectAppForResource' : 'OL.selectAppForStep';
+ 
     resultsOverlay.innerHTML = matches.map(app => `
-        <div class="search-result-item" 
+        <div class="search-result-item"
              style="cursor: pointer; padding: 8px; border-bottom: 1px solid var(--line);"
-             onmousedown="event.preventDefault(); event.stopPropagation(); OL.selectAppForStep('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
+             onmousedown="event.preventDefault(); event.stopPropagation(); ${selectFn}('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
             <div style="display:flex; align-items:center; gap:8px;">
                 <span>💻</span>
                 <div>${esc(app.name)}</div>
             </div>
         </div>
     `).join('');
-    
+ 
     resultsOverlay.style.display = 'block';
 };
-
+ 
+// 🚀 NEW: resource-level counterpart to the existing OL.selectAppForStep.
+// This didn't exist before — the resource-level search had nothing to call
+// even if it had worked.
+window.OL.selectAppForResource = async function(resId, _unused, appId, appName) {
+    const overlay = document.getElementById('res-app-results');
+    if (overlay) overlay.style.display = 'none';
+ 
+    // OL.handleResourceSave already persists and refreshes whichever view
+    // (modal / inspector / grid) is currently showing this resource.
+    OL.handleResourceSave(resId, 'appId', appId);
+    OL.handleResourceSave(resId, 'appName', appName);
+};
+ 
 window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
     const res = OL.getResourceById(parentId);
     if (!res) return;
