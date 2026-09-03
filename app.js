@@ -16753,6 +16753,10 @@ OL.addNewStepToCard = function(resId) {
         rule: "" 
     };
 
+    const dockedPanel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');    
+    const launchedFromInspector = !!(dockedPanel && dockedPanel.classList.contains('open') && window.location.hash.includes('visualizer'));    
+    OL._quickAddOrigin = launchedFromInspector ? 'inspector' : 'modal';
+
     const html = `
         <div id="quick-add-modal"> 
             <div class="modal-head">
@@ -17427,8 +17431,18 @@ OL.commitQuickStep = async function(resId) {
             modalLayer.style.display = 'none';
             modalLayer.innerHTML = '';
         }
+        const cameFromInspector = OL._quickAddOrigin === 'inspector';        
+        OL._quickAddOrigin = null;
         if (succeeded && resId) {
-            OL.openResourceModal(resId);
+            if (cameFromInspector && window.location.hash.includes('visualizer')) {                
+                OL._fvOpenStepsList(resId);            
+            } else {                
+                // Not returning to the docked Inspector — make sure it isn't                
+                // left open behind the modal from an earlier Visualizer visit.                
+                const dockedPanel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');                
+                if (dockedPanel) dockedPanel.classList.remove('open');               
+                OL.openResourceModal(resId);            
+            }        
         } else {
             OL.closeModal();
         }
