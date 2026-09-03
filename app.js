@@ -18489,7 +18489,7 @@ if (mode === 'cards' && resId) {
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
     if (window.lucide) window.lucide.createIcons();
-};
+}; 
 
 OL.executeStepMove = function(fromResId, stepId, toResId) {
     const data = OL.getCurrentProjectData();
