@@ -17853,7 +17853,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     }
 };
 
-OL._buildInspectorContent(resId, stepTarget, mode, panel, content, data, resources) {
+OL._buildInspectorContent = function(resId, stepTarget, mode, panel, content, data, resources) {
     // 📑 2. STEP DETAIL MODE
     // 🚀 FIX: Using stepTarget to check against null
     if (resId && stepTarget !== null) { 
