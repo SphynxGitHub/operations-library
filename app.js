@@ -142,7 +142,8 @@ OL.persist = async function() {
                     meta: clientCopy.meta || {},
                     modules: clientCopy.modules || {},
                     permissions: clientCopy.permissions || {},
-                    project_data: clientCopy.projectData || {}
+                    project_data: clientCopy.projectData || {},
+                    shared_master_ids: clientCopy.sharedMasterIds || []
                 };
 
                 const { error: clientErr } = await window.db
@@ -250,7 +251,8 @@ OL.sync = async function() {
                     meta: c.meta || { name: clientId, status: 'Discovery' },
                     modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
                     permissions: c.permissions || {},
-                    projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] }
+                    projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] },
+                    sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [] 
                 };
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
@@ -289,7 +291,8 @@ OL.loadFullClient = async function(clientId) {
             meta: data.meta || { name: data.id, status: 'Active' },
             modules: data.modules,
             permissions: data.permissions,
-            projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] }
+            projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] },
+            sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [] 
         };
         delete state.clients[clientId]._metaOnly;
     }
