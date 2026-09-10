@@ -298,6 +298,8 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     const isSidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
     const toggleArrow = isSidebarCollapsed ? '▶' : '◀'; // Flip based on state
 
+   //================SIDEBAR MENU CONTROLS=================//
+    
     const sidebarContent = `
         <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
             <span class="toggle-icon">${toggleArrow}</span>
@@ -305,30 +307,6 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 
         <div class="sidebar-inner-content" style="${isSidebarCollapsed ? 'display:none;' : ''}">
             <div class="sidebar-padding" style="padding: 10px;">
-                ${showHome ? `
-                    <div class="admin-nav-zone">
-                        <nav class="menu">
-                            <a href="javascript:void(0)" 
-                                onclick="${homeAction}" 
-                                class="${(hash === '#/' || hash === '#/partner-dashboard') ? 'active' : ''}"
-                                style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
-                                <i data-lucide="home" style="width:16px;height:16px;"></i> 
-                                <span>${homeLabel.toUpperCase()}</span>
-
-                            </a>
-                        </nav>
-                    </div>
-                    <div class="divider"></div>
-                ` : ''}
-
-                ${client ? `
-                    <div class="client-nav-zone">
-                        </div>
-                ` : ''}
-            </div>
-        </div>
-
-        <!-- SIDEBAR MENU CONTROLS -->
         
         ${showHome ? `
         <div class="admin-nav-zone">
