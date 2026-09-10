@@ -19,7 +19,7 @@ OL.activeTaskTimer = {
     elapsedSeconds: 0 
 };
 
-// 🔌 Standardized Third-Party / Vendor Assignee Options
+// 🔌 Standardized Third-Party / Vendor Assignees
 OL.thirdPartyAssignees = [
     "Zapier Support",
     "Developer / Engineering",
@@ -137,10 +137,10 @@ OL.renderBusinessTaskManager = function() {
                 <div style="position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
                     <select id="quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
-                        <option value="Sphynx Task" selected>⚡ Sphynx Task</option>
-                        <option value="Client Task">👤 Client Task</option>
+                        <option value="Sphynx Task" selected>Sphynx Task</option>
+                        <option value="Client Task">Client Task</option>
                         <optgroup label="Third-Party / Vendors">
-                            ${OL.thirdPartyAssignees.map(tp => `<option value="${esc(tp)}">🛠️ ${esc(tp)}</option>`).join('')}
+                            ${OL.thirdPartyAssignees.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join('')}
                         </optgroup>
                     </select>
                 </div>
@@ -164,10 +164,9 @@ OL.renderBusinessTaskManager = function() {
         </div>
 
         <div class="card" style="padding: 20px;">
-            <!-- ADVANCED FILTER & GROUPING TOOLBAR -->
+            <!-- ADVANCED FILTER TOOLBAR -->
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
                 
-                <!-- Search Query -->
                 <div style="display: flex; gap: 8px; flex: 1; min-width: 200px; align-items:center;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
                     <input type="text" 
@@ -177,8 +176,8 @@ OL.renderBusinessTaskManager = function() {
                            oninput="OL.setGlobalTaskFilter('query', this.value)">
                 </div>
 
-                <!-- Status Filter Dropdown -->
                 <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="list-checks" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Status:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('status', this.value)">
                         <option value="Open" ${OL.globalTaskFilterState.status === 'Open' ? 'selected' : ''}>Open Items (Pending/Progress/Review)</option>
@@ -191,22 +190,22 @@ OL.renderBusinessTaskManager = function() {
                     </select>
                 </div>
 
-                <!-- Assignee Filter Dropdown -->
                 <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="user-check" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Assignee:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('assignee', this.value)">
                         <option value="All" ${OL.globalTaskFilterState.assignee === 'All' ? 'selected' : ''}>All Assignees</option>
-                        <option value="Sphynx" ${OL.globalTaskFilterState.assignee === 'Sphynx' ? 'selected' : ''}>⚡ All Sphynx Tasks</option>
-                        <option value="Client" ${OL.globalTaskFilterState.assignee === 'Client' ? 'selected' : ''}>👤 All Client Tasks</option>
-                        <option value="3rdParty" ${OL.globalTaskFilterState.assignee === '3rdParty' ? 'selected' : ''}>🛠️ All 3rd Party / Developer Tasks</option>
+                        <option value="Sphynx" ${OL.globalTaskFilterState.assignee === 'Sphynx' ? 'selected' : ''}>All Sphynx Tasks</option>
+                        <option value="Client" ${OL.globalTaskFilterState.assignee === 'Client' ? 'selected' : ''}>All Client Tasks</option>
+                        <option value="3rdParty" ${OL.globalTaskFilterState.assignee === '3rdParty' ? 'selected' : ''}>All 3rd Party / Developer Tasks</option>
                         <optgroup label="3rd Party Vendors">
                             ${OL.thirdPartyAssignees.map(tp => `<option value="${esc(tp)}" ${OL.globalTaskFilterState.assignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
                         </optgroup>
                     </select>
                 </div>
 
-                <!-- Due Date Dropdown -->
                 <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="calendar" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Due:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('dateRange', this.value)">
                         <option value="All" ${OL.globalTaskFilterState.dateRange === 'All' ? 'selected' : ''}>All Dates</option>
@@ -218,8 +217,8 @@ OL.renderBusinessTaskManager = function() {
                     </select>
                 </div>
 
-                <!-- Grouping & Sub-Grouping Controls -->
                 <div style="display: flex; gap: 8px; align-items: center;">
+                    <i data-lucide="layers" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Group:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
                         <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
@@ -230,7 +229,7 @@ OL.renderBusinessTaskManager = function() {
                     <span class="tiny muted bold uppercase">Sub-Group:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('subGroupBy', this.value)">
                         <option value="none" ${OL.globalTaskFilterState.subGroupBy === 'none' ? 'selected' : ''}>None</option>
-                        <option value="type" ${OL.globalTaskFilterState.subGroupBy === 'type' ? 'selected' : ''}>Task Type (Sphynx/Client/Developer)</option>
+                        <option value="type" ${OL.globalTaskFilterState.subGroupBy === 'type' ? 'selected' : ''}>Task Type</option>
                         <option value="resource" ${OL.globalTaskFilterState.subGroupBy === 'resource' ? 'selected' : ''}>Related Resource</option>
                     </select>
                 </div>
@@ -259,7 +258,6 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
     
-    // Date calculations
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     const endOfWeek = new Date(startOfWeek);
@@ -273,20 +271,17 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
         const resourceMatch = (t.resourceName || '').toLowerCase().includes(query.toLowerCase());
         
-        // Status Filter Logic
         let statusMatch = true;
         if (status === 'Open') statusMatch = t.status !== 'Done';
         else if (status === 'Closed') statusMatch = t.status === 'Done';
         else if (status !== 'All') statusMatch = (t.status || 'Pending') === status;
 
-        // Assignee Filter Logic
         let assigneeMatch = true;
         if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || (!t.isClientTask && !OL.thirdPartyAssignees.includes(t.assignee));
         else if (assignee === 'Client') assigneeMatch = t.assignee !== 'Sphynx Task' && !OL.thirdPartyAssignees.includes(t.assignee);
         else if (assignee === '3rdParty') assigneeMatch = OL.thirdPartyAssignees.includes(t.assignee);
         else if (assignee !== 'All') assigneeMatch = t.assignee === assignee;
 
-        // Date Filter Logic
         let dateMatch = true;
         if (dateRange !== 'All') {
             if (!t.dueDate) {
@@ -316,7 +311,6 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         return `<div class="p-20 muted text-center">No matching tasks found across projects.</div>`;
     }
 
-    // Primary Grouping Engine
     const groups = {};
     filtered.forEach(task => {
         let groupKey = 'Other';
@@ -333,7 +327,6 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         const sampleClientId = tasks[0]?.clientId;
         const metrics = groupBy === 'client' ? OL.getClientReconciliationMetrics(sampleClientId) : null;
 
-        // Sub-Grouping Engine
         const subGroups = {};
         if (subGroupBy !== 'none') {
             tasks.forEach(task => {
@@ -348,7 +341,6 @@ OL.renderFilteredTaskGroups = function(allTasks) {
 
         return `
         <div style="margin-bottom: 24px;">
-            <!-- Primary Group Header -->
             <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <i data-lucide="folder" style="width:14px;height:14px;"></i>
@@ -373,7 +365,6 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     ${tasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
                 </div>
             ` : `
-                <!-- Sub-Grouped Task Display -->
                 <div style="display: grid; gap: 16px; padding-left: 12px; border-left: 2px solid rgba(var(--accent-rgb), 0.2);">
                     ${Object.entries(subGroups).map(([subTitle, subTasks]) => `
                         <div>
@@ -406,7 +397,9 @@ OL.renderTaskRowHTML = function(t, todayStr) {
         
         <!-- Task Title & Client Tag Badge -->
         <div>
-            <div style="font-weight: 600;">${esc(t.title || t.name)}</div>
+            <div class="task-title-cell" style="font-weight: 600; cursor: pointer;">
+                ${esc(t.title || t.name)}
+            </div>
             <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:4px;">
                 <span class="client-link-badge pill tiny soft" 
                       style="cursor:pointer; text-decoration:none; font-weight:600; padding: 2px 8px; border-radius: 4px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" 
@@ -418,7 +411,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </div>
         </div>
 
-        <!-- Assignee Dropdown (Client, Sphynx, 3rd Party) -->
+        <!-- Assignee Dropdown (Lucide Icon Overlay) -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="${is3rdParty ? 'wrench' : (isClientAssigned ? 'user' : 'zap')}" style="position:absolute; left:8px; width:13px; height:13px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}; pointer-events:none;"></i>
             <select class="modal-input tiny" 
@@ -442,7 +435,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </select>
         </div>
 
-        <!-- Due Date Input -->
+        <!-- Due Date Input (Lucide Calendar Overlay) -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="calendar" style="position:absolute; left:8px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
             <input type="date" 
@@ -452,7 +445,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                    onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
         </div>
 
-        <!-- Editable Status Dropdown -->
+        <!-- Editable Status Dropdown (Lucide Check Overlay) -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="check-circle" style="position:absolute; left:8px; width:12px; height:12px; color:var(--accent); pointer-events:none;"></i>
             <select class="modal-input tiny" 
@@ -520,15 +513,21 @@ OL.navigateToClientProject = function(clientId) {
 
 // Row Click Handler (Opens task modal in-context)
 OL.handleTaskRowClick = function(event, clientId, taskId) {
-    const isInteractive = event.target.closest('select, input, button, .client-link-badge');
+    // Strictly isolate interactive inputs (selects, inputs, timer buttons, and the workspace link)
+    const isInteractive = event.target.closest('select, input, button, a') || event.target.classList.contains('client-link-badge');
     if (isInteractive) return;
 
+    event.preventDefault();
+    event.stopPropagation();
+
+    console.log(`🔍 Direct Row Click - Opening Modal: Client [${clientId}], Task [${taskId}]`);
     OL.openTaskInContext(clientId, taskId);
 };
 
 // In-Context Task Modal Launcher
 OL.openTaskInContext = async function(clientId, taskId) {
     try {
+        // 1. Ensure target client data is loaded into state
         if (typeof loadFullClient === 'function') {
             await loadFullClient(clientId);
         } else if (typeof OL.loadFullClient === 'function') {
@@ -538,41 +537,46 @@ OL.openTaskInContext = async function(clientId, taskId) {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
 
-        if (typeof OL.openTaskModal === 'function') {
-            OL.openTaskModal(taskId, false, clientId);
-        } else if (typeof window.openTaskModal === 'function') {
+        // 2. Invoke Task Modal Renderer
+        if (typeof window.openTaskModal === 'function') {
             window.openTaskModal(taskId, false, clientId);
+        } else if (typeof OL.openTaskModal === 'function') {
+            OL.openTaskModal(taskId, false, clientId);
         } else if (task) {
+            // Light, reliable in-place fallback modal
             OL.renderFallbackTaskModal(client, task);
+        } else {
+            console.error("❌ Task modal renderer not found and task could not be resolved.");
         }
     } catch (err) {
-        console.error("Error launching task modal:", err);
+        console.error("❌ Error launching in-context task modal:", err);
     }
 };
 
+// Fallback Task Detail Modal Renderer
 OL.renderFallbackTaskModal = function(client, task) {
     const content = `
         <div style="padding: 20px; max-width: 600px; width: 100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 15px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="check-square" style="width:18px;height:18px;color:var(--accent);"></i>
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="check-square" style="width:20px;height:20px;color:var(--accent);"></i>
                     ${esc(task.title || task.name)}
                 </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+                <button class="btn tiny soft" onclick="OL.closeTimeReportModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 12px; display:flex; gap:8px;">
-                    <span class="pill tiny soft"><i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client.meta?.name || 'Client')}</span>
+                    <span class="pill tiny soft"><i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Client')}</span>
                     <span class="pill tiny accent">Status: ${esc(task.status || 'Pending')}</span>
                 </div>
-                ${task.description ? `<div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px;">${esc(task.description)}</div>` : ''}
+                ${task.description ? `<div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border:1px solid var(--line);">${esc(task.description)}</div>` : ''}
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;" class="tiny muted">
                     <div><strong>Assignee:</strong> ${esc(task.assignee || 'Sphynx')}</div>
                     <div><strong>Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'None'}</div>
                     <div><strong>Logged Hours:</strong> ${Number(task.loggedHours || 0).toFixed(1)}h</div>
                 </div>
                 <div style="text-align: right; margin-top: 20px;">
-                    <button class="btn primary tiny" onclick="OL.closeModal()">Close</button>
+                    <button class="btn primary tiny" onclick="OL.closeTimeReportModal()">Close</button>
                 </div>
             </div>
         </div>
