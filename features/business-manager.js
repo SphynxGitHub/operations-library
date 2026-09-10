@@ -65,9 +65,7 @@ OL.globalTaskFilterState = {
     query: '',
     status: 'All',
     assignee: 'All',
-    dateRange: 'All', // 'All' | 'Today' | 'Week' | 'Month' | 'Overdue' | 'Custom'
-    customStartDate: '',
-    customEndDate: '',
+    dateRange: 'All', // 'All' | 'Today' | 'Week' | 'Month' | 'Overdue'
     groupBy: 'client' // 'client' | 'status' | 'assignee'
 };
 
@@ -252,13 +250,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
     
-    // Start/End of week calculation
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-    // Date Filter logic
     let filtered = allTasks.filter(t => {
         const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
         const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
@@ -343,11 +339,17 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     <div style="display:grid; grid-template-columns: 2fr 130px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
                          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
                         
-                        <!-- Task Title & Client -->
+                        <!-- Task Title & Client Link -->
                         <div>
                             <div style="font-weight: 600;">${esc(t.title || t.name)}</div>
                             <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:2px;">
-                                <span>📁 ${esc(t.clientName)}</span>
+                                <!-- 🚀 CLICKING CLIENT NAME NAVIGATES DIRECTLY TO CLIENT WORKSPACE -->
+                                <span class="client-link-badge" 
+                                      style="cursor:pointer; text-decoration:underline; font-weight:bold; color:var(--accent);" 
+                                      onclick="event.stopPropagation(); OL.navigateToClientProject('${t.clientId}')"
+                                      title="Jump to ${esc(t.clientName)} Workspace">
+                                    📁 ${esc(t.clientName)}
+                                </span>
                                 ${t.category ? `<span>• ${esc(t.category)}</span>` : ''}
                             </div>
                         </div>
@@ -421,10 +423,23 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     }).join('');
 };
 
-// Row click handler (Opens details unless an input/select/button was clicked)
+// 🚀 Navigate directly to client workspace
+OL.navigateToClientProject = function(clientId) {
+    if (typeof switchClient === 'function') {
+        switchClient(clientId);
+    } else if (typeof OL.switchClient === 'function') {
+        OL.switchClient(clientId);
+    } else {
+        sessionStorage.setItem('lastActiveClientId', clientId);
+        if (state) state.activeClientId = clientId;
+        window.location.hash = '#/client-tasks';
+    }
+};
+
+// Row click handler (Opens details unless an input/select/button/client-link was clicked)
 OL.handleTaskRowClick = function(event, clientId, taskId) {
     const targetTag = event.target.tagName.toLowerCase();
-    if (['select', 'input', 'button', 'option'].includes(targetTag) || event.target.closest('button')) {
+    if (['select', 'input', 'button', 'option'].includes(targetTag) || event.target.closest('button') || event.target.closest('.client-link-badge')) {
         return;
     }
     OL.openTaskInContext(clientId, taskId);
