@@ -1,3 +1,6 @@
+import * as OLData from './core/data.js';
+import * as OLAuth from './core/auth.js';
+
 //START DELETE
 /* //======================= GENERAL SECTION =======================//
 
@@ -164,7 +167,7 @@ OL.persist = async function() {
     }, 1500);
 };
 
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
     // 1. Security Check FIRST
     const allowed = OL.initializeSecurityContext();
     if (!allowed) return;
@@ -1876,15 +1879,15 @@ OL.openClientProfileModal = function(clientId) {
                 <div class="small">Onboarded: ${client.meta.onboarded}</div>
             </div>
 
-            <label class="modal-section-label">External Sharing</label>
-            <div class="card-section">
-                <p class="tiny muted">Share this link with the client for read-only access to their tasks.</p>
-                <div style="display:flex; gap:8px; margin-top:8px;">
-                    <input type="text" class="modal-input small" readonly 
-                          value="${window.location.origin}${window.location.pathname}?access=${client.publicToken}#/client-tasks">
-                    <button class="btn tiny primary" onclick="OL.copyShareLink('${client.publicToken}')">Copy</button>
-                </div>
-            </div>
+           <label class="modal-section-label">Partner / Client Login</label>
+           <div class="card-section">
+               <p class="tiny muted">Generate a one-time setup link so they can create their own login.</p>
+               <input type="email" id="setupEmail-${clientId}" class="modal-input small"
+                      placeholder="their@email.com" value="${client.meta.setupEmail || ''}">
+               <div style="display:flex; gap:8px; margin-top:8px;">
+                   <button class="btn tiny primary" onclick="OL.copySetupLink('${clientId}')">Generate & Copy Setup Link</button>
+               </div>
+           </div>
 
             <label class="modal-section-label">Danger Zone</label>
             <div class="card-section">
