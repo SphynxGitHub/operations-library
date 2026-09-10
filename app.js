@@ -1,6 +1,15 @@
 import * as OLData from './core/data.js';
 import * as OLAuth from './core/auth.js';
 
+window.isMatrixActive = false;
+
+OL.getScopingDataForResource = function(resId) {
+    const client = getActiveClient();
+    if (!client?.projectData?.scopingSheets?.[0]) return null;
+    const sheet = client.projectData.scopingSheets[0];
+    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+};
+
 //START DELETE
 /* //======================= GENERAL SECTION =======================//
 
