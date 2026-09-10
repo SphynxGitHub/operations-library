@@ -264,10 +264,11 @@ window.buildLayout = function () {
   { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/vault/visualizer" },
   { key: "how-to", label: "Master How-To Guides", icon: "book-open", href: "#/vault/how-to" },
   { key: "checklist", label: "Master Tasks", icon: "clipboard-list", href: "#/vault/tasks" },
+  { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
   { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
   { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
   { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
-    { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" },
+  { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" },
 ];
 
     const businessTabs = [
@@ -549,6 +550,9 @@ window.handleRoute = function () {
         if (hash.includes('/communications')) OL.renderBusinessCommunications();
         else if (hash.includes('/calendar')) OL.renderBusinessCalendar();
         else if (hash.includes('/tasks')) OL.renderBusinessTaskManager();
+        else if (hash.includes('/time-reports') && typeof OL.openTimeReportModal === 'function') {
+            OL.openTimeReportModal();
+        }
         else if (hash.includes('/financials')) OL.renderBusinessFinancials();
         else if (hash.includes('/clients')) renderClientDashboard(); // Shows current global registry view
         return;
