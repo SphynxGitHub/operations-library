@@ -54,7 +54,7 @@ export const state = {
     clients: {}
 };
 
-// ---- persist: debounced write of master + active client to Supabase ----
+// ---- persist: debounced write of master + every dirty client to Supabase ----
 export function persist() {
     if (window.IS_GUEST) {
         console.warn("🛡️ Persist skipped: Read-only guest mode.");
@@ -91,16 +91,22 @@ export function persist() {
                 console.error("❌ Master Persist Error:", masterErr.message);
             }
 
-            const activeId = state.activeClientId;
-            if (activeId && state.clients[activeId]) {
-                const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
+            const idsToSave = new Set(state.dirtyClientIds || []);
+            if (state.activeClientId) idsToSave.add(state.activeClientId);
+            state.dirtyClientIds = new Set(); // claimed for this cycle; re-added below on failure
+
+            for (const activeId of idsToSave) {
+                const client = state.clients[activeId];
+                if (!client) continue;
+
+                const clientCopy = JSON.parse(JSON.stringify(client));
                 if (clientCopy.projectData) {
                     delete clientCopy.projectData.resources;
                 }
 
                 if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
-                    console.error('🛑 PERSIST ABORTED: Incomplete client object');
-                    return;
+                    console.error(`🛑 PERSIST SKIPPED for ${activeId}: Incomplete client object`);
+                    continue;
                 }
 
                 const clientPayload = {
@@ -118,7 +124,9 @@ export function persist() {
                     .upsert(clientPayload, { onConflict: 'id' });
 
                 if (clientErr) {
-                    console.error("❌ Client Persist Error:", clientErr.message);
+                    console.error(`❌ Client Persist Error [${activeId}]:`, clientErr.message);
+                    if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
+                    state.dirtyClientIds.add(activeId);
                 }
             }
 
@@ -254,10 +262,14 @@ export async function switchClient(id) {
 }
 
 // ---- updateAndSync: run a local mutation, then queue a persist ----
-export async function updateAndSync(mutationFn) {
+export async function updateAndSync(mutationFn, targetClientId) {
     state.isSaving = true;
     try {
         await mutationFn();
+        if (targetClientId) {
+            if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
+            state.dirtyClientIds.add(targetClientId);
+        }
         persist();
         console.log("📥 Local State Updated. Sync Queued...");
     } catch (error) {
