@@ -16,6 +16,7 @@ import * as OLIntegrations from './features/integrations.js';
 import * as OLHowTo from './features/how-to.js';
 import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
+import * as OLBusinessManager from './features/business-manager.js';
 
 window.isMatrixActive = false;
 
@@ -269,6 +270,15 @@ window.buildLayout = function () {
     { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" },
 ];
 
+    const businessTabs = [
+    { key: "dashboard", label: "Daily Dashboard", icon: "layout-dashboard", href: "#/business/dashboard" },
+    { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
+    { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
+    { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
+    { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" },
+    { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
+];
+
 const clientTabs = [
   { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
   { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
@@ -322,11 +332,24 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
         </div>
         <div class="divider"></div>
     ` : ''}
-    
+
     ${(isAdmin || effectiveAdminMode) && !client ? `
-        <!-- 🏛️ 1. SHOW MASTER MENU WHEN ON GLOBAL DASHBOARD / REGISTRY -->
+        <!-- 🏢 BUSINESS MANAGER MENU (Global Level) -->
         <div class="client-nav-zone admin-workspace">
-            <div class="menu-category-label">Global Administration</div>
+            <div class="menu-category-label">Business Manager</div>
+            <nav class="menu">
+                ${businessTabs.map(item => `
+                    <a href="${item.href}" class="${(hash === item.href || (item.key === 'dashboard' && (hash === '#/' || hash === ''))) ? 'active' : ''}">
+                        <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                        <span class="menu-item">${item.label}</span>
+                    </a>
+                `).join('')}
+            </nav>
+            
+            <div class="divider" style="margin: 15px 0;"></div>
+            
+            <!-- 🏛️ TEMPLATE VAULT / BUILDER LINK -->
+            <div class="menu-category-label">Template Vault</div>
             <nav class="menu">
                 ${masterTabs.map(item => `
                     <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
@@ -475,6 +498,7 @@ window.handleRoute = function () {
 
     const client = getActiveClient();
     const isVault = hash.startsWith('#/vault');
+    const isBusinessRoute = hash.startsWith('#/business') || hash === '#/' || hash === '';
     const ol = window.OL || {};
 
     // 1. Dashboard Routes
@@ -510,6 +534,23 @@ window.handleRoute = function () {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
         else if (hash.includes("/client-access")) OL.renderClientAccessList();
+        return;
+    }
+
+    if (hash === "#/" || hash === "" || hash === "#/business/dashboard") {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        OL.renderDailyDashboard();
+        return;
+    }
+    
+    if (hash.startsWith('#/business')) {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        
+        if (hash.includes('/communications')) OL.renderBusinessCommunications();
+        else if (hash.includes('/calendar')) OL.renderBusinessCalendar();
+        else if (hash.includes('/tasks')) OL.renderBusinessTaskManager();
+        else if (hash.includes('/financials')) OL.renderBusinessFinancials();
+        else if (hash.includes('/clients')) renderClientDashboard(); // Shows current global registry view
         return;
     }
 
