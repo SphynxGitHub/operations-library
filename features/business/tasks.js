@@ -392,12 +392,15 @@ OL.renderTaskRowHTML = function(t, todayStr) {
     const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && t.status !== 'Done';
 
     return `
-    <div style="display:grid; grid-template-columns: 2fr 160px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
+    <div class="task-row-container" 
+         style="display:grid; grid-template-columns: 2fr 160px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
         
         <!-- Task Title & Client Tag Badge -->
         <div>
-            <div class="task-title-cell" style="font-weight: 600; cursor: pointer;">
+            <div class="task-title-cell" 
+                 style="font-weight: 600; cursor: pointer;" 
+                 onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
                 ${esc(t.title || t.name)}
             </div>
             <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:4px;">
@@ -405,13 +408,13 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                       style="cursor:pointer; text-decoration:none; font-weight:600; padding: 2px 8px; border-radius: 4px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" 
                       onclick="event.stopPropagation(); OL.navigateToClientProject('${t.clientId}')"
                       title="Jump to ${esc(t.clientName)} Workspace">
-                    <i data-lucide="folder" style="width:10px;height:10px;"></i> ${esc(t.clientName)}
+                    <i data-lucide="folder" style="width:10px;height:10px; pointer-events:none;"></i> ${esc(t.clientName)}
                 </span>
                 ${t.resourceName ? `<span class="muted">• ${esc(t.resourceName)}</span>` : ''}
             </div>
         </div>
 
-        <!-- Assignee Dropdown (Lucide Icon Overlay) -->
+        <!-- Assignee Dropdown -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="${is3rdParty ? 'wrench' : (isClientAssigned ? 'user' : 'zap')}" style="position:absolute; left:8px; width:13px; height:13px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}; pointer-events:none;"></i>
             <select class="modal-input tiny" 
@@ -435,7 +438,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </select>
         </div>
 
-        <!-- Due Date Input (Lucide Calendar Overlay) -->
+        <!-- Due Date Input -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="calendar" style="position:absolute; left:8px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
             <input type="date" 
@@ -445,7 +448,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                    onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
         </div>
 
-        <!-- Editable Status Dropdown (Lucide Check Overlay) -->
+        <!-- Status Dropdown -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="check-circle" style="position:absolute; left:8px; width:12px; height:12px; color:var(--accent); pointer-events:none;"></i>
             <select class="modal-input tiny" 
@@ -458,29 +461,29 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </select>
         </div>
 
-        <!-- COMPACT TIMER & LOG BUTTONS -->
+        <!-- Timer & Log Controls -->
         <div onclick="event.stopPropagation();" style="display: flex; align-items: center; gap: 4px; justify-content: flex-end;">
             <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
                     id="timer-btn-${t.id}"
                     title="${isTimerRunning ? 'Stop Timer' : 'Start Timer'}"
                     style="font-weight: bold; width: 32px; height: 26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" 
-                    onclick="OL.toggleLiveTaskTimer('${t.clientId}', '${t.id}')">
-                <i data-lucide="${isTimerRunning ? 'square' : 'timer'}" style="width:13px;height:13px;"></i>
+                    onclick="event.stopPropagation(); OL.toggleLiveTaskTimer('${t.clientId}', '${t.id}')">
+                <i data-lucide="${isTimerRunning ? 'square' : 'timer'}" style="width:13px;height:13px; pointer-events:none;"></i>
             </button>
 
             <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width: 48px; text-align: right; color: ${isTimerRunning ? '#38bdf8' : 'var(--accent)'};">
                 ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
             </span>
 
-            <button class="btn tiny soft" title="Add 0.5 hours" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
-            <button class="btn tiny soft" title="Add 1.0 hour" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
-            <button class="btn tiny soft" title="Edit Retroactive Time Entry" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
-                <i data-lucide="pencil" style="width:11px;height:11px;"></i>
+            <button class="btn tiny soft" title="Add 0.5 hours" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
+            <button class="btn tiny soft" title="Add 1.0 hour" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
+            <button class="btn tiny soft" title="Edit Retroactive Time Entry" onclick="event.stopPropagation(); OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')" style="display:inline-flex; align-items:center; justify-content:center;">
+                <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
             </button>
         </div>
     </div>
     `;
-}; 
+};
 
 OL.updateQuickTaskTeamDropdown = function(clientId) {
     const assigneeSelect = document.getElementById('quick-task-assignee');
