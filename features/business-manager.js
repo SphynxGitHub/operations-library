@@ -467,11 +467,15 @@ OL.openTimeReportModal = function(selectedClientId) {
     const targetClientId = selectedClientId || (clients[0]?.id || '');
     
     const content = `
-        <div class="modal-header">
-            <h3><i data-lucide="bar-chart-2" style="width:20px;height:20px;vertical-align:sub;margin-right:6px;"></i>Time Reconciliation & Client Reports</h3>
-            <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
-        </div>
-        <div class="modal-body" style="padding: 20px;">
+        <div style="padding: 20px; max-width: 900px; width: 100%;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 12px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="bar-chart-2" style="width:20px;height:20px;color:var(--accent);"></i>
+                    Time Reconciliation & Client Reports
+                </h3>
+                <button class="btn tiny soft" onclick="OL.closeTimeReportModal()" style="font-weight:bold;">✕</button>
+            </div>
+
             <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px;">
                 <label class="bold tiny uppercase muted">Select Client:</label>
                 <select class="modal-input tiny" style="width: 250px;" onchange="OL.openTimeReportModal(this.value)">
@@ -488,77 +492,36 @@ OL.openTimeReportModal = function(selectedClientId) {
         </div>
     `;
 
+    // Standardized modal launcher with overlay dismiss listener
     if (typeof window.openModal === 'function') {
         window.openModal(content);
+        
+        // Attach click-off dismiss listener to overlay
+        const layer = document.getElementById("modal-layer") || document.getElementById("modal-overlay");
+        if (layer) {
+            layer.onclick = (e) => {
+                if (e.target === layer) OL.closeTimeReportModal();
+            };
+        }
         if (window.lucide) lucide.createIcons();
     }
 };
 
-OL.renderClientReportView = function(clientId) {
-    const client = state.clients[clientId];
-    if (!client) return `<div class="muted">No client selected.</div>`;
-
-    const metrics = OL.getClientReconciliationMetrics(clientId);
-    const tasks = client.projectData?.clientTasks || [];
-
-    return `
-        <!-- METRICS SUMMARY CARDS -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px;">
-            <div class="card" style="padding: 12px; text-align: center;">
-                <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>
-            </div>
-            <div class="card" style="padding: 12px; text-align: center;">
-                <div class="tiny muted uppercase bold">Logged Hours Used</div>
-                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>
-            </div>
-            <div class="card" style="padding: 12px; text-align: center;">
-                <div class="tiny muted uppercase bold">Remaining Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>
-            </div>
-            <div class="card" style="padding: 12px; text-align: center;">
-                <div class="tiny muted uppercase bold">Scoping Burn Rate</div>
-                <div style="font-size: 20px; font-weight: 900; color: ${metrics.burnRate > 100 ? '#ef4444' : 'var(--accent)'}; margin-top: 4px;">${metrics.burnRate}%</div>
-                <div class="tiny muted">${metrics.burnRate > 100 ? 'Over Scoped' : 'On Track'}</div>
-            </div>
-        </div>
-
-        <!-- BREAKDOWN TABLE -->
-        <h4>📋 Task Itemization & Time Audit</h4>
-        <table class="matrix-table" style="width:100%; margin-top: 10px;">
-            <thead>
-                <tr>
-                    <th style="text-align:left;">Deliverable / Task</th>
-                    <th style="text-align:center;">Assignee</th>
-                    <th style="text-align:center;">Status</th>
-                    <th style="text-align:right;">Logged Hours</th>
-                    <th style="text-align:right;">Calculated Value ($)</th>
-                    <th style="text-align:center;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${tasks.map(t => {
-                    const hours = Number(t.loggedHours || t.hoursLogged || 0);
-                    const val = hours * metrics.hourlyRate;
-                    return `
-                        <tr>
-                            <td><strong>${esc(t.title || t.name)}</strong></td>
-                            <td style="text-align:center;"><span class="pill tiny soft">${esc(t.assignee || 'Sphynx')}</span></td>
-                            <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
-                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
-                            <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
-                            <td style="text-align:center;">
-                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">✏️ Edit Log</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('') || '<tr><td colspan="6" class="muted text-center p-20">No tasks or time entries logged for this client yet.</td></tr>'}
-            </tbody>
-        </table>
-    `;
+OL.closeTimeReportModal = function() {
+    const layer = document.getElementById("modal-layer");
+    if (layer) {
+        layer.style.display = "none";
+        layer.innerHTML = "";
+    }
+    const overlay = document.getElementById("modal-overlay");
+    if (overlay) {
+        overlay.style.display = "none";
+        overlay.innerHTML = "";
+    }
+    // Fallback to standard closeModal if defined
+    if (typeof OL.closeModal === 'function' && OL.closeModal !== OL.closeTimeReportModal) {
+        OL.closeModal();
+    }
 };
 
 // -------------------------------------------------------------
