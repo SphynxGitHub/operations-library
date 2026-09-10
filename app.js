@@ -178,7 +178,7 @@ OL.persist = async function() {
 
 window.addEventListener("load", async () => {
     // 1. Security Check FIRST
-    const allowed = OL.initializeSecurityContext();
+    const allowed = await OL.initializeSecurityContext();
     if (!allowed) return;
 
     // 2. Admin Verification
