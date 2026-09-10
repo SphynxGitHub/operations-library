@@ -1,3 +1,7 @@
+// Add this at the absolute top of app.js before imports:
+console.log("🚨 APP.JS FILE DETECTED BY BROWSER");
+window.OL = window.OL || {};
+
 import * as OLData from './core/data.js';
 import * as OLAuth from './core/auth.js';
 import { esc, val, num, uid } from './core/data.js';
