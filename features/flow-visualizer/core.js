@@ -4700,7 +4700,6 @@ export function switchWorkbenchTab(tabId) {
     OL.renderWorkbenchItemsOnly();
 };
 
-switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // DRAG ASSET/GUIDE
 export function handleAssetDragStart(e, id, type) {
@@ -8808,3 +8807,11 @@ Object.assign(window.OL, {
 });
 // Called bare from app.js's router — bridge onto window directly.
 window.renderVisualizer = renderVisualizer;
+
+// This ran immediately at this spot in the original file, right after
+// switchWorkbenchTab's own definition — safe there in the old plain
+// script (definition === the OL.x assignment). In this module, it has
+// to run down here instead, after the bridge above, since its body
+// calls OL.renderWorkbenchItemsOnly() and that isn't attached to OL
+// until the Object.assign block runs.
+switchWorkbenchTab(state.ui.activeWorkbenchTab);
