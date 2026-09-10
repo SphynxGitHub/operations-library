@@ -107,6 +107,28 @@ OL.renderBusinessTaskManager = function() {
     if (window.lucide) lucide.createIcons();
 };
 
+OL.filterGlobalTasks = function(query) {
+    const q = (query || "").toLowerCase().trim();
+    const rows = document.querySelectorAll('#global-task-table > div');
+    rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(q) ? 'grid' : 'none';
+    });
+};
+
+OL.filterGlobalTaskStatus = function(status) {
+    const rows = document.querySelectorAll('#global-task-table > div');
+    rows.forEach(row => {
+        if (status === 'All') {
+            row.style.display = 'grid';
+        } else {
+            const statusPill = row.querySelector('.pill');
+            const currentStatus = statusPill ? statusPill.innerText.trim() : '';
+            row.style.display = (currentStatus === status) ? 'grid' : 'none';
+        }
+    });
+};
+
 //=============FINANCIALS===============//
 
 OL.renderBusinessFinancials = function() {
@@ -143,15 +165,21 @@ OL.renderBusinessFinancials = function() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${allScopedItems.map(item => `
-                        <tr>
-                            <td><strong>${esc(item.clientName)}</strong></td>
-                            <td>${esc(item.name || 'Scoped Item')}</td>
-                            <td style="text-align:center;"><span class="pill tiny soft">${esc(item.status || 'Do Now')}</span></td>
-                            <td style="text-align:center;">${esc(item.responsibleParty || 'Sphynx')}</td>
-                            <td style="text-align:right; font-weight:bold;">$${(item.total || 0).toLocaleString()}</td>
-                        </tr>
-                    `).join('') || '<tr><td colspan="5" class="p-20 text-center muted">No scoped items found across projects.</td></tr>'}
+                    ${allScopedItems.map(item => {
+                        const res = OL.getResourceById(item.resourceId);
+                        // 🎯 Calculate fee dynamically using your core pricing engine:
+                        const netValue = res ? (OL.calculateRowFee(item, res) || 0) : 0;
+
+                        return `
+                            <tr>
+                                <td><strong>${esc(item.clientName)}</strong></td>
+                                <td>${esc(res?.name || item.name || 'Scoped Item')}</td>
+                                <td style="text-align:center;"><span class="pill tiny soft">${esc(item.status || 'Do Now')}</span></td>
+                                <td style="text-align:center;">${esc(item.responsibleParty || 'Sphynx')}</td>
+                                <td style="text-align:right; font-weight:bold; color:var(--accent);">$${netValue.toLocaleString()}</td>
+                            </tr>
+                        `;
+                    }).join('') || '<tr><td colspan="5" class="p-20 text-center muted">No scoped items found across projects.</td></tr>'}
                 </tbody>
             </table>
         </div>
