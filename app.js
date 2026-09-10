@@ -93,38 +93,6 @@ OL.getRegistryIcon = function(type) {
     return defaults[type.toLowerCase()] || "file-text";
 };
 
-window.getActiveClient = function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const accessToken = urlParams.get('access');
-    const clientIdParam = urlParams.get('client'); // 👈 READS EXPLICIT CLIENT PARAM
-
-    if (!state.clients) return null;
-
-    // 1. If explicit client ID is in URL
-    if (clientIdParam && state.clients[clientIdParam]) {
-        state.activeClientId = clientIdParam;
-        return state.clients[clientIdParam];
-    }
-
-    // 2. Active client in state
-    if (state.activeClientId && state.clients[state.activeClientId]) {
-        return state.clients[state.activeClientId];
-    }
-
-    // 3. Fallback via access token lookup
-    if (accessToken) {
-        const foundClient = Object.values(state.clients).find(c => 
-            c.publicToken === accessToken || c.id === accessToken || c.meta?.accessCode === accessToken
-        );
-        if (foundClient) {
-            state.activeClientId = foundClient.id;
-            return foundClient;
-        }
-    }
-
-    return null;
-};
-
 OL.toggleSidebar = function() {
     const sidebar = document.querySelector('.sidebar');
     const innerContent = document.querySelector('.sidebar-inner-content');
