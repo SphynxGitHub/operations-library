@@ -607,6 +607,21 @@ OL.renderBulkTaskToolbar = function() {
 
     const masterStatuses = OL.getSystemStatuses();
 
+    // Build one deduped assignee list spanning every client involved in the
+    // current selection, so the bulk dropdown mirrors the per-task one
+    // instead of asking for free-text (which invites typos/duplicates).
+    const clientIds = [...new Set(Object.values(OL.bulkTaskSelection))];
+    const seenNames = new Set();
+    const clientTeamOptions = [];
+    clientIds.forEach(cid => {
+        (OL.getClientTeamOptions ? OL.getClientTeamOptions(cid) : []).forEach(m => {
+            if (m.name && !seenNames.has(m.name)) {
+                seenNames.add(m.name);
+                clientTeamOptions.push(m);
+            }
+        });
+    });
+
     return `
         <div class="card" style="padding:10px 14px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid var(--accent); background:rgba(var(--accent-rgb), 0.06);">
             <strong class="tiny" style="white-space:nowrap;">${ids.length} task${ids.length === 1 ? '' : 's'} selected</strong>
@@ -616,7 +631,24 @@ OL.renderBulkTaskToolbar = function() {
                 ${masterStatuses.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
             </select>
 
-            <input type="text" id="bulk-set-assignee" class="modal-input tiny" placeholder="Set Assignee..." style="width:150px;">
+            <select id="bulk-set-assignee" class="modal-input tiny" style="width:180px;">
+                <option value="">Set Assignee...</option>
+                <option value="Sphynx Task">Sphynx Task</option>
+                <option value="Client Task">Client Task</option>
+                ${(state.master?.sphynxTeam || []).length ? `
+                    <optgroup label="Sphynx Team">
+                        ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                    </optgroup>
+                ` : ''}
+                ${clientTeamOptions.length ? `
+                    <optgroup label="Client Team">
+                        ${clientTeamOptions.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                    </optgroup>
+                ` : ''}
+                <optgroup label="Vendors / 3rd Party">
+                    ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join('')}
+                </optgroup>
+            </select>
 
             <input type="date" id="bulk-set-duedate" class="modal-input tiny" style="width:auto;">
 
