@@ -7,7 +7,7 @@ import * as OLFunctions from './features/functions.js';
 import * as OLTasks from './features/tasks.js';
 import * as OLResourcesGrid from './features/resources-grid.js';
 import * as OLResourcesModal from './features/resources-modal.js';
-import * as OLWorkflows from './features/workflows.js';
+import * as OLWorkflows from './features/flow-visualizer/workflows.js';
 import * as OLScoping from './features/scoping.js';
 import * as OLTeam from './features/team.js';
 import * as OLCredentials from './features/credentials.js';
@@ -2498,47 +2498,6 @@ OL._fvRailDrop = function(e, targetType, targetId, targetParentId) {
     OL.renderVisualizer();
 };
 
-OL._fvCreateWorkflow = function(stageId) {
-    const name = prompt('Workflow name:');
-    if (!name?.trim()) return;
-    
-    const data = OL.getCurrentProjectData();
-    console.log('Creating workflow for client:', getActiveClient()?.meta?.name);
-    console.log('Current workflows:', data.workflows);
-    console.log('stageId:', stageId);
-    
-    OL.createWorkflow(name.trim(), stageId);
-    OL.renderVisualizer();
-};
-
-OL._fvAddResourceToWorkflow = function(wfId) {
-    const data = OL.getCurrentProjectData();
-    const workflows = data.workflows || [];
-    const wf = workflows.find(w => w.id === wfId);
-    if (!wf) return;
-
-    // Show picker of unassigned resources in this workflow's stage
-    const assignedIds = new Set(workflows.flatMap(w => w.resourceIds || []));
-    const available = (data.resources || []).filter(r =>
-        r.stageId === wf.stageId && !assignedIds.has(String(r.id))
-    );
-
-    if (available.length === 0) {
-        alert('No unassigned resources in this stage. Assign a resource to this stage first.');
-        return;
-    }
-
-    const options = available.map((r, i) => `${i + 1}. ${r.name}`).join('\n');
-    const choice = prompt(`Select resource to add:\n\n${options}\n\nEnter number:`);
-    if (!choice) return;
-
-    const idx = parseInt(choice) - 1;
-    if (idx >= 0 && idx < available.length) {
-        OL.addResourceToWorkflow(wfId, available[idx].id);
-        OL.renderVisualizer();
-    }
-};
-
 OL._fvLaneDragOver = function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -2722,114 +2681,6 @@ OL._fvComputeLayout = function(resources, stageFilter) {
       };
     }
   });
-};
-
-// ── WORKFLOW HELPERS ─────────────────────────────────
-
-OL.getWorkflows = function() {
-    const data = OL.getCurrentProjectData();
-    const isVault = window.location.hash.includes('vault');
-    return isVault 
-        ? (state.master.workflows || [])
-        : (data.workflows || []);
-};
-
-OL.createWorkflow = function(name, stageId, color) {
-    const client = getActiveClient();
-    const isVault = window.location.hash.includes('vault');
-    
-    const wf = {
-        id: 'wf-' + Date.now(),
-        name: name || 'New Workflow',
-        stageId: stageId || '',
-        color: color || '#3dd9c5',
-        resourceIds: [],
-        description: ''
-    };
-
-    if (isVault) {
-        if (!state.master.workflows) state.master.workflows = [];
-        state.master.workflows.push(wf);
-    } else if (client) {
-        if (!client.projectData.workflows) client.projectData.workflows = [];
-        client.projectData.workflows.push(wf);
-    }
-
-    OL.persist();
-    return wf;
-};
-
-OL.renameWorkflow = function(wfId, name) {
-    const wf = OL.getWorkflows().find(w => w.id === wfId);
-    if (!wf) return;
-    wf.name = name.trim();
-    OL.persist();
-};
-
-OL.deleteWorkflow = function(wfId) {
-    if (!confirm('Delete this workflow? Resources will become unassigned.')) return;
-    const data = OL.getCurrentProjectData();
-    // Unassign all resources from this workflow
-    (data.resources || []).forEach(r => {
-        if (r.workflowId === wfId) r.workflowId = null;
-    });
-    data.workflows = (data.workflows || []).filter(w => w.id !== wfId);
-    OL.persist();
-    OL.renderVisualizer();
-};
-
-OL.addResourceToWorkflow = function(wfId, resId) {
-    const data = OL.getCurrentProjectData();
-    const wf  = (data.workflows || []).find(w => w.id === wfId);
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!wf || !res) return;
-
-    // Check if resource is already in another workflow
-    const existingWf = (data.workflows || []).find(w => 
-        w.id !== wfId && (w.resourceIds || []).includes(String(resId))
-    );
-
-    if (!wf.resourceIds) wf.resourceIds = [];
-    if (!wf.resourceIds.includes(String(resId))) {
-        wf.resourceIds.push(String(resId));
-    }
-    res.workflowId = wfId;
-    OL.persist();
-};
-
-OL.removeResourceFromWorkflow = function(wfId, resId) {
-    const data = OL.getCurrentProjectData();
-    const wf = (data.workflows || []).find(w => String(w.id) === String(wfId));
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    
-    if (!wf) return;
-
-    // Direct, reference-safe filtering
-    wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
-    
-    if (res) {
-        // Recalculate if this item belongs to any other active project swimlanes
-        const remainingWfs = (data.workflows || []).filter(w => 
-            String(w.id) !== String(wfId) && (w.resourceIds || []).includes(String(resId))
-        );
-        
-        if (remainingWfs.length === 0) {
-            res.workflowId = null;
-        } else {
-            res.workflowId = remainingWfs[0].id;
-        }
-    }
-    
-    OL.persist();
-};
-
-OL.reorderWorkflowResources = function(wfId, fromIdx, toIdx) {
-    const wf = OL.getWorkflows().find(w => w.id === wfId);
-    if (!wf || !wf.resourceIds) return;
-    const [moved] = wf.resourceIds.splice(fromIdx, 1);
-    wf.resourceIds.splice(toIdx, 0, moved);
-    OL.persist();
-    OL.renderVisualizer();
 };
 
 OL.getLucideSVG = function(name, size = 12, color = 'currentColor') {
@@ -4346,27 +4197,6 @@ OL._fvRenderWbItems = function(items, tab) {
     if (window.lucide) lucide.createIcons();
 };
 
-OL.moveStageIndex = async function(fromIdx, toIdx) {
-    const data = OL.getCurrentProjectData();
-    const stages = data.stages || [];
-    
-    if (toIdx < 0 || toIdx >= stages.length) return;
-
-    // 🚀 ATOMIC LIVE DATA ARRAY INDEX MODIFICATION
-    await OL.updateAndSync(() => {
-        const [movedStage] = stages.splice(fromIdx, 1);
-        stages.splice(toIdx, 0, movedStage);
-        console.log(`🔀 Drawer Sync Complete: Shifted stage index ${fromIdx} ➔ ${toIdx}`);
-    });
-
-    // 🧲 RE-ALIGN EVERYTHING ON THE CANVAS
-    if (typeof OL.autoAlignNodes === 'function') {
-        OL.autoAlignNodes(); 
-    } else {
-        OL.renderVisualizer();
-    }
-};
-
 OL._fvFilterWb = function(tab) {
     const input = document.getElementById(`fv-wb-search-${tab}`);
     const q = (input?.value || '').toLowerCase().trim();
@@ -4680,30 +4510,6 @@ OL._fvBuildListShell = function(stages, resources) {
                 </div>`}
         </div>
     `;
-};
-
-OL._fvDeleteStage = function(stageId) {
-    const data = OL.getCurrentProjectData();
-    const stage = (data.stages||[]).find(s => s.id === stageId);
-    if (!stage) return;
-
-    const resCount = (data.resources||[]).filter(r => r.stageId === stageId).length;
-    const wfCount  = (data.workflows||[]).filter(w => w.stageId === stageId).length;
-
-    const msg = resCount > 0 || wfCount > 0
-        ? `Delete "${stage.name}"? ${resCount} resource(s) and ${wfCount} workflow(s) will become unassigned.`
-        : `Delete stage "${stage.name}"?`;
-
-    if (!confirm(msg)) return;
-
-    // Unassign resources and workflows
-    (data.resources||[]).forEach(r => { if (r.stageId === stageId) r.stageId = null; });
-    (data.workflows||[]).forEach(w => { if (w.stageId === stageId) w.stageId = null; });
-
-    data.stages = data.stages.filter(s => s.id !== stageId);
-
-    OL.persist();
-    OL.renderVisualizer();
 };
 
 OL._fvOpenStepsList = function(resId) {
@@ -5661,25 +5467,6 @@ OL.fvZoom = function(delta) {
   if (canvas) { canvas.style.transform = `scale(${OL._fv.zoom})`; canvas.style.transformOrigin = 'top left'; }
   const label = document.getElementById('fv-zoom-label');
   if (label) label.textContent = Math.round(OL._fv.zoom * 100) + '%';
-};
-
-OL.insertStage = async function(index) {
-    const data = OL.getCurrentProjectData();
-    
-    const newStage = {
-        id: 'stage-' + Date.now(),
-        name: 'New Stage',
-        width: 1000 // Legacy support
-    };
-
-    // 💉 Inject the stage at the specific position
-    data.stages.splice(index, 0, newStage);
-
-    await OL.persist();
-    
-    // 🧲 Run auto-align to shift all cards down and make room
-    OL.autoAlignNodes(); 
-    console.log(`✨ Inserted new stage at index ${index}`);
 };
 
 OL.handleSidebarSearch = function(e) {
@@ -7290,101 +7077,6 @@ OL.toggleSteps = function(id) {
             }
         }, 50);
     }
-};
-
-// 📝 THE RENAME HELPER
-OL.renameStage = async function(stageId, newName) {
-    const cleanName = newName.trim();
-    if (!cleanName) return;
-
-    const data = OL.getCurrentProjectData();
-    const stage = data.stages.find(s => String(s.id) === String(stageId));
-
-    if (stage) {
-        // 1. Update the data
-        stage.name = cleanName;
-        
-        // 2. 🚀 THE SHIELD: Use updateAndSync to prevent the "Bounce Back" 
-        // that causes you to lose focus or the map to flash.
-        await OL.updateAndSync(() => {
-            console.log(`✅ Stage ${stageId} renamed to: ${cleanName}`);
-        });
-
-        // 3. Optional: Sync the specific label in the DOM without re-rendering everything
-        const inputEl = document.querySelector(`input[onchange*="${stageId}"]`);
-        if (inputEl) inputEl.value = cleanName;
-    }
-};
-
-// ➕ THE INSERTION LOGIC
-OL.addStageBetween = async function(index) {
-    const name = prompt("Enter Stage Name:", "New Stage");
-    if (!name) return;
-
-    const client = getActiveClient();
-    const isVault = window.location.hash.startsWith('#/vault');
-
-    await OL.updateAndSync(() => {
-        const newStage = {
-            id: 'stage-' + Date.now(),
-            name: name,
-            width: 400
-        };
-
-        if (isVault) {
-            if (!state.master.stages) state.master.stages = [];
-            state.master.stages.splice(index, 0, newStage);
-        } else if (client) {
-            if (!client.projectData.stages) client.projectData.stages = [];
-            // Target the REAL array inside the client object
-            client.projectData.stages.splice(index, 0, newStage);
-        }
-    });
-
-    OL.renderVisualizer();
-};
-
-OL.deleteStage = async function(stageId) {
-    const data = OL.getCurrentProjectData();
-    const stages = data.stages || [];
-    const resources = data.resources || [];
-
-    // 1. Find the stage index using the ID
-    const stageIdx = stages.findIndex(s => String(s.id) === String(stageId));
-    
-    if (stageIdx === -1) {
-        console.error("❌ Delete failed: Stage ID not found in data.", stageId);
-        return;
-    }
-
-    const stageName = stages[stageIdx].name;
-
-    // 2. Confirmation Guard
-    if (!confirm(`Permanently delete the "${stageName}" section? Any cards inside will be moved back to the Workbench.`)) return;
-
-    // 3. Move cards inside this stage back to "Global" (Workbench)
-    resources.forEach(res => {
-        if (String(res.stageId) === String(stageId)) {
-            console.log(`📦 Unmapping resource: ${res.name}`);
-            res.stageId = null;
-            res.isGlobal = true;
-            delete res.coords; // Remove coordinates so it lands in the tray
-        }
-    });
-
-    // 4. Remove the stage from the array
-    stages.splice(stageIdx, 1);
-
-    // 5. Save and Hard Refresh
-    await OL.persist();
-    
-    // We run autoAlign to close the gap where the stage used to be
-    await OL.autoAlignNodes(); 
-    
-    // Force the tray to refresh so the unmapped cards appear
-    OL.renderWorkbenchItemsOnly(); 
-    
-    console.log(`✅ Stage "${stageName}" deleted successfully.`);
 };
 
 OL.splitCardAtStep = function(resourceId, stepIndex) {
