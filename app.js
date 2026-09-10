@@ -411,6 +411,7 @@ window.buildLayout = function () {
         { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
         { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
         { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" },
+        { key: "team", label: "Sphynx Team", icon: "shield-check", href: "#/business/team" }, // 👈 Added Sphynx Team
         { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
     ];
 
@@ -650,6 +651,10 @@ window.handleRoute = function () {
         else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
         else if (hash.includes('/time-reports') && typeof OL.renderBusinessTimeReports === 'function') OL.renderBusinessTimeReports();
         else if (hash.includes('/financials') && typeof OL.renderBusinessFinancials === 'function') OL.renderBusinessFinancials();
+        else if (hash.includes('/team')) { // 👈 Added Team Page Route
+            if (typeof OL.renderSphynxTeamPage === 'function') OL.renderSphynxTeamPage();
+            else if (typeof OL.openSphynxTeamManagerModal === 'function') OL.openSphynxTeamManagerModal();
+        }
         else if (hash.includes('/clients')) renderClientDashboard();
         return;
     }
