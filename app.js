@@ -20,58 +20,43 @@ import * as OLBusinessManager from './features/business-manager.js';
 
 window.isMatrixActive = false;
 
-// 🚀 DEFENSIVE APPLICATION INITIALIZATION
-function initApp() {
-    console.log("🏁 App Ignition Starting...");
+// 🚀 SAFE ENTRY POINT
+function bootSystem() {
+    try {
+        console.log("🏁 Booting System...");
 
-    // 1. Security Check FIRST (Synchronous & Defensive)
-    if (typeof OL !== 'undefined' && typeof OL.initializeSecurityContext === 'function') {
-        const allowed = OL.initializeSecurityContext();
-        if (!allowed) return;
-    }
-
-    // 2. Admin Verification
-    if (window.location.search.includes('admin=pizza123')) {
-        if (typeof state !== 'undefined') state.adminMode = true;
-    }
-
-    // 3. Recall Active Client
-    const savedClientId = sessionStorage.getItem('lastActiveClientId');
-    if (savedClientId && typeof state !== 'undefined') state.activeClientId = savedClientId;
-
-    // 4. Recall Visualizer Depth
-    if (typeof state !== 'undefined') {
-        state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-        state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-
-        const currentHash = location.hash;
-        const isDashboard = currentHash === "" || currentHash === "#/";
-        const isVisualizer = currentHash.includes('visualizer');
-
-        if ((state.focusedWorkflowId || state.focusedResourceId) &&
-            (isDashboard || isVisualizer) &&
-            !currentHash.includes('scoping')) {
-            console.log("♻️ Resuming Flow Map depth");
-            const isVault = currentHash.includes('vault');
-            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+        // 1. Initialize Security
+        if (typeof OL !== 'undefined' && typeof OL.initializeSecurityContext === 'function') {
+            const ok = OL.initializeSecurityContext();
+            if (!ok) return;
         }
-    }
 
-    // 5. Build Layout & Trigger Initial Route
-    if (typeof window.buildLayout === 'function') window.buildLayout();
-    if (typeof window.handleRoute === 'function') window.handleRoute();
+        // 2. Admin Check
+        if (window.location.search.includes('admin=pizza123')) {
+            if (typeof state !== 'undefined') state.adminMode = true;
+        }
 
-    // 6. Connect Firebase Sync
-    if (typeof OL !== 'undefined' && typeof OL.sync === 'function') {
-        OL.sync();
+        // 3. Restore State Memory
+        const savedClientId = sessionStorage.getItem('lastActiveClientId');
+        if (savedClientId && typeof state !== 'undefined') state.activeClientId = savedClientId;
+
+        // 4. Build Layout & Trigger Initial Route
+        if (typeof window.buildLayout === 'function') window.buildLayout();
+        if (typeof window.handleRoute === 'function') window.handleRoute();
+
+        // 5. Connect Firebase Listener
+        if (typeof OL !== 'undefined' && typeof OL.sync === 'function') {
+            OL.sync();
+        }
+    } catch (err) {
+        console.error("💀 Boot Error Caught:", err);
     }
 }
 
-// 🔄 Bind Init to Page Load
 if (document.readyState === "complete" || document.readyState === "interactive") {
-    initApp();
+    bootSystem();
 } else {
-    window.addEventListener("DOMContentLoaded", initApp);
+    window.addEventListener("DOMContentLoaded", bootSystem);
 }
 
 OL.goToDashboard = function(hash) {
@@ -87,29 +72,16 @@ OL.goToDashboard = function(hash) {
 
 OL.getRegistryIcon = function(type) {
     if (!type) return "file-text"; 
-    
     const registry = (typeof state !== 'undefined' && state.master) ? state.master.resourceTypes || [] : [];
-    const entry = registry.find(t => 
-        String(t.type).toLowerCase() === String(type).toLowerCase()
-    );
-
+    const entry = registry.find(t => String(t.type).toLowerCase() === String(type).toLowerCase());
     if (entry && entry.lucideIcon) return entry.lucideIcon;
 
     const defaults = {
-        zap: "zap",
-        form: "file-text",
-        email: "mail",
-        event: "calendar",
-        sop: "book-open",
-        guide: "book-open",
-        workflow: "workflow",
-        checklist: "clipboard-list",
-        signature: "pen-tool",
-        spreadsheet: "table",
-        folder: "folder",
-        other: "settings"
+        zap: "zap", form: "file-text", email: "mail", event: "calendar",
+        sop: "book-open", guide: "book-open", workflow: "workflow",
+        checklist: "clipboard-list", signature: "pen-tool", spreadsheet: "table",
+        folder: "folder", other: "settings"
     };
-    
     return defaults[type.toLowerCase()] || "file-text";
 };
 
@@ -133,7 +105,6 @@ OL.toggleSidebar = function() {
         const rightCol = inspectorOpen ? '380px' : '0px';
         layout.style.gridTemplateColumns = `${leftCol} 1fr ${rightCol}`;
     }
-
     window.dispatchEvent(new Event('resize'));
 };
 
@@ -146,12 +117,11 @@ window.addEventListener('load', () => {
 
 window.addEventListener('resize', () => {
     if (!window.location.hash.includes('visualizer')) return;
-
     const body = document.getElementById('fv-body');
     if (!body) return;
 
     body.style.display = 'none';
-    body.offsetHeight; // trigger reflow
+    body.offsetHeight;
     body.style.display = 'flex';
 
     if (typeof OL._fvSyncRailHeights === 'function') {
@@ -162,15 +132,11 @@ window.addEventListener('resize', () => {
 OL.toggleTheme = function() {
     const isLight = document.body.classList.toggle('light-mode');
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    
     if (typeof window.buildLayout === 'function') window.buildLayout(); 
-    
     if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
         OL.renderVisualizer();
     }
-
     if (window.lucide) window.lucide.createIcons();
-    console.log("💾 Theme Preference Saved:", isLight ? 'light' : 'dark');
 };
 
 OL.getViewMode = function(pageKey) {
@@ -199,18 +165,19 @@ OL.viewToggleBtn = function(pageKey, refreshFn) {
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
-      console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
+      console.error("❌ ERROR: Could not find 'app-root' in index.html!");
       return; 
   }
   const mainEl = document.getElementById('mainContent');
   if (mainEl && !window.location.hash.includes('visualizer')) {
       mainEl.style.cssText = '';
   }
+  
   const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
   const isAdmin = window.FORCE_ADMIN === true;
-  const isPublic = new URLSearchParams(window.location.search).has("access");
+  const isPublic = urlParams.has("access");
   const isPartnerProject = client && client.meta?.status === "Partner";
   const isPartnerMode = isPartnerProject || (client && !!client.meta?.partnerOwner);
   const isMaster = hash.startsWith("#/vault") && !window.IS_GUEST;
@@ -484,6 +451,8 @@ window.handleRoute = function () {
             OL.renderDailyDashboard();
         } else if (typeof renderClientDashboard === 'function') {
             renderClientDashboard();
+        } else if (typeof OLClientDashboard.renderClientDashboard === 'function') {
+            OLClientDashboard.renderClientDashboard();
         }
         return;
     }
@@ -495,7 +464,10 @@ window.handleRoute = function () {
         else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
         else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
         else if (hash.includes('/financials') && typeof OL.renderBusinessFinancials === 'function') OL.renderBusinessFinancials();
-        else if (hash.includes('/clients') && typeof renderClientDashboard === 'function') renderClientDashboard();
+        else if (hash.includes('/clients')) {
+            if (typeof renderClientDashboard === 'function') renderClientDashboard();
+            else if (typeof OLClientDashboard.renderClientDashboard === 'function') OLClientDashboard.renderClientDashboard();
+        }
         return;
     }
 
@@ -505,9 +477,18 @@ window.handleRoute = function () {
             window.location.hash = '#/';
             return;
         }
-        if (hash.includes("/apps") && typeof renderAppsGrid === 'function') renderAppsGrid();
-        else if (hash.includes("/functions") && typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
-        else if (hash.includes("/resources") && typeof renderResourceManager === 'function') renderResourceManager();
+        if (hash.includes("/apps")) {
+            if (typeof renderAppsGrid === 'function') renderAppsGrid();
+            else if (typeof OLApps.renderAppsGrid === 'function') OLApps.renderAppsGrid();
+        }
+        else if (hash.includes("/functions")) {
+            if (typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
+            else if (typeof OLFunctions.renderFunctionsGrid === 'function') OLFunctions.renderFunctionsGrid();
+        }
+        else if (hash.includes("/resources")) {
+            if (typeof renderResourceManager === 'function') renderResourceManager();
+            else if (typeof OLResourcesGrid.renderResourceManager === 'function') OLResourcesGrid.renderResourceManager();
+        }
         else if (hash.includes("/visualizer")) {
             if (typeof state !== 'undefined') state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
@@ -518,9 +499,18 @@ window.handleRoute = function () {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
-        else if (hash.includes("/tasks") && typeof renderChecklistModule === 'function') renderChecklistModule(true);
-        else if (hash.includes("/analyses") && typeof renderAnalysisModule === 'function') renderAnalysisModule(true);
-        else if (hash.includes("/rates") && typeof renderVaultRatesPage === 'function') renderVaultRatesPage();
+        else if (hash.includes("/tasks")) {
+            if (typeof renderChecklistModule === 'function') renderChecklistModule(true);
+            else if (typeof OLTasks.renderChecklistModule === 'function') OLTasks.renderChecklistModule(true);
+        }
+        else if (hash.includes("/analyses")) {
+            if (typeof renderAnalysisModule === 'function') renderAnalysisModule(true);
+            else if (typeof OLAnalysis.renderAnalysisModule === 'function') OLAnalysis.renderAnalysisModule(true);
+        }
+        else if (hash.includes("/rates")) {
+            if (typeof renderVaultRatesPage === 'function') renderVaultRatesPage();
+            else if (typeof OLResourcesGrid.renderVaultRatesPage === 'function') OLResourcesGrid.renderVaultRatesPage();
+        }
         else if (hash.includes("/data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
@@ -532,10 +522,22 @@ window.handleRoute = function () {
 
     // 3. Client Project Workspace Routes
     if (client) {
-        if (hash.includes("client-tasks") && typeof renderChecklistModule === 'function') renderChecklistModule();
-        else if (hash.includes("resources") && typeof renderResourceManager === 'function') renderResourceManager();
-        else if (hash.includes("applications") && typeof renderAppsGrid === 'function') renderAppsGrid();
-        else if (hash.includes("functions") && typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
+        if (hash.includes("client-tasks")) {
+            if (typeof renderChecklistModule === 'function') renderChecklistModule();
+            else if (typeof OLTasks.renderChecklistModule === 'function') OLTasks.renderChecklistModule();
+        }
+        else if (hash.includes("resources")) {
+            if (typeof renderResourceManager === 'function') renderResourceManager();
+            else if (typeof OLResourcesGrid.renderResourceManager === 'function') OLResourcesGrid.renderResourceManager();
+        }
+        else if (hash.includes("applications")) {
+            if (typeof renderAppsGrid === 'function') renderAppsGrid();
+            else if (typeof OLApps.renderAppsGrid === 'function') OLApps.renderAppsGrid();
+        }
+        else if (hash.includes("functions")) {
+            if (typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
+            else if (typeof OLFunctions.renderFunctionsGrid === 'function') OLFunctions.renderFunctionsGrid();
+        }
         else if (hash.includes("visualizer")) {
             if (typeof state !== 'undefined') state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
@@ -546,17 +548,24 @@ window.handleRoute = function () {
             if (typeof renderScopingSheet === 'function') renderScopingSheet();
             else if (typeof ol.renderScopingSheet === 'function') ol.renderScopingSheet();
         }
-        else if (hash.includes("analyze") && typeof renderAnalysisModule === 'function') renderAnalysisModule();
+        else if (hash.includes("analyze")) {
+            if (typeof renderAnalysisModule === 'function') renderAnalysisModule();
+            else if (typeof OLAnalysis.renderAnalysisModule === 'function') OLAnalysis.renderAnalysisModule();
+        }
         else if (hash.includes("how-to")) {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
-        else if (hash.includes("team") && typeof renderTeamManager === 'function') renderTeamManager();
+        else if (hash.includes("team")) {
+            if (typeof renderTeamManager === 'function') renderTeamManager();
+            else if (typeof OLTeam.renderTeamManager === 'function') OLTeam.renderTeamManager();
+        }
         else if (hash.includes("data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
     } else {
         if (typeof renderClientDashboard === 'function') renderClientDashboard();
+        else if (typeof OLClientDashboard.renderClientDashboard === 'function') OLClientDashboard.renderClientDashboard();
     }
 };
 
