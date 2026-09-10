@@ -184,7 +184,11 @@ export async function sync() {
                     modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
                     permissions: c.permissions || {},
                     projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] },
-                    sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || []
+                    sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [],
+                    // Login-gate migration status — lets the admin "Client
+                    // Logins" screen show who's set up real login vs. who
+                    // still needs a setup link, without an extra query.
+                    authUserId: c.auth_user_id || null
                 };
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
