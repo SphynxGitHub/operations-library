@@ -264,7 +264,6 @@ window.buildLayout = function () {
   { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/vault/visualizer" },
   { key: "how-to", label: "Master How-To Guides", icon: "book-open", href: "#/vault/how-to" },
   { key: "checklist", label: "Master Tasks", icon: "clipboard-list", href: "#/vault/tasks" },
-  { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
   { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
   { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
   { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
@@ -276,6 +275,7 @@ window.buildLayout = function () {
     { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
     { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
     { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
+    { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
     { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" },
     { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
 ];
