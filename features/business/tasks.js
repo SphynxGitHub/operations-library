@@ -737,3 +737,85 @@ OL.createGlobalQuickTask = function() {
 
     OL.renderBusinessTaskManager();
 };
+
+// ================= RETROACTIVE TIME EDIT MODAL ================= //
+
+OL.openEditTaskTimeModal = function(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+    if (!task) {
+        console.error("❌ Task not found for time edit:", taskId);
+        return;
+    }
+
+    const currentHours = Number(task.loggedHours || task.hoursLogged || 0);
+
+    const content = `
+        <div style="padding: 20px; max-width: 500px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="pencil" style="width:18px;height:18px;color:var(--accent);"></i>
+                    Retroactive Time Adjustment
+                </h3>
+                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 6px; border: 1px solid var(--line);">
+                    <strong style="display:block; font-size:13px;">${esc(task.title || task.name)}</strong>
+                    <div class="tiny muted" style="margin-top:2px;">📁 ${esc(client.meta?.name || clientId)}</div>
+                </div>
+
+                <form onsubmit="event.preventDefault(); OL.saveTaskTimeEdit('${clientId}', '${taskId}');">
+                    <div style="margin-bottom: 15px;">
+                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:5px;">Total Hours Logged:</label>
+                        <input type="number" step="0.1" min="0" id="edit-task-hours" class="modal-input" value="${currentHours}" required style="width:100%;">
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:5px;">Audit Note / Reason for Change:</label>
+                        <textarea id="edit-task-note" class="modal-input" placeholder="e.g. Corrected extra stopwatch run time, added offline call time..." style="height: 70px; width:100%; font-size:12px;">${esc(task.timeAuditNote || '')}</textarea>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                        <button type="button" class="btn soft tiny" onclick="OL.closeModal()">Cancel</button>
+                        <button type="submit" class="btn primary tiny" style="font-weight:bold;">Save Adjustments</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+
+    if (typeof window.openModal === 'function') {
+        window.openModal(content);
+        requestAnimationFrame(() => {
+            if (window.lucide) lucide.createIcons();
+        });
+    }
+};
+
+OL.saveTaskTimeEdit = function(clientId, taskId) {
+    const hoursVal = parseFloat(document.getElementById('edit-task-hours')?.value);
+    const noteVal = document.getElementById('edit-task-note')?.value;
+
+    if (isNaN(hoursVal) || hoursVal < 0) {
+        alert("Please enter a valid number of hours.");
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+        if (task) {
+            task.loggedHours = hoursVal;
+            task.hoursLogged = hoursVal;
+            task.timeAuditNote = noteVal || '';
+            console.log(`✅ Retroactive Time Adjustment Saved [${taskId}]: ${hoursVal}h`);
+        }
+    });
+
+    if (typeof OL.closeModal === 'function') OL.closeModal();
+    else if (typeof window.closeModal === 'function') window.closeModal();
+
+    OL.renderBusinessTaskManager();
+};
