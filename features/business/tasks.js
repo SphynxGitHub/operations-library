@@ -511,10 +511,14 @@ OL.navigateToClientProject = function(clientId) {
     else if (typeof OL.switchClient === 'function') OL.switchClient(clientId);
 };
 
-// Row Click Handler (Opens task modal in-context)
+// ================= HARDENED ROW CLICK HANDLER ================= //
+
 OL.handleTaskRowClick = function(event, clientId, taskId) {
-    // Strictly isolate interactive inputs (selects, inputs, timer buttons, and the workspace link)
-    const isInteractive = event.target.closest('select, input, button, a') || event.target.classList.contains('client-link-badge');
+    // Strictly isolate clicks on interactive controls (Selects, Inputs, Buttons, & Client Workspace Links)
+    const isInteractive = event.target.closest('select, input, button, a') || 
+                          event.target.classList.contains('client-link-badge') || 
+                          event.target.closest('.client-link-badge');
+                          
     if (isInteractive) return;
 
     event.preventDefault();
@@ -524,10 +528,9 @@ OL.handleTaskRowClick = function(event, clientId, taskId) {
     OL.openTaskInContext(clientId, taskId);
 };
 
-// In-Context Task Modal Launcher
+// In-Context Task Detail Modal Launcher
 OL.openTaskInContext = async function(clientId, taskId) {
     try {
-        // 1. Ensure target client data is loaded into state
         if (typeof loadFullClient === 'function') {
             await loadFullClient(clientId);
         } else if (typeof OL.loadFullClient === 'function') {
@@ -537,23 +540,21 @@ OL.openTaskInContext = async function(clientId, taskId) {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
 
-        // 2. Invoke Task Modal Renderer
         if (typeof window.openTaskModal === 'function') {
             window.openTaskModal(taskId, false, clientId);
         } else if (typeof OL.openTaskModal === 'function') {
             OL.openTaskModal(taskId, false, clientId);
         } else if (task) {
-            // Light, reliable in-place fallback modal
             OL.renderFallbackTaskModal(client, task);
         } else {
-            console.error("❌ Task modal renderer not found and task could not be resolved.");
+            console.error("❌ Task not resolved for modal launcher:", taskId);
         }
     } catch (err) {
-        console.error("❌ Error launching in-context task modal:", err);
+        console.error("❌ Error launching task modal:", err);
     }
 };
 
-// Fallback Task Detail Modal Renderer
+// Fallback Task Detail Modal
 OL.renderFallbackTaskModal = function(client, task) {
     const content = `
         <div style="padding: 20px; max-width: 600px; width: 100%;" onclick="event.stopPropagation()">
@@ -562,7 +563,7 @@ OL.renderFallbackTaskModal = function(client, task) {
                     <i data-lucide="check-square" style="width:20px;height:20px;color:var(--accent);"></i>
                     ${esc(task.title || task.name)}
                 </h3>
-                <button class="btn tiny soft" onclick="OL.closeTimeReportModal()">✕</button>
+                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 12px; display:flex; gap:8px;">
@@ -576,7 +577,7 @@ OL.renderFallbackTaskModal = function(client, task) {
                     <div><strong>Logged Hours:</strong> ${Number(task.loggedHours || 0).toFixed(1)}h</div>
                 </div>
                 <div style="text-align: right; margin-top: 20px;">
-                    <button class="btn primary tiny" onclick="OL.closeTimeReportModal()">Close</button>
+                    <button class="btn primary tiny" onclick="OL.closeModal()">Close</button>
                 </div>
             </div>
         </div>
