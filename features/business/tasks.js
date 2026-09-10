@@ -531,67 +531,108 @@ OL.handleTaskRowClick = function(event, clientId, taskId) {
     OL.openTaskInContext(clientId, taskId);
 };
 
-// In-Context Task Detail Modal Launcher
-OL.openTaskInContext = async function(clientId, taskId) {
-    try {
-        if (typeof loadFullClient === 'function') {
-            await loadFullClient(clientId);
-        } else if (typeof OL.loadFullClient === 'function') {
-            await OL.loadFullClient(clientId);
-        }
+// 📝 Standalone Generic Modal Overlay Helper (In case window.openModal is missing)
+OL.showOverlayModal = function(htmlContent) {
+    let layer = document.getElementById("modal-layer");
+    if (!layer) {
+        layer = document.createElement("div");
+        layer.id = "modal-layer";
+        layer.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(3px);";
+        document.body.appendChild(layer);
+    }
+    layer.style.display = "flex";
+    layer.innerHTML = `
+        <div class="modal-box" style="background:var(--bg-card, #1e293b); border:1px solid var(--line, #334155); border-radius:8px; max-width:650px; width:90%; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5); color:inherit;" onclick="event.stopPropagation()">
+            ${htmlContent}
+        </div>
+    `;
+    layer.onclick = function() { OL.closeModal(); };
+    if (window.lucide) lucide.createIcons();
+};
 
-        const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
-
-        if (typeof window.openTaskModal === 'function') {
-            window.openTaskModal(taskId, false, clientId);
-        } else if (typeof OL.openTaskModal === 'function') {
-            OL.openTaskModal(taskId, false, clientId);
-        } else if (task) {
-            OL.renderFallbackTaskModal(client, task);
-        } else {
-            console.error("❌ Task not resolved for modal launcher:", taskId);
-        }
-    } catch (err) {
-        console.error("❌ Error launching task modal:", err);
+OL.closeModal = function() {
+    const layer = document.getElementById("modal-layer");
+    if (layer) {
+        layer.style.display = "none";
+        layer.innerHTML = "";
+    }
+    const overlay = document.getElementById("modal-overlay");
+    if (overlay) {
+        overlay.style.display = "none";
+        overlay.innerHTML = "";
     }
 };
 
-// Fallback Task Detail Modal
+// 🔍 In-Context Task Launcher
+OL.openTaskInContext = async function(clientId, taskId) {
+    console.log(`🚀 Launching Task Modal for Client [${clientId}], Task [${taskId}]`);
+    
+    // Load full client if needed
+    if (typeof loadFullClient === 'function') {
+        await loadFullClient(clientId);
+    } else if (typeof OL.loadFullClient === 'function') {
+        await OL.loadFullClient(clientId);
+    }
+
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+
+    if (!task) {
+        alert("Task record could not be found in active workspace.");
+        return;
+    }
+
+    // Try global modal delegates first, or fallback to reliable built-in modal
+    if (typeof window.openTaskModal === 'function') {
+        window.openTaskModal(taskId, false, clientId);
+    } else if (typeof OL.openTaskModal === 'function' && OL.openTaskModal !== OL.openTaskInContext) {
+        OL.openTaskModal(taskId, false, clientId);
+    } else {
+        OL.renderFallbackTaskModal(client, task);
+    }
+};
+
+// 🛠️ Full In-Context Task Editor & View Modal
 OL.renderFallbackTaskModal = function(client, task) {
     const content = `
-        <div style="padding: 20px; max-width: 600px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 15px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-                    <i data-lucide="check-square" style="width:20px;height:20px;color:var(--accent);"></i>
-                    ${esc(task.title || task.name)}
-                </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 15px;">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                <i data-lucide="check-square" style="width:20px;height:20px;color:var(--accent);"></i>
+                ${esc(task.title || task.name)}
+            </h3>
+            <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold;">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span class="pill tiny soft"><i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Client')}</span>
+                <span class="pill tiny accent">Status: ${esc(task.status || 'Pending')}</span>
+                <span class="pill tiny soft">Assignee: ${esc(task.assignee || 'Sphynx Task')}</span>
             </div>
-            <div class="modal-body">
-                <div style="margin-bottom: 12px; display:flex; gap:8px;">
-                    <span class="pill tiny soft"><i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Client')}</span>
-                    <span class="pill tiny accent">Status: ${esc(task.status || 'Pending')}</span>
+
+            ${task.description ? `
+                <div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border:1px solid var(--line); font-size:13px;">
+                    <strong>Description:</strong>
+                    <div style="margin-top:4px;" class="muted">${esc(task.description)}</div>
                 </div>
-                ${task.description ? `<div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border:1px solid var(--line);">${esc(task.description)}</div>` : ''}
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;" class="tiny muted">
-                    <div><strong>Assignee:</strong> ${esc(task.assignee || 'Sphynx')}</div>
-                    <div><strong>Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'None'}</div>
-                    <div><strong>Logged Hours:</strong> ${Number(task.loggedHours || 0).toFixed(1)}h</div>
-                </div>
-                <div style="text-align: right; margin-top: 20px;">
-                    <button class="btn primary tiny" onclick="OL.closeModal()">Close</button>
-                </div>
+            ` : ''}
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:12px; border-radius:6px;" class="tiny">
+                <div><strong>Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'None'}</div>
+                <div><strong>Logged Hours:</strong> ${Number(task.loggedHours || 0).toFixed(1)}h</div>
+                <div><strong>Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
+                <div><strong>Created:</strong> ${task.createdAt ? new Date(task.createdAt).toLocaleDateString() : 'N/A'}</div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:15px;">
+                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')">
+                    <i data-lucide="pencil" style="width:12px;height:12px;"></i> Edit Time Log
+                </button>
+                <button class="btn primary tiny" onclick="OL.closeModal()">Close Details</button>
             </div>
         </div>
     `;
 
-    if (typeof window.openModal === 'function') {
-        window.openModal(content);
-        requestAnimationFrame(() => {
-            if (window.lucide) lucide.createIcons();
-        });
-    }
+    OL.showOverlayModal(content);
 };
 
 OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
