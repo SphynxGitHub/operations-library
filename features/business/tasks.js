@@ -20,14 +20,14 @@ OL.activeTaskTimer = {
 
 // Helper: Resolve team members for a given client ID
 OL.getClientTeamOptions = function(clientId) {
-    const client = state.clients[clientId];
+    const client = state.clients?.[clientId];
     const teamMembers = client?.projectData?.team || client?.projectData?.teamMembers || [];
     return teamMembers.map(m => typeof m === 'string' ? { id: m, name: m } : { id: m.id || m.name, name: m.name || m.email || 'Team Member' });
 };
 
 // Helper: Calculate Scoping Sheet totals vs Logged Hours per Client
 OL.getClientReconciliationMetrics = function(clientId) {
-    const client = state.clients[clientId];
+    const client = state.clients?.[clientId];
     if (!client) return { scopedHours: 0, scopedValue: 0, loggedHours: 0, hourlyRate: 300, remainingHours: 0, remainingValue: 0, burnRate: 0 };
 
     const hourlyRate = state.master?.rates?.baseHourlyRate || 300;
@@ -103,22 +103,37 @@ OL.renderBusinessTaskManager = function() {
                 <i data-lucide="zap" style="width:14px;height:14px;"></i> Quick Task Creator
             </div>
             <form onsubmit="event.preventDefault(); OL.createGlobalQuickTask();" style="display: grid; grid-template-columns: 180px 2fr 150px 140px 110px 110px; gap: 10px; align-items: center;">
-                <select id="quick-task-client" class="modal-input tiny" required onchange="OL.updateQuickTaskTeamDropdown(this.value)">
-                    <option value="" disabled selected>Select Client...</option>
-                    ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
-                </select>
+                
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="building" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                    <select id="quick-task-client" class="modal-input tiny" style="padding-left:26px; width:100%;" required onchange="OL.updateQuickTaskTeamDropdown(this.value)">
+                        <option value="" disabled selected>Select Client...</option>
+                        ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
+                    </select>
+                </div>
+
                 <input type="text" id="quick-task-title" class="modal-input tiny" placeholder="Task title or deliverable description..." required>
-                <select id="quick-task-assignee" class="modal-input tiny">
-                    <option value="Sphynx Task" selected>Sphynx Task</option>
-                    <option value="Client Task">Client Task</option>
-                </select>
+
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                    <select id="quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
+                        <option value="Sphynx Task" selected>Sphynx Task</option>
+                        <option value="Client Task">Client Task</option>
+                    </select>
+                </div>
+
                 <input type="date" id="quick-task-duedate" class="modal-input tiny" title="Due Date">
-                <select id="quick-task-status" class="modal-input tiny">
-                    <option value="Pending" selected>Pending</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Review">Review</option>
-                    <option value="Done">Done</option>
-                </select>
+
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="flag" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                    <select id="quick-task-status" class="modal-input tiny" style="padding-left:26px; width:100%;">
+                        <option value="Pending" selected>Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Review">Review</option>
+                        <option value="Done">Done</option>
+                    </select>
+                </div>
+
                 <button type="submit" class="btn tiny primary" style="height: 100%; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;">
                     <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Task
                 </button>
@@ -150,11 +165,14 @@ OL.renderBusinessTaskManager = function() {
 
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <span class="tiny muted bold uppercase">Group By:</span>
-                    <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
-                        <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
-                        <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
-                        <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee / Member</option>
-                    </select>
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <i data-lucide="layers" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                        <select class="modal-input tiny" style="width: auto; padding-left:26px;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
+                            <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
+                            <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
+                            <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee / Member</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -165,7 +183,10 @@ OL.renderBusinessTaskManager = function() {
         </div>
     `;
 
-    if (window.lucide) lucide.createIcons();
+    // Asynchronous icon refresh to guarantee rendering after DOM paint
+    requestAnimationFrame(() => {
+        if (window.lucide) lucide.createIcons();
+    });
 };
 
 OL.setGlobalTaskFilter = function(key, val) {
@@ -265,7 +286,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && t.status !== 'Done';
 
                     return `
-                    <div style="display:grid; grid-template-columns: 2fr 130px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
+                    <div style="display:grid; grid-template-columns: 2fr 140px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
                          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
                         
                         <!-- Task Title & Client Tag Badge -->
@@ -282,10 +303,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </div>
                         </div>
 
-                        <!-- Dynamic Team / Assignee Dropdown -->
-                        <div onclick="event.stopPropagation();">
+                        <!-- Dynamic Team / Assignee Dropdown with Lucide Overlay -->
+                        <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
+                            <i data-lucide="${isClientAssigned ? 'user' : 'zap'}" style="position:absolute; left:8px; width:13px; height:13px; color:${isClientAssigned ? '#fbbf24' : 'var(--accent)'}; pointer-events:none;"></i>
                             <select class="modal-input tiny" 
-                                    style="width: 100%; border-color: ${isClientAssigned ? '#fbbf24' : 'var(--line)'};"
+                                    style="width: 100%; padding-left: 26px; border-color: ${isClientAssigned ? '#fbbf24' : 'var(--line)'};"
                                     onchange="OL.updateGlobalTaskAssignee('${t.clientId}', '${t.id}', this.value)">
                                 <option value="Sphynx Task" ${t.assignee === 'Sphynx Task' ? 'selected' : ''}>Sphynx Task</option>
                                 ${teamOptions.length > 0 ? `
@@ -300,20 +322,21 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </select>
                         </div>
 
-                        <!-- Due Date Input -->
-                        <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:4px;">
-                            <i data-lucide="calendar" style="width:12px;height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'};"></i>
+                        <!-- Due Date Input with Lucide Overlay -->
+                        <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
+                            <i data-lucide="calendar" style="position:absolute; left:8px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
                             <input type="date" 
                                    class="modal-input tiny monospace" 
                                    value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
-                                   style="width:100%; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
+                                   style="width:100%; padding-left: 24px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
                                    onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
                         </div>
 
-                        <!-- Editable Status Dropdown -->
-                        <div onclick="event.stopPropagation();">
+                        <!-- Editable Status Dropdown with Lucide Overlay -->
+                        <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
+                            <i data-lucide="check-circle" style="position:absolute; left:8px; width:12px; height:12px; color:var(--accent); pointer-events:none;"></i>
                             <select class="modal-input tiny" 
-                                    style="width: 100%; font-weight: bold;" 
+                                    style="width: 100%; padding-left: 24px; font-weight: bold;" 
                                     onchange="OL.updateGlobalTaskStatus('${t.clientId}', '${t.id}', this.value)">
                                 <option value="Pending" ${t.status === 'Pending' ? 'selected' : ''}>Pending</option>
                                 <option value="In Progress" ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
@@ -379,7 +402,6 @@ OL.handleTaskRowClick = function(event, clientId, taskId) {
     const isInteractive = event.target.closest('select, input, button, .client-link-badge');
     if (isInteractive) return;
 
-    console.log(`Open task in-context: Client [${clientId}], Task [${taskId}]`);
     OL.openTaskInContext(clientId, taskId);
 };
 
@@ -437,7 +459,9 @@ OL.renderFallbackTaskModal = function(client, task) {
 
     if (typeof window.openModal === 'function') {
         window.openModal(content);
-        if (window.lucide) lucide.createIcons();
+        requestAnimationFrame(() => {
+            if (window.lucide) lucide.createIcons();
+        });
     }
 };
 
