@@ -445,6 +445,27 @@ export function openClientProfileModal(clientId) {
                 `).join('')}
             </div>
             
+            ${client.meta.status === 'Partner' ? `
+            <label class="modal-section-label">Business Manager Access (Partner)</label>
+            <div id="business-module-selection" class="card-section">
+                <p class="tiny muted" style="margin-bottom:8px;">Controls which of THIS partner's own Business Manager tabs they can see. Data shown is automatically limited to clients assigned to them above.</p>
+                ${[
+                    { id: 'tasks', label: 'Task Manager' },
+                    { id: 'financials', label: 'Financials' },
+                    { id: 'communications', label: 'Communications' },
+                    { id: 'time-reports', label: 'Time Reports' },
+                    { id: 'calendar', label: 'Calendar' }
+                ].map(m => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
+                        <input type="checkbox" 
+                            ${client.businessModules?.[m.id] ? 'checked' : ''} 
+                            onchange="OL.toggleClientBusinessModule('${clientId}', '${m.id}')">
+                        ${m.label}
+                    </label>
+                `).join('')}
+            </div>
+            ` : ''}
+
             <label class="modal-section-label">Project Metadata</label>
             <div class="card-section">
                 <div class="small">Status: <strong>${client.meta.status}</strong></div>
@@ -480,6 +501,14 @@ export function toggleClientModule(clientId, moduleId) {
         const client = state.clients[clientId];
         if (!client.modules) client.modules = {};
         client.modules[moduleId] = !client.modules[moduleId];
+    });
+};
+
+export function toggleClientBusinessModule(clientId, moduleId) {
+    OL.updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client.businessModules) client.businessModules = {};
+        client.businessModules[moduleId] = !client.businessModules[moduleId];
     });
 };
 
@@ -716,7 +745,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderPartnerDashboard, partnerCreateClient, handlePartnerAssignment,
     onboardNewClient, provisionSphynxTemplates, getDynamicPartners,
-    openClientProfileModal, toggleClientModule, copyShareLink,
+    openClientProfileModal, toggleClientModule, toggleClientBusinessModule, copyShareLink,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
     deleteClient, setAllPermissions, pushFeaturesToAllClients
 });
