@@ -154,27 +154,43 @@ window.addEventListener('resize', () => {
   }
 });
 
-// ================= UTILITY CONTROLS ================= //
-
-// 🌓 Theme Switcher
-OL.toggleTheme = function() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', nextTheme);
-    localStorage.setItem('theme', nextTheme);
-    console.log(`🌓 Theme toggled to: ${nextTheme}`);
-};
 
 // ================= UTILITY CONTROLS ================= //
 
-// 🌓 Theme Switcher
+// 🌓 Hardened Theme Switcher for app.js
 OL.toggleTheme = function() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', nextTheme);
+    const isLight = document.body.classList.contains('light-mode') || 
+                    document.documentElement.getAttribute('data-theme') === 'light';
+    const nextTheme = isLight ? 'dark' : 'light';
+    
+    if (nextTheme === 'light') {
+        document.body.classList.add('light-mode');
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.body.classList.remove('light-mode');
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    
     localStorage.setItem('theme', nextTheme);
     console.log(`🌓 Theme toggled to: ${nextTheme}`);
+    
+    // Re-render layout shell to refresh theme button labels
+    if (typeof window.buildLayout === 'function') {
+        window.buildLayout();
+    }
 };
+
+// Auto-initialize theme on boot
+(function initSavedTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.body.classList.remove('light-mode');
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+})();
 
 // 📥 Export JSON Backup
 OL.exportDatabaseBackup = function() {
