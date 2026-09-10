@@ -469,7 +469,8 @@ OL.renderTaskRowHTML = function(t, todayStr) {
 
             <!-- Full-Width Task Title -->
             <div class="task-title-cell" 
-                 style="font-weight:600; font-size:13px; color:var(--text); cursor:pointer; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                 style="font-weight:600; font-size:13px; color:var(--text); cursor:pointer; flex:1; min-width:0; max-width:100%; overflow:hidden; word-break:break-word; overflow-wrap:break-word; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.3;"
+                 title="${esc(t.title || t.name)}"
                  onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
                 ${esc(t.title || t.name)}
             </div>
