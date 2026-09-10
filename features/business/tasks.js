@@ -657,7 +657,7 @@ OL.renderBulkTaskToolbar = function() {
     });
 
     return `
-        <div class="card" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:500; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center; border:1px solid var(--accent); background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:92vw;">
+        <div style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:500; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center; border:1px solid var(--accent); background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:92vw;">
             <strong class="tiny" style="white-space:nowrap;">${ids.length} task${ids.length === 1 ? '' : 's'} selected</strong>
 
             <select id="bulk-set-status" class="modal-input tiny" style="width:auto;">
