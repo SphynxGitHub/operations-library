@@ -154,22 +154,140 @@ window.addEventListener('resize', () => {
   }
 });
 
-OL.toggleTheme = function() {
-    const isLight = document.body.classList.toggle('light-mode');
-    
-    // Save the specific string to match our bootloader check
-    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    
-    // 🔄 UI Refresh Logic
-    if (typeof window.buildLayout === 'function') window.buildLayout(); 
-    
-    if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
-        OL.renderVisualizer();
-    }
+// ================= UTILITY CONTROLS ================= //
 
-    if (window.lucide) window.lucide.createIcons();
-    
-    console.log("💾 Theme Preference Saved:", isLight ? 'light' : 'dark');
+// 🌓 Theme Switcher
+OL.toggleTheme = function() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    console.log(`🌓 Theme toggled to: ${nextTheme}`);
+};
+
+// ================= UTILITY CONTROLS ================= //
+
+// 🌓 Theme Switcher
+OL.toggleTheme = function() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    console.log(`🌓 Theme toggled to: ${nextTheme}`);
+};
+
+// 📥 Export JSON Backup
+OL.exportDatabaseBackup = function() {
+    if (!state) return alert("System state unavailable for export.");
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", `AgencyOS_Backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+};
+
+// 📤 Import JSON Backup
+OL.importDatabaseBackup = function() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const importedData = JSON.parse(evt.target.result);
+                if (confirm("Are you sure you want to restore from backup? This will overwrite your current workspace data.")) {
+                    updateAndSync(() => {
+                        Object.assign(state, importedData);
+                    });
+                    alert("✅ System state restored successfully!");
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert("❌ Invalid JSON backup file.");
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+};
+
+// 🎨 Utility Control Bar Renderer (Place in header/sidebar)
+OL.renderSystemUtilityBar = function() {
+    return `
+        <div class="system-utility-bar" style="display:flex; align-items:center; gap:8px;">
+            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
+            </button>
+            <button class="btn tiny soft" onclick="OL.exportDatabaseBackup()" title="Export JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="download" style="width:13px;height:13px;"></i> Backup
+            </button>
+            <button class="btn tiny soft" onclick="OL.importDatabaseBackup()" title="Restore JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="upload" style="width:13px;height:13px;"></i> Restore
+            </button>
+        </div>
+    `;
+};
+
+// 📥 Export JSON Backup
+OL.exportDatabaseBackup = function() {
+    if (!state) return alert("System state unavailable for export.");
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", `AgencyOS_Backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+};
+
+// 📤 Import JSON Backup
+OL.importDatabaseBackup = function() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const importedData = JSON.parse(evt.target.result);
+                if (confirm("Are you sure you want to restore from backup? This will overwrite your current workspace data.")) {
+                    updateAndSync(() => {
+                        Object.assign(state, importedData);
+                    });
+                    alert("✅ System state restored successfully!");
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert("❌ Invalid JSON backup file.");
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+};
+
+// 🎨 Utility Control Bar Renderer (Place in header/sidebar)
+OL.renderSystemUtilityBar = function() {
+    return `
+        <div class="system-utility-bar" style="display:flex; align-items:center; gap:8px;">
+            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
+            </button>
+            <button class="btn tiny soft" onclick="OL.exportDatabaseBackup()" title="Export JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="download" style="width:13px;height:13px;"></i> Backup
+            </button>
+            <button class="btn tiny soft" onclick="OL.importDatabaseBackup()" title="Restore JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
+                <i data-lucide="upload" style="width:13px;height:13px;"></i> Restore
+            </button>
+        </div>
+    `;
 };
 
 OL.getViewMode = function(pageKey) {
@@ -454,6 +572,20 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     }
     
     if (window.lucide) window.lucide.createIcons();
+
+    const sidebarHtml = `
+        <aside class="sidebar-container" style="display:flex; flex-direction:column; justify-content:space-between; height:100vh;">
+            <nav class="sidebar-nav">
+                <!-- Your Navigation Links -->
+            </nav>
+            
+            <!-- 🚀 Fixed Bottom Utility Section -->
+            <div class="sidebar-footer" style="padding: 15px; border-top: 1px solid var(--line);">
+                <div class="tiny muted uppercase bold" style="margin-bottom:8px; font-size:9px; letter-spacing:0.05em;">System Controls</div>
+                ${OL.renderSystemUtilityBar()}
+            </div>
+        </aside>
+    `;
 };
 
 window.handleRoute = function () {
@@ -499,17 +631,38 @@ window.handleRoute = function () {
 
     const client = getActiveClient();
     const isVault = hash.startsWith('#/vault');
-    const isBusinessRoute = hash.startsWith('#/business') || hash === '#/' || hash === '';
     const ol = window.OL || {};
 
-    // 1. Dashboard Routes
-    if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
+    // 1. Root / Default Home Landing -> Daily Dashboard
+    if (hash === "#/" || hash === "" || hash === "#/business/dashboard" || hash === "#/business") {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        if (typeof OL.renderDailyDashboard === 'function') {
+            OL.renderDailyDashboard();
+        }
+        return;
+    }
+
+    // 2. Global Client Registry / Partner Dashboard Route
+    if (hash === "#/clients" || hash.includes("partner-dashboard")) {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
         renderClientDashboard();
         return;
     }
 
-    // 2. Vault / Master Routes
+    // 3. Global Business Suite Routes
+    if (hash.startsWith('#/business')) {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        
+        if (hash.includes('/communications') && typeof OL.renderBusinessCommunications === 'function') OL.renderBusinessCommunications();
+        else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
+        else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
+        else if (hash.includes('/time-reports') && typeof OL.renderBusinessTimeReports === 'function') OL.renderBusinessTimeReports();
+        else if (hash.includes('/financials') && typeof OL.renderBusinessFinancials === 'function') OL.renderBusinessFinancials();
+        else if (hash.includes('/clients')) renderClientDashboard();
+        return;
+    }
+
+    // 4. Vault / Master Routes
     if (isVault) {
         if (window.IS_GUEST) {
             window.location.hash = '#/';
@@ -534,31 +687,11 @@ window.handleRoute = function () {
         else if (hash.includes("/data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
-        else if (hash.includes("/client-access")) OL.renderClientAccessList();
+        else if (hash.includes("/client-access") && typeof OL.renderClientAccessList === 'function') OL.renderClientAccessList();
         return;
     }
 
-    if (hash === "#/" || hash === "" || hash === "#/business/dashboard") {
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        OL.renderDailyDashboard();
-        return;
-    }
-    
-    if (hash.startsWith('#/business')) {
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        
-        if (hash.includes('/communications')) OL.renderBusinessCommunications();
-        else if (hash.includes('/calendar')) OL.renderBusinessCalendar();
-        else if (hash.includes('/tasks')) OL.renderBusinessTaskManager();
-        else if (hash.includes('/time-reports') && typeof OL.openTimeReportModal === 'function') {
-            OL.renderBusinessTimeReports();
-        }
-        else if (hash.includes('/financials')) OL.renderBusinessFinancials();
-        else if (hash.includes('/clients')) renderClientDashboard(); // Shows current global registry view
-        return;
-    }
-
-    // 3. Client Project Workspace Routes
+    // 5. Client Project Workspace Routes
     if (client) {
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
