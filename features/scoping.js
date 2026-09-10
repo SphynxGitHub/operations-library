@@ -1548,7 +1548,7 @@ export async function createAndLinkTaskDependency(resId, taskName) {
     OL.openTaskModal(taskId, false); 
     
     // Refresh background if needed
-    if (typeof renderChecklistModule === 'function') renderChecklistModule();
+    if (typeof renderClientTaskManager === 'function') renderClientTaskManager();
 };
 
 export async function addDependency(resId, depId, type) {
