@@ -415,6 +415,14 @@ window.buildLayout = function () {
         { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
     ];
 
+    const partnerBusinessTabs = [
+        { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
+        { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
+        { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
+        { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
+        { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" }
+    ];
+
     const clientTabs = [
         { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
         { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
@@ -500,6 +508,24 @@ window.buildLayout = function () {
                                     onclick="window.location.hash='#/partner-dashboard'">
                                 👁️ VIEW AS PORTFOLIO
                             </button>
+                        ` : ''}
+
+                        ${isPartnerProject ? `
+                            <div class="menu-category-label" style="margin-top:14px;">My Business Manager</div>
+                            <nav class="menu">
+                                ${partnerBusinessTabs.map(item => {
+                                    const isModuleEnabled = effectiveAdminMode || (client.businessModules && client.businessModules[item.key] === true);
+                                    if (!isModuleEnabled) return '';
+                                    const isActive = hash.startsWith(item.href);
+                                    return `
+                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
+                                            <span class="menu-item">${item.label}</span>
+                                        </a>
+                                    `;
+                                }).join('')}
+                            </nav>
+                            <div class="divider" style="margin: 15px 0;"></div>
                         ` : ''}
 
                         <nav class="menu" style="margin-top:10px;">
@@ -625,6 +651,11 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.startsWith('#/vault');
     const ol = window.OL || {};
+
+    // Scope Business Manager data (Tasks/Financials/Comms/Time Reports) to a
+    // Partner's own managed clients when browsing inside a Partner's context.
+    // Null/cleared for the real Sphynx admin view, which still sees everything.
+    state.businessScopePartnerId = (client && client.meta?.status === 'Partner') ? client.id : null;
 
     // 1. Root / Default Home Landing -> Daily Dashboard
     if (hash === "#/" || hash === "" || hash === "#/business/dashboard" || hash === "#/business") {
