@@ -1525,9 +1525,53 @@ export function deployRequirementsFromResource(resourceId) {
 };
 
 
+// ---- appended from "TASK RESOURCE OVERLAP" (never extracted the first
+// time around) — SOP-to-resource linking, misnamed section header
+// notwithstanding. The third function that used to live in this section,
+// deployRequirementsFromResource, is NOT re-added here: it's a dead
+// duplicate of the copy already above (the one that actually ran, being
+// the later definition in the original file) — see the note near the
+// top of this file's history for the same pattern as openImportHub.
+
+export function filterResourceSOPLinker(resId, query) {
+    const listEl = document.getElementById("res-sop-linker-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+
+    const availableSOPs = (state.master.howToLibrary || []).filter(ht => {
+        const isMatch = ht.name.toLowerCase().includes(q);
+        const isNotLinked = !(ht.resourceIds || []).includes(resId);
+        return isMatch && isNotLinked;
+    });
+
+    listEl.innerHTML = availableSOPs.map(sop => `
+        <div class="search-result-item" onmousedown="OL.toggleSOPToResource('${sop.id}', '${resId}')">
+            📖 ${esc(sop.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No unlinked SOPs found</div>';
+}
+
+export function toggleSOPToResource(sopId, resId) {
+    const sop = state.master.howToLibrary.find(h => h.id === sopId);
+    if (!sop) return;
+
+    if (!sop.resourceIds) sop.resourceIds = [];
+    const idx = sop.resourceIds.indexOf(resId);
+
+    if (idx === -1) {
+        sop.resourceIds.push(resId);
+    } else {
+        sop.resourceIds.splice(idx, 1);
+    }
+
+    persist();
+    OL.openResourceModal(resId);
+}
+
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
+    filterResourceSOPLinker, toggleSOPToResource,
     openGuideEditor, closeGuideEditor, getProjectsSharingSOP, openLocalHowToEditor,
     openHowToEditorModal, promoteLocalSOPToMaster, toggleHTApp, filterHTAppSearch,
     parseVideoEmbed, toggleHTResource, filterHTResourceSearch, toggleSOPSharing,

@@ -1992,16 +1992,6 @@ export function executeEditFeature(anlyId, featId, isMaster) {
     }
 };
 
-export async function executeGlobalFeatureUpdate(originalName, isVault) {
-    const name = document.getElementById('global-edit-name').value.trim();
-    const description = document.getElementById('global-edit-desc').value;
-
-    OL.syncFeatureChanges(originalName, { name, description }, isVault);
-    
-    await OL.persist();
-    OL.closeModal();
-    OL.openGlobalContentManager();
-};
 
 // 4. MANAGE ADDING / EDITING FEATURES
 export async function finalizeFeatureAddition(anlyId, featName, category, isMaster) {
@@ -2386,6 +2376,7 @@ const FLOW_SPINE_X_VW = 50;  // The center of the screen
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
+    universalCategorySearch, getCategoryWeight, handleCategorySelection,
     syncMatrixName, createNewMasterAnalysis, createNewAnalysisSandbox,
     deleteAnalysis, filterMasterAnalysisImport, importAnalysisFromVault,
     executeAnalysisImportById, pushMatrixToMasterLibrary, deleteMasterAnalysis,
