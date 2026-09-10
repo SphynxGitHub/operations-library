@@ -569,6 +569,207 @@ OL.renderClientReportView = function(clientId) {
 };
 
 // -------------------------------------------------------------
+// 📊 FULL-PAGE RECONCILIATION & TIME REPORT VIEW (#/business/time-reports)
+// -------------------------------------------------------------
+OL.renderBusinessTimeReports = function() {
+    const main = document.getElementById("mainContent");
+    if (!main) return;
+
+    const clients = Object.values(state.clients || {});
+    
+    // Aggregate tasks from all clients with reconciliation metrics
+    let masterTasks = clients.flatMap(c => 
+        (c.projectData?.clientTasks || []).map(t => {
+            const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
+            return {
+                ...t,
+                clientName: c.meta?.name || 'Unknown Client',
+                clientId: c.id,
+                teamMembers: teamMembers,
+                assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
+                loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
+            };
+        })
+    );
+
+    const totalLoggedHours = masterTasks.reduce((acc, t) => acc + t.loggedHours, 0);
+    const hourlyRate = state.master?.rates?.baseHourlyRate || 300;
+    const totalValue = totalLoggedHours * hourlyRate;
+
+    main.innerHTML = `
+        <div class="section-header">
+            <div>
+                <h2><i data-lucide="bar-chart-2" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time & Reconciliation Audit</h2>
+                <div class="small muted">Itemized client time logs, scoping burn rates, and billable value tracking</div>
+            </div>
+            <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h ($${totalValue.toLocaleString()})
+                </div>
+                <button class="btn small soft" onclick="OL.renderBusinessTimeReports()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- GLOBAL RECONCILIATION SUMMARY CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+            ${clients.slice(0, 4).map(c => {
+                const m = OL.getClientReconciliationMetrics(c.id);
+                return `
+                    <div class="card" style="padding: 14px; cursor:pointer;" onclick="OL.openTimeReportModal('${c.id}')">
+                        <div style="font-weight:bold; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                            <span>📁 ${esc(c.meta?.name || c.id)}</span>
+                            <span class="tiny muted">${m.burnRate}% Used</span>
+                        </div>
+                        <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
+                            ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
+                        </div>
+                        <div class="tiny muted" style="margin-top:2px;">
+                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">$${m.remainingValue.toLocaleString()}</strong>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+
+        <div class="card" style="padding: 20px;">
+            <!-- FILTER & GROUPING CONTROLS -->
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
+                <div style="display: flex; gap: 8px; flex: 1; min-width: 240px; align-items:center;">
+                    <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
+                    <input type="text" 
+                           class="modal-input tiny" 
+                           placeholder="Filter time entries, deliverables, or assignees..." 
+                           value="${esc(OL.globalTaskFilterState.query)}"
+                           oninput="OL.setGlobalTaskFilter('query', this.value); OL.renderBusinessTimeReports();">
+                </div>
+
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="tiny muted bold uppercase">Group By:</span>
+                    <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value); OL.renderBusinessTimeReports();">
+                        <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
+                        <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
+                        <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee / Member</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- TIME REPORT TABLE CONTAINER -->
+            <div id="time-report-table">
+                ${OL.renderTimeReportTableGroups(masterTasks, hourlyRate)}
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
+    const { query, status, assignee, groupBy } = OL.globalTaskFilterState;
+
+    let filtered = allTasks.filter(t => {
+        const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
+        const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
+        const statusMatch = status === 'All' || (t.status || 'Pending') === status;
+        
+        let assigneeMatch = true;
+        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || !t.isClientTask;
+        if (assignee === 'Client') assigneeMatch = t.assignee !== 'Sphynx Task' || t.isClientTask;
+
+        return (titleMatch || clientMatch) && statusMatch && assigneeMatch;
+    });
+
+    if (filtered.length === 0) {
+        return `<div class="p-20 muted text-center">No time entries found matching criteria.</div>`;
+    }
+
+    const groups = {};
+    filtered.forEach(task => {
+        let groupKey = 'Other';
+        if (groupBy === 'client') groupKey = task.clientName;
+        else if (groupBy === 'status') groupKey = task.status || 'Pending';
+        else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
+
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(task);
+    });
+
+    return Object.entries(groups).map(([groupTitle, tasks]) => {
+        const groupHours = tasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
+        const groupValue = groupHours * hourlyRate;
+        const sampleClientId = tasks[0]?.clientId;
+        const metrics = groupBy === 'client' ? OL.getClientReconciliationMetrics(sampleClientId) : null;
+
+        return `
+        <div style="margin-bottom: 24px;">
+            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="folder" style="width:14px;height:14px;"></i>
+                    <span>${esc(groupTitle)}</span>
+                    <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} entries</span>
+                </div>
+                
+                <div style="display:flex; align-items:center; gap:12px;">
+                    ${metrics && metrics.scopedHours > 0 ? `
+                        <span class="tiny monospace" style="color:${metrics.remainingHours < 0 ? '#ef4444' : '#38bdf8'}; font-weight:bold;">
+                            Paid Scoped: ${metrics.scopedHours.toFixed(1)}h (${metrics.burnRate}% Used)
+                        </span>
+                    ` : ''}
+                    <div class="tiny muted monospace" style="font-weight: normal; display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Value: <strong style="color:var(--accent);">$${groupValue.toLocaleString()} (${groupHours.toFixed(1)}h)</strong>
+                    </div>
+                </div>
+            </div>
+
+            <table class="matrix-table" style="width:100%; margin-top: 6px;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Deliverable / Task</th>
+                        <th style="text-align:center;">Client Workspace</th>
+                        <th style="text-align:center;">Assignee</th>
+                        <th style="text-align:center;">Status</th>
+                        <th style="text-align:right;">Logged Hours</th>
+                        <th style="text-align:right;">Calculated Value ($)</th>
+                        <th style="text-align:center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tasks.map(t => {
+                        const hours = Number(t.loggedHours || t.hoursLogged || 0);
+                        const val = hours * hourlyRate;
+
+                        return `
+                            <tr>
+                                <td>
+                                    <strong>${esc(t.title || t.name)}</strong>
+                                    ${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                </td>
+                                <td style="text-align:center;">
+                                    <span class="pill tiny soft" 
+                                          style="cursor:pointer; font-weight:600;" 
+                                          onclick="OL.navigateToClientProject('${t.clientId}')">
+                                        📁 ${esc(t.clientName)}
+                                    </span>
+                                </td>
+                                <td style="text-align:center;"><span class="pill tiny soft">${esc(t.assignee)}</span></td>
+                                <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
+                                <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
+                                <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
+                                <td style="text-align:center;">
+                                    <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">✏️ Edit Log</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+        `;
+    }).join('');
+};
+
+// -------------------------------------------------------------
 // 📊 RECONCILIATION & TIME REPORT MODAL
 // -------------------------------------------------------------
 OL.openTimeReportModal = function(selectedClientId) {
