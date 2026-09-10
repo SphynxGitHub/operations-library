@@ -328,7 +328,7 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
             </div>
         </div>
 
-        // SIDEBAR MENU CONTROLS
+        <!-- SIDEBAR MENU CONTROLS -->
         
         ${showHome ? `
         <div class="admin-nav-zone">
