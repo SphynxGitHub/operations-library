@@ -339,13 +339,12 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     <div style="display:grid; grid-template-columns: 2fr 130px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"
                          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
                         
-                        <!-- Task Title & Client Link -->
+                        <!-- Task Title & Client Tag Badge (No Underline) -->
                         <div>
                             <div style="font-weight: 600;">${esc(t.title || t.name)}</div>
-                            <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:2px;">
-                                <!-- 🚀 CLICKING CLIENT NAME NAVIGATES DIRECTLY TO CLIENT WORKSPACE -->
-                                <span class="client-link-badge" 
-                                      style="cursor:pointer; text-decoration:underline; font-weight:bold; color:var(--accent);" 
+                            <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:4px;">
+                                <span class="pill tiny soft" 
+                                      style="cursor:pointer; text-decoration:none; font-weight:600; padding: 2px 8px; border-radius: 4px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" 
                                       onclick="event.stopPropagation(); OL.navigateToClientProject('${t.clientId}')"
                                       title="Jump to ${esc(t.clientName)} Workspace">
                                     📁 ${esc(t.clientName)}
@@ -423,7 +422,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     }).join('');
 };
 
-// 🚀 Navigate directly to client workspace
+// Navigate directly to client workspace
 OL.navigateToClientProject = function(clientId) {
     if (typeof switchClient === 'function') {
         switchClient(clientId);
@@ -439,7 +438,7 @@ OL.navigateToClientProject = function(clientId) {
 // Row click handler (Opens details unless an input/select/button/client-link was clicked)
 OL.handleTaskRowClick = function(event, clientId, taskId) {
     const targetTag = event.target.tagName.toLowerCase();
-    if (['select', 'input', 'button', 'option'].includes(targetTag) || event.target.closest('button') || event.target.closest('.client-link-badge')) {
+    if (['select', 'input', 'button', 'option'].includes(targetTag) || event.target.closest('button') || event.target.closest('.pill')) {
         return;
     }
     OL.openTaskInContext(clientId, taskId);
@@ -457,6 +456,116 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
             console.log(`✅ Updated Task Due Date [${taskId}]: ${newDueDate}`);
         }
     });
+};
+
+// -------------------------------------------------------------
+// 📊 RECONCILIATION HELPERS & REPORT VIEWS (Declared First)
+// -------------------------------------------------------------
+OL.getClientReconciliationMetrics = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return { scopedHours: 0, scopedValue: 0, loggedHours: 0, hourlyRate: 300, remainingHours: 0, remainingValue: 0, burnRate: 0 };
+
+    const hourlyRate = state.master?.rates?.baseHourlyRate || 300;
+    
+    const sheet = client.projectData?.scopingSheets?.[0];
+    const lineItems = sheet?.lineItems || [];
+    let scopedHours = 0;
+    let scopedValue = 0;
+
+    lineItems.forEach(item => {
+        const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
+        const rowVal = res && typeof OL.calculateRowFee === 'function' ? OL.calculateRowFee(item, res) : (item.total || 0);
+        scopedValue += rowVal;
+        
+        const itemHours = item.hours || (rowVal ? rowVal / hourlyRate : 0);
+        scopedHours += itemHours;
+    });
+
+    const tasks = client.projectData?.clientTasks || [];
+    const loggedHours = tasks.reduce((sum, t) => sum + Number(t.loggedHours || t.hoursLogged || 0), 0);
+
+    const remainingHours = scopedHours - loggedHours;
+    const usedValue = loggedHours * hourlyRate;
+    const remainingValue = scopedValue - usedValue;
+    const burnRate = scopedHours > 0 ? Math.min(Math.round((loggedHours / scopedHours) * 100), 999) : 0;
+
+    return {
+        scopedHours,
+        scopedValue,
+        loggedHours,
+        hourlyRate,
+        usedValue,
+        remainingHours,
+        remainingValue,
+        burnRate
+    };
+};
+
+OL.renderClientReportView = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return `<div class="muted p-20 text-center">No client selected.</div>`;
+
+    const metrics = OL.getClientReconciliationMetrics(clientId);
+    const tasks = client.projectData?.clientTasks || [];
+
+    return `
+        <!-- METRICS SUMMARY CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px;">
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
+                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Logged Hours Used</div>
+                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Remaining Hours</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Scoping Burn Rate</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.burnRate > 100 ? '#ef4444' : 'var(--accent)'}; margin-top: 4px;">${metrics.burnRate}%</div>
+                <div class="tiny muted">${metrics.burnRate > 100 ? 'Over Scoped' : 'On Track'}</div>
+            </div>
+        </div>
+
+        <!-- BREAKDOWN TABLE -->
+        <h4>📋 Task Itemization & Time Audit</h4>
+        <table class="matrix-table" style="width:100%; margin-top: 10px;">
+            <thead>
+                <tr>
+                    <th style="text-align:left;">Deliverable / Task</th>
+                    <th style="text-align:center;">Assignee</th>
+                    <th style="text-align:center;">Status</th>
+                    <th style="text-align:right;">Logged Hours</th>
+                    <th style="text-align:right;">Calculated Value ($)</th>
+                    <th style="text-align:center;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tasks.map(t => {
+                    const hours = Number(t.loggedHours || t.hoursLogged || 0);
+                    const val = hours * metrics.hourlyRate;
+                    return `
+                        <tr>
+                            <td><strong>${esc(t.title || t.name)}</strong></td>
+                            <td style="text-align:center;"><span class="pill tiny soft">${esc(t.assignee || 'Sphynx')}</span></td>
+                            <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
+                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
+                            <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
+                            <td style="text-align:center;">
+                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">✏️ Edit Log</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('') || '<tr><td colspan="6" class="muted text-center p-20">No tasks or time entries logged for this client yet.</td></tr>'}
+            </tbody>
+        </table>
+    `;
 };
 
 // -------------------------------------------------------------
@@ -492,11 +601,9 @@ OL.openTimeReportModal = function(selectedClientId) {
         </div>
     `;
 
-    // Standardized modal launcher with overlay dismiss listener
     if (typeof window.openModal === 'function') {
         window.openModal(content);
         
-        // Attach click-off dismiss listener to overlay
         const layer = document.getElementById("modal-layer") || document.getElementById("modal-overlay");
         if (layer) {
             layer.onclick = (e) => {
@@ -517,10 +624,6 @@ OL.closeTimeReportModal = function() {
     if (overlay) {
         overlay.style.display = "none";
         overlay.innerHTML = "";
-    }
-    // Fallback to standard closeModal if defined
-    if (typeof OL.closeModal === 'function' && OL.closeModal !== OL.closeTimeReportModal) {
-        OL.closeModal();
     }
 };
 
