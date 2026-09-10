@@ -1,3 +1,5 @@
+import { esc, val, num, uid } from '../core/data.js';
+
 //=============DAILY DASHBOARD===============//
 
 OL.renderDailyDashboard = function() {
