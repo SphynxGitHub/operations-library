@@ -8,6 +8,13 @@
 
 import { state, esc, getActiveClient, persist } from '../core/data.js';
 
+export function getScopingDataForResource(resId) {
+    const client = getActiveClient();
+    if (!client?.projectData?.scopingSheets?.[0]) return null;
+    const sheet = client.projectData.scopingSheets[0];
+    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+}
+
 export function getScopingWorkflowContext() {
     const workflowId = state.focusedWorkflowId;
     if (!workflowId) return null;
@@ -723,14 +730,6 @@ export async function removeFromScopeByID(lineItemId) {
         alert("Error: Item not found in database. Please refresh.");
     }
 };
-
-OL.getScopingDataForResource = function(resId) {
-    const client = getActiveClient();
-    if (!client?.projectData?.scopingSheets?.[0]) return null;
-    const sheet = client.projectData.scopingSheets[0];
-    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
-};
-
 
 export function filterResourceForScope(query) {
     const listEl = document.getElementById("scope-search-results");
@@ -1588,7 +1587,7 @@ export async function removeDependencyById(resId, depId) {
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
+    getScopingDataForResource, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
     openTeamAssignmentModal, setTeamMode, updateLineItem, toggleScopingUnits,
     renderUnitBadges, addResourceToScope, removeFromScope, removeFromScopeByID,
     filterResourceForScope, executeScopeAdd, cycleTeamMode, getMultiplierDisplay,
