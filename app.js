@@ -22,6 +22,30 @@ import * as OLBusinessManager from './features/business-manager.js';
 window.OL = window.OL || {};
 window.isMatrixActive = false;
 
+const featureModules = [
+    OLClientDashboard, OLApps, OLFunctions, OLTasks,
+    OLResourcesGrid, OLResourcesModal, OLWorkflows, OLTeam,
+    OLCredentials, OLDataManager, OLScoping, OLIntegrations,
+    OLHowTo, OLAnalysis, OLFlowCore, OLBusinessManager
+];
+
+// 🚀 Unwrap and bind all module exports directly to window and window.OL
+featureModules.forEach(mod => {
+    if (!mod) return;
+    // Bind named exports
+    Object.keys(mod).forEach(key => {
+        window[key] = mod[key];
+        window.OL[key] = mod[key];
+    });
+    // Bind default exports if present
+    if (mod.default && typeof mod.default === 'object') {
+        Object.keys(mod.default).forEach(key => {
+            window[key] = mod.default[key];
+            window.OL[key] = mod.default[key];
+        });
+    }
+});
+
 if (typeof window !== 'undefined') {
     Object.assign(window, OLClientDashboard);
     Object.assign(window, OLApps);
