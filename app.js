@@ -42,157 +42,6 @@ if (typeof window !== 'undefined') {
 }
 
 // 🚀 INITIALIZATION
-function bootApp() {
-    console.log("🏁 Booting Application...");
-
-    // 1. Security Check
-    if (typeof OL.initializeSecurityContext === 'function') {
-        const allowed = OL.initializeSecurityContext();
-        if (!allowed) return;
-    }
-
-    // 2. Admin Verification
-    if (window.location.search.includes('admin=pizza123')) {
-        if (typeof state !== 'undefined') state.adminMode = true;
-    }
-
-    // 3. Recall Client & Depth State
-    const savedClientId = sessionStorage.getItem('lastActiveClientId');
-    if (savedClientId && typeof state !== 'undefined') state.activeClientId = savedClientId;
-
-    if (typeof state !== 'undefined') {
-        state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-        state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-
-        const currentHash = location.hash;
-        const isDashboard = currentHash === "" || currentHash === "#/";
-        const isVisualizer = currentHash.includes('visualizer');
-
-        if ((state.focusedWorkflowId || state.focusedResourceId) &&
-            (isDashboard || isVisualizer) &&
-            !currentHash.includes('scoping')) {
-            const isVault = currentHash.includes('vault');
-            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
-        }
-    }
-
-    // 4. Force Initial Layout and Route Render
-    if (typeof window.buildLayout === 'function') window.buildLayout();
-    if (typeof window.handleRoute === 'function') window.handleRoute();
-
-    // 5. Connect Firebase Listener
-    if (typeof OL.sync === 'function') OL.sync();
-}
-
-if (document.readyState === "complete" || document.readyState === "interactive") {
-    bootApp();
-} else {
-    window.addEventListener("DOMContentLoaded", bootApp);
-}
-
-OL.goToDashboard = function(hash) {
-    if (typeof state !== 'undefined') state.activeClientId = null;
-    sessionStorage.removeItem('lastActiveClientId');
-    const params = new URLSearchParams(window.location.search);
-    params.delete('client');
-    const newSearch = params.toString();
-    window.history.pushState({}, '', `${window.location.pathname}${newSearch ? '?' + newSearch : ''}${hash}`);
-    if (typeof window.buildLayout === 'function') window.buildLayout();
-    if (typeof window.handleRoute === 'function') window.handleRoute();
-};
-
-OL.getRegistryIcon = function(type) {
-    if (!type) return "file-text"; 
-    const registry = (typeof state !== 'undefined' && state.master) ? state.master.resourceTypes || [] : [];
-    const entry = registry.find(t => String(t.type).toLowerCase() === String(type).toLowerCase());
-    if (entry && entry.lucideIcon) return entry.lucideIcon;
-
-    const defaults = {
-        zap: "zap", form: "file-text", email: "mail", event: "calendar",
-        sop: "book-open", guide: "book-open", workflow: "workflow",
-        checklist: "clipboard-list", signature: "pen-tool", spreadsheet: "table",
-        folder: "folder", other: "settings"
-    };
-    return defaults[type.toLowerCase()] || "file-text";
-};
-
-OL.toggleSidebar = function() {
-    const sidebar = document.querySelector('.sidebar');
-    const innerContent = document.querySelector('.sidebar-inner-content');
-    const toggleIcon = document.querySelector('.toggle-icon');
-    if (!sidebar) return;
-
-    const isCollapsed = sidebar.classList.toggle('collapsed');
-    if (innerContent) innerContent.style.display = isCollapsed ? 'none' : 'block';
-    if (toggleIcon) toggleIcon.innerText = isCollapsed ? '▶' : '◀';
-    localStorage.setItem('sidebarCollapsed', isCollapsed);
-
-    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-    const inspectorOpen = panel && panel.classList.contains('open');
-    const layout = document.querySelector('.three-pane-layout');
-
-    if (layout) {
-        const leftCol = isCollapsed ? '65px' : '240px';
-        const rightCol = inspectorOpen ? '380px' : '0px';
-        layout.style.gridTemplateColumns = `${leftCol} 1fr ${rightCol}`;
-    }
-    window.dispatchEvent(new Event('resize'));
-};
-
-window.addEventListener('load', () => {
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
-        sidebar.classList.add('collapsed');
-    }
-});
-
-window.addEventListener('resize', () => {
-    if (!window.location.hash.includes('visualizer')) return;
-    const body = document.getElementById('fv-body');
-    if (!body) return;
-
-    body.style.display = 'none';
-    body.offsetHeight;
-    body.style.display = 'flex';
-
-    if (typeof OL._fvSyncRailHeights === 'function') {
-        OL._fvSyncRailHeights();
-    }
-});
-
-OL.toggleTheme = function() {
-    const isLight = document.body.classList.toggle('light-mode');
-    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    if (typeof window.buildLayout === 'function') window.buildLayout(); 
-    if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
-        OL.renderVisualizer();
-    }
-    if (window.lucide) window.lucide.createIcons();
-};
-
-OL.getViewMode = function(pageKey) {
-    if (typeof state === 'undefined') return 'cards';
-    if (!state.viewModes) state.viewModes = {};
-    return state.viewModes[pageKey] || localStorage.getItem(`ol_view_${pageKey}`) || 'cards';
-};
-
-OL.setViewMode = function(pageKey, mode) {
-    if (typeof state === 'undefined') return;
-    if (!state.viewModes) state.viewModes = {};
-    state.viewModes[pageKey] = mode;
-    localStorage.setItem(`ol_view_${pageKey}`, mode);
-};
-
-OL.viewToggleBtn = function(pageKey, refreshFn) {
-    const mode = OL.getViewMode(pageKey);
-    return `<button class="btn small soft" 
-                    onclick="OL.setViewMode('${pageKey}', '${mode === 'list' ? 'cards' : 'list'}'); ${refreshFn}();"
-                    style="display:flex;align-items:center;gap:6px;">
-                <i data-lucide="${mode === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
-                ${mode === 'list' ? 'Card View' : 'List View'}
-            </button>`;
-};
-
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
@@ -435,6 +284,109 @@ window.buildLayout = function () {
   if (window.lucide) window.lucide.createIcons();
 };
 
+OL.goToDashboard = function(hash) {
+    if (typeof state !== 'undefined') state.activeClientId = null;
+    sessionStorage.removeItem('lastActiveClientId');
+    const params = new URLSearchParams(window.location.search);
+    params.delete('client');
+    const newSearch = params.toString();
+    window.history.pushState({}, '', `${window.location.pathname}${newSearch ? '?' + newSearch : ''}${hash}`);
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+    if (typeof window.handleRoute === 'function') window.handleRoute();
+};
+
+OL.getRegistryIcon = function(type) {
+    if (!type) return "file-text"; 
+    const registry = (typeof state !== 'undefined' && state.master) ? state.master.resourceTypes || [] : [];
+    const entry = registry.find(t => String(t.type).toLowerCase() === String(type).toLowerCase());
+    if (entry && entry.lucideIcon) return entry.lucideIcon;
+
+    const defaults = {
+        zap: "zap", form: "file-text", email: "mail", event: "calendar",
+        sop: "book-open", guide: "book-open", workflow: "workflow",
+        checklist: "clipboard-list", signature: "pen-tool", spreadsheet: "table",
+        folder: "folder", other: "settings"
+    };
+    return defaults[type.toLowerCase()] || "file-text";
+};
+
+OL.toggleSidebar = function() {
+    const sidebar = document.querySelector('.sidebar');
+    const innerContent = document.querySelector('.sidebar-inner-content');
+    const toggleIcon = document.querySelector('.toggle-icon');
+    if (!sidebar) return;
+
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    if (innerContent) innerContent.style.display = isCollapsed ? 'none' : 'block';
+    if (toggleIcon) toggleIcon.innerText = isCollapsed ? '▶' : '◀';
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
+    const inspectorOpen = panel && panel.classList.contains('open');
+    const layout = document.querySelector('.three-pane-layout');
+
+    if (layout) {
+        const leftCol = isCollapsed ? '65px' : '240px';
+        const rightCol = inspectorOpen ? '380px' : '0px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr ${rightCol}`;
+    }
+    window.dispatchEvent(new Event('resize'));
+};
+
+window.addEventListener('load', () => {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
+        sidebar.classList.add('collapsed');
+    }
+});
+
+window.addEventListener('resize', () => {
+    if (!window.location.hash.includes('visualizer')) return;
+    const body = document.getElementById('fv-body');
+    if (!body) return;
+
+    body.style.display = 'none';
+    body.offsetHeight;
+    body.style.display = 'flex';
+
+    if (typeof OL._fvSyncRailHeights === 'function') {
+        OL._fvSyncRailHeights();
+    }
+});
+
+OL.toggleTheme = function() {
+    const isLight = document.body.classList.toggle('light-mode');
+    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
+    if (typeof window.buildLayout === 'function') window.buildLayout(); 
+    if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
+        OL.renderVisualizer();
+    }
+    if (window.lucide) window.lucide.createIcons();
+};
+
+OL.getViewMode = function(pageKey) {
+    if (typeof state === 'undefined') return 'cards';
+    if (!state.viewModes) state.viewModes = {};
+    return state.viewModes[pageKey] || localStorage.getItem(`ol_view_${pageKey}`) || 'cards';
+};
+
+OL.setViewMode = function(pageKey, mode) {
+    if (typeof state === 'undefined') return;
+    if (!state.viewModes) state.viewModes = {};
+    state.viewModes[pageKey] = mode;
+    localStorage.setItem(`ol_view_${pageKey}`, mode);
+};
+
+OL.viewToggleBtn = function(pageKey, refreshFn) {
+    const mode = OL.getViewMode(pageKey);
+    return `<button class="btn small soft" 
+                    onclick="OL.setViewMode('${pageKey}', '${mode === 'list' ? 'cards' : 'list'}'); ${refreshFn}();"
+                    style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="${mode === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
+                ${mode === 'list' ? 'Card View' : 'List View'}
+            </button>`;
+};
+
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
@@ -569,3 +521,50 @@ window.handleRoute = function () {
 };
 
 window.addEventListener("hashchange", handleRoute);
+
+// -------------------------------------------------------------
+// 🚀 BOOT LAUNCHER (Must be at the VERY BOTTOM of app.js)
+// -------------------------------------------------------------
+function bootApp() {
+    console.log("🏁 Booting Application...");
+
+    // 1. Security Context
+    if (typeof OL !== 'undefined' && typeof OL.initializeSecurityContext === 'function') {
+        const allowed = OL.initializeSecurityContext();
+        if (!allowed) return;
+    }
+
+    // 2. Admin Check
+    if (window.location.search.includes('admin=pizza123')) {
+        if (typeof state !== 'undefined') state.adminMode = true;
+    }
+
+    // 3. Restore Client ID
+    const savedClientId = sessionStorage.getItem('lastActiveClientId');
+    if (savedClientId && typeof state !== 'undefined') {
+        state.activeClientId = savedClientId;
+    }
+
+    // 4. Safely call buildLayout and handleRoute
+    if (typeof window.buildLayout === 'function') {
+        window.buildLayout();
+    } else {
+        console.error("❌ window.buildLayout is still missing on boot!");
+    }
+
+    if (typeof window.handleRoute === 'function') {
+        window.handleRoute();
+    }
+
+    // 5. Start Sync
+    if (typeof OL !== 'undefined' && typeof OL.sync === 'function') {
+        OL.sync();
+    }
+}
+
+// Fire boot sequence
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    bootApp();
+} else {
+    window.addEventListener("DOMContentLoaded", bootApp);
+}
