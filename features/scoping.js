@@ -724,6 +724,14 @@ export async function removeFromScopeByID(lineItemId) {
     }
 };
 
+OL.getScopingDataForResource = function(resId) {
+    const client = getActiveClient();
+    if (!client?.projectData?.scopingSheets?.[0]) return null;
+    const sheet = client.projectData.scopingSheets[0];
+    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+};
+
+
 export function filterResourceForScope(query) {
     const listEl = document.getElementById("scope-search-results");
     if (!listEl) return;
