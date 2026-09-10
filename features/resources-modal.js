@@ -8,7 +8,7 @@
 // Companion to features/resources-grid.js (see that file's header note
 // about the circular renderResourceManager <-> renderResourceCard calls).
 
-import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { state, esc, num, uid, getActiveClient, persist } from '../core/data.js';
 
 export function renderResourceCard(res) {
     if (!res) return "";
