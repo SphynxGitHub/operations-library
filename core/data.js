@@ -297,6 +297,17 @@ export function getActiveClient() {
     return null;
 }
 
+// ---- getBusinessScopedClients: clients visible in Business Manager views ----
+// Admin (state.businessScopePartnerId unset) sees every client.
+// A Partner viewing their own Business Manager tabs only sees clients they manage
+// (client.meta.partnerOwner === that partner's client id).
+export function getBusinessScopedClients() {
+    const all = Object.values(state.clients || {});
+    const partnerId = state.businessScopePartnerId;
+    if (!partnerId) return all;
+    return all.filter(c => String(c.meta?.partnerOwner) === String(partnerId));
+}
+
 // ---- backup export / import ----
 export async function exportMasterBackup() {
     try {
@@ -437,9 +448,11 @@ export async function importMasterBackup(event) {
 window.db = db;
 window.state = state;
 window.getActiveClient = getActiveClient;
+window.getBusinessScopedClients = getBusinessScopedClients;
 window.OL = window.OL || {};
 
 Object.assign(window.OL, {
+    getBusinessScopedClients,
     state, persist, sync, loadFullClient, switchClient, updateAndSync,
     exportMasterBackup, importMasterBackup
 });
