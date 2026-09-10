@@ -553,6 +553,365 @@ OL.openTaskInContext = async function(clientId, taskId) {
     }
 };
 
+// -------------------------------------------------------------
+// 📊 RECONCILIATION & TIME REPORT MODAL
+// -------------------------------------------------------------
+OL.openTimeReportModal = function(selectedClientId) {
+    const clients = Object.values(state.clients || {});
+    const targetClientId = selectedClientId || (clients[0]?.id || '');
+    
+    const content = `
+        <div class="modal-header">
+            <h3>📊 Time Reconciliation & Client Reports</h3>
+            <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px;">
+                <label class="bold tiny uppercase muted">Select Client:</label>
+                <select class="modal-input tiny" style="width: 250px;" onchange="OL.openTimeReportModal(this.value)">
+                    ${clients.map(c => `<option value="${c.id}" ${c.id === targetClientId ? 'selected' : ''}>${esc(c.meta?.name || c.id)}</option>`).join('')}
+                </select>
+                <button class="btn tiny primary" onclick="OL.exportClientTimeReportCSV('${targetClientId}')" style="display:inline-flex; align-items:center; gap:4px;">
+                    <i data-lucide="download" style="width:12px;height:12px;"></i> Export CSV Report
+                </button>
+            </div>
+
+            <div id="reconciliation-report-content">
+                ${OL.renderClientReportView(targetClientId)}
+            </div>
+        </div>
+    `;
+
+    if (typeof window.openModal === 'function') {
+        window.openModal(content);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+OL.renderClientReportView = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return `<div class="muted">No client selected.</div>`;
+
+    const metrics = OL.getClientReconciliationMetrics(clientId);
+    const tasks = client.projectData?.clientTasks || [];
+
+    return `
+        <!-- METRICS SUMMARY CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px;">
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
+                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Logged Hours Used</div>
+                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Remaining Hours</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
+                <div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>
+            </div>
+            <div class="card" style="padding: 12px; text-align: center;">
+                <div class="tiny muted uppercase bold">Scoping Burn Rate</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.burnRate > 100 ? '#ef4444' : 'var(--accent)'}; margin-top: 4px;">${metrics.burnRate}%</div>
+                <div class="tiny muted">${metrics.burnRate > 100 ? 'Over Scoped' : 'On Track'}</div>
+            </div>
+        </div>
+
+        <!-- BREAKDOWN TABLE -->
+        <h4>📋 Task Itemization & Time Audit</h4>
+        <table class="matrix-table" style="width:100%; margin-top: 10px;">
+            <thead>
+                <tr>
+                    <th style="text-align:left;">Deliverable / Task</th>
+                    <th style="text-align:center;">Assignee</th>
+                    <th style="text-align:center;">Status</th>
+                    <th style="text-align:right;">Logged Hours</th>
+                    <th style="text-align:right;">Calculated Value ($)</th>
+                    <th style="text-align:center;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tasks.map(t => {
+                    const hours = Number(t.loggedHours || t.hoursLogged || 0);
+                    const val = hours * metrics.hourlyRate;
+                    return `
+                        <tr>
+                            <td><strong>${esc(t.title || t.name)}</strong></td>
+                            <td style="text-align:center;"><span class="pill tiny soft">${esc(t.assignee || 'Sphynx')}</span></td>
+                            <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
+                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
+                            <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
+                            <td style="text-align:center;">
+                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">✏️ Edit Log</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('') || '<tr><td colspan="6" class="muted text-center p-20">No tasks or time entries logged for this client yet.</td></tr>'}
+            </tbody>
+        </table>
+    `;
+};
+
+// -------------------------------------------------------------
+// ✏️ RETROACTIVE TIME ENTRY EDIT MODAL
+// -------------------------------------------------------------
+OL.openEditTaskTimeModal = function(clientId, taskId) {
+    const client = state.clients[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+    if (!task) return;
+
+    const currentHours = Number(task.loggedHours || task.hoursLogged || 0);
+
+    const content = `
+        <div class="modal-header">
+            <h3>✏️ Retroactive Time Edit</h3>
+            <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div style="margin-bottom: 15px;">
+                <strong>Task:</strong> ${esc(task.title || task.name)}
+                <div class="tiny muted">Client: ${esc(client.meta?.name || clientId)}</div>
+            </div>
+
+            <form onsubmit="event.preventDefault(); OL.saveTaskTimeEdit('${clientId}', '${taskId}');">
+                <div style="margin-bottom: 15px;">
+                    <label class="bold tiny uppercase muted">Total Logged Hours:</label>
+                    <input type="number" step="0.1" id="edit-task-hours" class="modal-input" value="${currentHours}" required style="margin-top:5px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label class="bold tiny uppercase muted">Audit Note / Adjustment Reason:</label>
+                    <textarea id="edit-task-note" class="modal-input" placeholder="e.g. Corrected extra stopwatch time, manual Zoom meeting credit..." style="height: 70px; margin-top:5px;">${esc(task.timeAuditNote || '')}</textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                    <button type="button" class="btn soft tiny" onclick="OL.closeModal()">Cancel</button>
+                    <button type="submit" class="btn primary tiny">Save Adjustments</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    if (typeof window.openModal === 'function') {
+        window.openModal(content);
+    }
+};
+
+OL.saveTaskTimeEdit = function(clientId, taskId) {
+    const hoursVal = parseFloat(document.getElementById('edit-task-hours')?.value);
+    const noteVal = document.getElementById('edit-task-note')?.value;
+
+    if (isNaN(hoursVal) || hoursVal < 0) {
+        alert("Please enter a valid number of hours.");
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (task) {
+            task.loggedHours = hoursVal;
+            task.hoursLogged = hoursVal;
+            task.timeAuditNote = noteVal || '';
+            console.log(`✅ Retroactive Time Adjustment Saved [${taskId}]: ${hoursVal}h`);
+        }
+    });
+
+    if (typeof OL.closeModal === 'function') OL.closeModal();
+    OL.renderBusinessTaskManager();
+};
+
+// -------------------------------------------------------------
+// 📄 CSV REPORT EXPORTER
+// -------------------------------------------------------------
+OL.exportClientTimeReportCSV = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const metrics = OL.getClientReconciliationMetrics(clientId);
+    const tasks = client.projectData?.clientTasks || [];
+
+    let csv = `Client Time & Scoping Reconciliation Report\n`;
+    csv += `Client Name,${client.meta?.name || clientId}\n`;
+    csv += `Report Date,${new Date().toLocaleDateString()}\n`;
+    csv += `Base Hourly Rate,$${metrics.hourlyRate}/hr\n`;
+    csv += `Total Scoped Hours,${metrics.scopedHours.toFixed(2)}h\n`;
+    csv += `Total Logged Hours,${metrics.loggedHours.toFixed(2)}h\n`;
+    csv += `Remaining Balance Hours,${metrics.remainingHours.toFixed(2)}h\n\n`;
+
+    csv += `Task Title,Assignee,Status,Logged Hours,Calculated Value ($),Audit Note\n`;
+
+    tasks.forEach(t => {
+        const hours = Number(t.loggedHours || t.hoursLogged || 0);
+        const val = hours * metrics.hourlyRate;
+        csv += `"${(t.title || t.name).replace(/"/g, '""')}","${t.assignee || 'Sphynx'}","${t.status || 'Pending'}",${hours.toFixed(2)},${val.toFixed(2)},"${(t.timeAuditNote || '').replace(/"/g, '""')}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Time_Report_${(client.meta?.name || clientId).replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+};
+
+// -------------------------------------------------------------
+// ⏱️ LIVE STOPWATCH & TASK CONTROLS
+// -------------------------------------------------------------
+OL.toggleLiveTaskTimer = function(clientId, taskId) {
+    const timer = OL.activeTaskTimer;
+
+    if (timer.taskId === taskId) {
+        OL.stopLiveTaskTimer();
+        return;
+    }
+
+    if (timer.taskId) {
+        OL.stopLiveTaskTimer();
+    }
+
+    timer.clientId = clientId;
+    timer.taskId = taskId;
+    timer.startTime = Date.now();
+    timer.elapsedSeconds = 0;
+
+    timer.intervalId = setInterval(() => {
+        timer.elapsedSeconds++;
+        const displayEl = document.getElementById(`timer-display-${taskId}`);
+        if (displayEl) {
+            displayEl.innerText = OL.formatSecondsDisplay(timer.elapsedSeconds);
+        }
+    }, 1000);
+
+    OL.renderBusinessTaskManager();
+};
+
+OL.stopLiveTaskTimer = function() {
+    const timer = OL.activeTaskTimer;
+    if (!timer.taskId) return;
+
+    clearInterval(timer.intervalId);
+
+    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
+
+    if (hoursEarned > 0) {
+        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);
+    }
+
+    OL.activeTaskTimer = {
+        clientId: null,
+        taskId: null,
+        startTime: null,
+        intervalId: null,
+        elapsedSeconds: 0
+    };
+
+    OL.renderBusinessTaskManager();
+};
+
+OL.formatSecondsDisplay = function(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+OL.createGlobalQuickTask = function() {
+    const clientId = document.getElementById('quick-task-client')?.value;
+    const title = document.getElementById('quick-task-title')?.value;
+    const assignee = document.getElementById('quick-task-assignee')?.value || 'Sphynx Task';
+    const status = document.getElementById('quick-task-status')?.value || 'Pending';
+
+    if (!clientId || !title) {
+        alert("Please select a client and provide a task title.");
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        const newTask = {
+            id: uid(),
+            title: title,
+            name: title,
+            status: status,
+            assignee: assignee,
+            isClientTask: (assignee !== 'Sphynx Task'),
+            loggedHours: 0,
+            createdAt: new Date().toISOString()
+        };
+
+        client.projectData.clientTasks.unshift(newTask);
+        console.log(`✅ Quick Task Created for [${clientId}]:`, newTask);
+    });
+
+    const inputTitle = document.getElementById('quick-task-title');
+    if (inputTitle) inputTitle.value = '';
+
+    OL.renderBusinessTaskManager();
+};
+
+OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            task.status = newStatus;
+            console.log(`✅ Updated Task Status [${taskId}]: ${newStatus}`);
+        }
+    });
+};
+
+OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            task.assignee = newAssignee;
+            task.isClientTask = (newAssignee !== 'Sphynx Task');
+            console.log(`✅ Updated Task Assignee [${taskId}]: ${newAssignee}`);
+        }
+    });
+};
+
+OL.logTaskHours = function(clientId, taskId, additionalHours) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            const current = Number(task.loggedHours || task.hoursLogged || 0);
+            task.loggedHours = current + Number(additionalHours);
+            task.hoursLogged = task.loggedHours;
+            console.log(`⏱️ Logged ${additionalHours}h on Task [${taskId}]. Total: ${task.loggedHours}h`);
+        }
+    });
+    OL.renderBusinessTaskManager();
+};
+
+OL.openTaskInContext = async function(clientId, taskId) {
+    await loadFullClient(clientId);
+    
+    if (typeof OL.openTaskModal === 'function') {
+        OL.openTaskModal(taskId, false, clientId);
+    } else if (typeof window.openTaskModal === 'function') {
+        window.openTaskModal(taskId, false, clientId);
+    } else {
+        console.error("❌ openTaskModal renderer not found!");
+    }
+};
+
 //=============FINANCIALS===============//
 
 OL.renderBusinessFinancials = function() {
