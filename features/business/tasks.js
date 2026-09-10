@@ -480,7 +480,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
         </div>
     </div>
     `;
-};
+}; 
 
 OL.updateQuickTaskTeamDropdown = function(clientId) {
     const assigneeSelect = document.getElementById('quick-task-assignee');
