@@ -216,28 +216,45 @@ export function openTeamMemberModal(memberId, draftObj = null) {
             </div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
+
         <div class="modal-body" style="padding: 20px;">
 
-            <!-- Contact Details Section -->
-            <div class="card-section" style="margin-bottom: 20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
+            <!-- 📧 📱 NEW: CONTACT INFORMATION CARD SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
                     <i data-lucide="contact" style="width:14px; height:14px;"></i> Contact Information
                 </label>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                     <div>
-                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Email Address</label>
-                        <input type="email" id="tm-email-${member.id}" class="modal-input tiny" value="${esc(member.email || '')}" placeholder="client@company.com" style="width:100%;" onblur="OL.updateTeamMember('${member.id}', 'email', this.value)">
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px; font-size:10px;">
+                            <i data-lucide="mail" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;"></i> Email Address
+                        </label>
+                        <input type="email" 
+                               id="tm-email-${member.id}" 
+                               class="modal-input tiny" 
+                               value="${esc(member.email || '')}" 
+                               placeholder="garret@sphynxfinancial.com" 
+                               style="width:100%;" 
+                               onblur="OL.updateTeamMember('${member.id}', 'email', this.value)">
                     </div>
                     <div>
-                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Phone Number</label>
-                        <input type="text" id="tm-phone-${member.id}" class="modal-input tiny" value="${esc(member.phone || '')}" placeholder="(555) 000-0000" style="width:100%;" onblur="OL.updateTeamMember('${member.id}', 'phone', this.value)">
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px; font-size:10px;">
+                            <i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;"></i> Phone Number
+                        </label>
+                        <input type="text" 
+                               id="tm-phone-${member.id}" 
+                               class="modal-input tiny" 
+                               value="${esc(member.phone || '')}" 
+                               placeholder="(555) 000-0000" 
+                               style="width:100%;" 
+                               onblur="OL.updateTeamMember('${member.id}', 'phone', this.value)">
                     </div>
                 </div>
             </div>
 
-            <!-- Roles Section -->
-            <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
+            <!-- ASSIGNED ROLES SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
                     <i data-lucide="shield" style="width:14px; height:14px;"></i> Assigned Roles
                 </label>
                 <div class="pills-row" style="margin-bottom: 12px; min-height: 32px; display:flex; flex-wrap:wrap; gap:6px;">
@@ -262,19 +279,26 @@ export function openTeamMemberModal(memberId, draftObj = null) {
                 </div>
             </div>
 
-            <!-- Email Signature Section -->
-            <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
+            <!-- EMAIL SIGNATURE SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
                     <i data-lucide="pen-tool" style="width:14px; height:14px;"></i> Email Signature
                 </label>
                 <textarea class="modal-textarea" 
                         style="min-height: 80px; font-family: monospace; font-size: 11px; line-height:1.4; width:100%;" 
-                        placeholder="Best regards,\n{{name}}" 
+                        placeholder="Best regards,\n{{name}}\nSphynx Financial" 
                         onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
+                <div class="tiny muted" style="margin-top:5px; display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="info" style="width:10px; height:10px;"></i>
+                    Used for automated email templates sent by this member.
+                </div>
             </div>
+
+            <!-- SYSTEM ACCESS & CREDENTIALS SECTION -->
             ${typeof OL.renderAccessSection === 'function' ? OL.renderAccessSection(memberId, "member") : ''} 
         </div>
     `;
+
     if (typeof openModal === 'function') openModal(html);
     else if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(html);
 
