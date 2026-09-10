@@ -1,4 +1,5 @@
-//======================= GENERAL SECTION =======================//
+//START DELETE
+/* //======================= GENERAL SECTION =======================//
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
@@ -342,6 +343,7 @@ OL.updateAndSync = async function(mutationFn) {
         setTimeout(() => { state.isSaving = false; }, 2000);
     }
 };
+*/ //END DELETE
 
 OL.getRegistryIcon = function(type) {
     if (!type) return "file-text"; 
@@ -954,6 +956,7 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     if (window.lucide) window.lucide.createIcons();
 };
 
+/* // START DELETE
 // ── FIXED: OL.exportMasterBackup (was using Firestore db.collection) ──
 OL.exportMasterBackup = async function() {
     try {
@@ -1091,7 +1094,7 @@ OL.importMasterBackup = async function(event) {
         alert('❌ Restore failed: ' + e.message);
         console.error(e);
     }
-};
+};*/ //END DELETE
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
