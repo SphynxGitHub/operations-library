@@ -32,6 +32,7 @@ OL.renderMasterTaskBlueprints = function() {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                         <strong style="font-size:13px;">${esc(bp.title || 'Untitled Blueprint')}</strong>
                         <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button class="btn tiny primary" onclick="OL.openApplyBlueprintModal('${bp.id}')" title="Apply to a client"><i data-lucide="send" style="width:11px;height:11px;"></i></button>
                             <button class="btn tiny soft" onclick="OL.openTaskBlueprintModal('${bp.id}')" title="Edit"><i data-lucide="pencil" style="width:11px;height:11px;"></i></button>
                             <button class="btn tiny" style="background:#ef4444;color:white;" onclick="OL.deleteTaskBlueprint('${bp.id}')" title="Delete"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
                         </div>
@@ -127,3 +128,102 @@ OL.deleteTaskBlueprint = function(blueprintId) {
     });
     OL.renderMasterTaskBlueprints();
 };
+
+// ================= APPLYING A BLUEPRINT TO A CLIENT =================
+// Shared by the manual "Apply to Client" button below AND by the
+// automation engine's 'apply_blueprint' action, so both stay in sync.
+//
+// ctx (all optional) supports template placeholders in title/description:
+//   {resourceName}, {taskTitle}, {clientName} — same placeholders the
+//   free-form automation action uses.
+// ctx.task, if provided (an automation firing off an existing task),
+// lets asSubtask nest the new task under it.
+OL.buildTaskFromBlueprint = function(blueprint, client, ctx) {
+    ctx = ctx || {};
+    const fill = (str) => String(str || '')
+        .replace(/\{resourceName\}/g, ctx.resourceName || '')
+        .replace(/\{taskTitle\}/g, ctx.title || '')
+        .replace(/\{clientName\}/g, client?.meta?.name || '');
+
+    let dueDate = '';
+    const dueInDays = ctx.dueInDaysOverride ?? blueprint.dueInDays;
+    if (dueInDays !== undefined && dueInDays !== null && dueInDays !== '') {
+        const d = new Date();
+        d.setDate(d.getDate() + Number(dueInDays));
+        dueDate = d.toISOString().slice(0, 10);
+    }
+
+    const assignee = blueprint.defaultAssignee || 'Sphynx Task';
+    const title = fill(blueprint.title) || 'Task';
+
+    return {
+        id: uid(),
+        title,
+        name: title,
+        description: fill(blueprint.description),
+        status: blueprint.defaultStatus || 'Pending Sphynx Action',
+        assignee,
+        dueDate,
+        isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
+        loggedHours: 0,
+        parentTaskId: (ctx.asSubtask && ctx.task) ? ctx.task.id : null,
+        howToIds: [...(blueprint.howToIds || [])],
+        blueprintId: blueprint.id,
+        createdBy: ctx.automationRuleId ? 'automation' : 'blueprint',
+        automationRuleId: ctx.automationRuleId || undefined,
+        createdAt: new Date().toISOString()
+    };
+};
+
+// Manual UI entry point — pushes the built task into a client's workspace.
+// clientId is passed as the updateAndSync target since a blueprint can be
+// applied to any client, not necessarily the "active" one.
+OL.applyTaskBlueprintToClient = function(blueprintId, clientId) {
+    const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
+    if (!blueprint) return;
+    if (!clientId) { alert('Pick a client first.'); return; }
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        const newTask = OL.buildTaskFromBlueprint(blueprint, client, {});
+        client.projectData.clientTasks.unshift(newTask);
+    }, clientId);
+
+    OL.closeModal();
+    alert(`"${blueprint.title}" applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
+};
+
+OL.openApplyBlueprintModal = function(blueprintId) {
+    const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
+    if (!blueprint) return;
+
+    const clients = Object.values(state.clients || {}).sort((a, b) =>
+        (a.meta?.name || '').localeCompare(b.meta?.name || '')
+    );
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">Apply "${esc(blueprint.title)}" to a Client</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <label class="modal-section-label">Client</label>
+            <select id="apply-bp-client" class="modal-input">
+                <option value="">Select a client...</option>
+                ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
+            </select>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.applyTaskBlueprintToClient('${blueprintId}', document.getElementById('apply-bp-client').value)">Apply</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+

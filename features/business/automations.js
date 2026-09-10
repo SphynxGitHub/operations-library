@@ -67,12 +67,34 @@ OL.runAutomationRules = function(triggerType, ctx) {
 
 OL.executeAutomationAction = function(rule, ctx) {
     const action = rule.action || {};
-    if (action.type !== 'create_task') return;
-
     const client = ctx.client;
     if (!client) return;
     if (!client.projectData) client.projectData = {};
     if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+    if (action.type === 'apply_blueprint') {
+        const blueprint = (state.master.taskBlueprints || []).find(b => b.id === action.blueprintId);
+        if (!blueprint) {
+            console.warn(`🤖 Automation "${rule.name}" references a blueprint that no longer exists.`);
+            return;
+        }
+        if (typeof OL.buildTaskFromBlueprint !== 'function') return;
+
+        const newTask = OL.buildTaskFromBlueprint(blueprint, client, {
+            resourceName: ctx.resourceName,
+            title: ctx.title,
+            asSubtask: action.asSubtask,
+            task: ctx.task,
+            dueInDaysOverride: (action.dueInDays === undefined || action.dueInDays === null || action.dueInDays === '') ? undefined : action.dueInDays,
+            automationRuleId: rule.id
+        });
+
+        client.projectData.clientTasks.unshift(newTask);
+        console.log(`🤖 Automation "${rule.name}" applied blueprint "${blueprint.title}" for ${client.meta?.name || client.id}`);
+        return;
+    }
+
+    if (action.type !== 'create_task') return;
 
     const fill = (str) => String(str || '')
         .replace(/\{resourceName\}/g, ctx.resourceName || '')
@@ -141,7 +163,9 @@ OL.renderAutomationBuilder = function() {
                         <div class="tiny muted" style="margin-top:4px;">
                             When <b>${rule.trigger === 'scoping_status_change' ? 'a scoping item changes' : 'a task status changes'}</b>
                             ${(rule.conditions || []).length ? ' and ' + rule.conditions.map(c => `<code>${esc(c.field)} ${c.op === 'not_equals' ? '≠' : '='} ${esc(c.value)}</code>`).join(' and ') : ''}
-                            → create task <code>${esc(rule.action?.titleTemplate || '')}</code>
+                            → ${rule.action?.type === 'apply_blueprint'
+                                ? `apply blueprint <code>${esc((state.master.taskBlueprints || []).find(b => b.id === rule.action.blueprintId)?.title || '(deleted blueprint)')}</code>`
+                                : `create task <code>${esc(rule.action?.titleTemplate || '')}</code>`}
                             ${rule.action?.asSubtask ? ' <span class="tiny">(as sub-task)</span>' : ''}
                         </div>
                     </div>
@@ -203,24 +227,42 @@ OL.openAutomationRuleModal = function(ruleId) {
             </div>
             <button type="button" class="btn tiny soft" onclick="OL.addAutomationConditionRow()">+ Add Condition</button>
 
-            <label class="modal-section-label" style="margin-top:16px;">Action: Create Task</label>
+            <label class="modal-section-label" style="margin-top:16px;">Action</label>
             <div class="card-section">
-                <label class="tiny muted uppercase bold">Title (use {resourceName}, {taskTitle}, {clientName})</label>
-                <input type="text" id="auto-action-title" class="modal-input tiny" value="${esc(action.titleTemplate || '')}" placeholder="Implementation: {resourceName}" style="margin-bottom:8px;">
+                <label class="tiny muted uppercase bold">Action Type</label>
+                <select id="auto-action-type" class="modal-input tiny" style="margin-bottom:10px;" onchange="OL.refreshAutomationActionFields()">
+                    <option value="create_task" ${action.type !== 'apply_blueprint' ? 'selected' : ''}>Create a freeform task</option>
+                    <option value="apply_blueprint" ${action.type === 'apply_blueprint' ? 'selected' : ''}>Apply a Master Task blueprint</option>
+                </select>
 
-                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
-                    <div>
-                        <label class="tiny muted uppercase bold">Assignee</label>
-                        <input type="text" id="auto-action-assignee" class="modal-input tiny" value="${esc(action.assignee || 'Sphynx Task')}" placeholder="Sphynx Task">
+                <div id="auto-action-freeform" style="${action.type === 'apply_blueprint' ? 'display:none;' : ''}">
+                    <label class="tiny muted uppercase bold">Title (use {resourceName}, {taskTitle}, {clientName})</label>
+                    <input type="text" id="auto-action-title" class="modal-input tiny" value="${esc(action.titleTemplate || '')}" placeholder="Implementation: {resourceName}" style="margin-bottom:8px;">
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
+                        <div>
+                            <label class="tiny muted uppercase bold">Assignee</label>
+                            <input type="text" id="auto-action-assignee" class="modal-input tiny" value="${esc(action.assignee || 'Sphynx Task')}" placeholder="Sphynx Task">
+                        </div>
+                        <div>
+                            <label class="tiny muted uppercase bold">Status</label>
+                            <input type="text" id="auto-action-status" class="modal-input tiny" value="${esc(action.status || 'Pending Sphynx Action')}" placeholder="Pending Sphynx Action">
+                        </div>
+                        <div>
+                            <label class="tiny muted uppercase bold">Due In (days)</label>
+                            <input type="number" id="auto-action-due" class="modal-input tiny" value="${esc(action.dueInDays ?? '')}" placeholder="e.g. 3">
+                        </div>
                     </div>
-                    <div>
-                        <label class="tiny muted uppercase bold">Status</label>
-                        <input type="text" id="auto-action-status" class="modal-input tiny" value="${esc(action.status || 'Pending Sphynx Action')}" placeholder="Pending Sphynx Action">
-                    </div>
-                    <div>
-                        <label class="tiny muted uppercase bold">Due In (days)</label>
-                        <input type="number" id="auto-action-due" class="modal-input tiny" value="${esc(action.dueInDays ?? '')}" placeholder="e.g. 3">
-                    </div>
+                </div>
+
+                <div id="auto-action-blueprint" style="${action.type === 'apply_blueprint' ? '' : 'display:none;'}">
+                    <label class="tiny muted uppercase bold">Blueprint</label>
+                    <select id="auto-action-blueprint-id" class="modal-input tiny" style="margin-bottom:8px;">
+                        <option value="">Select a Master Task blueprint...</option>
+                        ${(state.master.taskBlueprints || []).map(bp => `<option value="${bp.id}" ${action.blueprintId === bp.id ? 'selected' : ''}>${esc(bp.title)}</option>`).join('')}
+                    </select>
+                    <label class="tiny muted uppercase bold">Due In (days) — leave blank to use the blueprint's own default</label>
+                    <input type="number" id="auto-action-blueprint-due" class="modal-input tiny" value="${esc(action.type === 'apply_blueprint' ? (action.dueInDays ?? '') : '')}" placeholder="optional override">
                 </div>
 
                 <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-top:10px; cursor:pointer;">
@@ -273,6 +315,14 @@ OL.refreshAutomationConditionFields = function() {
     });
 };
 
+OL.refreshAutomationActionFields = function() {
+    const type = document.getElementById('auto-action-type')?.value || 'create_task';
+    const freeformEl = document.getElementById('auto-action-freeform');
+    const blueprintEl = document.getElementById('auto-action-blueprint');
+    if (freeformEl) freeformEl.style.display = type === 'apply_blueprint' ? 'none' : '';
+    if (blueprintEl) blueprintEl.style.display = type === 'apply_blueprint' ? '' : 'none';
+};
+
 OL.saveAutomationRule = function(ruleId) {
     const name = document.getElementById('auto-rule-name')?.value?.trim();
     const trigger = document.getElementById('auto-rule-trigger')?.value || 'task_status_change';
@@ -286,14 +336,30 @@ OL.saveAutomationRule = function(ruleId) {
         value: row.querySelector('.cond-value')?.value || ''
     })).filter(c => c.field);
 
-    const action = {
-        type: 'create_task',
-        titleTemplate: document.getElementById('auto-action-title')?.value || '',
-        assignee: document.getElementById('auto-action-assignee')?.value || 'Sphynx Task',
-        status: document.getElementById('auto-action-status')?.value || 'Pending Sphynx Action',
-        dueInDays: document.getElementById('auto-action-due')?.value === '' ? null : Number(document.getElementById('auto-action-due')?.value),
-        asSubtask: !!document.getElementById('auto-action-subtask')?.checked
-    };
+    const actionType = document.getElementById('auto-action-type')?.value || 'create_task';
+    const asSubtask = !!document.getElementById('auto-action-subtask')?.checked;
+
+    let action;
+    if (actionType === 'apply_blueprint') {
+        const blueprintId = document.getElementById('auto-action-blueprint-id')?.value || '';
+        if (!blueprintId) { alert('Pick a Master Task blueprint for this action.'); return; }
+        const dueRaw = document.getElementById('auto-action-blueprint-due')?.value;
+        action = {
+            type: 'apply_blueprint',
+            blueprintId,
+            dueInDays: dueRaw === '' || dueRaw === undefined ? null : Number(dueRaw),
+            asSubtask
+        };
+    } else {
+        action = {
+            type: 'create_task',
+            titleTemplate: document.getElementById('auto-action-title')?.value || '',
+            assignee: document.getElementById('auto-action-assignee')?.value || 'Sphynx Task',
+            status: document.getElementById('auto-action-status')?.value || 'Pending Sphynx Action',
+            dueInDays: document.getElementById('auto-action-due')?.value === '' ? null : Number(document.getElementById('auto-action-due')?.value),
+            asSubtask
+        };
+    }
 
     updateAndSync(() => {
         if (!state.master.automationRules) state.master.automationRules = [];
