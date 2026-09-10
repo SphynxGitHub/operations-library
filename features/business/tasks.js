@@ -405,6 +405,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
     const isGenericSphynx = t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx';
     const isGenericClient = t.assignee === 'Client Task' || t.assignee === 'Client';
+    const isSphynxTeamMember = (state.master?.sphynxTeam || []).some(m => m.name === t.assignee);
     const isNamedPerson = !isGenericSphynx && !isGenericClient && !is3rdParty;
 
     const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
@@ -420,8 +421,8 @@ OL.renderTaskRowHTML = function(t, todayStr) {
     let avatarContent = '';
 
     if (is3rdParty) {
-        avatarBg = 'rgba(168, 85, 247, 0.15)';
-        avatarColor = '#a855f7';
+        avatarBg = 'rgba(234, 179, 8, 0.15)';
+        avatarColor = '#eab308';
         avatarContent = `<i data-lucide="wrench" style="width:12px;height:12px; pointer-events:none;"></i>`;
     } else if (isGenericSphynx) {
         avatarBg = 'rgba(56, 189, 248, 0.15)';
@@ -431,6 +432,15 @@ OL.renderTaskRowHTML = function(t, todayStr) {
         avatarBg = 'rgba(236, 72, 153, 0.15)';
         avatarColor = '#ec4899';
         avatarContent = `<i data-lucide="user" style="width:12px;height:12px; pointer-events:none;"></i>`;
+    } else if (isNamedPerson && isSphynxTeamMember) {
+        avatarBg = '#2dd4bf';
+        avatarColor = '#ffffff';
+        const nameParts = (t.assignee || 'SP').trim().split(' ');
+        if (nameParts.length >= 2) {
+            avatarContent = `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
+        } else {
+            avatarContent = nameParts[0].substring(0, 2).toUpperCase();
+        }
     } else if (isNamedPerson) {
         avatarBg = '#ec4899';
         avatarColor = '#ffffff';
