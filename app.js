@@ -328,70 +328,77 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
             </div>
         </div>
 
-        ${isMaster ? `
-            <div class="client-nav-zone admin-workspace">
-                <div class="menu-category-label">Global Administration</div>
-              
-                <nav class="menu">
-                    ${masterTabs.map(item => `
-                        <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
+        // SIDEBAR MENU CONTROLS
+        
+        ${showHome ? `
+        <div class="admin-nav-zone">
+            <nav class="menu">
+                <a href="javascript:void(0)" 
+                    onclick="${homeAction}" 
+                    class="${(hash === '#/' || hash === '#/partner-dashboard') ? 'active' : ''}"
+                    style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
+                    <i data-lucide="home" style="width:16px;height:16px;"></i> 
+                    <span>${homeLabel.toUpperCase()}</span>
+                </a>
+            </nav>
+        </div>
+        <div class="divider"></div>
+    ` : ''}
+    
+    ${(isAdmin || effectiveAdminMode) && !client ? `
+        <!-- 🏛️ 1. SHOW MASTER MENU WHEN ON GLOBAL DASHBOARD / REGISTRY -->
+        <div class="client-nav-zone admin-workspace">
+            <div class="menu-category-label">Global Administration</div>
+            <nav class="menu">
+                ${masterTabs.map(item => `
+                    <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                        <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                        <span class="menu-item">${item.label}</span>
+                    </a>
+                `).join('')}
+            </nav>
+        </div>
+    ` : client ? `
+        <!-- 📁 2. SHOW CLIENT MENU ONLY WHEN INSIDE A CLIENT PROJECT -->
+        <div class="client-nav-zone">
+            <div class="menu-category-label">Project Workspace</div>
+            <div class="client-profile-trigger" 
+                ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
+                <div class="client-info">
+                    <div class="client-name">${esc(client.meta.name)}</div>
+                    <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                </div>
+            </div>
+    
+            ${isAdmin && isPartnerProject ? `
+                <button class="btn tiny primary" 
+                        style="margin: 10px; width: calc(100% - 20px); background: #fbbf24; color: black; font-weight: bold; border: none;"
+                        onclick="window.location.hash='#/partner-dashboard'">
+                    👁️ VIEW AS PORTFOLIO
+                </button>
+            ` : ''}
+            ${themeSection}
+            <nav class="menu">
+                ${clientTabs.map(item => {
+                    const perm = OL.checkPermission(item.key);
+                    if (perm === 'none') return '';
+                    const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
+                    if (!isModuleEnabled) return ''; 
+                    const isActive = hash.startsWith(item.href);
+                    return `
+                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
                             <span class="menu-item">${item.label}</span>
+                            ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                         </a>
-                    `).join('')}
-                </nav>
-                <div style="padding:8px 8px 4px;display:flex;flex-direction:column;gap:4px;">
-                    <button class="btn tiny soft" style="width:100%;justify-content:flex-start;gap:6px;"
-                            onclick="OL.exportMasterBackup()">
-                        ${OL.getLucideSVG('download',12,'currentColor')} Export Backup
-                    </button>
-                    <label class="btn tiny soft" style="width:100%;justify-content:flex-start;gap:6px;cursor:pointer;">
-                        ${OL.getLucideSVG('upload',12,'currentColor')} Import Backup
-                        <input type="file" accept=".json" style="display:none;"
-                               onchange="OL.importMasterBackup(event)">
-                    </label>
-                </div>
-            </div>
-        ` : client ? `
-            <div class="client-nav-zone">
-                <div class="menu-category-label">Project Workspace</div>
-                <div class="client-profile-trigger" 
-                    ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                    <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
-                    <div class="client-info">
-                        <div class="client-name">${esc(client.meta.name)}</div>
-                        <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
-                    </div>
-                </div>
-
-                ${isAdmin && isPartnerProject ? `
-                    <button class="btn tiny primary" 
-                            style="margin: 10px; width: calc(100% - 20px); background: #fbbf24; color: black; font-weight: bold; border: none;"
-                            onclick="window.location.hash='#/partner-dashboard'">
-                        👁️ VIEW AS PORTFOLIO
-                    </button>
-                ` : ''}
-                ${themeSection}
-                <nav class="menu">
-                    ${clientTabs.map(item => {
-                        const perm = OL.checkPermission(item.key);
-                        if (perm === 'none') return '';
-                        const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                        if (!isModuleEnabled) return ''; 
-                        const isActive = hash.startsWith(item.href);
-                        return `
-                            <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                                <span class="menu-item">${item.label}</span>
-                                ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
-                            </a>
-                        `;
-                    }).join('')}
-                </nav>
-            </div>
-        ` : `
-            <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>
-        `}
+                    `;
+                }).join('')}
+            </nav>
+        </div>
+    ` : `
+        <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>
+    `}
   `;
 
     // 3. 🏗️ HARDENED SHELL LOGIC
