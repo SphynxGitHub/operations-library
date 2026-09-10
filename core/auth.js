@@ -6,6 +6,14 @@
 
 import { db, state, persist } from './data.js';
 
+// ---- FORCE_ADMIN: computed once on load, same as the original ----
+// Restored here after being lost in the core/data.js extraction — this
+// is read in 8 places across app.js (buildLayout and several tab-render
+// functions) to decide whether to show admin UI.
+const _params = new URLSearchParams(window.location.search);
+const _isFiddle = window.location.hostname.includes('jsfiddle.net') || window.location.hostname.includes('fiddle.jshell.net');
+window.FORCE_ADMIN = _params.get('admin') === 'pizza123' || _isFiddle;
+
 // ---- initializeSecurityContext: gate the whole app on load ----
 // Now async — the load listener that calls this in app.js needs
 // `await OL.initializeSecurityContext()`.
