@@ -368,6 +368,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         <div style="margin-bottom: 24px;">
             <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
+                    ${OL.renderGroupSelectCheckbox(tasks)}
                     <i data-lucide="folder" style="width:14px;height:14px;"></i>
                     <span>${esc(groupTitle)}</span>
                     <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} tasks</span>
@@ -394,6 +395,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     ${Object.entries(subGroups).map(([subTitle, subTasks]) => `
                         <div>
                             <div class="tiny muted uppercase bold" style="margin-bottom: 6px; display:flex; align-items:center; gap:6px;">
+                                ${OL.renderGroupSelectCheckbox(subTasks)}
                                 <i data-lucide="corner-down-right" style="width:12px;height:12px;"></i> ${esc(subTitle)} (${subTasks.length})
                             </div>
                             <div style="display: grid; gap: 8px;">
@@ -596,6 +598,38 @@ OL.toggleBulkTaskSelection = function(taskId, clientId) {
 OL.clearBulkTaskSelection = function() {
     OL.bulkTaskSelection = {};
     OL.refreshTaskView();
+};
+
+// Select/deselect every task in a group at once. pairsStr is
+// "taskId:clientId,taskId:clientId,..." (built by renderGroupSelectCheckbox)
+// since a group can span multiple clients (e.g. grouped by status/assignee
+// in the master rollup).
+OL.toggleBulkSelectGroup = function(pairsStr, checked) {
+    pairsStr.split(',').filter(Boolean).forEach(pair => {
+        const [taskId, clientId] = pair.split(':');
+        if (checked) {
+            OL.bulkTaskSelection[taskId] = clientId;
+        } else {
+            delete OL.bulkTaskSelection[taskId];
+        }
+    });
+    OL.refreshTaskView();
+};
+
+// Renders the "select all in this group" checkbox for a group header.
+// Checked when every task in the group is currently selected.
+OL.renderGroupSelectCheckbox = function(tasks) {
+    if (!tasks || tasks.length === 0) return '';
+    const pairs = tasks.map(t => `${t.id}:${t.clientId}`).join(',');
+    const allSelected = tasks.every(t => OL.bulkTaskSelection[t.id]);
+    return `
+        <input type="checkbox"
+               title="Select all in this group"
+               onclick="event.stopPropagation();"
+               onchange="OL.toggleBulkSelectGroup('${pairs}', this.checked)"
+               ${allSelected ? 'checked' : ''}
+               style="width:13px;height:13px;cursor:pointer;">
+    `;
 };
 
 // Renders the sticky bulk-action bar. Returns '' (renders nothing) when
