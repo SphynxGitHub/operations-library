@@ -1,4 +1,4 @@
-import { esc, uid, state, updateAndSync, loadFullClient, switchClient } from '../../core/data.js';
+import { esc, uid, state, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -83,7 +83,7 @@ OL.renderBusinessTaskManager = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    const clients = Object.values(state.clients || {});
+    const clients = getBusinessScopedClients();
     
     // Aggregate tasks from all clients
     let masterTasks = clients.flatMap(c => 
@@ -605,6 +605,14 @@ OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
             <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Client Task'); OL.closePopoverDropdown();">
                 <i data-lucide="user" style="width:12px;height:12px;color:#ec4899;"></i> Client Task
             </button>
+            ${(state.master?.sphynxTeam || []).length > 0 ? `
+                <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Sphynx Team</div>
+                ${state.master.sphynxTeam.map(m => `
+                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}'); OL.closePopoverDropdown();">
+                        <i data-lucide="shield-check" style="width:12px;height:12px;color:var(--accent);"></i> ${esc(m.name)}
+                    </button>
+                `).join('')}
+            ` : ''}
             ${teamOptions.length > 0 ? `
                 <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Client Team</div>
                 ${teamOptions.map(m => `
@@ -656,6 +664,19 @@ OL.openTaskTimerDropdown = function(event, clientId, taskId) {
 
 // ================= DATA MUTATION & AUTO-RE-RENDER HANDLERS ================= //
 
+// This shared task row (OL.renderTaskRowHTML) is used by both the master/global
+// Business Manager task list AND the per-client workspace task list. Mutation
+// handlers below must refresh whichever one is actually on screen, not always
+// force-navigate back to the master rollup.
+OL.refreshTaskView = function() {
+    const hash = window.location.hash || '';
+    if (hash.includes('client-tasks') && typeof window.renderClientTaskManager === 'function') {
+        window.renderClientTaskManager();
+    } else if (typeof OL.renderBusinessTaskManager === 'function') {
+        OL.renderBusinessTaskManager();
+    }
+};
+
 OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
     updateAndSync(() => {
         const client = state.clients[clientId];
@@ -666,7 +687,7 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
             task.dueDate = newDueDate;
         }
     });
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 // 🚦 Persist Status Change to Supabase State
@@ -697,7 +718,7 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
     });
 
     // Re-render immediately to reflect state
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 // 👥 Persist Assignee Change to Supabase State
@@ -729,7 +750,7 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
     });
 
     // Re-render immediately to reflect state
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 OL.logTaskHours = function(clientId, taskId, additionalHours) {
@@ -744,7 +765,7 @@ OL.logTaskHours = function(clientId, taskId, additionalHours) {
             task.hoursLogged = task.loggedHours;
         }
     });
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 OL.toggleLiveTaskTimer = function(clientId, taskId) {
@@ -772,7 +793,7 @@ OL.toggleLiveTaskTimer = function(clientId, taskId) {
         }
     }, 1000);
 
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 OL.stopLiveTaskTimer = function() {
@@ -794,7 +815,7 @@ OL.stopLiveTaskTimer = function() {
         elapsedSeconds: 0
     };
 
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 OL.formatSecondsDisplay = function(totalSeconds) {
@@ -1030,7 +1051,7 @@ OL.saveTaskTimeEdit = function(clientId, taskId) {
     });
 
     if (typeof OL.closeModal === 'function') OL.closeModal();
-    OL.renderBusinessTaskManager();
+    OL.refreshTaskView();
 };
 
 OL.createGlobalQuickTask = function() {
