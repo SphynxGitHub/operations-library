@@ -686,7 +686,7 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
         if (task) {
             task.dueDate = newDueDate;
         }
-    });
+    }, clientId);
     OL.refreshTaskView();
 };
 
@@ -715,7 +715,7 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
         } else {
             console.error("❌ Task not found in client workspace:", taskId);
         }
-    });
+    }, clientId);
 
     // Re-render immediately to reflect state
     OL.refreshTaskView();
@@ -747,7 +747,7 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         } else {
             console.error("❌ Task not found in client workspace:", taskId);
         }
-    });
+    }, clientId);
 
     // Re-render immediately to reflect state
     OL.refreshTaskView();
@@ -764,7 +764,7 @@ OL.logTaskHours = function(clientId, taskId, additionalHours) {
             task.loggedHours = current + Number(additionalHours);
             task.hoursLogged = task.loggedHours;
         }
-    });
+    }, clientId);
     OL.refreshTaskView();
 };
 
@@ -1048,7 +1048,7 @@ OL.saveTaskTimeEdit = function(clientId, taskId) {
             task.hoursLogged = hoursVal;
             task.timeAuditNote = noteVal || '';
         }
-    });
+    }, clientId);
 
     if (typeof OL.closeModal === 'function') OL.closeModal();
     OL.refreshTaskView();
@@ -1086,7 +1086,7 @@ OL.createGlobalQuickTask = function() {
         };
 
         client.projectData.clientTasks.unshift(newTask);
-    });
+    }, clientId);
 
     const inputTitle = document.getElementById('quick-task-title');
     if (inputTitle) inputTitle.value = '';
