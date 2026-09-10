@@ -408,6 +408,7 @@ window.buildLayout = function () {
   { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
   { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
   { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
+    { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" },
 ];
 
 const clientTabs = [
@@ -665,6 +666,7 @@ window.handleRoute = function () {
         else if (hash.includes("/data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
+        else if (hash.includes("/client-access")) OL.renderClientAccessList();
         return;
     }
 
