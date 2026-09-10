@@ -10,6 +10,49 @@ OL.getScopingDataForResource = function(resId) {
     return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
 };
 
+window.addEventListener("load", async () => {
+    // 1. Security Check FIRST
+    const allowed = await OL.initializeSecurityContext();
+    if (!allowed) return;
+
+    // 2. Admin Verification
+    if (window.location.search.includes('admin=pizza123')) {
+        state.adminMode = true;
+    }
+
+    // 3. Recall Client
+    const savedClientId = sessionStorage.getItem('lastActiveClientId');
+    if (savedClientId) state.activeClientId = savedClientId;
+
+    // 4. Recall Visualizer depth
+    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+
+    const currentHash = location.hash;
+    const isDashboard = currentHash === "" || currentHash === "#/";
+    const isVisualizer = currentHash.includes('visualizer');
+
+    if ((state.focusedWorkflowId || state.focusedResourceId) &&
+        (isDashboard || isVisualizer) &&
+        !currentHash.includes('scoping')) {
+        console.log("♻️ Resuming Flow Map depth");
+        const isVault = currentHash.includes('vault');
+        location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+    }
+
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+    const mainEl = document.getElementById('mainContent');
+    if (mainEl) {
+        mainEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
+                <div class="fv-spinner"></div>
+                <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
+            </div>`;
+    }
+
+    OL.sync();
+});
+
 //START DELETE
 /* //======================= GENERAL SECTION =======================//
 
