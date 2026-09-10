@@ -54,6 +54,17 @@ window.addEventListener("load", async () => {
     OL.sync();
 });
 
+OL.goToDashboard = function(hash) {
+    state.activeClientId = null;
+    sessionStorage.removeItem('lastActiveClientId');
+    const params = new URLSearchParams(window.location.search);
+    params.delete('client');
+    const newSearch = params.toString();
+    window.history.pushState({}, '', `${window.location.pathname}${newSearch ? '?' + newSearch : ''}${hash}`);
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+    if (typeof window.handleRoute === 'function') window.handleRoute();
+};
+
 //START DELETE
 /* //======================= GENERAL SECTION =======================//
 
@@ -785,18 +796,18 @@ window.buildLayout = function () {
 
   if (isAdmin) {
     homeLabel = "Global Registry";
-    homeAction = `window.location.hash = '#/'`;
+    homeAction = `OL.goToDashboard('#/')`;
 } else if (client && client.meta.status === "Partner") {
     homeLabel = "My Portfolio";
-    homeAction = `window.location.hash='#/partner-dashboard'`;
+    homeAction = `OL.goToDashboard('#/partner-dashboard')`;
 } else if (client && client.meta.partnerOwner) {
     if (!window.IS_GUEST) {
         homeLabel = "Partner Home";
-        homeAction = `window.location.hash='#/partner-dashboard'`;
+        homeAction = `OL.goToDashboard('#/partner-dashboard')`;
     } else {
         homeLabel = "My Portfolio";
-        homeAction = `state.activeClientId=null; sessionStorage.removeItem('lastActiveClientId'); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
-    }
+        homeAction = `OL.goToDashboard('#/partner-dashboard')`;
+        }
 } else if (isPublic) {
     showHome = false;
 }
