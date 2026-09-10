@@ -68,6 +68,22 @@ OL.globalTaskFilterState = {
     groupBy: 'client' // 'client' | 'status' | 'assignee'
 };
 
+// ⏱️ LIVE STOPWATCH STATE TRACKER
+OL.activeTaskTimer = {
+    clientId: null,
+    taskId: null,
+    startTime: null,
+    intervalId: null,
+    elapsedSeconds: 0
+};
+
+// Helper: Resolve team members for a given client ID
+OL.getClientTeamOptions = function(clientId) {
+    const client = state.clients[clientId];
+    const teamMembers = client?.projectData?.team || client?.projectData?.teamMembers || [];
+    return teamMembers.map(m => typeof m === 'string' ? { id: m, name: m } : { id: m.id || m.name, name: m.name || m.email || 'Team Member' });
+};
+
 OL.renderBusinessTaskManager = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
@@ -76,29 +92,79 @@ OL.renderBusinessTaskManager = function() {
     
     // Aggregate tasks from all clients
     let masterTasks = clients.flatMap(c => 
-        (c.projectData?.clientTasks || []).map(t => ({
-            ...t,
-            clientName: c.meta?.name || 'Unknown Client',
-            clientId: c.id,
-            assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client' : 'Sphynx')
-        }))
+        (c.projectData?.clientTasks || []).map(t => {
+            const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
+            return {
+                ...t,
+                clientName: c.meta?.name || 'Unknown Client',
+                clientId: c.id,
+                teamMembers: teamMembers,
+                assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
+                loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
+            };
+        })
     );
+
+    const totalLoggedHours = masterTasks.reduce((acc, t) => acc + t.loggedHours, 0);
 
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>📋 Cross-Project Task Manager</h2>
-                <div class="small muted">Consolidated view of deliverables across all client workspaces</div>
+                <h2><i data-lucide="check-square" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Cross-Project Task Manager</h2>
+                <div class="small muted">Consolidated deliverables, team assignments, and live time tracking across all clients</div>
             </div>
-            <div class="header-actions">
-                <button class="btn small soft" onclick="OL.renderBusinessTaskManager()">🔄 Refresh</button>
+            <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Total Hours Logged: ${totalLoggedHours.toFixed(1)}h
+                </div>
+                <button class="btn small soft" onclick="OL.renderBusinessTaskManager()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
+                </button>
             </div>
+        </div>
+
+        <!-- ⚡ QUICK TASK CREATION BAR -->
+        <div class="card" style="padding: 16px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.04); border: 1px solid var(--accent);">
+            <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+                <i data-lucide="zap" style="width:14px;height:14px;"></i> Quick Task Creator
+            </div>
+            <form onsubmit="event.preventDefault(); OL.createGlobalQuickTask();" style="display: grid; grid-template-columns: 180px 2fr 160px 120px 110px; gap: 10px; align-items: center;">
+                
+                <!-- Client Select -->
+                <select id="quick-task-client" class="modal-input tiny" required onchange="OL.updateQuickTaskTeamDropdown(this.value)">
+                    <option value="" disabled selected>Select Client...</option>
+                    ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
+                </select>
+
+                <!-- Task Title -->
+                <input type="text" id="quick-task-title" class="modal-input tiny" placeholder="Task title or deliverable description..." required>
+
+                <!-- Dynamic Assignee Dropdown -->
+                <select id="quick-task-assignee" class="modal-input tiny">
+                    <option value="Sphynx Task" selected>⚡ Sphynx Task</option>
+                    <option value="Client Task">👤 Client Task</option>
+                </select>
+
+                <!-- Status -->
+                <select id="quick-task-status" class="modal-input tiny">
+                    <option value="Pending" selected>Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Review">Review</option>
+                    <option value="Done">Done</option>
+                </select>
+
+                <!-- Submit Button -->
+                <button type="submit" class="btn tiny primary" style="height: 100%; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;">
+                    <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Task
+                </button>
+            </form>
         </div>
 
         <div class="card" style="padding: 20px;">
             <!-- FILTER & GROUPING CONTROLS -->
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
-                <div style="display: flex; gap: 8px; flex: 1; min-width: 260px;">
+                <div style="display: flex; gap: 8px; flex: 1; min-width: 260px; align-items:center;">
+                    <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
                     <input type="text" 
                            class="modal-input tiny" 
                            placeholder="Search tasks, clients, or assignees..." 
@@ -110,7 +176,7 @@ OL.renderBusinessTaskManager = function() {
                     <span class="tiny muted bold uppercase">Assignee:</span>
                     <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'All' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'All')">All</button>
                     <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'Sphynx' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'Sphynx')">⚡ Sphynx</button>
-                    <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'Client' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'Client')">👤 Client</button>
+                    <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'Client' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'Client')">👤 Client / Team</button>
                 </div>
 
                 <div style="display: flex; gap: 8px; align-items: center;">
@@ -118,7 +184,7 @@ OL.renderBusinessTaskManager = function() {
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
                         <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
                         <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
-                        <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee (Party)</option>
+                        <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee / Member</option>
                     </select>
                 </div>
             </div>
@@ -142,6 +208,27 @@ OL.renderBusinessTaskManager = function() {
     if (window.lucide) lucide.createIcons();
 };
 
+// Update Quick Task Assignee dropdown when client selection changes
+OL.updateQuickTaskTeamDropdown = function(clientId) {
+    const assigneeSelect = document.getElementById('quick-task-assignee');
+    if (!assigneeSelect) return;
+
+    const teamOptions = OL.getClientTeamOptions(clientId);
+    
+    let html = `<option value="Sphynx Task" selected>⚡ Sphynx Task</option>`;
+    if (teamOptions.length > 0) {
+        html += `<optgroup label="Client Team Members">`;
+        teamOptions.forEach(m => {
+            html += `<option value="${esc(m.name)}">👤 ${esc(m.name)}</option>`;
+        });
+        html += `</optgroup>`;
+    } else {
+        html += `<option value="Client Task">👤 Client Task</option>`;
+    }
+
+    assigneeSelect.innerHTML = html;
+};
+
 // Filter & Grouping Engine
 OL.setGlobalTaskFilter = function(key, val) {
     OL.globalTaskFilterState[key] = val;
@@ -151,15 +238,15 @@ OL.setGlobalTaskFilter = function(key, val) {
 OL.renderFilteredTaskGroups = function(allTasks) {
     const { query, status, assignee, groupBy } = OL.globalTaskFilterState;
 
-    // Apply Filter Pipeline
+    // Filter Pipeline
     let filtered = allTasks.filter(t => {
         const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
         const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
         const statusMatch = status === 'All' || (t.status || 'Pending') === status;
         
         let assigneeMatch = true;
-        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx' || !t.isClientTask;
-        if (assignee === 'Client') assigneeMatch = t.assignee === 'Client' || t.isClientTask;
+        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || !t.isClientTask;
+        if (assignee === 'Client') assigneeMatch = t.assignee !== 'Sphynx Task' || t.isClientTask;
 
         return (titleMatch || clientMatch) && statusMatch && assigneeMatch;
     });
@@ -174,23 +261,37 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         let groupKey = 'Other';
         if (groupBy === 'client') groupKey = task.clientName;
         else if (groupBy === 'status') groupKey = task.status || 'Pending';
-        else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx';
+        else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
 
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
     });
 
     // Render HTML Output by Group
-    return Object.entries(groups).map(([groupTitle, tasks]) => `
+    return Object.entries(groups).map(([groupTitle, tasks]) => {
+        const groupHours = tasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
+
+        return `
         <div style="margin-bottom: 24px;">
-            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                <span>${esc(groupTitle)}</span>
-                <span class="pill tiny soft" style="font-size: 10px;">${tasks.length}</span>
+            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="folder" style="width:14px;height:14px;"></i>
+                    <span>${esc(groupTitle)}</span>
+                    <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} tasks</span>
+                </div>
+                <div class="tiny muted monospace" style="font-weight: normal; display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Time: <strong style="color:var(--accent);">${groupHours.toFixed(1)}h</strong>
+                </div>
             </div>
             
             <div style="display: grid; gap: 8px;">
-                ${tasks.map(t => `
-                    <div style="display:grid; grid-template-columns: 2fr 140px 130px 110px 110px; gap: 12px; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center;">
+                ${tasks.map(t => {
+                    const teamOptions = OL.getClientTeamOptions(t.clientId);
+                    const isClientAssigned = t.assignee !== 'Sphynx Task';
+                    const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
+
+                    return `
+                    <div style="display:grid; grid-template-columns: 2fr 160px 130px 240px 90px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center;">
                         
                         <!-- Task Title & Meta -->
                         <div>
@@ -201,13 +302,21 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </div>
                         </div>
 
-                        <!-- Assignee / Task Type Selector -->
+                        <!-- Dynamic Team / Assignee Dropdown -->
                         <div>
                             <select class="modal-input tiny" 
-                                    style="width: 100%; border-color: ${t.assignee === 'Client' ? '#fbbf24' : 'var(--line)'};"
+                                    style="width: 100%; border-color: ${isClientAssigned ? '#fbbf24' : 'var(--line)'};"
                                     onchange="OL.updateGlobalTaskAssignee('${t.clientId}', '${t.id}', this.value)">
-                                <option value="Sphynx" ${t.assignee === 'Sphynx' ? 'selected' : ''}>⚡ Sphynx</option>
-                                <option value="Client" ${t.assignee === 'Client' ? 'selected' : ''}>👤 Client Task</option>
+                                <option value="Sphynx Task" ${t.assignee === 'Sphynx Task' ? 'selected' : ''}>⚡ Sphynx Task</option>
+                                ${teamOptions.length > 0 ? `
+                                    <optgroup label="Client Team">
+                                        ${teamOptions.map(m => `
+                                            <option value="${esc(m.name)}" ${t.assignee === m.name ? 'selected' : ''}>👤 ${esc(m.name)}</option>
+                                        `).join('')}
+                                    </optgroup>
+                                ` : `
+                                    <option value="Client Task" ${t.assignee === 'Client Task' || t.assignee === 'Client' ? 'selected' : ''}>👤 Client Task</option>
+                                `}
                             </select>
                         </div>
 
@@ -223,23 +332,144 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </select>
                         </div>
 
-                        <!-- Due Date -->
-                        <div class="tiny monospace muted" style="text-align: center;">
-                            ${t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '—'}
+                        <!-- ⏱️ LIVE TIME TRACKING CONTROLS -->
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <!-- Live Stopwatch Button -->
+                            <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
+                                    id="timer-btn-${t.id}"
+                                    style="font-weight: bold; min-width: 80px; display:inline-flex; align-items:center; justify-content:center; gap:4px;" 
+                                    onclick="OL.toggleLiveTaskTimer('${t.clientId}', '${t.id}')">
+                                <i data-lucide="${isTimerRunning ? 'square' : 'play'}" style="width:11px;height:11px;"></i>
+                                <span id="timer-display-${t.id}">${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : 'Start'}</span>
+                            </button>
+
+                            <span class="tiny monospace bold" style="min-width: 42px; text-align: right; color: var(--accent); margin-right: 2px;">${t.loggedHours.toFixed(1)}h</span>
+                            <button class="btn tiny soft" title="Add 0.5 hours" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
+                            <button class="btn tiny soft" title="Add 1.0 hour" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
+                            <button class="btn tiny soft" title="Custom Hours" onclick="OL.promptCustomHours('${t.clientId}', '${t.id}', ${t.loggedHours})">
+                                <i data-lucide="pencil" style="width:10px;height:10px;"></i>
+                            </button>
                         </div>
 
                         <!-- In-Context Open Task Button -->
                         <div style="text-align: right;">
                             <button class="btn tiny primary" 
+                                    style="display:inline-flex; align-items:center; gap:4px;"
                                     onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
-                                🔍 Details
+                                <i data-lucide="search" style="width:12px;height:12px;"></i> Details
                             </button>
                         </div>
                     </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+};
+
+// ⏱️ LIVE STOPWATCH ENGINE
+OL.toggleLiveTaskTimer = function(clientId, taskId) {
+    const timer = OL.activeTaskTimer;
+
+    // If clicking on an active running timer -> STOP IT
+    if (timer.taskId === taskId) {
+        OL.stopLiveTaskTimer();
+        return;
+    }
+
+    // If another timer is running elsewhere -> Stop that one first
+    if (timer.taskId) {
+        OL.stopLiveTaskTimer();
+    }
+
+    // Start New Timer
+    timer.clientId = clientId;
+    timer.taskId = taskId;
+    timer.startTime = Date.now();
+    timer.elapsedSeconds = 0;
+
+    timer.intervalId = setInterval(() => {
+        timer.elapsedSeconds++;
+        const displayEl = document.getElementById(`timer-display-${taskId}`);
+        if (displayEl) {
+            displayEl.innerText = OL.formatSecondsDisplay(timer.elapsedSeconds);
+        }
+    }, 1000);
+
+    // Re-render to update UI button states
+    OL.renderBusinessTaskManager();
+};
+
+OL.stopLiveTaskTimer = function() {
+    const timer = OL.activeTaskTimer;
+    if (!timer.taskId) return;
+
+    clearInterval(timer.intervalId);
+
+    // Convert elapsed seconds to hours (rounded to 2 decimal places)
+    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
+
+    if (hoursEarned > 0) {
+        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);
+    }
+
+    // Reset Timer State
+    OL.activeTaskTimer = {
+        clientId: null,
+        taskId: null,
+        startTime: null,
+        intervalId: null,
+        elapsedSeconds: 0
+    };
+
+    OL.renderBusinessTaskManager();
+};
+
+OL.formatSecondsDisplay = function(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+// ⚡ Quick Creation Handler
+OL.createGlobalQuickTask = function() {
+    const clientId = document.getElementById('quick-task-client')?.value;
+    const title = document.getElementById('quick-task-title')?.value;
+    const assignee = document.getElementById('quick-task-assignee')?.value || 'Sphynx Task';
+    const status = document.getElementById('quick-task-status')?.value || 'Pending';
+
+    if (!clientId || !title) {
+        alert("Please select a client and provide a task title.");
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        const newTask = {
+            id: uid(),
+            title: title,
+            name: title,
+            status: status,
+            assignee: assignee,
+            isClientTask: (assignee !== 'Sphynx Task'),
+            loggedHours: 0,
+            createdAt: new Date().toISOString()
+        };
+
+        client.projectData.clientTasks.unshift(newTask);
+        console.log(`✅ Quick Task Created for [${clientId}]:`, newTask);
+    });
+
+    const inputTitle = document.getElementById('quick-task-title');
+    if (inputTitle) inputTitle.value = '';
+
+    OL.renderBusinessTaskManager();
 };
 
 // Live Update Handlers
@@ -264,18 +494,56 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         const task = client.projectData.clientTasks.find(t => t.id === taskId);
         if (task) {
             task.assignee = newAssignee;
-            task.isClientTask = (newAssignee === 'Client');
+            task.isClientTask = (newAssignee !== 'Sphynx Task');
             console.log(`✅ Updated Task Assignee [${taskId}]: ${newAssignee}`);
         }
     });
 };
 
-// In-Context Modal Launcher (Does NOT switch client context/route)
+// ⏱️ Time-Tracking Handlers
+OL.logTaskHours = function(clientId, taskId, additionalHours) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            const current = Number(task.loggedHours || task.hoursLogged || 0);
+            task.loggedHours = current + Number(additionalHours);
+            task.hoursLogged = task.loggedHours;
+            console.log(`⏱️ Logged ${additionalHours}h on Task [${taskId}]. Total: ${task.loggedHours}h`);
+        }
+    });
+    OL.renderBusinessTaskManager();
+};
+
+OL.promptCustomHours = function(clientId, taskId, currentHours) {
+    const input = prompt("Set total hours logged for this task:", currentHours);
+    if (input === null) return;
+    const newTotal = parseFloat(input);
+    if (isNaN(newTotal) || newTotal < 0) {
+        alert("Please enter a valid number of hours.");
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            task.loggedHours = newTotal;
+            task.hoursLogged = newTotal;
+            console.log(`⏱️ Set total hours on Task [${taskId}] to: ${newTotal}h`);
+        }
+    });
+    OL.renderBusinessTaskManager();
+};
+
+// In-Context Modal Launcher
 OL.openTaskInContext = async function(clientId, taskId) {
-    // 1. Ensure full client project data is in memory
     await loadFullClient(clientId);
     
-    // 2. Open task modal directly without changing URL hash or triggering full layout rebuild
     if (typeof OL.openTaskModal === 'function') {
         OL.openTaskModal(taskId, false, clientId);
     } else if (typeof window.openTaskModal === 'function') {
