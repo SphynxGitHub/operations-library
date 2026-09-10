@@ -79,8 +79,91 @@ export async function initializeSecurityContext() {
         return true;
     }
 
+    // MIGRATION SAFETY NET: existing clients from before the login-gate
+    // change still have old ?access=token links (emailed, bookmarked,
+    // etc.) and no auth_user_id yet. Keep honoring that token so nobody
+    // gets locked out while you send out setup links via the "Client
+    // Logins" admin screen. Remove this block once every client has
+    // migrated (check via that screen — it flags anyone still on the
+    // legacy path).
+    if (params.get('access')) {
+        state.adminMode = false;
+        window.FORCE_ADMIN = false;
+        window.IS_GUEST = true;
+        console.log("🔗 Legacy access-token guest mode (client hasn't set up real login yet)");
+        return true;
+    }
+
     window.location.href = 'login.html';
     return false;
+}
+
+/*===================== BULK MIGRATION TOOL ==================*/
+
+// Renders a table of every client/partner project with their login-setup
+// status, so you can generate + copy setup links in bulk instead of one
+// at a time through each project's profile modal. Wire into the admin
+// vault as its own tab (see instructions).
+export function renderClientAccessList() {
+    const container = document.getElementById('mainContent');
+    if (!container) return;
+
+    const clients = Object.values(state.clients).sort((a, b) =>
+        (a.meta?.name || '').localeCompare(b.meta?.name || '')
+    );
+
+    const migratedCount = clients.filter(c => c.authUserId).length;
+
+    const rows = clients.map(c => {
+        const isMigrated = !!c.authUserId;
+        const hasPendingLink = c.meta?.setupToken && !c.meta?.setupUsed;
+        return `
+            <tr>
+                <td>${c.meta?.name || c.id}</td>
+                <td><span class="pill tiny soft">${c.meta?.status || ''}</span></td>
+                <td>
+                    ${isMigrated
+                        ? `<span style="color:#48bb78;">✅ Logged in</span>`
+                        : hasPendingLink
+                            ? `<span style="color:#fbbf24;">⏳ Link sent, not claimed</span>`
+                            : `<span style="color:#a0aec0;">— Not started</span>`
+                    }
+                </td>
+                <td>
+                    ${isMigrated ? '' : `
+                        <input type="email" id="setupEmail-${c.id}" class="modal-input tiny"
+                               placeholder="their@email.com" value="${c.meta?.setupEmail || ''}"
+                               style="width:160px;display:inline-block;">
+                        <button class="btn tiny primary" onclick="OL.copySetupLink('${c.id}')">
+                            ${hasPendingLink ? 'Regenerate & Copy' : 'Generate & Copy'}
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="padding:24px;">
+            <h2 style="margin-bottom:4px;">Client Logins</h2>
+            <p class="tiny muted" style="margin-bottom:16px;">
+                ${migratedCount} of ${clients.length} projects have set up real login.
+                Everyone else is still using their old share link as a fallback —
+                generate a setup link for each and send it their way.
+            </p>
+            <table class="modal-input" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="text-align:left; border-bottom:1px solid var(--panel-border);">
+                        <th style="padding:8px;">Project</th>
+                        <th style="padding:8px;">Status</th>
+                        <th style="padding:8px;">Login Setup</th>
+                        <th style="padding:8px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
 }
 
 // ---- checkPermission: per-tab read/write level for the active client ----
@@ -145,7 +228,7 @@ export function copySetupLink(clientId) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     initializeSecurityContext, checkPermission, isAdmin, getAdminQuery,
-    signOut, generateSetupLink, copySetupLink
+    signOut, generateSetupLink, copySetupLink, renderClientAccessList
 });
 
 // Retired in this version — link-token access is gone, and neither was
