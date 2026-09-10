@@ -576,7 +576,7 @@ OL.openTimeReportModal = function(selectedClientId) {
     const targetClientId = selectedClientId || (clients[0]?.id || '');
     
     const content = `
-        <div style="padding: 20px; max-width: 900px; width: 100%;">
+        <div style="padding: 20px; max-width: 900px; width: 100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 12px;">
                 <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
                     <i data-lucide="bar-chart-2" style="width:20px;height:20px;color:var(--accent);"></i>
@@ -604,12 +604,21 @@ OL.openTimeReportModal = function(selectedClientId) {
     if (typeof window.openModal === 'function') {
         window.openModal(content);
         
-        const layer = document.getElementById("modal-layer") || document.getElementById("modal-overlay");
-        if (layer) {
-            layer.onclick = (e) => {
-                if (e.target === layer) OL.closeTimeReportModal();
+        // 🎯 Guarantee Click-Outside Dismissal on all layer targets
+        requestAnimationFrame(() => {
+            const layer = document.getElementById("modal-layer");
+            const overlay = document.getElementById("modal-overlay");
+            
+            const dismissHandler = (e) => {
+                if (e.target === layer || e.target === overlay) {
+                    OL.closeTimeReportModal();
+                }
             };
-        }
+
+            if (layer) layer.onclick = dismissHandler;
+            if (overlay) overlay.onclick = dismissHandler;
+        });
+
         if (window.lucide) lucide.createIcons();
     }
 };
@@ -619,11 +628,13 @@ OL.closeTimeReportModal = function() {
     if (layer) {
         layer.style.display = "none";
         layer.innerHTML = "";
+        layer.onclick = null;
     }
     const overlay = document.getElementById("modal-overlay");
     if (overlay) {
         overlay.style.display = "none";
         overlay.innerHTML = "";
+        overlay.onclick = null;
     }
 };
 
