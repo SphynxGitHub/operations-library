@@ -97,7 +97,7 @@ OL.renderBusinessTaskManager = function() {
             </div>
         </div>
 
-        <!-- QUICK TASK CREATION BAR -->
+        <!-- QUICK TASK CREATOR BAR -->
         <div class="card" style="padding: 16px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.04); border: 1px solid var(--accent);">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
                 <i data-lucide="zap" style="width:14px;height:14px;"></i> Quick Task Creator
@@ -300,7 +300,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </select>
                         </div>
 
-                        <!-- Due Date Badge / Input -->
+                        <!-- Due Date Input -->
                         <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:4px;">
                             <i data-lucide="calendar" style="width:12px;height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'};"></i>
                             <input type="date" 
@@ -374,13 +374,12 @@ OL.navigateToClientProject = function(clientId) {
     else if (typeof OL.switchClient === 'function') OL.switchClient(clientId);
 };
 
-// Hardened Row Click Handler
+// Row Click Handler (Opens task modal in-context)
 OL.handleTaskRowClick = function(event, clientId, taskId) {
-    // Stop if user clicked directly on an interactive input element
     const isInteractive = event.target.closest('select, input, button, .client-link-badge');
     if (isInteractive) return;
 
-    console.log(`🔍 Opening Task Modal in-context: Client [${clientId}], Task [${taskId}]`);
+    console.log(`Open task in-context: Client [${clientId}], Task [${taskId}]`);
     OL.openTaskInContext(clientId, taskId);
 };
 
@@ -402,11 +401,9 @@ OL.openTaskInContext = async function(clientId, taskId) {
             window.openTaskModal(taskId, false, clientId);
         } else if (task) {
             OL.renderFallbackTaskModal(client, task);
-        } else {
-            console.error("❌ Task modal renderer not found and task could not be resolved.");
         }
     } catch (err) {
-        console.error("❌ Error launching in-context task modal:", err);
+        console.error("Error launching task modal:", err);
     }
 };
 
@@ -452,7 +449,6 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
         const task = client.projectData.clientTasks.find(t => t.id === taskId);
         if (task) {
             task.dueDate = newDueDate;
-            console.log(`✅ Updated Task Due Date [${taskId}]: ${newDueDate}`);
         }
     });
 };
@@ -465,7 +461,6 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
         const task = client.projectData.clientTasks.find(t => t.id === taskId);
         if (task) {
             task.status = newStatus;
-            console.log(`✅ Updated Task Status [${taskId}]: ${newStatus}`);
         }
     });
 };
@@ -479,7 +474,6 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         if (task) {
             task.assignee = newAssignee;
             task.isClientTask = (newAssignee !== 'Sphynx Task');
-            console.log(`✅ Updated Task Assignee [${taskId}]: ${newAssignee}`);
         }
     });
 };
@@ -494,7 +488,6 @@ OL.logTaskHours = function(clientId, taskId, additionalHours) {
             const current = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = current + Number(additionalHours);
             task.hoursLogged = task.loggedHours;
-            console.log(`⏱️ Logged ${additionalHours}h on Task [${taskId}]. Total: ${task.loggedHours}h`);
         }
     });
     OL.renderBusinessTaskManager();
@@ -588,7 +581,6 @@ OL.createGlobalQuickTask = function() {
         };
 
         client.projectData.clientTasks.unshift(newTask);
-        console.log(`✅ Quick Task Created for [${clientId}]:`, newTask);
     });
 
     const inputTitle = document.getElementById('quick-task-title');
