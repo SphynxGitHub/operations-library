@@ -54,7 +54,7 @@ export const state = {
     clients: {}
 };
 
-// ---- persist: debounced write of master + every dirty client to Supabase ----
+// ---- persist: debounced write of master + active client to Supabase ----
 export function persist() {
     if (window.IS_GUEST) {
         console.warn("🛡️ Persist skipped: Read-only guest mode.");
@@ -80,7 +80,8 @@ export function persist() {
                 datapoints: masterCopy.datapoints || [],
                 task_blueprints: masterCopy.taskBlueprints || [],
                 how_to_library: masterCopy.howToLibrary || [],
-                analyses: masterCopy.analyses || []
+                analyses: masterCopy.analyses || [],
+                sphynx_team: masterCopy.sphynxTeam || []
             };
 
             const { error: masterErr } = await db
@@ -125,6 +126,7 @@ export function persist() {
 
                 if (clientErr) {
                     console.error(`❌ Client Persist Error [${activeId}]:`, clientErr.message);
+                    // Keep it marked dirty so the next debounced cycle retries it.
                     if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
                     state.dirtyClientIds.add(activeId);
                 }
@@ -161,7 +163,17 @@ export async function sync() {
             if (Array.isArray(masterData.task_blueprints) && masterData.task_blueprints.length > 0) state.master.taskBlueprints = masterData.task_blueprints;
             if (Array.isArray(masterData.how_to_library) && masterData.how_to_library.length > 0) state.master.howToLibrary = masterData.how_to_library;
             if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) state.master.analyses = masterData.analyses;
+            if (Array.isArray(masterData.sphynx_team) && masterData.sphynx_team.length > 0) state.master.sphynxTeam = masterData.sphynx_team;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
+        }
+
+        // Sphynx staff roster: make sure it's populated even if this is the
+        // first load and the Team page hasn't been opened yet this session.
+        if (!state.master.sphynxTeam || state.master.sphynxTeam.length === 0) {
+            state.master.sphynxTeam = [
+                { id: "tm-1", name: "Admin Owner", email: "admin@sphynx.agency", phone: "", role: "Master Admin", signature: "Admin Owner | Sphynx Agency", rate: 300 },
+                { id: "tm-2", name: "Lead Developer", email: "dev@sphynx.agency", phone: "", role: "Developer", signature: "Development Team | Sphynx Agency", rate: 150 }
+            ];
         }
 
         const { data: clientsData, error: clientsErr } = await db
@@ -266,6 +278,11 @@ export async function updateAndSync(mutationFn, targetClientId) {
     state.isSaving = true;
     try {
         await mutationFn();
+        // Most mutations happen against state.activeClientId (the workspace
+        // you're currently inside), which persist() already covers. But some
+        // callers — e.g. the master Task Manager rollup — mutate an arbitrary
+        // client by id while activeClientId is unset or points elsewhere.
+        // Track those explicitly so persist() knows to save them too.
         if (targetClientId) {
             if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
             state.dirtyClientIds.add(targetClientId);
