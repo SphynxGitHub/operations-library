@@ -551,7 +551,7 @@ window.handleRoute = function () {
         else if (hash.includes('/calendar')) OL.renderBusinessCalendar();
         else if (hash.includes('/tasks')) OL.renderBusinessTaskManager();
         else if (hash.includes('/time-reports') && typeof OL.openTimeReportModal === 'function') {
-            OL.openTimeReportModal();
+            OL.renderBusinessTimeReports();
         }
         else if (hash.includes('/financials')) OL.renderBusinessFinancials();
         else if (hash.includes('/clients')) renderClientDashboard(); // Shows current global registry view
