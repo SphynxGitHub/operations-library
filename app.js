@@ -1,6 +1,3 @@
-window.OL = window.OL || {};
-const OL = window.OL = {};
-
 //START DELETE
 /* //======================= GENERAL SECTION =======================//
 
