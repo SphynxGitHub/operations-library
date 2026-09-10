@@ -567,16 +567,16 @@ OL.createPopoverContainer = function(event) {
     return popover;
 };
 
-// 🎯 Status Selection Dropdown
+// 🎯 Status Selection Popover
 OL.openEditTaskStatusQuickDropdown = function(event, clientId, taskId) {
     const popover = OL.createPopoverContainer(event);
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
     const statuses = OL.getSystemStatuses();
 
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Update Status</div>
-        <div style="display:grid; gap:4px;">
+        <div style="display:grid; gap:4px; max-height:260px; overflow-y:auto;">
             ${statuses.map(s => `
                 <button class="btn tiny soft" 
                         style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; justify-content:flex-start; padding:6px 8px; ${task?.status === s.name ? 'border:1px solid var(--accent); background:rgba(var(--accent-rgb),0.1);' : ''}"
@@ -591,7 +591,7 @@ OL.openEditTaskStatusQuickDropdown = function(event, clientId, taskId) {
     if (window.lucide) lucide.createIcons();
 };
 
-// 👥 Assignee Selection Dropdown
+// 👥 Assignee Selection Popover
 OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
     const popover = OL.createPopoverContainer(event);
     const teamOptions = OL.getClientTeamOptions(clientId);
@@ -669,30 +669,66 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
     OL.renderBusinessTaskManager();
 };
 
+// 🚦 Persist Status Change to Supabase State
 OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
+    console.log(`📡 Updating Status for Task [${taskId}] in Client [${clientId}] -> ${newStatus}`);
+
     updateAndSync(() => {
-        const client = state.clients[clientId];
-        if (!client || !client.projectData?.clientTasks) return;
-        
-        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        const client = state.clients?.[clientId];
+        if (!client) {
+            console.error("❌ Client not found in state:", clientId);
+            return;
+        }
+
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        // Flexible ID/Key match (handles both string & number representations)
+        const task = client.projectData.clientTasks.find(t => 
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+
         if (task) {
             task.status = newStatus;
+            console.log(`✅ Status updated successfully for [${taskId}] -> ${newStatus}`);
+        } else {
+            console.error("❌ Task not found in client workspace:", taskId);
         }
     });
+
+    // Re-render immediately to reflect state
     OL.renderBusinessTaskManager();
 };
 
+// 👥 Persist Assignee Change to Supabase State
 OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
+    console.log(`📡 Updating Assignee for Task [${taskId}] in Client [${clientId}] -> ${newAssignee}`);
+
     updateAndSync(() => {
-        const client = state.clients[clientId];
-        if (!client || !client.projectData?.clientTasks) return;
-        
-        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        const client = state.clients?.[clientId];
+        if (!client) {
+            console.error("❌ Client not found in state:", clientId);
+            return;
+        }
+
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        // Flexible ID/Key match
+        const task = client.projectData.clientTasks.find(t => 
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+
         if (task) {
             task.assignee = newAssignee;
-            task.isClientTask = (newAssignee !== 'Sphynx Task' && !OL.thirdPartyAssignees.includes(newAssignee));
+            task.isClientTask = (newAssignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(newAssignee));
+            console.log(`✅ Assignee updated successfully for [${taskId}] -> ${newAssignee}`);
+        } else {
+            console.error("❌ Task not found in client workspace:", taskId);
         }
     });
+
+    // Re-render immediately to reflect state
     OL.renderBusinessTaskManager();
 };
 
