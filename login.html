@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign In — Sphynx Operations</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="sphynx-theme.css">
+</head>
+<body>
+    <div style="max-width:360px;margin:15vh auto;padding:32px;">
+        <h1 style="margin-bottom:24px;">Sign In</h1>
+        <form id="loginForm" style="display:flex;flex-direction:column;gap:14px;">
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                Email
+                <input type="email" id="email" class="modal-input" required autocomplete="username">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                Password
+                <input type="password" id="password" class="modal-input" required autocomplete="current-password">
+            </label>
+            <button type="submit" class="btn primary">Sign In</button>
+            <p id="loginError" style="color:#ef4444;display:none;font-size:13px;"></p>
+        </form>
+    </div>
+    <script type="module" src="login.js"></script>
+</body>
+</html>
