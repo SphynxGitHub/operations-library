@@ -1,5 +1,6 @@
 import * as OLData from './core/data.js';
 import * as OLAuth from './core/auth.js';
+import { esc, val, num, uid } from './core/data.js';
 
 window.isMatrixActive = false;
 
