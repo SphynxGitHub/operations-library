@@ -312,54 +312,56 @@ OL.viewToggleBtn = function(pageKey, refreshFn) {
 };
 
 window.buildLayout = function () {
-  const root = document.getElementById("app-root");
-  if (!root) {
-      console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
-      return; 
-  }
-  const mainEl = document.getElementById('mainContent');
-  if (mainEl && !window.location.hash.includes('visualizer')) {
-      mainEl.style.cssText = '';
-  }
-  const client = getActiveClient();
-  const hash = location.hash || "#/";
-  const urlParams = new URLSearchParams(window.location.search);
-  const isAdmin = window.FORCE_ADMIN === true;
-  const isPublic = new URLSearchParams(window.location.search).has("access");
-  const isPartnerProject = client && client.meta.status === "Partner";
-  const isPartnerMode = isPartnerProject || (client && !!client.meta.partnerOwner);
-  
-  const token = urlParams.get("access");
+    const root = document.getElementById("app-root");
+    if (!root) {
+        console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
+        return; 
+    }
+
+    const mainEl = document.getElementById('mainContent');
+    if (mainEl && !window.location.hash.includes('visualizer')) {
+        mainEl.style.cssText = '';
+    }
+
+    const client = getActiveClient();
+    const hash = location.hash || "#/";
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isPublic = urlParams.has("access");
+    const isPartnerProject = client && client.meta?.status === "Partner";
+    const isPartnerMode = isPartnerProject || (client && !!client.meta?.partnerOwner);
     const isMaster = hash.startsWith("#/vault") && !window.IS_GUEST;
 
-  let homeLabel = "Dashboard";
-  let homeAction = "";
-  let showHome = true;
+    // Default Home Button Config -> Points to Daily Command Dashboard
+    let homeLabel = "Home";
+    let homeAction = `OL.goToDashboard('#/business/dashboard')`;
+    let showHome = true;
 
-  if (isAdmin) {
-    homeLabel = "Global Registry";
-    homeAction = `OL.goToDashboard('#/')`;
-} else if (client && client.meta.status === "Partner") {
-    homeLabel = "My Portfolio";
-    homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-} else if (client && client.meta.partnerOwner) {
-    if (!window.IS_GUEST) {
-        homeLabel = "Partner Home";
-        homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-    } else {
+    if (isAdmin) {
+        homeLabel = "Global Registry";
+        homeAction = `OL.goToDashboard('#/business/clients')`;
+    } else if (client && client.meta?.status === "Partner") {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-        }
-} else if (isPublic) {
-    showHome = false;
-}
-    
-  // 1. Dashboard/Non-Context View
-  if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
-        // Only render the Dashboard link if no client context exists
+    } else if (client && client.meta?.partnerOwner) {
+        homeLabel = window.IS_GUEST ? "My Portfolio" : "Partner Home";
+        homeAction = `OL.goToDashboard('#/partner-dashboard')`;
+    } else if (isPublic) {
+        showHome = false;
+    }
+
+    // 1. Dashboard/Non-Context Shell View
+    if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
-                <aside class="sidebar"><nav class="menu"><a href="#/" class="active"><i>🏠</i> <span>Dashboard</span></a></nav></aside>
+                <aside class="sidebar">
+                    <nav class="menu">
+                        <a href="#/business/dashboard" class="active">
+                            <i data-lucide="home" style="width:16px;height:16px;"></i> 
+                            <span>Home</span>
+                        </a>
+                    </nav>
+                </aside>
                 <main id="mainContent"></main>
                 <aside id="inspector-panel" class="pane-inspector">
                     <div class="sidebar-resizer right-side-handle"></div>
@@ -368,161 +370,152 @@ window.buildLayout = function () {
                     </div>
                 </aside>
             </div>`;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }  
 
-  const effectiveAdminMode = isPublic ? false : state.adminMode;
+    const effectiveAdminMode = isPublic ? false : state.adminMode;
 
-  if (!root) return; // Safety guard
-
-  const masterTabs = [
-  { key: "apps", label: "Master Apps", icon: "layout-grid", href: "#/vault/apps" },
-  { key: "functions", label: "Master Functions", icon: "wrench", href: "#/vault/functions" },
-  { key: "resources", label: "Master Resources", icon: "database", href: "#/vault/resources" },
-  { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/vault/visualizer" },
-  { key: "how-to", label: "Master How-To Guides", icon: "book-open", href: "#/vault/how-to" },
-  { key: "checklist", label: "Master Tasks", icon: "clipboard-list", href: "#/vault/tasks" },
-  { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
-  { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
-  { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
-  { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" },
-];
+    const masterTabs = [
+        { key: "apps", label: "Master Apps", icon: "layout-grid", href: "#/vault/apps" },
+        { key: "functions", label: "Master Functions", icon: "wrench", href: "#/vault/functions" },
+        { key: "resources", label: "Master Resources", icon: "database", href: "#/vault/resources" },
+        { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/vault/visualizer" },
+        { key: "how-to", label: "Master How-To Guides", icon: "book-open", href: "#/vault/how-to" },
+        { key: "checklist", label: "Master Tasks", icon: "clipboard-list", href: "#/vault/tasks" },
+        { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
+        { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
+        { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
+        { key: "client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" }
+    ];
 
     const businessTabs = [
-    { key: "dashboard", label: "Daily Dashboard", icon: "layout-dashboard", href: "#/business/dashboard" },
-    { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
-    { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
-    { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
-    { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
-    { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" },
-    { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
-];
+        { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
+        { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
+        { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
+        { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
+        { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" },
+        { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
+    ];
 
-const clientTabs = [
-  { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
-  { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
-  { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
-  { key: "resources", label: "Project Resources", icon: "database", href: "#/resources" },
-  { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/visualizer" },
-  { key: "scoping", label: "Scoping & Pricing", icon: "bar-chart-2", href: "#/scoping-sheet" },
-  { key: "analysis", label: "Weighted Analysis", icon: "trending-up", href: "#/analyze" },
-  { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
-  { key: "team", label: "Team Members", icon: "users", href: "#/team" },
-  { key: "data", label: "Data Tags", icon: "tag", href: "#/data" },
-];
-
-const isLightMode = document.body.classList.contains('light-mode');
-const themeIcon = isLightMode ? "moon" : "sun";
-const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
-
-    const themeSection = `
-        <div class="theme-toggle-zone">
-            <button class="btn soft tiny" onclick="OL.toggleTheme()" title="${themeLabel}">
-                <i data-lucide="${themeIcon}" style="width:16px;height:16px;"></i>
-                <span class="theme-label">${themeLabel}</span>
-            </button>
-        </div>
-    `;
+    const clientTabs = [
+        { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
+        { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
+        { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
+        { key: "resources", label: "Project Resources", icon: "database", href: "#/resources" },
+        { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/visualizer" },
+        { key: "scoping", label: "Scoping & Pricing", icon: "bar-chart-2", href: "#/scoping-sheet" },
+        { key: "analysis", label: "Weighted Analysis", icon: "trending-up", href: "#/analyze" },
+        { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+        { key: "team", label: "Team Members", icon: "users", href: "#/team" },
+        { key: "data", label: "Data Tags", icon: "tag", href: "#/data" }
+    ];
 
     const isSidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-    const toggleArrow = isSidebarCollapsed ? '▶' : '◀'; // Flip based on state
+    const toggleArrow = isSidebarCollapsed ? '▶' : '◀';
 
-   //================SIDEBAR MENU CONTROLS=================//
-    
+    //================ SIDEBAR CONTENT HTML =================//
     const sidebarContent = `
         <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
             <span class="toggle-icon">${toggleArrow}</span>
-        </button>       
+        </button>        
 
-        <div class="sidebar-inner-content" style="${isSidebarCollapsed ? 'display:none;' : ''}">
-            <div class="sidebar-padding" style="padding: 10px;">
+        <div class="sidebar-inner-content" style="${isSidebarCollapsed ? 'display:none;' : 'display:flex; flex-direction:column; justify-content:space-between; height:100%;'}">
+            <div class="sidebar-padding" style="padding: 10px; flex:1;">
         
-        ${showHome ? `
-        <div class="admin-nav-zone">
-            <nav class="menu">
-                <a href="javascript:void(0)" 
-                    onclick="${homeAction}" 
-                    class="${(hash === '#/' || hash === '#/partner-dashboard') ? 'active' : ''}"
-                    style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
-                    <i data-lucide="home" style="width:16px;height:16px;"></i> 
-                    <span>${homeLabel.toUpperCase()}</span>
-                </a>
-            </nav>
-        </div>
-        <div class="divider"></div>
-    ` : ''}
-
-    ${(isAdmin || effectiveAdminMode) && !client ? `
-        <!-- 🏢 BUSINESS MANAGER MENU (Global Level) -->
-        <div class="client-nav-zone admin-workspace">
-            <div class="menu-category-label">Business Manager</div>
-            <nav class="menu">
-                ${businessTabs.map(item => `
-                    <a href="${item.href}" class="${(hash === item.href || (item.key === 'dashboard' && (hash === '#/' || hash === ''))) ? 'active' : ''}">
-                        <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                        <span class="menu-item">${item.label}</span>
-                    </a>
-                `).join('')}
-            </nav>
-            
-            <div class="divider" style="margin: 15px 0;"></div>
-            
-            <!-- 🏛️ TEMPLATE VAULT / BUILDER LINK -->
-            <div class="menu-category-label">Template Vault</div>
-            <nav class="menu">
-                ${masterTabs.map(item => `
-                    <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                        <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                        <span class="menu-item">${item.label}</span>
-                    </a>
-                `).join('')}
-            </nav>
-        </div>
-    ` : client ? `
-        <!-- 📁 2. SHOW CLIENT MENU ONLY WHEN INSIDE A CLIENT PROJECT -->
-        <div class="client-nav-zone">
-            <div class="menu-category-label">Project Workspace</div>
-            <div class="client-profile-trigger" 
-                ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
-                <div class="client-info">
-                    <div class="client-name">${esc(client.meta.name)}</div>
-                    <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
-                </div>
-            </div>
-    
-            ${isAdmin && isPartnerProject ? `
-                <button class="btn tiny primary" 
-                        style="margin: 10px; width: calc(100% - 20px); background: #fbbf24; color: black; font-weight: bold; border: none;"
-                        onclick="window.location.hash='#/partner-dashboard'">
-                    👁️ VIEW AS PORTFOLIO
-                </button>
-            ` : ''}
-            ${themeSection}
-            <nav class="menu">
-                ${clientTabs.map(item => {
-                    const perm = OL.checkPermission(item.key);
-                    if (perm === 'none') return '';
-                    const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                    if (!isModuleEnabled) return ''; 
-                    const isActive = hash.startsWith(item.href);
-                    return `
-                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                            <span class="menu-item">${item.label}</span>
-                            ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                ${showHome ? `
+                <div class="admin-nav-zone">
+                    <nav class="menu">
+                        <a href="javascript:void(0)" 
+                            onclick="${homeAction}" 
+                            class="${(hash === '#/' || hash === '#/business/dashboard' || hash === '#/partner-dashboard') ? 'active' : ''}"
+                            style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
+                            <i data-lucide="home" style="width:16px;height:16px;"></i> 
+                            <span>${homeLabel.toUpperCase()}</span>
                         </a>
-                    `;
-                }).join('')}
-            </nav>
-        </div>
-    ` : `
-        <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>
-    `}
-  `;
+                    </nav>
+                </div>
+                <div class="divider" style="margin: 10px 0;"></div>
+                ` : ''}
 
-    // 3. 🏗️ HARDENED SHELL LOGIC
-    // We check for the .three-pane-layout wrapper. If it's missing, we build the full structure.
+                ${(isAdmin || effectiveAdminMode) && !client ? `
+                    <!-- 🏢 BUSINESS MANAGER MENU -->
+                    <div class="client-nav-zone admin-workspace">
+                        <div class="menu-category-label">Business Manager</div>
+                        <nav class="menu">
+                            ${businessTabs.map(item => `
+                                <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                                    <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                                    <span class="menu-item">${item.label}</span>
+                                </a>
+                            `).join('')}
+                        </nav>
+                        
+                        <div class="divider" style="margin: 15px 0;"></div>
+                        
+                        <!-- 🏛️ TEMPLATE VAULT / BUILDER MENU -->
+                        <div class="menu-category-label">Template Vault</div>
+                        <nav class="menu">
+                            ${masterTabs.map(item => `
+                                <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                                    <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                                    <span class="menu-item">${item.label}</span>
+                                </a>
+                            `).join('')}
+                        </nav>
+                    </div>
+                ` : client ? `
+                    <!-- 📁 CLIENT PROJECT WORKSPACE MENU -->
+                    <div class="client-nav-zone">
+                        <div class="menu-category-label">Project Workspace</div>
+                        <div class="client-profile-trigger" 
+                            ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                            <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
+                            <div class="client-info">
+                                <div class="client-name">${esc(client.meta.name)}</div>
+                                <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                            </div>
+                        </div>
+
+                        ${isAdmin && isPartnerProject ? `
+                            <button class="btn tiny primary" 
+                                    style="margin: 10px 0; width: 100%; background: #fbbf24; color: black; font-weight: bold; border: none;"
+                                    onclick="window.location.hash='#/partner-dashboard'">
+                                👁️ VIEW AS PORTFOLIO
+                            </button>
+                        ` : ''}
+
+                        <nav class="menu" style="margin-top:10px;">
+                            ${clientTabs.map(item => {
+                                const perm = OL.checkPermission(item.key);
+                                if (perm === 'none') return '';
+                                const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
+                                if (!isModuleEnabled) return ''; 
+                                const isActive = hash.startsWith(item.href);
+                                return `
+                                    <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                                        <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                                        <span class="menu-item">${item.label}</span>
+                                        ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                                    </a>
+                                `;
+                            }).join('')}
+                        </nav>
+                    </div>
+                ` : `
+                    <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>
+                `}
+            </div>
+
+            <!-- 🚀 SYSTEM UTILITY BAR (Fixed Footer) -->
+            <div class="sidebar-footer" style="padding: 12px; border-top: 1px solid var(--line);">
+                <div class="tiny muted uppercase bold" style="margin-bottom:6px; font-size:9px; letter-spacing:0.05em;">System Controls</div>
+                ${typeof OL.renderSystemUtilityBar === 'function' ? OL.renderSystemUtilityBar() : ''}
+            </div>
+        </div>
+    `;
+
+    // 2. HARDENED SHELL STRUCTURE
     let shell = root.querySelector('.three-pane-layout');
     
     if (!shell) {
@@ -541,23 +534,20 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
         shell = root.querySelector('.three-pane-layout');
     }
 
-    // 4. SURGICAL UPDATES
-    // Now that the shell is guaranteed to exist, update the dynamic parts
+    // 3. SURGICAL DOM UPDATES
     const sidebar = shell.querySelector('.sidebar');
     if (sidebar) sidebar.innerHTML = sidebarContent;
 
-    // Ensure the mainContent ID is always there for routing
     const main = shell.querySelector('main');
     if (main && main.id !== 'mainContent') main.id = 'mainContent';
 
-    // Ensure Inspector is ready
     const inspector = document.getElementById('inspector-panel');
     if (inspector && !inspector.querySelector('.inspector-scroll-content')) {
         inspector.innerHTML = `<div class="sidebar-resizer right-side-handle"></div><div class="inspector-scroll-content"></div>`;
-        OL.initSideResizers();
+        if (typeof OL.initSideResizers === 'function') OL.initSideResizers();
     }
 
-    // At the bottom of buildLayout(), before the lucide call:
+    // 4. LAYOUT GRID RE-CALCULATION
     const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
@@ -572,20 +562,6 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     }
     
     if (window.lucide) window.lucide.createIcons();
-
-    const sidebarHtml = `
-        <aside class="sidebar-container" style="display:flex; flex-direction:column; justify-content:space-between; height:100vh;">
-            <nav class="sidebar-nav">
-                <!-- Your Navigation Links -->
-            </nav>
-            
-            <!-- 🚀 Fixed Bottom Utility Section -->
-            <div class="sidebar-footer" style="padding: 15px; border-top: 1px solid var(--line);">
-                <div class="tiny muted uppercase bold" style="margin-bottom:8px; font-size:9px; letter-spacing:0.05em;">System Controls</div>
-                ${OL.renderSystemUtilityBar()}
-            </div>
-        </aside>
-    `;
 };
 
 window.handleRoute = function () {
