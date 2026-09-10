@@ -1,4 +1,4 @@
-import { esc, val, num, uid } from '../core/data.js';
+import { esc, val, num, uid, state, getActiveClient, updateAndSync, loadFullClient } from '../core/data.js';
 
 //=============DAILY DASHBOARD===============//
 
@@ -59,23 +59,36 @@ OL.renderDailyDashboard = function() {
     if (window.lucide) lucide.createIcons();
 };
 
-//=============GLOBAL TASK MANAGER===============//
+//============= GLOBAL TASK MANAGER ===============//
+
+OL.globalTaskFilterState = {
+    query: '',
+    status: 'All',
+    assignee: 'All',
+    groupBy: 'client' // 'client' | 'status' | 'assignee'
+};
 
 OL.renderBusinessTaskManager = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
     const clients = Object.values(state.clients || {});
-    // Pull every task across all clients into one master collection
+    
+    // Aggregate tasks from all clients
     let masterTasks = clients.flatMap(c => 
-        (c.projectData?.clientTasks || []).map(t => ({ ...t, clientName: c.meta.name, clientId: c.id }))
+        (c.projectData?.clientTasks || []).map(t => ({
+            ...t,
+            clientName: c.meta?.name || 'Unknown Client',
+            clientId: c.id,
+            assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client' : 'Sphynx')
+        }))
     );
 
     main.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📋 Cross-Project Task Manager</h2>
-                <div class="small muted">Consolidated view of all active deliverables across every client</div>
+                <div class="small muted">Consolidated view of deliverables across all client workspaces</div>
             </div>
             <div class="header-actions">
                 <button class="btn small soft" onclick="OL.renderBusinessTaskManager()">🔄 Refresh</button>
@@ -83,52 +96,193 @@ OL.renderBusinessTaskManager = function() {
         </div>
 
         <div class="card" style="padding: 20px;">
-            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <input type="text" class="modal-input tiny" placeholder="Search tasks or clients..." oninput="OL.filterGlobalTasks(this.value)">
-                <button class="btn tiny accent" onclick="OL.filterGlobalTaskStatus('All')">All</button>
-                <button class="btn tiny soft" onclick="OL.filterGlobalTaskStatus('Pending')">Pending</button>
-                <button class="btn tiny soft" onclick="OL.filterGlobalTaskStatus('In Progress')">In Progress</button>
-                <button class="btn tiny soft" onclick="OL.filterGlobalTaskStatus('Done')">Done</button>
+            <!-- FILTER & GROUPING CONTROLS -->
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
+                <div style="display: flex; gap: 8px; flex: 1; min-width: 260px;">
+                    <input type="text" 
+                           class="modal-input tiny" 
+                           placeholder="Search tasks, clients, or assignees..." 
+                           value="${esc(OL.globalTaskFilterState.query)}"
+                           oninput="OL.setGlobalTaskFilter('query', this.value)">
+                </div>
+
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="tiny muted bold uppercase">Assignee:</span>
+                    <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'All' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'All')">All</button>
+                    <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'Sphynx' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'Sphynx')">⚡ Sphynx</button>
+                    <button class="btn tiny ${OL.globalTaskFilterState.assignee === 'Client' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('assignee', 'Client')">👤 Client</button>
+                </div>
+
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="tiny muted bold uppercase">Group By:</span>
+                    <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
+                        <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
+                        <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
+                        <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee (Party)</option>
+                    </select>
+                </div>
             </div>
 
+            <!-- STATUS QUICK FILTERS -->
+            <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+                <button class="btn tiny ${OL.globalTaskFilterState.status === 'All' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('status', 'All')">All Statuses</button>
+                <button class="btn tiny ${OL.globalTaskFilterState.status === 'Pending' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('status', 'Pending')">Pending</button>
+                <button class="btn tiny ${OL.globalTaskFilterState.status === 'In Progress' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('status', 'In Progress')">In Progress</button>
+                <button class="btn tiny ${OL.globalTaskFilterState.status === 'Review' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('status', 'Review')">Review</button>
+                <button class="btn tiny ${OL.globalTaskFilterState.status === 'Done' ? 'accent' : 'soft'}" onclick="OL.setGlobalTaskFilter('status', 'Done')">Done</button>
+            </div>
+
+            <!-- TASK LIST CONTAINER -->
             <div id="global-task-table">
-                ${masterTasks.map(t => `
-                    <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 100px; gap: 10px; padding: 10px; border-bottom: 1px solid var(--line); align-items:center;">
-                        <div>
-                            <strong>${esc(t.title || t.name)}</strong>
-                            <div class="tiny muted">${esc(t.clientName)}</div>
-                        </div>
-                        <div><span class="pill tiny soft">${esc(t.status || 'Pending')}</span></div>
-                        <div class="tiny monospace">${t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '—'}</div>
-                        <button class="btn tiny primary" onclick="OL.switchClient('${t.clientId}'); setTimeout(()=>OL.openTaskModal('${t.id}', false), 200);">Open Task</button>
-                    </div>
-                `).join('') || '<div class="p-20 muted text-center">No tasks found across projects.</div>'}
+                ${OL.renderFilteredTaskGroups(masterTasks)}
             </div>
         </div>
     `;
+
     if (window.lucide) lucide.createIcons();
 };
 
-OL.filterGlobalTasks = function(query) {
-    const q = (query || "").toLowerCase().trim();
-    const rows = document.querySelectorAll('#global-task-table > div');
-    rows.forEach(row => {
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(q) ? 'grid' : 'none';
+// Filter & Grouping Engine
+OL.setGlobalTaskFilter = function(key, val) {
+    OL.globalTaskFilterState[key] = val;
+    OL.renderBusinessTaskManager();
+};
+
+OL.renderFilteredTaskGroups = function(allTasks) {
+    const { query, status, assignee, groupBy } = OL.globalTaskFilterState;
+
+    // Apply Filter Pipeline
+    let filtered = allTasks.filter(t => {
+        const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
+        const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
+        const statusMatch = status === 'All' || (t.status || 'Pending') === status;
+        
+        let assigneeMatch = true;
+        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx' || !t.isClientTask;
+        if (assignee === 'Client') assigneeMatch = t.assignee === 'Client' || t.isClientTask;
+
+        return (titleMatch || clientMatch) && statusMatch && assigneeMatch;
+    });
+
+    if (filtered.length === 0) {
+        return `<div class="p-20 muted text-center">No matching tasks found across projects.</div>`;
+    }
+
+    // Grouping Pipeline
+    const groups = {};
+    filtered.forEach(task => {
+        let groupKey = 'Other';
+        if (groupBy === 'client') groupKey = task.clientName;
+        else if (groupBy === 'status') groupKey = task.status || 'Pending';
+        else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx';
+
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(task);
+    });
+
+    // Render HTML Output by Group
+    return Object.entries(groups).map(([groupTitle, tasks]) => `
+        <div style="margin-bottom: 24px;">
+            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                <span>${esc(groupTitle)}</span>
+                <span class="pill tiny soft" style="font-size: 10px;">${tasks.length}</span>
+            </div>
+            
+            <div style="display: grid; gap: 8px;">
+                ${tasks.map(t => `
+                    <div style="display:grid; grid-template-columns: 2fr 140px 130px 110px 110px; gap: 12px; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center;">
+                        
+                        <!-- Task Title & Meta -->
+                        <div>
+                            <div style="font-weight: 600;">${esc(t.title || t.name)}</div>
+                            <div class="tiny muted" style="display:flex; gap: 8px; align-items:center; margin-top:2px;">
+                                <span>📁 ${esc(t.clientName)}</span>
+                                ${t.category ? `<span>• ${esc(t.category)}</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Assignee / Task Type Selector -->
+                        <div>
+                            <select class="modal-input tiny" 
+                                    style="width: 100%; border-color: ${t.assignee === 'Client' ? '#fbbf24' : 'var(--line)'};"
+                                    onchange="OL.updateGlobalTaskAssignee('${t.clientId}', '${t.id}', this.value)">
+                                <option value="Sphynx" ${t.assignee === 'Sphynx' ? 'selected' : ''}>⚡ Sphynx</option>
+                                <option value="Client" ${t.assignee === 'Client' ? 'selected' : ''}>👤 Client Task</option>
+                            </select>
+                        </div>
+
+                        <!-- Editable Status Dropdown -->
+                        <div>
+                            <select class="modal-input tiny" 
+                                    style="width: 100%; font-weight: bold;" 
+                                    onchange="OL.updateGlobalTaskStatus('${t.clientId}', '${t.id}', this.value)">
+                                <option value="Pending" ${t.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="In Progress" ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                                <option value="Review" ${t.status === 'Review' ? 'selected' : ''}>Review</option>
+                                <option value="Done" ${t.status === 'Done' ? 'selected' : ''}>Done</option>
+                            </select>
+                        </div>
+
+                        <!-- Due Date -->
+                        <div class="tiny monospace muted" style="text-align: center;">
+                            ${t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '—'}
+                        </div>
+
+                        <!-- In-Context Open Task Button -->
+                        <div style="text-align: right;">
+                            <button class="btn tiny primary" 
+                                    onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
+                                🔍 Details
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+};
+
+// Live Update Handlers
+OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            task.status = newStatus;
+            console.log(`✅ Updated Task Status [${taskId}]: ${newStatus}`);
+        }
     });
 };
 
-OL.filterGlobalTaskStatus = function(status) {
-    const rows = document.querySelectorAll('#global-task-table > div');
-    rows.forEach(row => {
-        if (status === 'All') {
-            row.style.display = 'grid';
-        } else {
-            const statusPill = row.querySelector('.pill');
-            const currentStatus = statusPill ? statusPill.innerText.trim() : '';
-            row.style.display = (currentStatus === status) ? 'grid' : 'none';
+OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+        
+        const task = client.projectData.clientTasks.find(t => t.id === taskId);
+        if (task) {
+            task.assignee = newAssignee;
+            task.isClientTask = (newAssignee === 'Client');
+            console.log(`✅ Updated Task Assignee [${taskId}]: ${newAssignee}`);
         }
     });
+};
+
+// In-Context Modal Launcher (Does NOT switch client context/route)
+OL.openTaskInContext = async function(clientId, taskId) {
+    // 1. Ensure full client project data is in memory
+    await loadFullClient(clientId);
+    
+    // 2. Open task modal directly without changing URL hash or triggering full layout rebuild
+    if (typeof OL.openTaskModal === 'function') {
+        OL.openTaskModal(taskId, false, clientId);
+    } else if (typeof window.openTaskModal === 'function') {
+        window.openTaskModal(taskId, false, clientId);
+    } else {
+        console.error("❌ openTaskModal renderer not found!");
+    }
 };
 
 //=============FINANCIALS===============//
