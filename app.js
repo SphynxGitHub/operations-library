@@ -125,62 +125,6 @@ window.getActiveClient = function() {
     return null;
 };
 
-OL.checkPermission = function (tabKey) {
-  const client = getActiveClient();
-  if (!client) return "full";
-  if (!client.permissions) return "full";
-  return client.permissions[tabKey] || "full"; 
-};
-
-OL.initializeSecurityContext = function() {
-    const params = new URLSearchParams(window.location.search);
-    const clientToken = params.get('access'); 
-    let adminKeyFromUrl = params.get('admin'); 
-
-    if (clientToken) {
-        state.adminMode = false;
-        OL.state.adminMode = false;
-        window.IS_GUEST = true;
-        console.log("👨‍💼 Guest Access Mode Active");
-        return true;
-    }
-
-    if (adminKeyFromUrl && adminKeyFromUrl === 'pizza123') {
-        state.adminMode = true;
-        OL.state.adminMode = true;
-        window.IS_GUEST = false; 
-        console.log("🛠️ Admin Mode Active");
-        return true; 
-    }
-
-    if (!adminKeyFromUrl && !clientToken) {
-        state.adminMode = false;
-        document.body.innerHTML = `
-            <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0d0f12;color:#a0aec0;font-family:sans-serif;text-align:center;">
-                <div style="max-width:400px;padding:32px;background:#161920;border-radius:12px;border:1px solid #2d3748;">
-                    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
-                    <h2 style="color:#fff;margin:0 0 8px 0;font-size:18px;">Access Restricted</h2>
-                    <p style="font-size:13px;line-height:1.5;color:#718096;">
-                        A valid access key is required to view this workspace.
-                    </p>
-                </div>
-            </div>`;
-        return false;
-    }
-    
-    return false;
-};
-
-OL.isAdmin = function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('admin') === 'pizza123';
-};
-
-OL.getAdminQuery = function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.has('admin') ? `?admin=${urlParams.get('admin')}` : '';
-};
-
 OL.toggleSidebar = function() {
     const sidebar = document.querySelector('.sidebar');
     const innerContent = document.querySelector('.sidebar-inner-content');
