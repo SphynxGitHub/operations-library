@@ -20,53 +20,51 @@ import * as OLBusinessManager from './features/business-manager.js';
 
 window.isMatrixActive = false;
 
-// 🚀 UNIFIED APP INITIALIZATION (Single Source of Truth)
-async function initApp() {
+// 🚀 DEFENSIVE APPLICATION INITIALIZATION
+function initApp() {
     console.log("🏁 App Ignition Starting...");
-    
-    // 1. Security Check FIRST
-    if (typeof OL.initializeSecurityContext === 'function') {
-        const allowed = await OL.initializeSecurityContext();
+
+    // 1. Security Check FIRST (Synchronous & Defensive)
+    if (typeof OL !== 'undefined' && typeof OL.initializeSecurityContext === 'function') {
+        const allowed = OL.initializeSecurityContext();
         if (!allowed) return;
     }
 
     // 2. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
-        state.adminMode = true;
+        if (typeof state !== 'undefined') state.adminMode = true;
     }
 
     // 3. Recall Active Client
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
-    if (savedClientId) state.activeClientId = savedClientId;
+    if (savedClientId && typeof state !== 'undefined') state.activeClientId = savedClientId;
 
     // 4. Recall Visualizer Depth
-    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+    if (typeof state !== 'undefined') {
+        state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+        state.focusedResourceId = sessionStorage.getItem('active_resource_id');
 
-    const currentHash = location.hash;
-    const isDashboard = currentHash === "" || currentHash === "#/";
-    const isVisualizer = currentHash.includes('visualizer');
+        const currentHash = location.hash;
+        const isDashboard = currentHash === "" || currentHash === "#/";
+        const isVisualizer = currentHash.includes('visualizer');
 
-    if ((state.focusedWorkflowId || state.focusedResourceId) &&
-        (isDashboard || isVisualizer) &&
-        !currentHash.includes('scoping')) {
-        console.log("♻️ Resuming Flow Map depth");
-        const isVault = currentHash.includes('vault');
-        location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+        if ((state.focusedWorkflowId || state.focusedResourceId) &&
+            (isDashboard || isVisualizer) &&
+            !currentHash.includes('scoping')) {
+            console.log("♻️ Resuming Flow Map depth");
+            const isVault = currentHash.includes('vault');
+            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+        }
     }
 
+    // 5. Build Layout & Trigger Initial Route
     if (typeof window.buildLayout === 'function') window.buildLayout();
+    if (typeof window.handleRoute === 'function') window.handleRoute();
 
-    const mainEl = document.getElementById('mainContent');
-    if (mainEl && (mainEl.innerHTML.trim() === "" || mainEl.innerHTML.includes('spinner'))) {
-        mainEl.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
-                <div class="fv-spinner"></div>
-                <div style="font-size:13px;letter-spacing:0.05em;">Connecting to Registry...</div>
-            </div>`;
+    // 6. Connect Firebase Sync
+    if (typeof OL !== 'undefined' && typeof OL.sync === 'function') {
+        OL.sync();
     }
-
-    if (typeof OL.sync === 'function') OL.sync();
 }
 
 // 🔄 Bind Init to Page Load
@@ -77,7 +75,7 @@ if (document.readyState === "complete" || document.readyState === "interactive")
 }
 
 OL.goToDashboard = function(hash) {
-    state.activeClientId = null;
+    if (typeof state !== 'undefined') state.activeClientId = null;
     sessionStorage.removeItem('lastActiveClientId');
     const params = new URLSearchParams(window.location.search);
     params.delete('client');
@@ -90,7 +88,7 @@ OL.goToDashboard = function(hash) {
 OL.getRegistryIcon = function(type) {
     if (!type) return "file-text"; 
     
-    const registry = state.master?.resourceTypes || [];
+    const registry = (typeof state !== 'undefined' && state.master) ? state.master.resourceTypes || [] : [];
     const entry = registry.find(t => 
         String(t.type).toLowerCase() === String(type).toLowerCase()
     );
@@ -176,11 +174,13 @@ OL.toggleTheme = function() {
 };
 
 OL.getViewMode = function(pageKey) {
+    if (typeof state === 'undefined') return 'cards';
     if (!state.viewModes) state.viewModes = {};
     return state.viewModes[pageKey] || localStorage.getItem(`ol_view_${pageKey}`) || 'cards';
 };
 
 OL.setViewMode = function(pageKey, mode) {
+    if (typeof state === 'undefined') return;
     if (!state.viewModes) state.viewModes = {};
     state.viewModes[pageKey] = mode;
     localStorage.setItem(`ol_view_${pageKey}`, mode);
@@ -206,7 +206,7 @@ window.buildLayout = function () {
   if (mainEl && !window.location.hash.includes('visualizer')) {
       mainEl.style.cssText = '';
   }
-  const client = getActiveClient();
+  const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
   const isAdmin = window.FORCE_ADMIN === true;
@@ -247,7 +247,7 @@ window.buildLayout = function () {
         return;
   }  
 
-  const effectiveAdminMode = isPublic ? false : state.adminMode;
+  const effectiveAdminMode = isPublic ? false : (typeof state !== 'undefined' ? state.adminMode : false);
 
   const masterTabs = [
     { key: "apps", label: "Master Apps", icon: "layout-grid", href: "#/vault/apps" },
@@ -355,9 +355,9 @@ window.buildLayout = function () {
               <div class="menu-category-label">Project Workspace</div>
               <div class="client-profile-trigger" 
                   ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                  <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
+                  <div class="client-avatar">${esc(client.meta?.name ? client.meta.name.substring(0,2).toUpperCase() : 'CL')}</div>
                   <div class="client-info">
-                      <div class="client-name">${esc(client.meta.name)}</div>
+                      <div class="client-name">${esc(client.meta?.name || 'Client')}</div>
                       <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
                   </div>
               </div>
@@ -372,7 +372,7 @@ window.buildLayout = function () {
               ${themeSection}
               <nav class="menu">
                   ${clientTabs.map(item => {
-                      const perm = OL.checkPermission(item.key);
+                      const perm = typeof OL.checkPermission === 'function' ? OL.checkPermission(item.key) : 'full';
                       if (perm === 'none') return '';
                       const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
                       if (!isModuleEnabled) return ''; 
@@ -473,7 +473,7 @@ window.handleRoute = function () {
     const main = document.getElementById("mainContent");
     if (!main) return; 
 
-    const client = getActiveClient();
+    const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
     const isVault = hash.startsWith('#/vault');
     const ol = window.OL || {};
 
@@ -482,7 +482,7 @@ window.handleRoute = function () {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
         if (typeof OL.renderDailyDashboard === 'function') {
             OL.renderDailyDashboard();
-        } else {
+        } else if (typeof renderClientDashboard === 'function') {
             renderClientDashboard();
         }
         return;
@@ -495,7 +495,7 @@ window.handleRoute = function () {
         else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
         else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
         else if (hash.includes('/financials') && typeof OL.renderBusinessFinancials === 'function') OL.renderBusinessFinancials();
-        else if (hash.includes('/clients')) renderClientDashboard();
+        else if (hash.includes('/clients') && typeof renderClientDashboard === 'function') renderClientDashboard();
         return;
     }
 
@@ -505,11 +505,11 @@ window.handleRoute = function () {
             window.location.hash = '#/';
             return;
         }
-        if (hash.includes("/apps")) renderAppsGrid();
-        else if (hash.includes("/functions")) renderFunctionsGrid();
-        else if (hash.includes("/resources")) renderResourceManager();
+        if (hash.includes("/apps") && typeof renderAppsGrid === 'function') renderAppsGrid();
+        else if (hash.includes("/functions") && typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
+        else if (hash.includes("/resources") && typeof renderResourceManager === 'function') renderResourceManager();
         else if (hash.includes("/visualizer")) {
-            state.viewMode = 'graph';
+            if (typeof state !== 'undefined') state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
             if (typeof renderVisualizer === 'function') renderVisualizer();
             else if (typeof ol.renderVisualizer === 'function') ol.renderVisualizer();
@@ -518,9 +518,9 @@ window.handleRoute = function () {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
-        else if (hash.includes("/tasks")) renderChecklistModule(true);
-        else if (hash.includes("/analyses")) renderAnalysisModule(true);
-        else if (hash.includes("/rates")) renderVaultRatesPage();
+        else if (hash.includes("/tasks") && typeof renderChecklistModule === 'function') renderChecklistModule(true);
+        else if (hash.includes("/analyses") && typeof renderAnalysisModule === 'function') renderAnalysisModule(true);
+        else if (hash.includes("/rates") && typeof renderVaultRatesPage === 'function') renderVaultRatesPage();
         else if (hash.includes("/data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
@@ -532,12 +532,12 @@ window.handleRoute = function () {
 
     // 3. Client Project Workspace Routes
     if (client) {
-        if (hash.includes("client-tasks")) renderChecklistModule();
-        else if (hash.includes("resources")) renderResourceManager();
-        else if (hash.includes("applications")) renderAppsGrid();
-        else if (hash.includes("functions")) renderFunctionsGrid();
+        if (hash.includes("client-tasks") && typeof renderChecklistModule === 'function') renderChecklistModule();
+        else if (hash.includes("resources") && typeof renderResourceManager === 'function') renderResourceManager();
+        else if (hash.includes("applications") && typeof renderAppsGrid === 'function') renderAppsGrid();
+        else if (hash.includes("functions") && typeof renderFunctionsGrid === 'function') renderFunctionsGrid();
         else if (hash.includes("visualizer")) {
-            state.viewMode = 'graph';
+            if (typeof state !== 'undefined') state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
             if (typeof renderVisualizer === 'function') renderVisualizer();
             else if (typeof ol.renderVisualizer === 'function') ol.renderVisualizer();
@@ -546,17 +546,18 @@ window.handleRoute = function () {
             if (typeof renderScopingSheet === 'function') renderScopingSheet();
             else if (typeof ol.renderScopingSheet === 'function') ol.renderScopingSheet();
         }
-        else if (hash.includes("analyze")) renderAnalysisModule();
+        else if (hash.includes("analyze") && typeof renderAnalysisModule === 'function') renderAnalysisModule();
         else if (hash.includes("how-to")) {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
-        else if (hash.includes("team")) renderTeamManager();
+        else if (hash.includes("team") && typeof renderTeamManager === 'function') renderTeamManager();
         else if (hash.includes("data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
     } else {
-        renderClientDashboard();
+        if (typeof renderClientDashboard === 'function') renderClientDashboard();
     }
 };
-window.addEventListener("hashchange", handleRoute)
+
+window.addEventListener("hashchange", handleRoute);
