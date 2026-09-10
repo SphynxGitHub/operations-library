@@ -2,6 +2,8 @@ import * as OLData from './core/data.js';
 import * as OLAuth from './core/auth.js';
 import { esc, val, num, uid } from './core/data.js';
 import * as OLClientDashboard from './features/client-dashboard.js';
+import * as OLApps from './features/apps.js';
+import * as OLFunctions from './features/functions.js';
 
 window.isMatrixActive = false;
 
