@@ -678,7 +678,10 @@ window.handleRoute = function () {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
-        else if (hash.includes("/tasks")) renderChecklistModule(true);
+        else if (hash.includes("/tasks")) {
+            if (typeof renderChecklistModule === 'function') renderChecklistModule(true);
+            else console.warn('Master Tasks (vault) view has no renderer wired up yet.');
+        }
         else if (hash.includes("/analyses")) renderAnalysisModule(true);
         else if (hash.includes("/rates")) renderVaultRatesPage();
         else if (hash.includes("/data")) {
@@ -690,7 +693,7 @@ window.handleRoute = function () {
 
     // 5. Client Project Workspace Routes
     if (client) {
-        if (hash.includes("client-tasks")) renderChecklistModule();
+        if (hash.includes("client-tasks")) renderClientTaskManager();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
