@@ -4700,7 +4700,7 @@ export function switchWorkbenchTab(tabId) {
     OL.renderWorkbenchItemsOnly();
 };
 
-OL.switchWorkbenchTab(state.ui.activeWorkbenchTab);
+switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // DRAG ASSET/GUIDE
 export function handleAssetDragStart(e, id, type) {
