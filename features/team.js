@@ -1,12 +1,12 @@
 //======================= FEATURES / TEAM =======================//
 // Extracted from app.js "TEAM MANAGEMENT SECTION".
 // Owns: the team roster grid, the team member modal (roles, signature,
-// access section trigger), and team-to-scoping-item assignment.
+// contact details, access section trigger), and team-to-scoping-item assignment.
 
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
 
 export function renderTeamManager() {
-    OL.registerView(renderTeamManager);
+    if (typeof OL.registerView === 'function') OL.registerView(renderTeamManager);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     if (!client || !container) return;
@@ -30,21 +30,37 @@ export function renderTeamManager() {
            </span>`;
 
             return `
-           <div class="card is-clickable hover-trigger" onclick="OL.openTeamMemberModal('${m.id}')" style="padding:15px;">
-              <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-                  <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="background:var(--accent); color:black; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px;">
-                        ${m.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
-                    </div>
-                    <div class="card-title tm-card-title-${m.id}" style="font-weight:bold;">${esc(m.name)}</div>
+           <div class="card is-clickable hover-trigger" onclick="OL.openTeamMemberModal('${m.id}')" style="padding:15px; display:flex; flex-direction:column; justify-between; gap:10px;">
+              <div>
+                  <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                      <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="background:var(--accent); color:black; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">
+                            ${m.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                        </div>
+                        <div style="min-width:0;">
+                            <div class="card-title tm-card-title-${m.id}" style="font-weight:bold; font-size:14px;">${esc(m.name)}</div>
+                            <div class="pills-row" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top:2px;">
+                                ${rolesHtml}
+                            </div>
+                        </div>
+                      </div>
+                      <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">
+                        <i data-lucide="x" style="width:14px; height:14px;"></i>
+                      </button>
                   </div>
-                  <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">
-                    <i data-lucide="x" style="width:14px; height:14px;"></i>
-                  </button>
-              </div>
-              <div class="card-body">
-                  <div class="pills-row" style="display: flex; flex-wrap: wrap; gap: 4px;">
-                      ${rolesHtml}
+
+                  <!-- Contact Information Row -->
+                  <div class="card-body" style="display:grid; gap:4px; font-size:11px; margin-top:10px;" class="muted">
+                      ${m.email ? `
+                      <div style="display:flex; align-items:center; gap:6px; opacity:0.8;">
+                          <i data-lucide="mail" style="width:12px; height:12px; color:var(--accent);"></i>
+                          <a href="mailto:${esc(m.email)}" style="color:inherit; text-decoration:none;" onclick="event.stopPropagation();">${esc(m.email)}</a>
+                      </div>` : ''}
+                      ${m.phone ? `
+                      <div style="display:flex; align-items:center; gap:6px; opacity:0.8;">
+                          <i data-lucide="phone" style="width:12px; height:12px; color:var(--accent);"></i>
+                          <span>${esc(m.phone)}</span>
+                      </div>` : ''}
                   </div>
               </div>
           </div>
@@ -57,15 +73,15 @@ export function renderTeamManager() {
             <i data-lucide="users" style="width:28px; height:24px; color:var(--accent);"></i>
             <div style="flex:1;">
                 <h2 style="margin:0;">Team Members</h2>
-                <div class="small muted subheader">Manage members assigned to ${esc(client.meta.name)}</div>
+                <div class="small muted subheader">Manage client members assigned to ${esc(client.meta.name)}</div>
             </div>
             <button class="btn primary" onclick="OL.promptAddTeamMember()" style="display:flex; align-items:center; gap:6px;">
                 <i data-lucide="user-plus" style="width:16px; height:16px;"></i> Add Member
             </button>
-            ${OL.viewToggleBtn('team', 'renderTeamManager')}
+            ${typeof OL.viewToggleBtn === 'function' ? OL.viewToggleBtn('team', 'renderTeamManager') : ''}
         </div>
-        ${OL.getViewMode('team') === 'list' ? `
-            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+        ${typeof OL.getViewMode === 'function' && OL.getViewMode('team') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px;">
                 ${members.map(m => `
                     <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
                                 background:var(--panel-soft);border:1px solid var(--panel-border);
@@ -73,12 +89,15 @@ export function renderTeamManager() {
                          onclick="OL.openTeamMemberModal('${m.id}')"
                          onmouseover="this.style.borderColor='var(--accent)'"
                          onmouseout="this.style.borderColor='var(--panel-border)'">
-                        <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
+                        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);
                                     color:#000;display:flex;align-items:center;justify-content:center;
                                     font-weight:900;font-size:11px;flex-shrink:0;">
                             ${m.name.split(' ').map(n=>n[0]).join('').toUpperCase().substring(0,2)}
                         </div>
-                        <span style="font-weight:600;font-size:13px;flex:1;">${esc(m.name)}</span>
+                        <div style="flex:1; min-width:0;">
+                            <span style="font-weight:600;font-size:13px;display:block;">${esc(m.name)}</span>
+                            <span class="tiny muted">${esc(m.email || 'No email')} ${m.phone ? `• ${esc(m.phone)}` : ''}</span>
+                        </div>
                         <div class="pills-row" style="margin:0;gap:4px;">
                             ${(m.roles||[]).map(r=>`<span class="pill tiny soft" style="font-size:9px;">${esc(r)}</span>`).join('')}
                         </div>
@@ -89,7 +108,7 @@ export function renderTeamManager() {
                 `).join('')}
             </div>
         ` : `
-        <div class="cards-grid" style="margin-top: 20px;">
+        <div class="cards-grid" style="margin-top: 20px; display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
             ${memberCardsHtml}
             ${members.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No team members added yet.</div>' : ""}
         </div>
@@ -106,6 +125,8 @@ export function promptAddTeamMember() {
     const draftMember = {
         id: draftId,
         name: "",
+        email: "",
+        phone: "",
         roles: [],
         isDraft: true
     };
@@ -126,6 +147,8 @@ export function handleTeamMemberSave(id, name) {
         const newMember = {
             id: newId,
             name: cleanName,
+            email: document.getElementById(`tm-email-${id}`)?.value || "",
+            phone: document.getElementById(`tm-phone-${id}`)?.value || "",
             roles: [],
             createdDate: new Date().toISOString()
         };
@@ -181,7 +204,7 @@ export function openTeamMemberModal(memberId, draftObj = null) {
     }
 
     const html = `
-        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px; border-bottom:1px solid var(--panel-border);">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <i data-lucide="user" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
@@ -193,10 +216,28 @@ export function openTeamMemberModal(memberId, draftObj = null) {
             </div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="padding: 20px;">
 
+            <!-- Contact Details Section -->
+            <div class="card-section" style="margin-bottom: 20px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
+                    <i data-lucide="contact" style="width:14px; height:14px;"></i> Contact Information
+                </label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Email Address</label>
+                        <input type="email" id="tm-email-${member.id}" class="modal-input tiny" value="${esc(member.email || '')}" placeholder="client@company.com" style="width:100%;" onblur="OL.updateTeamMember('${member.id}', 'email', this.value)">
+                    </div>
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Phone Number</label>
+                        <input type="text" id="tm-phone-${member.id}" class="modal-input tiny" value="${esc(member.phone || '')}" placeholder="(555) 000-0000" style="width:100%;" onblur="OL.updateTeamMember('${member.id}', 'phone', this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Roles Section -->
             <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
                     <i data-lucide="shield" style="width:14px; height:14px;"></i> Assigned Roles
                 </label>
                 <div class="pills-row" style="margin-bottom: 12px; min-height: 32px; display:flex; flex-wrap:wrap; gap:6px;">
@@ -221,23 +262,21 @@ export function openTeamMemberModal(memberId, draftObj = null) {
                 </div>
             </div>
 
+            <!-- Email Signature Section -->
             <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:bold; font-size:12px;" class="uppercase muted">
                     <i data-lucide="pen-tool" style="width:14px; height:14px;"></i> Email Signature
                 </label>
                 <textarea class="modal-textarea" 
-                        style="min-height: 100px; font-family: monospace; font-size: 11px; line-height:1.4;" 
-                        placeholder="Best regards,\n{{name}}\nSphynx Financial"
+                        style="min-height: 80px; font-family: monospace; font-size: 11px; line-height:1.4; width:100%;" 
+                        placeholder="Best regards,\n{{name}}" 
                         onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
-                <div class="tiny muted" style="margin-top:5px; display:flex; align-items:center; gap:4px;">
-                    <i data-lucide="info" style="width:10px; height:10px;"></i>
-                    Used for automated email templates sent by this member.
-                </div>
             </div>
-            ${OL.renderAccessSection(memberId, "member")} 
+            ${typeof OL.renderAccessSection === 'function' ? OL.renderAccessSection(memberId, "member") : ''} 
         </div>
     `;
-    openModal(html);
+    if (typeof openModal === 'function') openModal(html);
+    else if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(html);
 
     if (window.lucide) {
         window.lucide.createIcons();
@@ -260,7 +299,7 @@ export function filterRoleSearch(memberId, query) {
     const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
     if (!member) return;
 
-    const allProjectRoles = [...new Set(client.projectData.teamMembers.flatMap(m => m.roles || []))];
+    const allProjectRoles = [...new Set((client.projectData.teamMembers || []).flatMap(m => m.roles || []))];
     const memberRoles = member.roles || [];
     const matches = allProjectRoles.filter(role =>
         role.toLowerCase().includes(q) && !memberRoles.includes(role)
@@ -341,8 +380,8 @@ export function toggleTeamAssignment(itemId, memberId) {
 
         persist();
 
-        OL.openTeamAssignmentModal(itemId);
-        OL.renderScopingSheet();
+        if (typeof OL.openTeamAssignmentModal === 'function') OL.openTeamAssignmentModal(itemId);
+        if (typeof OL.renderScopingSheet === 'function') OL.renderScopingSheet();
 
         const searchResults = document.getElementById("team-search-results");
         if (searchResults) searchResults.innerHTML = "";
@@ -401,15 +440,14 @@ export function executeCreateTeamAndMap(itemId, name) {
     toggleTeamAssignment(itemId, newMember.id);
 
     persist();
-    console.log(`✅ Created and assigned new member: ${name}`);
 }
 
-// ---- bridge: keep OL.*/window.* calls working until callers import directly ----
+// Bridge global exports
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
+    renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
     openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
     removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap
 });
-// Called bare from sections still living in app.js (scoping sheet).
+
 window.renderTeamManager = renderTeamManager;
