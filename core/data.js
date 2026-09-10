@@ -1,10 +1,4 @@
 //======================= CORE / DATA LAYER =======================//
-// Extracted from app.js "GENERAL SECTION".
-// Owns: the state object, Supabase client, and every read/write against it
-// (sync, persist, loadFullClient, switchClient, updateAndSync, backup
-// export/import). Nothing in here should touch the DOM except the couple
-// of loading-state innerHTML writes that were already inline in switchClient
-// (left as-is for now — candidate for a follow-up cleanup, not this pass).
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
@@ -20,10 +14,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---- state ----
-// NOTE: kept as a mutable module-level object, same shape/semantics as the
-// original global `state`. Still assigned to window.state / OL.state at the
-// bottom of this file so every not-yet-extracted piece of app.js keeps
-// working untouched during the migration.
 export const state = {
     activeClientId: null,
     isCloudSynced: false,
@@ -185,9 +175,6 @@ export async function sync() {
                     permissions: c.permissions || {},
                     projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] },
                     sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [],
-                    // Login-gate migration status — lets the admin "Client
-                    // Logins" screen show who's set up real login vs. who
-                    // still needs a setup link, without an extra query.
                     authUserId: c.auth_user_id || null
                 };
             });
@@ -229,9 +216,6 @@ export async function loadFullClient(clientId) {
             modules: data.modules,
             permissions: data.permissions,
             projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] },
-            // 🐛 FIX: was `c.shared_master_ids` — `c` doesn't exist in this
-            // scope (leftover from copy-paste of the sync() loop variable).
-            // That threw a ReferenceError on every load that reached here.
             sharedMasterIds: data.shared_master_ids || data.sharedMasterIds || []
         };
         delete state.clients[clientId]._metaOnly;
@@ -329,6 +313,7 @@ export async function exportMasterBackup() {
             modules: row.modules,
             permissions: row.permissions,
             project_data: row.project_data,
+            shared_master_ids: row.shared_master_ids || []
         }));
 
         const payload = {
@@ -414,7 +399,8 @@ export async function importMasterBackup(event) {
                     meta: clientData.meta || {},
                     modules: clientData.modules || {},
                     permissions: clientData.permissions || {},
-                    project_data: clientData.project_data ?? clientData.projectData ?? {}
+                    project_data: clientData.project_data ?? clientData.projectData ?? {},
+                    shared_master_ids: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? []
                 };
             });
 
@@ -432,14 +418,15 @@ export async function importMasterBackup(event) {
                     meta: clientData.meta || { name: _id, status: 'Active' },
                     modules: clientData.modules,
                     permissions: clientData.permissions,
-                    projectData: clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] }
+                    projectData: clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] },
+                    sharedMasterIds: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? []
                 };
             });
         }
 
         console.log(`✅ Restored: master + ${clients.length} clients`);
         alert(`✅ Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
-        window.handleRoute();
+        if (typeof window.handleRoute === 'function') window.handleRoute();
     } catch (e) {
         alert('❌ Restore failed: ' + e.message);
         console.error(e);
@@ -447,15 +434,12 @@ export async function importMasterBackup(event) {
 }
 
 // ---- bridge: keep every not-yet-extracted OL.* / window.* call working ----
-// Delete this block piece-by-piece as each remaining section gets its own
-// module and starts importing directly from here instead of off OL/window.
 window.db = db;
 window.state = state;
 window.getActiveClient = getActiveClient;
 window.OL = window.OL || {};
+
 Object.assign(window.OL, {
     state, persist, sync, loadFullClient, switchClient, updateAndSync,
-    getRegistryIcon: undefined, // still lives in app.js for now — see note below
     exportMasterBackup, importMasterBackup
 });
-delete window.OL.getRegistryIcon; // don't stomp app.js's real one with undefined
