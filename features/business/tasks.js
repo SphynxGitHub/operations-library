@@ -4,16 +4,33 @@ import { esc, uid, state, updateAndSync, loadFullClient, switchClient } from '..
 
 OL.globalTaskFilterState = { 
     query: '', 
-    status: 'Open',     // 'Open' | 'Closed' | 'All' | 'Pending' | 'In Progress' | 'Review' | 'Done'
+    status: 'Open',     // 'Open' | 'Closed' | 'All' | 'Pending Sphynx Action' | etc.
     assignee: 'All',   // 'All' | 'Sphynx' | 'Client' | '3rdParty' | Member Name
     dateRange: 'All',  // 'All' | 'Overdue' | 'Today' | 'Week' | 'NextTwoWeeks' | 'Month'
     groupBy: 'client', // 'client' | 'status' | 'assignee'
     subGroupBy: 'none' // 'none' | 'resource' | 'type'
 };
 
+OL.activeTaskTimer = { 
+    clientId: null, 
+    taskId: null, 
+    startTime: null, 
+    intervalId: null, 
+    elapsedSeconds: 0 
+};
+
+// 🔌 Standardized Third-Party / Vendor Assignees
+OL.thirdPartyAssignees = [
+    "Zapier Support",
+    "Developer / Engineering",
+    "Vendor / App Support",
+    "External Consultant"
+];
+
 // ================= ⚙️ CUSTOM STATUS MANAGER ================= //
-OL.getSystemStatuses = fuction () {
-    return state.master? taskStatues || [
+
+OL.getSystemStatuses = function() {
+    return state.master?.taskStatuses || [
         { id: "st-1", name: "Pending Sphynx Action", color: "#64c6a2", isClosed: false, order: 1 },
         { id: "st-2", name: "Pending Client Feedback", color: "#0880ea", isClosed: false, order: 2 },
         { id: "st-3", name: "Pending Client Document", color: "#4a55e6", isClosed: false, order: 3 },
@@ -22,24 +39,14 @@ OL.getSystemStatuses = fuction () {
         { id: "st-6", name: "Pending Third Party Support", color: "#ffca18", isClosed: false, order: 6 },
         { id: "st-7", name: "Needs Follow Up", color: "#ff7f27", isClosed: false, order: 7 },
         { id: "st-8", name: "Client Task", color: "#cb1d63", isClosed: false, order: 8 },
-        { id: "st-9", name: "Done", color: "#299764", isClosed: true, order: 9}
+        { id: "st-9", name: "Done", color: "#299764", isClosed: true, order: 9 }
     ];
-}
+};
 
 OL.openStatusManagerModal = function() {
     if (!state.master) state.master = {};
     if (!state.master.taskStatuses) {
-        state.master.taskStatuses = [
-            { id: "st-1", name: "Pending Sphynx Action", color: "#64c6a2", isClosed: false, order: 1 },
-            { id: "st-2", name: "Pending Client Feedback", color: "#0880ea", isClosed: false, order: 2 },
-            { id: "st-3", name: "Pending Client Document", color: "#4a55e6", isClosed: false, order: 3 },
-            { id: "st-4", name: "Pending Client Review", color: "#b83dba", isClosed: false, order: 4 },
-            { id: "st-5", name: "Pending Developer Update", color: "#9e832c", isClosed: false, order: 5 },
-            { id: "st-6", name: "Pending Third Party Support", color: "#ffca18", isClosed: false, order: 6 },
-            { id: "st-7", name: "Needs Follow Up", color: "#ff7f27", isClosed: false, order: 7 },
-            { id: "st-8", name: "Client Task", color: "#cb1d63", isClosed: false, order: 8 },
-            { id: "st-9", name: "Done", color: "#299764", isClosed: true, order: 9}
-        ];
+        state.master.taskStatuses = OL.getSystemStatuses();
     }
 
     const statuses = state.master.taskStatuses.sort((a,b) => a.order - b.order);
@@ -142,69 +149,6 @@ OL.openEditTaskStatusQuickMenu = function(event, clientId, taskId) {
     OL.showOverlayModal(content);
 };
 
-// ⚙️ Status Pipeline Settings Modal (Master Tasks / Vault / Business Manager)
-OL.openStatusManagerModal = function() {
-    if (!state.master) state.master = {};
-    if (!state.master.taskStatuses) {
-        state.master.taskStatuses = OL.getSystemStatuses();
-    }
-
-    const statuses = state.master.taskStatuses;
-
-    const content = `
-        <div style="padding: 24px; max-width: 550px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-                    <i data-lucide="settings-2" style="width:20px;height:20px;color:var(--accent);"></i>
-                    Task Status Pipeline Manager
-                </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold;">✕</button>
-            </div>
-
-            <div class="modal-body">
-                <div class="tiny muted" style="margin-bottom: 15px;">
-                    Configure global status names, color dot badges, and completion states across all workspaces.
-                </div>
-
-                <div style="display:grid; gap:8px; margin-bottom: 20px;">
-                    ${statuses.map(st => `
-                        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <input type="color" value="${st.color}" style="width:22px; height:22px; border:none; background:none; cursor:pointer;" onchange="OL.updateStatusColor('${st.id}', this.value)">
-                                <strong style="font-size:13px;">${esc(st.name)}</strong>
-                                <span class="pill tiny ${st.isClosed ? 'accent' : 'soft'}" style="font-size:9px;">
-                                    ${st.isClosed ? 'Closed State' : 'Open State'}
-                                </span>
-                            </div>
-
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <button class="btn tiny soft" onclick="OL.toggleStatusClosedType('${st.id}')" title="Toggle Open/Closed State">
-                                    <i data-lucide="${st.isClosed ? 'check-circle' : 'circle'}" style="width:12px;height:12px;"></i>
-                                </button>
-                                <button class="btn tiny soft danger" onclick="OL.deleteCustomStatus('${st.id}')" title="Delete Status">
-                                    <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
-                                </button>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <form onsubmit="event.preventDefault(); OL.createNewCustomStatus();" style="display:grid; grid-template-columns: 36px 1fr 110px 80px; gap:8px; align-items:center; padding-top:15px; border-top:1px solid var(--line);">
-                    <input type="color" id="new-status-color" value="#38bdf8" style="width:30px; height:30px; border:none; background:none; cursor:pointer;">
-                    <input type="text" id="new-status-name" class="modal-input tiny" placeholder="Status name..." required>
-                    <select id="new-status-type" class="modal-input tiny">
-                        <option value="false">Open</option>
-                        <option value="true">Closed</option>
-                    </select>
-                    <button type="submit" class="btn tiny primary" style="font-weight:bold; height:100%;">+ Add</button>
-                </form>
-            </div>
-        </div>
-    `;
-
-    OL.showOverlayModal(content);
-};
-
 // Data Mutation Handlers
 OL.createNewCustomStatus = function() {
     const name = document.getElementById('new-status-name')?.value;
@@ -251,77 +195,41 @@ OL.deleteCustomStatus = function(statusId) {
     if (!confirm("Are you sure you want to remove this status option?")) return;
 
     updateAndSync(() => {
-        state.master.taskStatuses = state.master.taskStatuses.filter(s => s.id !== statusId);
+        state.master.taskStatuses = (state.master.taskStatuses || []).filter(s => s.id !== statusId);
     });
     OL.openStatusManagerModal();
     OL.renderBusinessTaskManager();
 };
 
-// Data Mutation Handlers
-OL.createNewCustomStatus = function() {
-    const name = document.getElementById('new-status-name')?.value;
-    const color = document.getElementById('new-status-color')?.value || '#38bdf8';
-    const isClosed = document.getElementById('new-status-type')?.value === 'true';
+// Quick Assignee Modal Launcher
+OL.openEditTaskAssigneeModal = function(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+    if (!task) return;
 
-    if (!name) return;
+    const teamOptions = OL.getClientTeamOptions(clientId);
 
-    updateAndSync(() => {
-        const newSt = {
-            id: uid(),
-            name: name,
-            color: color,
-            isClosed: isClosed,
-            order: (state.master.taskStatuses.length || 0) + 1
-        };
-        state.master.taskStatuses.push(newSt);
-    });
-
-    OL.openStatusManagerModal();
-    OL.renderBusinessTaskManager();
+    const content = `
+        <div style="padding: 16px; max-width: 360px; width: 100%;" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);">
+                <span class="tiny bold uppercase muted">Assign Deliverable</span>
+                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+            </div>
+            <div style="display:grid; gap:8px;">
+                <button class="btn tiny soft" style="text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Sphynx Task'); OL.closeModal();">⚡ Sphynx Task</button>
+                <button class="btn tiny soft" style="text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Client Task'); OL.closeModal();">👤 Client Task</button>
+                ${teamOptions.map(m => `
+                    <button class="btn tiny soft" style="text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}'); OL.closeModal();">👤 ${esc(m.name)}</button>
+                `).join('')}
+                <div class="tiny muted uppercase bold" style="margin-top:8px;">Third-Party / Vendors</div>
+                ${OL.thirdPartyAssignees.map(tp => `
+                    <button class="btn tiny soft" style="text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(tp)}'); OL.closeModal();">🛠️ ${esc(tp)}</button>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    OL.showOverlayModal(content);
 };
-
-OL.updateStatusColor = function(statusId, newColor) {
-    updateAndSync(() => {
-        const st = state.master.taskStatuses.find(s => s.id === statusId);
-        if (st) st.color = newColor;
-    });
-    OL.renderBusinessTaskManager();
-};
-
-OL.toggleStatusClosedType = function(statusId) {
-    updateAndSync(() => {
-        const st = state.master.taskStatuses.find(s => s.id === statusId);
-        if (st) st.isClosed = !st.isClosed;
-    });
-    OL.openStatusManagerModal();
-    OL.renderBusinessTaskManager();
-};
-
-OL.deleteCustomStatus = function(statusId) {
-    if (!confirm("Are you sure you want to delete this status?")) return;
-
-    updateAndSync(() => {
-        state.master.taskStatuses = state.master.taskStatuses.filter(s => s.id !== statusId);
-    });
-    OL.openStatusManagerModal();
-    OL.renderBusinessTaskManager();
-};
-
-OL.activeTaskTimer = { 
-    clientId: null, 
-    taskId: null, 
-    startTime: null, 
-    intervalId: null, 
-    elapsedSeconds: 0 
-};
-
-// 🔌 Standardized Third-Party / Vendor Assignees
-OL.thirdPartyAssignees = [
-    "Zapier Support",
-    "Developer / Engineering",
-    "Vendor / App Support",
-    "External Consultant"
-];
 
 // Helper: Resolve team members for a given client ID
 OL.getClientTeamOptions = function(clientId) {
@@ -371,7 +279,6 @@ OL.renderBusinessTaskManager = function() {
         (c.projectData?.clientTasks || []).map(t => {
             const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
             
-            // Resolve Task Classification Type
             let taskType = "Sphynx Task";
             if (OL.thirdPartyAssignees.includes(t.assignee)) {
                 taskType = "Developer / 3rd Party Task";
@@ -393,6 +300,7 @@ OL.renderBusinessTaskManager = function() {
     );
 
     const totalLoggedHours = masterTasks.reduce((acc, t) => acc + t.loggedHours, 0);
+    const masterStatuses = OL.getSystemStatuses();
 
     main.innerHTML = `
         <div class="section-header">
@@ -401,6 +309,9 @@ OL.renderBusinessTaskManager = function() {
                 <div class="small muted">Consolidated deliverables, team assignments, third-party logs, and scoping reconciliation</div>
             </div>
             <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                <button class="btn small soft" onclick="OL.openStatusManagerModal()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="settings-2" style="width:14px;height:14px;"></i> Statuses
+                </button>
                 <button class="btn small primary" onclick="OL.openTimeReportModal()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="bar-chart-2" style="width:14px;height:14px;"></i> Reconciliation Report
                 </button>
@@ -446,10 +357,7 @@ OL.renderBusinessTaskManager = function() {
                 <div style="position:relative; display:flex; align-items:center;">
                     <i data-lucide="flag" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
                     <select id="quick-task-status" class="modal-input tiny" style="padding-left:26px; width:100%;">
-                        <option value="Pending" selected>Pending</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Review">Review</option>
-                        <option value="Done">Done</option>
+                        ${masterStatuses.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
                     </select>
                 </div>
 
@@ -476,13 +384,12 @@ OL.renderBusinessTaskManager = function() {
                     <i data-lucide="list-checks" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Status:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('status', this.value)">
-                        <option value="Pending" ${OL.globalTaskFilterState.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                        <option value="Open" ${OL.globalTaskFilterState.status === 'Open' ? 'selected' : ''}>Open</option>
-                        <option value="In Progress" ${OL.globalTaskFilterState.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                        <option value="Review" ${OL.globalTaskFilterState.status === 'Review' ? 'selected' : ''}>Review Only</option>
-                        <option value="Closed" ${OL.globalTaskFilterState.status === 'Closed' ? 'selected' : ''}>Closed</option>
-                        <option value="All" ${OL.globalTaskFilterState.status === 'All' ? 'selected' : ''}>All Statuses</option>                
-                        <option value="Done" ${OL.globalTaskFilterState.status === 'Done' ? 'selected' : ''}>Done Only</option>
+                        <option value="Open" ${OL.globalTaskFilterState.status === 'Open' ? 'selected' : ''}>Open Items</option>
+                        <option value="Closed" ${OL.globalTaskFilterState.status === 'Closed' ? 'selected' : ''}>Closed Items</option>
+                        <option value="All" ${OL.globalTaskFilterState.status === 'All' ? 'selected' : ''}>All Statuses</option>
+                        <optgroup label="Specific Pipeline Status">
+                            ${masterStatuses.map(s => `<option value="${esc(s.name)}" ${OL.globalTaskFilterState.status === s.name ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+                        </optgroup>
                     </select>
                 </div>
 
@@ -562,15 +469,18 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     const nextTwoWeeks = new Date(now);
     nextTwoWeeks.setDate(now.getDate() + 14);
 
+    const masterStatuses = OL.getSystemStatuses();
+    const closedStatusNames = masterStatuses.filter(s => s.isClosed).map(s => s.name);
+
     let filtered = allTasks.filter(t => {
         const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
         const clientMatch = (t.clientName || '').toLowerCase().includes(query.toLowerCase());
         const resourceMatch = (t.resourceName || '').toLowerCase().includes(query.toLowerCase());
         
         let statusMatch = true;
-        if (status === 'Open') statusMatch = t.status !== 'Done';
-        else if (status === 'Closed') statusMatch = t.status === 'Done';
-        else if (status !== 'All') statusMatch = (t.status || 'Pending') === status;
+        if (status === 'Open') statusMatch = !closedStatusNames.includes(t.status) && t.status !== 'Done';
+        else if (status === 'Closed') statusMatch = closedStatusNames.includes(t.status) || t.status === 'Done';
+        else if (status !== 'All') statusMatch = (t.status || 'Pending Sphynx Action') === status;
 
         let assigneeMatch = true;
         if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || (!t.isClientTask && !OL.thirdPartyAssignees.includes(t.assignee));
@@ -587,7 +497,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                 const taskDateStr = t.dueDate.slice(0, 10);
 
                 if (dateRange === 'Overdue') {
-                    dateMatch = taskDateStr < todayStr && t.status !== 'Done';
+                    dateMatch = taskDateStr < todayStr && !closedStatusNames.includes(t.status);
                 } else if (dateRange === 'Today') {
                     dateMatch = taskDateStr === todayStr;
                 } else if (dateRange === 'Week') {
@@ -611,7 +521,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     filtered.forEach(task => {
         let groupKey = 'Other';
         if (groupBy === 'client') groupKey = task.clientName;
-        else if (groupBy === 'status') groupKey = task.status || 'Pending';
+        else if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
         else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
 
         if (!groups[groupKey]) groups[groupKey] = [];
@@ -679,23 +589,17 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     }).join('');
 };
 
-// Render Individual Task Row
+// Render Individual Task Row (ClickUp Style)
 OL.renderTaskRowHTML = function(t, todayStr) {
     const isClientAssigned = t.assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(t.assignee);
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
     const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
-    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && t.status !== 'Done';
 
-    // ClickUp Status Color Mapping
-    const statusColors = {
-        'Pending': '#94a3b8',
-        'In Progress': '#38bdf8',
-        'Review': '#fbbf24',
-        'Done': '#22c55e'
-    };
-    const dotColor = statusColors[t.status] || '#94a3b8';
+    const masterStatuses = OL.getSystemStatuses();
+    const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
+    const dotColor = activeStatusObj.color;
+    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && !activeStatusObj.isClosed;
 
-    // Assignee Avatar Icon Configuration (Pure Lucide Icons)
     let avatarBg = 'rgba(56, 189, 248, 0.15)';
     let avatarIcon = 'zap';
     let avatarColor = '#38bdf8';
@@ -740,7 +644,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </span>
         </div>
 
-        <!-- 4. Linked Resource Reference with Lucide Database Icon -->
+        <!-- 4. Linked Resource Reference -->
         <div>
             <span class="pill tiny soft" style="font-size: 10px; color: var(--accent); background: rgba(var(--accent-rgb), 0.06); border: 1px solid rgba(var(--accent-rgb), 0.15); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 <i data-lucide="database" style="width:11px;height:11px; pointer-events:none;"></i>
@@ -748,7 +652,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </span>
         </div>
 
-        <!-- 5. Compact Due Date with Lucide Calendar Icon -->
+        <!-- 5. Compact Due Date -->
         <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
             <i data-lucide="calendar" style="position:absolute; left:6px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
             <input type="date" 
@@ -758,7 +662,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                    onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
         </div>
 
-        <!-- 6. Time Tracking Controls with Lucide Timer & Pencil Icons -->
+        <!-- 6. Time Tracking Controls -->
         <div onclick="event.stopPropagation();" style="display: flex; align-items: center; gap: 4px; justify-content: flex-end;">
             <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
                     id="timer-btn-${t.id}"
@@ -779,7 +683,7 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </button>
         </div>
 
-        <!-- 7. Assignee Lucide Avatar Badge -->
+        <!-- 7. Assignee Badge -->
         <div onclick="event.stopPropagation();" style="display:flex; justify-content:center;">
             <div title="Assignee: ${esc(t.assignee)}" 
                  style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; border:1px solid ${avatarColor}; display:flex; align-items:center; justify-content:center; cursor:pointer;"
@@ -823,7 +727,6 @@ OL.navigateToClientProject = function(clientId) {
 // ================= HARDENED ROW CLICK HANDLER ================= //
 
 OL.handleTaskRowClick = function(event, clientId, taskId) {
-    // Isolate interactive form controls (selects, inputs, timer buttons, links)
     const isInteractive = event.target.closest('select, input, button, a, .client-link-badge');
     if (isInteractive) return;
 
@@ -833,7 +736,7 @@ OL.handleTaskRowClick = function(event, clientId, taskId) {
     OL.openTaskInContext(clientId, taskId);
 };
 
-// 📝 Standalone Generic Modal Overlay Helper (In case window.openModal is missing)
+// 📝 Standalone Generic Modal Overlay Helper
 OL.showOverlayModal = function(htmlContent) {
     let layer = document.getElementById("modal-layer");
     if (!layer) {
@@ -868,7 +771,6 @@ OL.closeModal = function() {
 // 🔍 In-Context Task Launcher
 OL.openTaskInContext = async function(clientId, taskId) {
     try {
-        // 1. Ensure target client data is synced into state
         if (typeof loadFullClient === 'function') {
             await loadFullClient(clientId);
         } else if (typeof OL.loadFullClient === 'function') {
@@ -883,13 +785,11 @@ OL.openTaskInContext = async function(clientId, taskId) {
             return;
         }
 
-        // 2. Delegate to primary application openTaskModal if available
         if (typeof window.openTaskModal === 'function') {
             window.openTaskModal(taskId, false, clientId);
             return;
         }
 
-        // 3. Guaranteed Standalone In-Context Modal Renderer
         OL.renderInContextTaskModal(client, task);
     } catch (err) {
         console.error("❌ Error launching task modal:", err);
@@ -911,26 +811,23 @@ OL.renderInContextTaskModal = function(client, task) {
             </div>
 
             <div class="modal-body">
-                <!-- Metadata Badges -->
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
                     <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
                         <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
                     </span>
                     <span class="pill tiny accent" style="font-weight:bold;">
-                        Status: ${esc(task.status || 'Pending')}
+                        Status: ${esc(task.status || 'Pending Sphynx Action')}
                     </span>
                     <span class="pill tiny soft" style="font-weight:bold; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}">
                         Assignee: ${esc(task.assignee || 'Sphynx Task')}
                     </span>
                 </div>
 
-                <!-- Description Block -->
                 <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                     <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
                     <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
                 </div>
 
-                <!-- Task Metrics Grid -->
                 <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                     <div><strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Unscheduled'}</div>
                     <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
@@ -944,7 +841,6 @@ OL.renderInContextTaskModal = function(client, task) {
                     </div>
                 ` : ''}
 
-                <!-- Modal Actions -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
                     <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:6px;">
                         <i data-lucide="pencil" style="width:12px;height:12px;"></i> Adjust Logged Time
@@ -1070,7 +966,7 @@ OL.createGlobalQuickTask = function() {
     const clientId = document.getElementById('quick-task-client')?.value;
     const title = document.getElementById('quick-task-title')?.value;
     const assignee = document.getElementById('quick-task-assignee')?.value || 'Sphynx Task';
-    const status = document.getElementById('quick-task-status')?.value || 'Pending';
+    const status = document.getElementById('quick-task-status')?.value || 'Pending Sphynx Action';
     const dueDate = document.getElementById('quick-task-duedate')?.value || '';
 
     if (!clientId || !title) {
