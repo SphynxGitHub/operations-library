@@ -44,6 +44,10 @@ featureModules.forEach(mod => {
     }
 });
 
+// Explicitly assign core variables as fallbacks
+window.state = OLData.state || window.state;
+window.getActiveClient = OLData.getActiveClient || window.getActiveClient;
+
 // 🚀 LAYOUT BUILDER
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
