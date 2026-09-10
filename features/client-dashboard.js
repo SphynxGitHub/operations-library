@@ -254,6 +254,117 @@ export function renderClientDashboard() {
     }, 100);
 };
 
+OL.renderPartnerDashboard = function(leadProject, container) {
+    if (!container || !leadProject) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+
+    // 🔍 THE FIX: Ensure we are comparing strings and checking the partnerOwner metadata
+    const subClients = Object.values(state.clients).filter(c => 
+        String(c.meta?.partnerOwner) === String(leadProject.id)
+    );
+
+    container.innerHTML = `
+        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
+                    <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
+                </div>
+                ${(!window.IS_GUEST || window.location.search.includes('access=')) ? `
+                    <button class="btn primary" onclick="OL.partnerCreateClient('${leadProject.id}')">+ Onboard New Client</button>` : ''
+                }
+            </div>
+        </div>
+
+        <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
+            ${subClients.length > 0 ? subClients.map(c => `
+                <div class="card is-clickable" onclick="OL.switchClient('${c.id}')">
+                    <div style="font-size: 10px; color: var(--accent); font-weight: bold; margin-bottom: 5px;">SUB-CLIENT</div>
+                    <h3 style="margin:0; font-size: 16px;">${esc(c.meta.name)}</h3>
+                    <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
+                        <span style="font-size: 10px; opacity: 0.5;">Open Project ➔</span>
+                    </div>
+                </div>
+            `).join('') : `
+                <div style="grid-column: 1/-1; padding: 100px; text-align: center; opacity: 0.5;">
+                    <div style="font-size: 40px; margin-bottom: 20px;">📂</div>
+                    <h3>No clients assigned yet.</h3>
+                    <p class="small">Assign clients to this partner in their Profile Settings.</p>
+                </div>
+            `}
+        </div>
+    `;
+};
+
+OL.partnerCreateClient = function(partnerKey) {
+    const name = prompt("Enter Client Name (Family or Business):");
+    if (!name) return;
+
+    const clientId = 'c-' + Math.random().toString(36).slice(2, 9);
+    
+    const newClient = {
+        id: clientId,
+        meta: {
+            name: name,
+            status: "Discovery",
+            partnerOwner: partnerKey, // 🔒 Mandatory link
+            createdDate: new Date().toISOString()
+        },
+        projectData: {
+            localResources: [],
+            localApps: [],
+            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }],
+            localFunctions: [],
+            stages: [],
+            workflows: [],
+            clientTasks: [],
+        }
+    };
+
+    state.clients[clientId] = newClient;
+    
+    // 🚀 Auto-Provision Agreement, Naming, Hierarchy, and Compliance
+    OL.provisionSphynxTemplates(clientId);
+
+    OL.persist().then(() => {
+        OL.renderPartnerDashboard();
+    });
+};
+
+// 🤝 THE PARTNER ASSIGNMENT HANDLER
+OL.handlePartnerAssignment = function(clientId, partnerKey) {
+    const client = state.clients[clientId];
+    if (!client) {
+        console.error("❌ Assignment Failed: Client ID not found.");
+        return;
+    }
+
+    // 1. Update the metadata
+    client.meta.partnerOwner = partnerKey;
+
+    // 2. Add an activity log entry for history
+    if (!client.meta.activityLog) client.meta.activityLog = [];
+    client.meta.activityLog.push({
+        action: partnerKey ? `Assigned to Partner: ${partnerKey}` : "Set to Internal Project",
+        timestamp: new Date().toISOString()
+    });
+
+    console.log(`🎯 Client "${client.meta.name}" ownership updated to: ${partnerKey || 'None'}`);
+
+    // 3. Persist and Refresh
+    OL.persist().then(() => {
+        // If you have a specific modal refresh function, call it here
+        if (typeof OL.openClientProfileModal === 'function') {
+            OL.openClientProfileModal(clientId);
+        } else {
+            // Fallback: Refresh the whole route to update UI
+            window.handleRoute();
+        }
+    });
+};
+
 // 2. CREATE CLIENT INCLUDING PROFILE ID FOR PUBLIC LINK
 export function onboardNewClient() {
   const name = prompt("Enter Client Name:");
