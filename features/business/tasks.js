@@ -19,6 +19,11 @@ OL.activeTaskTimer = {
     elapsedSeconds: 0 
 };
 
+// 🗂️ Bulk Task Editor selection — { taskId: clientId } so we know which
+// client each selected task belongs to even when selecting across the
+// master rollup (which spans many clients at once).
+OL.bulkTaskSelection = OL.bulkTaskSelection || {};
+
 // 🔌 Standardized Third-Party / Vendor Assignees
 OL.thirdPartyAssignees = [
     "Zapier Support",
@@ -135,10 +140,13 @@ OL.renderBusinessTaskManager = function() {
             </div>
         </div>
 
+        ${OL.renderBulkTaskToolbar()}
+
         <!-- QUICK TASK CREATOR BAR -->
         <div class="card" style="padding: 16px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.04); border: 1px solid var(--accent);">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
                 <i data-lucide="zap" style="width:14px;height:14px;"></i> Quick Task Creator
+
             </div>
             <form onsubmit="event.preventDefault(); OL.createGlobalQuickTask();" style="display: grid; grid-template-columns: 180px 2fr 160px 140px 140px 110px; gap: 10px; align-items: center;">
                 
@@ -379,7 +387,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
             
             ${subGroupBy === 'none' ? `
                 <div style="display: grid; gap: 8px;">
-                    ${tasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                    ${OL.sortTasksWithSubtasksNested(tasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
                 </div>
             ` : `
                 <div style="display: grid; gap: 16px; padding-left: 12px; border-left: 2px solid rgba(var(--accent-rgb), 0.2);">
@@ -389,7 +397,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                                 <i data-lucide="corner-down-right" style="width:12px;height:12px;"></i> ${esc(subTitle)} (${subTasks.length})
                             </div>
                             <div style="display: grid; gap: 8px;">
-                                ${subTasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                                ${OL.sortTasksWithSubtasksNested(subTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
                             </div>
                         </div>
                     `).join('')}
@@ -401,6 +409,31 @@ OL.renderFilteredTaskGroups = function(allTasks) {
 };
 
 // Render Individual Task Row (ClickUp-Style 2-Line Layout)
+// Reorders a flat task array so each sub-task (t.parentTaskId set) sits
+// immediately after its parent, for visually nested rendering. Orphaned
+// sub-tasks (parent filtered out of this list, e.g. by a status filter)
+// just render in place, unindented.
+OL.sortTasksWithSubtasksNested = function(tasks) {
+    const byId = {};
+    tasks.forEach(t => { byId[t.id] = t; });
+
+    const topLevel = tasks.filter(t => !t.parentTaskId || !byId[t.parentTaskId]);
+    const childrenOf = {};
+    tasks.forEach(t => {
+        if (t.parentTaskId && byId[t.parentTaskId]) {
+            if (!childrenOf[t.parentTaskId]) childrenOf[t.parentTaskId] = [];
+            childrenOf[t.parentTaskId].push(t);
+        }
+    });
+
+    const ordered = [];
+    topLevel.forEach(t => {
+        ordered.push(t);
+        (childrenOf[t.id] || []).forEach(child => ordered.push(child));
+    });
+    return ordered;
+};
+
 OL.renderTaskRowHTML = function(t, todayStr) {
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
     const isGenericSphynx = t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx';
@@ -454,11 +487,17 @@ OL.renderTaskRowHTML = function(t, todayStr) {
 
     return `
     <div class="task-row-card" 
-         style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
+         style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; margin-left:${t.parentTaskId ? '28px' : '0'}; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; ${t.parentTaskId ? 'border-left:2px solid var(--accent);' : ''}"
          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
-        
+        ${t.parentTaskId ? `<div class="tiny muted" style="display:flex; align-items:center; gap:4px;"><i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> Sub-task${t.automationRuleId ? ' · auto-created' : ''}</div>` : ''}
         <!-- LINE 1: Status Dot + Expanded Task Title + Workspace Badge -->
         <div style="display:flex; align-items:center; gap:10px; width:100%;">
+            <!-- Bulk Select Checkbox -->
+            <input type="checkbox" 
+                   onclick="event.stopPropagation();"
+                   onchange="OL.toggleBulkTaskSelection('${t.id}', '${t.clientId}')"
+                   ${OL.bulkTaskSelection[t.id] ? 'checked' : ''}
+                   style="width:14px;height:14px;flex-shrink:0;cursor:pointer;">
             <!-- Status Dot -->
             <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
                 <span title="Status: ${esc(t.status || 'Pending')}" 
@@ -543,7 +582,108 @@ OL.renderTaskRowHTML = function(t, todayStr) {
     `;
 };
 
-// ================= LIGHTWEIGHT POPOVER DROPDOWNS ================= //
+// ================= 🗂️ BULK TASK EDITOR =================
+
+OL.toggleBulkTaskSelection = function(taskId, clientId) {
+    if (OL.bulkTaskSelection[taskId]) {
+        delete OL.bulkTaskSelection[taskId];
+    } else {
+        OL.bulkTaskSelection[taskId] = clientId;
+    }
+    OL.refreshTaskView();
+};
+
+OL.clearBulkTaskSelection = function() {
+    OL.bulkTaskSelection = {};
+    OL.refreshTaskView();
+};
+
+// Renders the sticky bulk-action bar. Returns '' (renders nothing) when
+// nothing is selected, so callers can just drop this above their task list
+// unconditionally.
+OL.renderBulkTaskToolbar = function() {
+    const ids = Object.keys(OL.bulkTaskSelection);
+    if (ids.length === 0) return '';
+
+    const masterStatuses = OL.getSystemStatuses();
+
+    return `
+        <div class="card" style="padding:10px 14px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid var(--accent); background:rgba(var(--accent-rgb), 0.06);">
+            <strong class="tiny" style="white-space:nowrap;">${ids.length} task${ids.length === 1 ? '' : 's'} selected</strong>
+
+            <select id="bulk-set-status" class="modal-input tiny" style="width:auto;">
+                <option value="">Set Status...</option>
+                ${masterStatuses.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
+            </select>
+
+            <input type="text" id="bulk-set-assignee" class="modal-input tiny" placeholder="Set Assignee..." style="width:150px;">
+
+            <input type="date" id="bulk-set-duedate" class="modal-input tiny" style="width:auto;">
+
+            <button class="btn tiny primary" onclick="OL.applyBulkTaskEdit()">Apply to Selected</button>
+            <button class="btn tiny soft" onclick="OL.clearBulkTaskSelection()">Clear Selection</button>
+        </div>
+    `;
+};
+
+OL.applyBulkTaskEdit = function() {
+    const newStatus = document.getElementById('bulk-set-status')?.value || '';
+    const newAssignee = document.getElementById('bulk-set-assignee')?.value?.trim() || '';
+    const newDueDate = document.getElementById('bulk-set-duedate')?.value || '';
+
+    if (!newStatus && !newAssignee && !newDueDate) {
+        alert('Set at least one field (status, assignee, or due date) before applying.');
+        return;
+    }
+
+    // Group selected task ids by client so we do one updateAndSync per
+    // client (and correctly mark each of those clients dirty for persist()).
+    const byClient = {};
+    Object.entries(OL.bulkTaskSelection).forEach(([taskId, clientId]) => {
+        if (!byClient[clientId]) byClient[clientId] = [];
+        byClient[clientId].push(taskId);
+    });
+
+    Object.entries(byClient).forEach(([clientId, taskIds]) => {
+        updateAndSync(() => {
+            const client = state.clients?.[clientId];
+            if (!client?.projectData?.clientTasks) return;
+
+            taskIds.forEach(taskId => {
+                const task = client.projectData.clientTasks.find(t =>
+                    String(t.id) === String(taskId) || String(t.key) === String(taskId)
+                );
+                if (!task) return;
+
+                if (newStatus) {
+                    const previousStatus = task.status;
+                    task.status = newStatus;
+                    if (typeof OL.runAutomationRules === 'function') {
+                        OL.runAutomationRules('task_status_change', {
+                            clientId, client, task,
+                            previousStatus, newStatus,
+                            assignee: task.assignee,
+                            title: task.title || task.name,
+                            resourceName: task.resourceName || task.category || ''
+                        });
+                    }
+                }
+                if (newAssignee) {
+                    task.assignee = newAssignee;
+                    task.isClientTask = (newAssignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(newAssignee));
+                }
+                if (newDueDate) {
+                    task.dueDate = newDueDate;
+                }
+            });
+        }, clientId);
+    });
+
+    OL.bulkTaskSelection = {};
+    OL.refreshTaskView();
+};
+
+
 
 OL.closePopoverDropdown = function() {
     const existing = document.getElementById('task-popover-dropdown');
@@ -721,8 +861,19 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
         );
 
         if (task) {
+            const previousStatus = task.status;
             task.status = newStatus;
             console.log(`✅ Status updated successfully for [${taskId}] -> ${newStatus}`);
+
+            if (typeof OL.runAutomationRules === 'function') {
+                OL.runAutomationRules('task_status_change', {
+                    clientId, client, task,
+                    previousStatus, newStatus,
+                    assignee: task.assignee,
+                    title: task.title || task.name,
+                    resourceName: task.resourceName || task.category || ''
+                });
+            }
         } else {
             console.error("❌ Task not found in client workspace:", taskId);
         }

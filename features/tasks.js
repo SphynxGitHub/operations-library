@@ -45,6 +45,8 @@ export function renderClientTaskManager() {
             </div>
         </div>
 
+        ${typeof OL.renderBulkTaskToolbar === 'function' ? OL.renderBulkTaskToolbar() : ''}
+
         <!-- QUICK TASK CREATOR BAR (PRE-SET TO CURRENT CLIENT) -->
         <div class="card" style="padding: 14px 16px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.04); border: 1px solid var(--accent);">
             <form onsubmit="event.preventDefault(); OL.createClientQuickTask('${client.id}');" style="display: grid; grid-template-columns: 2fr 160px 140px 140px 110px; gap: 10px; align-items: center;">
@@ -172,7 +174,7 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
     }
 
     if (groupBy === 'none') {
-        return `<div style="display:grid; gap:8px;">${filtered.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
+        return `<div style="display:grid; gap:8px;">${OL.sortTasksWithSubtasksNested(filtered).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
     }
 
     const groups = {};
@@ -195,7 +197,7 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
                 </div>
             </div>
             <div style="display: grid; gap: 8px;">
-                ${groupTasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                ${OL.sortTasksWithSubtasksNested(groupTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
             </div>
         </div>
     `).join('');

@@ -1,10 +1,10 @@
-import { esc, state } from '../../core/data.js';
+import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
 OL.renderBusinessFinancials = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    const clients = Object.values(state.clients || {});
+    const clients = getBusinessScopedClients();
     let allScopedItems = clients.flatMap(c => {
         const sheet = c.projectData?.scopingSheets?.[0];
         return (sheet?.lineItems || []).map(li => ({

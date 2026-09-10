@@ -611,10 +611,27 @@ export function updateLineItem(itemId, field, value) {
     if (item) {
         console.log(`✅ Item Resolved. Updating ${field} to:`, value);
 
+        const previousValue = item[field];
+
         if (field === 'round') {
             item.round = parseInt(value, 10) || 1;
         } else {
             item[field] = value;
+        }
+
+        // 🤖 Fire automation rules for status/responsibleParty changes only —
+        // these are the fields that matter as automation triggers ("Do Now" + "Sphynx", etc.)
+        if ((field === 'status' || field === 'responsibleParty') && typeof OL.runAutomationRules === 'function') {
+            const resource = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
+            OL.runAutomationRules('scoping_status_change', {
+                clientId: client.id, client,
+                field,
+                newValue: value,
+                previousValue,
+                status: item.status,
+                party: item.responsibleParty,
+                resourceName: resource?.name || ''
+            });
         }
 
         // Save and Re-render

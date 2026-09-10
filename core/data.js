@@ -24,6 +24,7 @@ export const state = {
     },
     master: {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
+        automationRules: [],
         datapoints: [
             { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
             { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
@@ -81,7 +82,8 @@ export function persist() {
                 task_blueprints: masterCopy.taskBlueprints || [],
                 how_to_library: masterCopy.howToLibrary || [],
                 analyses: masterCopy.analyses || [],
-                sphynx_team: masterCopy.sphynxTeam || []
+                sphynx_team: masterCopy.sphynxTeam || [],
+                automation_rules: masterCopy.automationRules || []
             };
 
             const { error: masterErr } = await db
@@ -164,6 +166,7 @@ export async function sync() {
             if (Array.isArray(masterData.how_to_library) && masterData.how_to_library.length > 0) state.master.howToLibrary = masterData.how_to_library;
             if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) state.master.analyses = masterData.analyses;
             if (Array.isArray(masterData.sphynx_team) && masterData.sphynx_team.length > 0) state.master.sphynxTeam = masterData.sphynx_team;
+            if (Array.isArray(masterData.automation_rules)) state.master.automationRules = masterData.automation_rules;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
 

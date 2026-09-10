@@ -1,4 +1,4 @@
-import { esc, state } from '../../core/data.js';
+import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
 //============= RECONCILIATION HELPERS =============//
 
@@ -37,7 +37,7 @@ OL.renderBusinessTimeReports = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    const clients = Object.values(state.clients || {});
+    const clients = getBusinessScopedClients();
     
     // Aggregate tasks from all clients
     let masterTasks = clients.flatMap(c => 
@@ -241,7 +241,7 @@ OL.renderClientReportView = function(clientId) {
 };
 
 OL.openTimeReportModal = function(selectedClientId) {
-    const clients = Object.values(state.clients || {});
+    const clients = getBusinessScopedClients();
     const targetClientId = selectedClientId || (clients[0]?.id || '');
     
     const content = `

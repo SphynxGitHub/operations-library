@@ -1,4 +1,4 @@
-import { esc, state, updateAndSync } from '../../core/data.js';
+import { esc, state, updateAndSync, getBusinessScopedClients } from '../../core/data.js';
 
 // Global state for communications tab view
 OL.commTabState = {
@@ -10,7 +10,7 @@ OL.renderBusinessCommunications = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    const clients = Object.values(state.clients || {});
+    const clients = getBusinessScopedClients();
     const commsData = state.master?.communications || {
         gmail: { connected: false, email: '', apiKey: '' },
         quo: { endpointSecret: 'whsec_' + Math.random().toString(36).slice(2, 10), activeWebhooks: 0 },
