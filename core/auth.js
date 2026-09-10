@@ -6,67 +6,81 @@
 
 import { db, state, persist } from './data.js';
 
-// ---- FORCE_ADMIN: computed once on load, same as the original ----
-// Restored here after being lost in the core/data.js extraction — this
-// is read in 8 places across app.js (buildLayout and several tab-render
-// functions) to decide whether to show admin UI.
-const _params = new URLSearchParams(window.location.search);
-const _isFiddle = window.location.hostname.includes('jsfiddle.net') || window.location.hostname.includes('fiddle.jshell.net');
-window.FORCE_ADMIN = _params.get('admin') === 'pizza123' || _isFiddle;
-
 // ---- initializeSecurityContext: gate the whole app on load ----
 // Now async — the load listener that calls this in app.js needs
 // `await OL.initializeSecurityContext()`.
+//
+// v3: admin status now comes from a real Supabase session + the `admins`
+// table, not just the ?admin=pizza123 URL secret. Sets both
+// state.adminMode (~25 call sites across app.js) and window.FORCE_ADMIN
+// (8 call sites) exactly as the old URL-secret path did, so nothing else
+// in app.js needs to change.
 export async function initializeSecurityContext() {
-    const params = new URLSearchParams(window.location.search);
-    const adminKeyFromUrl = params.get('admin');
+    const { data: { session } } = await db.auth.getSession();
 
-    // Admin path: unchanged.
-    if (adminKeyFromUrl && adminKeyFromUrl === 'pizza123') {
-        state.adminMode = true;
-        window.IS_GUEST = false;
-        console.log("🛠️ Admin Mode Active");
+    if (session) {
+        const { data: adminRow } = await db
+            .from('admins')
+            .select('id')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+        if (adminRow) {
+            state.adminMode = true;
+            window.FORCE_ADMIN = true;
+            window.IS_GUEST = false;
+            console.log("🛠️ Admin Mode Active (real login)");
+            return true;
+        }
+
+        // Not an admin — look up their client/partner project.
+        const { data: client, error } = await db
+            .from('workspace_clients')
+            .select('*')
+            .eq('auth_user_id', session.user.id)
+            .maybeSingle();
+
+        if (error || !client) {
+            console.error('No project or admin role is linked to this login.', error);
+            await db.auth.signOut();
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        state.activeClientId = client.id;
+        state.clients[client.id] = {
+            id: client.id,
+            publicToken: client.public_token,
+            meta: client.meta || {},
+            modules: client.modules,
+            permissions: client.permissions,
+            projectData: client.project_data || { localResources: [], clientTasks: [] },
+            sharedMasterIds: client.shared_master_ids || []
+        };
+
+        state.adminMode = false;
+        window.FORCE_ADMIN = false;
+        // IS_GUEST historically meant "not admin" throughout app.js's UI
+        // branching — a logged-in partner/client is still not admin, so
+        // this stays true, same as the old ?access=token path.
+        window.IS_GUEST = true;
         return true;
     }
 
-    // Everyone else needs a real Supabase session now.
-    const { data: { session } } = await db.auth.getSession();
-
-    if (!session) {
-        window.location.href = 'login.html';
-        return false;
+    // No session yet. TEMPORARY fallback so you're not locked out while
+    // testing the real admin login above — remove this whole block once
+    // you've confirmed logging in via login.html + the admins table works.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'pizza123') {
+        state.adminMode = true;
+        window.FORCE_ADMIN = true;
+        window.IS_GUEST = false;
+        console.log("🛠️ Admin Mode Active (LEGACY URL key — remove this fallback once real admin login is confirmed)");
+        return true;
     }
 
-    const { data: client, error } = await db
-        .from('workspace_clients')
-        .select('*')
-        .eq('auth_user_id', session.user.id)
-        .maybeSingle();
-
-    if (error || !client) {
-        console.error('No project is linked to this login.', error);
-        await db.auth.signOut();
-        window.location.href = 'login.html';
-        return false;
-    }
-
-    state.activeClientId = client.id;
-    state.clients[client.id] = {
-        id: client.id,
-        publicToken: client.public_token,
-        meta: client.meta || {},
-        modules: client.modules,
-        permissions: client.permissions,
-        projectData: client.project_data || { localResources: [], clientTasks: [] },
-        sharedMasterIds: client.shared_master_ids || []
-    };
-
-    state.adminMode = false;
-    // IS_GUEST historically meant "not admin" throughout app.js's UI
-    // branching (14 call sites) — a logged-in partner/client is still
-    // not admin, so this stays true, same as the old ?access=token path.
-    window.IS_GUEST = true;
-    return true;
+    window.location.href = 'login.html';
+    return false;
 }
 
 // ---- checkPermission: per-tab read/write level for the active client ----
