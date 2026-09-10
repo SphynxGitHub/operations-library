@@ -180,12 +180,12 @@ OL.renderBusinessTaskManager = function() {
                     <i data-lucide="list-checks" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Status:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('status', this.value)">
-                        <option value="Open" ${OL.globalTaskFilterState.status === 'Open' ? 'selected' : ''}>Open Items (Pending/Progress/Review)</option>
-                        <option value="Closed" ${OL.globalTaskFilterState.status === 'Closed' ? 'selected' : ''}>Closed Items (Done)</option>
-                        <option value="All" ${OL.globalTaskFilterState.status === 'All' ? 'selected' : ''}>All Statuses</option>
-                        <option value="Pending" ${OL.globalTaskFilterState.status === 'Pending' ? 'selected' : ''}>Pending Only</option>
-                        <option value="In Progress" ${OL.globalTaskFilterState.status === 'In Progress' ? 'selected' : ''}>In Progress Only</option>
+                        <option value="Pending" ${OL.globalTaskFilterState.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                        <option value="Open" ${OL.globalTaskFilterState.status === 'Open' ? 'selected' : ''}>Open</option>
+                        <option value="In Progress" ${OL.globalTaskFilterState.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
                         <option value="Review" ${OL.globalTaskFilterState.status === 'Review' ? 'selected' : ''}>Review Only</option>
+                        <option value="Closed" ${OL.globalTaskFilterState.status === 'Closed' ? 'selected' : ''}>Closed</option>
+                        <option value="All" ${OL.globalTaskFilterState.status === 'All' ? 'selected' : ''}>All Statuses</option>                
                         <option value="Done" ${OL.globalTaskFilterState.status === 'Done' ? 'selected' : ''}>Done Only</option>
                     </select>
                 </div>
@@ -546,17 +546,13 @@ OL.navigateToClientProject = function(clientId) {
 // ================= HARDENED ROW CLICK HANDLER ================= //
 
 OL.handleTaskRowClick = function(event, clientId, taskId) {
-    // Strictly isolate clicks on interactive controls (Selects, Inputs, Buttons, & Client Workspace Links)
-    const isInteractive = event.target.closest('select, input, button, a') || 
-                          event.target.classList.contains('client-link-badge') || 
-                          event.target.closest('.client-link-badge');
-                          
+    // Isolate interactive form controls (selects, inputs, timer buttons, links)
+    const isInteractive = event.target.closest('select, input, button, a, .client-link-badge');
     if (isInteractive) return;
 
     event.preventDefault();
     event.stopPropagation();
 
-    console.log(`🔍 Direct Row Click - Opening Modal: Client [${clientId}], Task [${taskId}]`);
     OL.openTaskInContext(clientId, taskId);
 };
 
@@ -594,69 +590,90 @@ OL.closeModal = function() {
 
 // 🔍 In-Context Task Launcher
 OL.openTaskInContext = async function(clientId, taskId) {
-    console.log(`🚀 Launching Task Modal for Client [${clientId}], Task [${taskId}]`);
-    
-    // Load full client if needed
-    if (typeof loadFullClient === 'function') {
-        await loadFullClient(clientId);
-    } else if (typeof OL.loadFullClient === 'function') {
-        await OL.loadFullClient(clientId);
-    }
+    try {
+        // 1. Ensure target client data is synced into state
+        if (typeof loadFullClient === 'function') {
+            await loadFullClient(clientId);
+        } else if (typeof OL.loadFullClient === 'function') {
+            await OL.loadFullClient(clientId);
+        }
 
-    const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
 
-    if (!task) {
-        alert("Task record could not be found in active workspace.");
-        return;
-    }
+        if (!task) {
+            console.error("❌ Could not resolve task in state:", taskId);
+            return;
+        }
 
-    // Try global modal delegates first, or fallback to reliable built-in modal
-    if (typeof window.openTaskModal === 'function') {
-        window.openTaskModal(taskId, false, clientId);
-    } else if (typeof OL.openTaskModal === 'function' && OL.openTaskModal !== OL.openTaskInContext) {
-        OL.openTaskModal(taskId, false, clientId);
-    } else {
-        OL.renderFallbackTaskModal(client, task);
+        // 2. Delegate to primary application openTaskModal if available
+        if (typeof window.openTaskModal === 'function') {
+            window.openTaskModal(taskId, false, clientId);
+            return;
+        }
+
+        // 3. Guaranteed Standalone In-Context Modal Renderer
+        OL.renderInContextTaskModal(client, task);
+    } catch (err) {
+        console.error("❌ Error launching task modal:", err);
     }
 };
 
-// 🛠️ Full In-Context Task Editor & View Modal
-OL.renderFallbackTaskModal = function(client, task) {
+OL.renderInContextTaskModal = function(client, task) {
+    const is3rdParty = (OL.thirdPartyAssignees || []).includes(task.assignee);
+    const isClientAssigned = task.assignee !== 'Sphynx Task' && !is3rdParty;
+
     const content = `
-        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 15px;">
-            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-                <i data-lucide="check-square" style="width:20px;height:20px;color:var(--accent);"></i>
-                ${esc(task.title || task.name)}
-            </h3>
-            <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold;">✕</button>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <span class="pill tiny soft"><i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Client')}</span>
-                <span class="pill tiny accent">Status: ${esc(task.status || 'Pending')}</span>
-                <span class="pill tiny soft">Assignee: ${esc(task.assignee || 'Sphynx Task')}</span>
+        <div style="padding: 24px; max-width: 650px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:10px; font-size:18px;">
+                    <i data-lucide="check-square" style="width:22px;height:22px;color:var(--accent);"></i>
+                    ${esc(task.title || task.name)}
+                </h3>
+                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px;">✕</button>
             </div>
 
-            ${task.description ? `
-                <div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border:1px solid var(--line); font-size:13px;">
-                    <strong>Description:</strong>
-                    <div style="margin-top:4px;" class="muted">${esc(task.description)}</div>
+            <div class="modal-body">
+                <!-- Metadata Badges -->
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
+                    <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                        <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
+                    </span>
+                    <span class="pill tiny accent" style="font-weight:bold;">
+                        Status: ${esc(task.status || 'Pending')}
+                    </span>
+                    <span class="pill tiny soft" style="font-weight:bold; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}">
+                        Assignee: ${esc(task.assignee || 'Sphynx Task')}
+                    </span>
                 </div>
-            ` : ''}
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:12px; border-radius:6px;" class="tiny">
-                <div><strong>Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'None'}</div>
-                <div><strong>Logged Hours:</strong> ${Number(task.loggedHours || 0).toFixed(1)}h</div>
-                <div><strong>Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
-                <div><strong>Created:</strong> ${task.createdAt ? new Date(task.createdAt).toLocaleDateString() : 'N/A'}</div>
-            </div>
+                <!-- Description Block -->
+                <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
+                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
+                    <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
+                </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:15px;">
-                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')">
-                    <i data-lucide="pencil" style="width:12px;height:12px;"></i> Edit Time Log
-                </button>
-                <button class="btn primary tiny" onclick="OL.closeModal()">Close Details</button>
+                <!-- Task Metrics Grid -->
+                <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
+                    <div><strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Unscheduled'}</div>
+                    <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
+                    <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
+                    <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
+                </div>
+
+                ${task.timeAuditNote ? `
+                    <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
+                        <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
+                    </div>
+                ` : ''}
+
+                <!-- Modal Actions -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
+                    <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:6px;">
+                        <i data-lucide="pencil" style="width:12px;height:12px;"></i> Adjust Logged Time
+                    </button>
+                    <button class="btn primary tiny" onclick="OL.closeModal()" style="font-weight:bold;">Close Window</button>
+                </div>
             </div>
         </div>
     `;
