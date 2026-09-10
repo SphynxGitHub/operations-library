@@ -385,129 +385,110 @@ OL.renderFilteredTaskGroups = function(allTasks) {
 
 // Render Individual Task Row
 OL.renderTaskRowHTML = function(t, todayStr) {
-    const teamOptions = OL.getClientTeamOptions(t.clientId);
     const isClientAssigned = t.assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(t.assignee);
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
     const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
     const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && t.status !== 'Done';
 
+    // ClickUp Status Color Mapping
+    const statusColors = {
+        'Pending': '#94a3b8',
+        'In Progress': '#38bdf8',
+        'Review': '#fbbf24',
+        'Done': '#22c55e'
+    };
+    const dotColor = statusColors[t.status] || '#94a3b8';
+
+    // Assignee Avatar Icon Configuration (Pure Lucide Icons)
+    let avatarBg = 'rgba(56, 189, 248, 0.15)';
+    let avatarIcon = 'zap';
+    let avatarColor = '#38bdf8';
+
+    if (is3rdParty) {
+        avatarBg = 'rgba(168, 85, 247, 0.15)';
+        avatarIcon = 'wrench';
+        avatarColor = '#a855f7';
+    } else if (isClientAssigned) {
+        avatarBg = 'rgba(236, 72, 153, 0.15)';
+        avatarIcon = 'user';
+        avatarColor = '#ec4899';
+    }
+
     return `
     <div class="task-row-card" 
-         style="display:flex; flex-direction:column; gap:8px; padding:12px 16px; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border:1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius:6px; cursor:pointer;"
+         style="display:grid; grid-template-columns: 24px 2fr 160px 150px 120px 210px 32px; gap: 12px; padding: 8px 12px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom: 1px solid var(--line); border-radius: 4px; align-items:center; cursor:pointer;"
          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
         
-        <!-- ------------------------------------------------------------- -->
-        <!-- LINE 1: Task Name — Workspace / Project Title — Linked Resource -->
-        <!-- ------------------------------------------------------------- -->
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
-            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-                <!-- Task Title -->
-                <div class="task-title-cell" 
-                     style="font-weight:700; font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;"
-                     onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
-                    ${esc(t.title || t.name)}
-                </div>
-                
-                <span class="muted" style="font-size:12px;">—</span>
-
-                <!-- Workspace / Project Title Tag -->
-                <span class="client-link-badge pill tiny soft" 
-                      style="cursor:pointer; text-decoration:none; font-weight:600; padding:2px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:4px; font-size:11px; flex-shrink:0;" 
-                      onclick="event.stopPropagation(); OL.navigateToClientProject('${t.clientId}')"
-                      title="Jump to Workspace">
-                    <i data-lucide="folder" style="width:11px;height:11px; pointer-events:none;"></i> ${esc(t.clientName)}
-                </span>
-            </div>
-
-            <!-- Linked Resource Badge -->
-            <div style="flex-shrink:0;">
-                <span class="pill tiny soft" style="font-size:11px; color:var(--accent); background:rgba(var(--accent-rgb), 0.08); border:1px solid rgba(var(--accent-rgb), 0.2); display:inline-flex; align-items:center; gap:4px;">
-                    <i data-lucide="database" style="width:11px;height:11px; pointer-events:none;"></i>
-                    <strong>Resource:</strong> ${esc(t.resourceName || t.category || 'General Deliverable')}
-                </span>
-            </div>
+        <!-- 1. Color-Coded ClickUp Status Dot -->
+        <div onclick="event.stopPropagation();" style="display:flex; justify-content:center;">
+            <span title="Status: ${esc(t.status || 'Pending')}" 
+                  style="width: 10px; height: 10px; border-radius: 50%; background-color: ${dotColor}; display: inline-block; cursor: pointer;"
+                  onclick="OL.openEditTaskStatusQuickMenu(event, '${t.clientId}', '${t.id}')">
+            </span>
         </div>
 
-        <!-- ------------------------------------------------------------- -->
-        <!-- LINE 2: Category | Assignee | Due Date | Status | Time Tracking -->
-        <!-- ------------------------------------------------------------- -->
-        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
-            
-            <!-- Left Side Controls: Category Badge & Assignee -->
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                
-                <!-- Category Badge -->
-                <span class="pill tiny soft" style="font-size:10px; text-transform:uppercase; letter-spacing:0.05em; font-weight:bold; color:var(--muted);">
-                    🏷️ ${esc(t.category || 'Deliverable')}
-                </span>
+        <!-- 2. Compact Task Name -->
+        <div class="task-title-cell" 
+             style="font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+             onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
+            ${esc(t.title || t.name)}
+        </div>
 
-                <!-- Assignee Dropdown -->
-                <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center; width:160px;">
-                    <i data-lucide="${is3rdParty ? 'wrench' : (isClientAssigned ? 'user' : 'zap')}" style="position:absolute; left:8px; width:13px; height:13px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}; pointer-events:none;"></i>
-                    <select class="modal-input tiny" 
-                            style="width:100%; padding-left:26px; border-color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--line)')}; font-size:11px;"
-                            onchange="OL.updateGlobalTaskAssignee('${t.clientId}', '${t.id}', this.value)">
-                        <option value="Sphynx Task" ${t.assignee === 'Sphynx Task' ? 'selected' : ''}>Sphynx Task</option>
-                        ${teamOptions.length > 0 ? `
-                            <optgroup label="Client Team">
-                                ${teamOptions.map(m => `
-                                    <option value="${esc(m.name)}" ${t.assignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>
-                                `).join('')}
-                            </optgroup>
-                        ` : `
-                            <option value="Client Task" ${t.assignee === 'Client Task' || t.assignee === 'Client' ? 'selected' : ''}>Client Task</option>
-                        `}
-                        <optgroup label="3rd Party / Vendors">
-                            ${(OL.thirdPartyAssignees || []).map(tp => `
-                                <option value="${esc(tp)}" ${t.assignee === tp ? 'selected' : ''}>${esc(tp)}</option>
-                            `).join('')}
-                        </optgroup>
-                    </select>
-                </div>
+        <!-- 3. Workspace Tag with Lucide Folder Icon -->
+        <div>
+            <span class="client-link-badge pill tiny soft" 
+                  style="cursor:pointer; text-decoration:none; font-weight:600; padding: 2px 8px; border-radius: 4px; display:inline-flex; align-items:center; gap:5px; font-size:11px;" 
+                  onclick="event.stopPropagation(); OL.navigateToClientProject('${t.clientId}')"
+                  title="Jump to Workspace">
+                <i data-lucide="folder" style="width:12px;height:12px; pointer-events:none;"></i> ${esc(t.clientName)}
+            </span>
+        </div>
 
-                <!-- Due Date Input -->
-                <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center; width:130px;">
-                    <i data-lucide="calendar" style="position:absolute; left:8px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
-                    <input type="date" 
-                           class="modal-input tiny monospace" 
-                           value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
-                           style="width:100%; padding-left:24px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'}; font-size:11px;"
-                           onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
-                </div>
+        <!-- 4. Linked Resource Reference with Lucide Database Icon -->
+        <div>
+            <span class="pill tiny soft" style="font-size: 10px; color: var(--accent); background: rgba(var(--accent-rgb), 0.06); border: 1px solid rgba(var(--accent-rgb), 0.15); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <i data-lucide="database" style="width:11px;height:11px; pointer-events:none;"></i>
+                ${esc(t.resourceName || t.category || 'General Resource')}
+            </span>
+        </div>
 
-                <!-- Status Dropdown -->
-                <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center; width:120px;">
-                    <i data-lucide="check-circle" style="position:absolute; left:8px; width:12px; height:12px; color:var(--accent); pointer-events:none;"></i>
-                    <select class="modal-input tiny" 
-                            style="width:100%; padding-left:24px; font-weight:bold; font-size:11px;" 
-                            onchange="OL.updateGlobalTaskStatus('${t.clientId}', '${t.id}', this.value)">
-                        <option value="Pending" ${t.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                        <option value="In Progress" ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                        <option value="Review" ${t.status === 'Review' ? 'selected' : ''}>Review</option>
-                        <option value="Done" ${t.status === 'Done' ? 'selected' : ''}>Done</option>
-                    </select>
-                </div>
-            </div>
+        <!-- 5. Compact Due Date with Lucide Calendar Icon -->
+        <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
+            <i data-lucide="calendar" style="position:absolute; left:6px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
+            <input type="date" 
+                   class="modal-input tiny monospace" 
+                   value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
+                   style="width:100%; padding-left: 22px; border:none; background:transparent; font-size:11px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
+                   onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
+        </div>
 
-            <!-- Right Side Controls: Time Tracking & Quick Logging -->
-            <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:6px;">
-                <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
-                        id="timer-btn-${t.id}"
-                        title="${isTimerRunning ? 'Stop Timer' : 'Start Timer'}"
-                        style="font-weight:bold; width:30px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" 
-                        onclick="event.stopPropagation(); OL.toggleLiveTaskTimer('${t.clientId}', '${t.id}')">
-                    <i data-lucide="${isTimerRunning ? 'square' : 'timer'}" style="width:13px;height:13px; pointer-events:none;"></i>
-                </button>
+        <!-- 6. Time Tracking Controls with Lucide Timer & Pencil Icons -->
+        <div onclick="event.stopPropagation();" style="display: flex; align-items: center; gap: 4px; justify-content: flex-end;">
+            <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
+                    id="timer-btn-${t.id}"
+                    title="${isTimerRunning ? 'Stop Timer' : 'Start Timer'}"
+                    style="font-weight: bold; width: 26px; height: 24px; padding:0; display:inline-flex; align-items:center; justify-content:center;" 
+                    onclick="event.stopPropagation(); OL.toggleLiveTaskTimer('${t.clientId}', '${t.id}')">
+                <i data-lucide="${isTimerRunning ? 'square' : 'timer'}" style="width:12px;height:12px; pointer-events:none;"></i>
+            </button>
 
-                <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width:48px; text-align:right; color:${isTimerRunning ? '#38bdf8' : 'var(--accent)'}; font-size:12px;">
-                    ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
-                </span>
+            <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width: 38px; text-align: right; color: ${isTimerRunning ? '#38bdf8' : 'var(--accent)'}; font-size: 11px;">
+                ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
+            </span>
 
-                <button class="btn tiny soft" title="Add 0.5 hours" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
-                <button class="btn tiny soft" title="Add 1.0 hour" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
-                <button class="btn tiny soft" title="Edit Retroactive Time Entry" onclick="event.stopPropagation(); OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')" style="display:inline-flex; align-items:center; justify-content:center; padding:4px 6px;">
-                    <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
-                </button>
+            <button class="btn tiny soft" style="padding:2px 5px; font-size:10px;" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
+            <button class="btn tiny soft" style="padding:2px 5px; font-size:10px;" onclick="event.stopPropagation(); OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
+            <button class="btn tiny soft" title="Edit Time Log" onclick="event.stopPropagation(); OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')" style="display:inline-flex; align-items:center; justify-content:center; padding:3px 5px;">
+                <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
+            </button>
+        </div>
+
+        <!-- 7. Assignee Lucide Avatar Badge -->
+        <div onclick="event.stopPropagation();" style="display:flex; justify-content:center;">
+            <div title="Assignee: ${esc(t.assignee)}" 
+                 style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; border:1px solid ${avatarColor}; display:flex; align-items:center; justify-content:center; cursor:pointer;"
+                 onclick="OL.openEditTaskAssigneeModal('${t.clientId}', '${t.id}')">
+                <i data-lucide="${avatarIcon}" style="width:12px;height:12px; pointer-events:none;"></i>
             </div>
         </div>
     </div>
