@@ -12,6 +12,19 @@ OL.globalTaskFilterState = {
 };
 
 // ================= ⚙️ CUSTOM STATUS MANAGER ================= //
+OL.getSystemStatuses = fuction () {
+    return state.master? taskStatues || [
+        { id: "st-1", name: "Pending Sphynx Action", color: "#64c6a2", isClosed: false, order: 1 },
+        { id: "st-2", name: "Pending Client Feedback", color: "#0880ea", isClosed: false, order: 2 },
+        { id: "st-3", name: "Pending Client Document", color: "#4a55e6", isClosed: false, order: 3 },
+        { id: "st-4", name: "Pending Client Review", color: "#b83dba", isClosed: false, order: 4 },
+        { id: "st-5", name: "Pending Developer Update", color: "#9e832c", isClosed: false, order: 5 },
+        { id: "st-6", name: "Pending Third Party Support", color: "#ffca18", isClosed: false, order: 6 },
+        { id: "st-7", name: "Needs Follow Up", color: "#ff7f27", isClosed: false, order: 7 },
+        { id: "st-8", name: "Client Task", color: "#cb1d63", isClosed: false, order: 8 },
+        { id: "st-9", name: "Done", color: "#299764", isClosed: true, order: 9}
+    ];
+}
 
 OL.openStatusManagerModal = function() {
     if (!state.master) state.master = {};
@@ -87,6 +100,161 @@ OL.openStatusManagerModal = function() {
     `;
 
     OL.showOverlayModal(content);
+};
+
+OL.openEditTaskStatusQuickMenu = function(event, clientId, taskId) {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
+    if (!task) return;
+
+    const statuses = OL.getSystemStatuses();
+
+    const content = `
+        <div style="padding: 16px; max-width: 360px; width: 100%;" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);">
+                <span class="tiny bold uppercase muted">Update Status</span>
+                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+            </div>
+            <div style="display:grid; gap:8px;">
+                ${statuses.map(s => `
+                    <button class="btn tiny soft" 
+                            style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; width:100%; ${task.status === s.name ? 'border:1px solid var(--accent); background:rgba(var(--accent-rgb),0.1);' : ''}"
+                            onclick="OL.updateGlobalTaskStatus('${clientId}', '${taskId}', '${esc(s.name)}'); OL.closeModal();">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="width:10px; height:10px; border-radius:50%; background:${s.color};"></span>
+                            <strong>${esc(s.name)}</strong>
+                        </div>
+                        ${task.status === s.name ? '<i data-lucide="check" style="width:12px;height:12px;color:var(--accent);"></i>' : ''}
+                    </button>
+                `).join('')}
+            </div>
+            <div style="margin-top:12px; padding-top:8px; border-top:1px solid var(--line); text-align:center;">
+                <button class="btn tiny soft" style="font-size:10px;" onclick="OL.closeModal(); OL.openStatusManagerModal();">
+                    ⚙️ Manage Status Pipeline
+                </button>
+            </div>
+        </div>
+    `;
+
+    OL.showOverlayModal(content);
+};
+
+// ⚙️ Status Pipeline Settings Modal (Master Tasks / Vault / Business Manager)
+OL.openStatusManagerModal = function() {
+    if (!state.master) state.master = {};
+    if (!state.master.taskStatuses) {
+        state.master.taskStatuses = OL.getSystemStatuses();
+    }
+
+    const statuses = state.master.taskStatuses;
+
+    const content = `
+        <div style="padding: 24px; max-width: 550px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="settings-2" style="width:20px;height:20px;color:var(--accent);"></i>
+                    Task Status Pipeline Manager
+                </h3>
+                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold;">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="tiny muted" style="margin-bottom: 15px;">
+                    Configure global status names, color dot badges, and completion states across all workspaces.
+                </div>
+
+                <div style="display:grid; gap:8px; margin-bottom: 20px;">
+                    ${statuses.map(st => `
+                        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <input type="color" value="${st.color}" style="width:22px; height:22px; border:none; background:none; cursor:pointer;" onchange="OL.updateStatusColor('${st.id}', this.value)">
+                                <strong style="font-size:13px;">${esc(st.name)}</strong>
+                                <span class="pill tiny ${st.isClosed ? 'accent' : 'soft'}" style="font-size:9px;">
+                                    ${st.isClosed ? 'Closed State' : 'Open State'}
+                                </span>
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <button class="btn tiny soft" onclick="OL.toggleStatusClosedType('${st.id}')" title="Toggle Open/Closed State">
+                                    <i data-lucide="${st.isClosed ? 'check-circle' : 'circle'}" style="width:12px;height:12px;"></i>
+                                </button>
+                                <button class="btn tiny soft danger" onclick="OL.deleteCustomStatus('${st.id}')" title="Delete Status">
+                                    <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <form onsubmit="event.preventDefault(); OL.createNewCustomStatus();" style="display:grid; grid-template-columns: 36px 1fr 110px 80px; gap:8px; align-items:center; padding-top:15px; border-top:1px solid var(--line);">
+                    <input type="color" id="new-status-color" value="#38bdf8" style="width:30px; height:30px; border:none; background:none; cursor:pointer;">
+                    <input type="text" id="new-status-name" class="modal-input tiny" placeholder="Status name..." required>
+                    <select id="new-status-type" class="modal-input tiny">
+                        <option value="false">Open</option>
+                        <option value="true">Closed</option>
+                    </select>
+                    <button type="submit" class="btn tiny primary" style="font-weight:bold; height:100%;">+ Add</button>
+                </form>
+            </div>
+        </div>
+    `;
+
+    OL.showOverlayModal(content);
+};
+
+// Data Mutation Handlers
+OL.createNewCustomStatus = function() {
+    const name = document.getElementById('new-status-name')?.value;
+    const color = document.getElementById('new-status-color')?.value || '#38bdf8';
+    const isClosed = document.getElementById('new-status-type')?.value === 'true';
+
+    if (!name) return;
+
+    updateAndSync(() => {
+        if (!state.master) state.master = {};
+        if (!state.master.taskStatuses) state.master.taskStatuses = OL.getSystemStatuses();
+        
+        state.master.taskStatuses.push({
+            id: uid(),
+            name: name,
+            color: color,
+            isClosed: isClosed,
+            order: state.master.taskStatuses.length + 1
+        });
+    });
+
+    OL.openStatusManagerModal();
+    OL.renderBusinessTaskManager();
+};
+
+OL.updateStatusColor = function(statusId, newColor) {
+    updateAndSync(() => {
+        const st = state.master.taskStatuses?.find(s => s.id === statusId);
+        if (st) st.color = newColor;
+    });
+    OL.renderBusinessTaskManager();
+};
+
+OL.toggleStatusClosedType = function(statusId) {
+    updateAndSync(() => {
+        const st = state.master.taskStatuses?.find(s => s.id === statusId);
+        if (st) st.isClosed = !st.isClosed;
+    });
+    OL.openStatusManagerModal();
+    OL.renderBusinessTaskManager();
+};
+
+OL.deleteCustomStatus = function(statusId) {
+    if (!confirm("Are you sure you want to remove this status option?")) return;
+
+    updateAndSync(() => {
+        state.master.taskStatuses = state.master.taskStatuses.filter(s => s.id !== statusId);
+    });
+    OL.openStatusManagerModal();
+    OL.renderBusinessTaskManager();
 };
 
 // Data Mutation Handlers
