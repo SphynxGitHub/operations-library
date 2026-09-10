@@ -7,7 +7,12 @@ import * as OLFunctions from './features/functions.js';
 import * as OLTasks from './features/tasks.js';
 import * as OLResourcesGrid from './features/resources-grid.js';
 import * as OLResourcesModal from './features/resources-modal.js';
-import * as OLAnalysis from './features/analysis.js';
+import * as OLWorkflows from './features/workflows.js';
+import * as OLScoping from './features/scoping.js';
+import * as OLTeam from './features/team.js';
+import * as OLCredentials from './features/credentials.js';
+import * as OLDataManager from './features/data-manager.js';
+import * as OLIntegrations from './features/integrations.js';
 
 window.isMatrixActive = false;
 
