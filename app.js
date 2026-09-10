@@ -221,18 +221,22 @@ window.buildLayout = function () {
   if (isAdmin) {
     homeLabel = "Global Registry";
     homeAction = `OL.goToDashboard('#/')`;
-} else if (client && client.meta.status === "Partner") {
+} 
+  else if (client && client.meta.status === "Partner") {
     homeLabel = "My Portfolio";
     homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-} else if (client && client.meta.partnerOwner) {
+} 
+  else if (client && client.meta.partnerOwner) {
     if (!window.IS_GUEST) {
         homeLabel = "Partner Home";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-    } else {
+    } 
+    else {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
-        }
-} else if (isPublic) {
+    }
+} 
+  else if (isPublic) {
     showHome = false;
 }
     
@@ -438,7 +442,6 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
         OL.initSideResizers();
     }
 
-    // At the bottom of buildLayout(), before the lucide call:
     const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
