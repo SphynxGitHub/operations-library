@@ -17,6 +17,7 @@ import * as OLHowTo from './features/how-to.js';
 import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
 import * as OLBusinessManager from './features/business/index.js';
+import * as OLTaskBlueprints from './features/task-blueprints.js';
 
 window.isMatrixActive = false;
 
@@ -711,7 +712,7 @@ window.handleRoute = function () {
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
         else if (hash.includes("/tasks")) {
-            if (typeof renderChecklistModule === 'function') renderChecklistModule(true);
+            if (typeof OL.renderMasterTaskBlueprints === 'function') OL.renderMasterTaskBlueprints();
             else console.warn('Master Tasks (vault) view has no renderer wired up yet.');
         }
         else if (hash.includes("/analyses")) renderAnalysisModule(true);
