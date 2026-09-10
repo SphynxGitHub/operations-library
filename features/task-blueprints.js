@@ -10,6 +10,7 @@ OL.renderMasterTaskBlueprints = function() {
     if (!main) return;
 
     const blueprints = state.master.taskBlueprints || [];
+    const sops = state.master.sops || [];
 
     main.innerHTML = `
         <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -39,10 +40,46 @@ OL.renderMasterTaskBlueprints = function() {
                     </div>
                     ${bp.description ? `<div class="tiny muted" style="margin-top:6px;">${esc(bp.description)}</div>` : ''}
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">
-                        ${bp.defaultAssignee ? `<span class="pill tiny soft">👤 ${esc(bp.defaultAssignee)}</span>` : ''}
+                        ${bp.defaultAssignee ? `<span class="pill tiny soft" style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="user" style="width:10px;height:10px;"></i>${esc(bp.defaultAssignee)}</span>` : ''}
                         ${bp.defaultStatus ? `<span class="pill tiny soft">${esc(bp.defaultStatus)}</span>` : ''}
                         ${bp.dueInDays !== undefined && bp.dueInDays !== null && bp.dueInDays !== '' ? `<span class="pill tiny soft">Due +${esc(bp.dueInDays)}d</span>` : ''}
-                        ${(bp.howToIds || []).length ? `<span class="pill tiny soft">📖 ${bp.howToIds.length} guide${bp.howToIds.length === 1 ? '' : 's'}</span>` : ''}
+                        ${(bp.howToIds || []).length ? `<span class="pill tiny soft" style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="book-open" style="width:10px;height:10px;"></i>${bp.howToIds.length} guide${bp.howToIds.length === 1 ? '' : 's'}</span>` : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; margin-top:32px;">
+            <div>
+                <h2><i data-lucide="layers" style="width:20px;height:20px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>SOPs</h2>
+                <div class="small muted">Group blueprints into a standard workflow you can apply to a client all at once.</div>
+            </div>
+            <button class="btn small primary" onclick="OL.openSopModal()" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="plus" style="width:14px;height:14px;"></i> New SOP
+            </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; margin-top:16px;">
+            ${sops.length === 0 ? `
+                <div class="card" style="padding:24px; text-align:center; grid-column: 1 / -1;">
+                    <p class="muted small">No SOPs yet. Group a few blueprints together — e.g. "New Client Onboarding" — and apply the whole set to a client in one click.</p>
+                </div>
+            ` : sops.map(sop => `
+                <div class="card" style="padding:14px 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                        <strong style="font-size:13px;">${esc(sop.name || 'Untitled SOP')}</strong>
+                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button class="btn tiny primary" onclick="OL.openApplySopModal('${sop.id}')" title="Apply to a client"><i data-lucide="send" style="width:11px;height:11px;"></i></button>
+                            <button class="btn tiny soft" onclick="OL.openSopModal('${sop.id}')" title="Edit"><i data-lucide="pencil" style="width:11px;height:11px;"></i></button>
+                            <button class="btn tiny" style="background:#ef4444;color:white;" onclick="OL.deleteSop('${sop.id}')" title="Delete"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
+                        </div>
+                    </div>
+                    ${sop.description ? `<div class="tiny muted" style="margin-top:6px;">${esc(sop.description)}</div>` : ''}
+                    <div style="margin-top:10px; display:flex; flex-direction:column; gap:3px;">
+                        ${(sop.blueprintIds || []).map((bpId, i) => {
+                            const b = blueprints.find(x => x.id === bpId);
+                            return `<div class="tiny muted">${i + 1}. ${esc(b ? b.title : '(deleted blueprint)')}</div>`;
+                        }).join('') || `<div class="tiny muted">No blueprints added yet.</div>`}
                     </div>
                 </div>
             `).join('')}
@@ -71,11 +108,24 @@ OL.openTaskBlueprintModal = function(blueprintId) {
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:12px;">
                 <div>
                     <label class="tiny muted uppercase bold">Default Assignee</label>
-                    <input type="text" id="bp-assignee" class="modal-input tiny" value="${esc(bp?.defaultAssignee || 'Sphynx Task')}">
+                    <select id="bp-assignee" class="modal-input tiny">
+                        <option value="Sphynx Task" ${(!bp || bp.defaultAssignee === 'Sphynx Task' || !bp.defaultAssignee) ? 'selected' : ''}>Sphynx Task</option>
+                        <option value="Client Task" ${bp?.defaultAssignee === 'Client Task' ? 'selected' : ''}>Client Task</option>
+                        ${(state.master?.sphynxTeam || []).length ? `
+                            <optgroup label="Sphynx Team">
+                                ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}" ${bp?.defaultAssignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+                            </optgroup>
+                        ` : ''}
+                        <optgroup label="Vendors / 3rd Party">
+                            ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}" ${bp?.defaultAssignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
+                        </optgroup>
+                    </select>
                 </div>
                 <div>
                     <label class="tiny muted uppercase bold">Default Status</label>
-                    <input type="text" id="bp-status" class="modal-input tiny" value="${esc(bp?.defaultStatus || 'Pending Sphynx Action')}">
+                    <select id="bp-status" class="modal-input tiny">
+                        ${(OL.getSystemStatuses ? OL.getSystemStatuses() : []).map(s => `<option value="${esc(s.name)}" ${(bp?.defaultStatus === s.name || (!bp && s.name === 'Pending Sphynx Action')) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+                    </select>
                 </div>
                 <div>
                     <label class="tiny muted uppercase bold">Due In (days)</label>
@@ -221,6 +271,147 @@ OL.openApplyBlueprintModal = function(blueprintId) {
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
                 <button class="btn primary" onclick="OL.applyTaskBlueprintToClient('${blueprintId}', document.getElementById('apply-bp-client').value)">Apply</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+// ================= SOPs (grouped blueprints) =================
+
+OL.openSopModal = function(sopId) {
+    const sops = state.master.sops || [];
+    const sop = sopId ? sops.find(s => s.id === sopId) : null;
+    const blueprints = state.master.taskBlueprints || [];
+    const selectedIds = sop?.blueprintIds || [];
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">${sop ? 'Edit' : 'New'} SOP</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <label class="modal-section-label">Name</label>
+            <input type="text" id="sop-name" class="modal-input" value="${esc(sop?.name || '')}" placeholder="e.g. New Client Onboarding">
+
+            <label class="modal-section-label">Description</label>
+            <textarea id="sop-description" class="modal-input" style="height:60px;">${esc(sop?.description || '')}</textarea>
+
+            <label class="modal-section-label">Blueprints in this SOP</label>
+            <div id="sop-blueprint-list" class="card-section" style="max-height:280px; overflow-y:auto;">
+                ${blueprints.length === 0 ? `
+                    <p class="tiny muted">No blueprints exist yet — create some Master Tasks first, then group them here.</p>
+                ` : blueprints.map(bp => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer; padding:4px 0;">
+                        <input type="checkbox" class="sop-bp-checkbox" value="${bp.id}" ${selectedIds.includes(bp.id) ? 'checked' : ''}>
+                        ${esc(bp.title)}
+                    </label>
+                `).join('')}
+            </div>
+            <p class="tiny muted" style="margin-top:6px;">Applied in the order shown above (the order blueprints were created in).</p>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.saveSop('${sop?.id || ''}')">Save SOP</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.saveSop = function(sopId) {
+    const name = document.getElementById('sop-name')?.value?.trim();
+    if (!name) { alert('Give the SOP a name first.'); return; }
+
+    const description = document.getElementById('sop-description')?.value || '';
+    const blueprintIds = Array.from(document.querySelectorAll('.sop-bp-checkbox:checked')).map(cb => cb.value);
+
+    updateAndSync(() => {
+        if (!state.master.sops) state.master.sops = [];
+        if (sopId) {
+            const existing = state.master.sops.find(s => s.id === sopId);
+            if (existing) Object.assign(existing, { name, description, blueprintIds });
+        } else {
+            state.master.sops.push({
+                id: uid(),
+                name, description, blueprintIds,
+                createdAt: new Date().toISOString()
+            });
+        }
+    });
+
+    OL.closeModal();
+    OL.renderMasterTaskBlueprints();
+};
+
+OL.deleteSop = function(sopId) {
+    if (!confirm('Delete this SOP? The blueprints and tasks it already created are unaffected.')) return;
+    updateAndSync(() => {
+        state.master.sops = (state.master.sops || []).filter(s => s.id !== sopId);
+    });
+    OL.renderMasterTaskBlueprints();
+};
+
+// Applies every blueprint in an SOP to a client in one shot — one
+// updateAndSync call so all the resulting tasks land in a single
+// persist cycle instead of one write per blueprint.
+OL.applySopToClient = function(sopId, clientId) {
+    const sop = (state.master.sops || []).find(s => s.id === sopId);
+    if (!sop) return;
+    if (!clientId) { alert('Pick a client first.'); return; }
+
+    const blueprints = (sop.blueprintIds || [])
+        .map(id => (state.master.taskBlueprints || []).find(b => b.id === id))
+        .filter(Boolean);
+
+    if (blueprints.length === 0) {
+        alert('This SOP has no blueprints in it yet — edit it and add some first.');
+        return;
+    }
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        blueprints.forEach(bp => {
+            const newTask = OL.buildTaskFromBlueprint(bp, client, {});
+            newTask.sopId = sop.id;
+            client.projectData.clientTasks.unshift(newTask);
+        });
+    }, clientId);
+
+    OL.closeModal();
+    alert(`"${sop.name}" (${blueprints.length} task${blueprints.length === 1 ? '' : 's'}) applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
+};
+
+OL.openApplySopModal = function(sopId) {
+    const sop = (state.master.sops || []).find(s => s.id === sopId);
+    if (!sop) return;
+
+    const clients = Object.values(state.clients || {}).sort((a, b) =>
+        (a.meta?.name || '').localeCompare(b.meta?.name || '')
+    );
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">Apply "${esc(sop.name)}" to a Client</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted">This will create ${(sop.blueprintIds || []).length} task${(sop.blueprintIds || []).length === 1 ? '' : 's'} in the selected client's workspace.</p>
+            <label class="modal-section-label">Client</label>
+            <select id="apply-sop-client" class="modal-input">
+                <option value="">Select a client...</option>
+                ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
+            </select>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.applySopToClient('${sopId}', document.getElementById('apply-sop-client').value)">Apply</button>
             </div>
         </div>
     `;

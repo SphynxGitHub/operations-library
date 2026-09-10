@@ -25,6 +25,7 @@ export const state = {
     master: {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
         automationRules: [],
+        sops: [], // Standard Operating Procedures — named groups of taskBlueprints applied together
         datapoints: [
             { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
             { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
@@ -83,7 +84,8 @@ export function persist() {
                 how_to_library: masterCopy.howToLibrary || [],
                 analyses: masterCopy.analyses || [],
                 sphynx_team: masterCopy.sphynxTeam || [],
-                automation_rules: masterCopy.automationRules || []
+                automation_rules: masterCopy.automationRules || [],
+                sops: masterCopy.sops || []
             };
 
             const { error: masterErr } = await db
@@ -167,6 +169,7 @@ export async function sync() {
             if (Array.isArray(masterData.analyses) && masterData.analyses.length > 0) state.master.analyses = masterData.analyses;
             if (Array.isArray(masterData.sphynx_team) && masterData.sphynx_team.length > 0) state.master.sphynxTeam = masterData.sphynx_team;
             if (Array.isArray(masterData.automation_rules)) state.master.automationRules = masterData.automation_rules;
+            if (Array.isArray(masterData.sops)) state.master.sops = masterData.sops;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
 

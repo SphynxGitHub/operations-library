@@ -242,11 +242,24 @@ OL.openAutomationRuleModal = function(ruleId) {
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
                         <div>
                             <label class="tiny muted uppercase bold">Assignee</label>
-                            <input type="text" id="auto-action-assignee" class="modal-input tiny" value="${esc(action.assignee || 'Sphynx Task')}" placeholder="Sphynx Task">
+                            <select id="auto-action-assignee" class="modal-input tiny">
+                                <option value="Sphynx Task" ${(!action.assignee || action.assignee === 'Sphynx Task') ? 'selected' : ''}>Sphynx Task</option>
+                                <option value="Client Task" ${action.assignee === 'Client Task' ? 'selected' : ''}>Client Task</option>
+                                ${(state.master?.sphynxTeam || []).length ? `
+                                    <optgroup label="Sphynx Team">
+                                        ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}" ${action.assignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+                                    </optgroup>
+                                ` : ''}
+                                <optgroup label="Vendors / 3rd Party">
+                                    ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}" ${action.assignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
+                                </optgroup>
+                            </select>
                         </div>
                         <div>
                             <label class="tiny muted uppercase bold">Status</label>
-                            <input type="text" id="auto-action-status" class="modal-input tiny" value="${esc(action.status || 'Pending Sphynx Action')}" placeholder="Pending Sphynx Action">
+                            <select id="auto-action-status" class="modal-input tiny">
+                                ${(OL.getSystemStatuses ? OL.getSystemStatuses() : []).map(s => `<option value="${esc(s.name)}" ${(action.status === s.name || (!action.status && s.name === 'Pending Sphynx Action')) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+                            </select>
                         </div>
                         <div>
                             <label class="tiny muted uppercase bold">Due In (days)</label>
