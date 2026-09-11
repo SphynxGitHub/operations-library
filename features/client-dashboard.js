@@ -18,6 +18,11 @@ export function renderClientDashboard() {
 
     const activeView = state.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
     state.dashboardView = activeView;
+
+    // A partner browsing their own portfolio gets a quick "Manage Access"
+    // shortcut on each client card, instead of having to switch into that
+    // client's whole workspace just to toggle which tabs it can see.
+    const isPartnerViewer = getActiveClient()?.meta?.status === 'Partner' && !(window.FORCE_ADMIN === true);
     
     // 🚀 FILTER LOGIC & PARTNER ISOLATION
     const activeFilter = state.dashboardFilter || 'All';
@@ -37,7 +42,9 @@ export function renderClientDashboard() {
                 : activeClient.meta?.partnerOwner;
 
             if (partnerId) {
-                clients = clients.filter(c => String(c.id) === String(partnerId) || String(c.meta?.partnerOwner) === String(partnerId));
+                // Only clients actually managed by this partner — never the
+                // partner's own account record itself.
+                clients = clients.filter(c => String(c.meta?.partnerOwner) === String(partnerId));
             } else {
                 clients = clients.filter(c => String(c.id) === String(activeClient.id));
             }
@@ -129,6 +136,11 @@ export function renderClientDashboard() {
                                 </div>
                             </div>
                             <span style="font-size:10px;color:var(--text-dim);">${esc(client.meta.status)}</span>
+                            ${isPartnerViewer ? `
+                                <button class="btn tiny soft" onclick="event.stopPropagation(); OL.openPartnerClientModulesModal('${client.id}')" title="Manage Access">
+                                    <i data-lucide="sliders-horizontal" style="width:11px;height:11px;"></i>
+                                </button>
+                            ` : ''}
                             ${openTasks.length ? `
                                 <span onclick="event.stopPropagation();
                                               if(!state.dashboardExpanded) state.dashboardExpanded={};
@@ -210,6 +222,11 @@ export function renderClientDashboard() {
                             `).join('')}
                         </select>
                     </div>
+                    ${isPartnerViewer ? `
+                        <button class="btn tiny soft" style="margin: 8px 0 0; width: 100%;" onclick="event.stopPropagation(); OL.openPartnerClientModulesModal('${client.id}')">
+                            <i data-lucide="sliders-horizontal" style="width:11px;height:11px;"></i> Manage Access
+                        </button>
+                    ` : ''}
                     <div class="card-body">
                         <div class="hover-preview-zone" style="position:relative; display:inline-block;">
                             <div class="small muted">Onboarded: ${client.meta.onboarded}</div>
