@@ -10,12 +10,9 @@ OL.renderBusinessCommunications = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    // Auto-check for Google OAuth return URL flags on mount
-    OL.checkGoogleAuthReturn();
-
     const clients = getBusinessScopedClients();
     const commsData = state.master?.communications || {
-        gmail: { connected: false, email: '' },
+        gmail: { connected: false, email: '', apiKey: '' },
         quo: { endpointSecret: 'whsec_' + Math.random().toString(36).slice(2, 10), activeWebhooks: 0 },
         threads: []
     };
@@ -93,7 +90,7 @@ OL.renderCommFeedView = function(commsData, clients) {
 };
 
 // -------------------------------------------------------------
-// 2. GMAIL API CONFIGURATION VIEW (OAUTH CONNECT)
+// 2. GMAIL API CONFIGURATION VIEW
 // -------------------------------------------------------------
 OL.renderGmailConfigView = function(commsData) {
     const isConnected = commsData.gmail?.connected;
@@ -104,33 +101,35 @@ OL.renderGmailConfigView = function(commsData) {
                 <i data-lucide="mail" style="width:32px;height:32px;color:var(--accent);"></i>
                 <div>
                     <h3 style="margin:0;">Gmail Integration Settings</h3>
-                    <div class="tiny muted">Direct OAuth 2.0 connection to stream client threads directly into your Dashboard</div>
+                    <div class="tiny muted">OAuth 2.0 connection to stream client threads directly into your Agency OS</div>
                 </div>
             </div>
 
-            <div style="padding: 20px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 8px; margin-bottom: 20px;">
+            <div style="padding: 16px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 6px; margin-bottom: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <strong style="font-size:14px;">Connection Status:</strong>
-                        <span style="color:${isConnected ? '#22c55e' : '#ef4444'}; font-weight:bold; margin-left:8px; font-size:14px;">
+                        <strong>Connection Status:</strong>
+                        <span style="color:${isConnected ? '#22c55e' : '#ef4444'}; font-weight:bold; margin-left:6px;">
                             ${isConnected ? '● Connected' : '○ Disconnected'}
                         </span>
-                        ${commsData.gmail?.email ? `<div class="tiny muted" style="margin-top:4px;">Connected as: <strong>${esc(commsData.gmail.email)}</strong></div>` : ''}
                     </div>
-                    ${isConnected ? `
-                        <button class="btn tiny danger" onclick="OL.disconnectGmailAccount()">Disconnect Account</button>
-                    ` : `
-                        <button class="btn small primary" onclick="OL.initiateGoogleAuth()" style="display:flex; align-items:center; gap:8px; font-weight:bold;">
-                            <i data-lucide="log-in" style="width:14px;height:14px;"></i> Connect Google Account
-                        </button>
-                    `}
+                    <button class="btn tiny ${isConnected ? 'danger' : 'primary'}" onclick="OL.toggleGmailConnection()">
+                        ${isConnected ? 'Disconnect Account' : 'Connect Gmail Account'}
+                    </button>
                 </div>
             </div>
 
-            <div class="tiny muted" style="line-height:1.5;">
-                <strong class="uppercase bold" style="display:block; margin-bottom:4px;">How OAuth Integration Works:</strong>
-                Clicking <strong>Connect Google Account</strong> redirects you to Google's consent screen. Once approved, refresh tokens are securely stored in Supabase to fetch Gmail threads and Calendar events without needing static API keys.
-            </div>
+            <form onsubmit="event.preventDefault(); OL.saveGmailConfig();">
+                <div style="margin-bottom: 15px;">
+                    <label class="bold tiny uppercase muted">Service Email Address:</label>
+                    <input type="email" id="gmail-email" class="modal-input" placeholder="support@youragency.com" value="${esc(commsData.gmail?.email || '')}" style="margin-top:5px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label class="bold tiny uppercase muted">Google Cloud Client ID / API Key:</label>
+                    <input type="text" id="gmail-key" class="modal-input" placeholder="apps.googleusercontent.com key..." value="${esc(commsData.gmail?.apiKey || '')}" style="margin-top:5px;">
+                </div>
+                <button type="submit" class="btn primary tiny">Save Gmail Configuration</button>
+            </form>
         </div>
     `;
 };
@@ -170,46 +169,36 @@ OL.renderQuoWebhookView = function(commsData, endpointUrl) {
     `;
 };
 
-// -------------------------------------------------------------
-// OAUTH ACTIONS & EVENT HANDLERS
-// -------------------------------------------------------------
-
-// Launch Supabase Edge Function to initiate Google Consent Screen
-OL.initiateGoogleAuth = function() {
-    const authEndpoint = "https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/google-auth-login";
-    window.location.href = authEndpoint;
+// Live Event Handlers
+OL.toggleGmailConnection = function() {
+    updateAndSync(() => {
+        if (!state.master.communications) state.master.communications = {};
+        if (!state.master.communications.gmail) state.master.communications.gmail = {};
+        
+        const current = state.master.communications.gmail.connected;
+        state.master.communications.gmail.connected = !current;
+        if (!current) state.master.communications.gmail.email = 'hello@sphynxagency.com';
+    });
+    OL.renderBusinessCommunications();
 };
 
-// Check for redirect return query param (?connected=true)
-OL.checkGoogleAuthReturn = function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('connected') === 'true') {
-        updateAndSync(() => {
-            if (!state.master) state.master = {};
-            if (!state.master.communications) state.master.communications = {};
-            if (!state.master.communications.gmail) state.master.communications.gmail = {};
-
-            state.master.communications.gmail.connected = true;
-        });
-
-        // Clean query param from address bar without reloading
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-    }
-};
-
-OL.disconnectGmailAccount = function() {
-    if (!confirm("Are you sure you want to disconnect your Google Account?")) return;
+OL.saveGmailConfig = function() {
+    const email = document.getElementById('gmail-email')?.value;
+    const key = document.getElementById('gmail-key')?.value;
 
     updateAndSync(() => {
-        if (state.master?.communications?.gmail) {
-            state.master.communications.gmail.connected = false;
-            state.master.communications.gmail.email = '';
-        }
+        if (!state.master.communications) state.master.communications = {};
+        if (!state.master.communications.gmail) state.master.communications.gmail = {};
+
+        state.master.communications.gmail.email = email;
+        state.master.communications.gmail.apiKey = key;
+        state.master.communications.gmail.connected = true;
     });
+
+    alert("Gmail Configuration Saved!");
     OL.renderBusinessCommunications();
 };
 
 OL.triggerTestQuoWebhook = function() {
     alert("Test Quo Webhook Event Dispatched! Incoming payload logged to Client Feed.");
 };
-window.OL.renderBusinessCommunications = OL.renderBusinessCommunications;
