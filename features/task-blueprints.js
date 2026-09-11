@@ -76,9 +76,11 @@ OL.renderMasterTaskBlueprints = function() {
                     </div>
                     ${sop.description ? `<div class="tiny muted" style="margin-top:6px;">${esc(sop.description)}</div>` : ''}
                     <div style="margin-top:10px; display:flex; flex-direction:column; gap:3px;">
-                        ${(sop.blueprintIds || []).map((bpId, i) => {
-                            const b = blueprints.find(x => x.id === bpId);
-                            return `<div class="tiny muted">${i + 1}. ${esc(b ? b.title : '(deleted blueprint)')}</div>`;
+                        ${OL.resolveSopItems(sop).map((item, i) => {
+                            const relNote = item.dueMode === 'relative' && item.relativeToIndex !== null && item.relativeToIndex !== undefined
+                                ? ` <span style="color:var(--accent);">· due ${item.offsetDays ?? 0}d after #${item.relativeToIndex + 1}</span>`
+                                : '';
+                            return `<div class="tiny muted">${i + 1}. ${esc(item.blueprint.title)}${relNote}</div>`;
                         }).join('') || `<div class="tiny muted">No blueprints added yet.</div>`}
                     </div>
                 </div>
@@ -283,7 +285,12 @@ OL.openSopModal = function(sopId) {
     const sops = state.master.sops || [];
     const sop = sopId ? sops.find(s => s.id === sopId) : null;
     const blueprints = state.master.taskBlueprints || [];
-    const selectedIds = sop?.blueprintIds || [];
+
+    // Normalize into the in-memory editing array (supports older SOPs saved
+    // as a flat blueprintIds list, before relative due dates existed).
+    window._sopEditingItems = sop?.items
+        ? JSON.parse(JSON.stringify(sop.items))
+        : (sop?.blueprintIds || []).map(id => ({ blueprintId: id, dueMode: 'default', relativeToIndex: null, offsetDays: null }));
 
     const html = `
         <div class="modal-head">
@@ -298,18 +305,18 @@ OL.openSopModal = function(sopId) {
             <label class="modal-section-label">Description</label>
             <textarea id="sop-description" class="modal-input" style="height:60px;">${esc(sop?.description || '')}</textarea>
 
-            <label class="modal-section-label">Blueprints in this SOP</label>
-            <div id="sop-blueprint-list" class="card-section" style="max-height:280px; overflow-y:auto;">
-                ${blueprints.length === 0 ? `
-                    <p class="tiny muted">No blueprints exist yet — create some Master Tasks first, then group them here.</p>
-                ` : blueprints.map(bp => `
-                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer; padding:4px 0;">
-                        <input type="checkbox" class="sop-bp-checkbox" value="${bp.id}" ${selectedIds.includes(bp.id) ? 'checked' : ''}>
-                        ${esc(bp.title)}
-                    </label>
-                `).join('')}
+            <label class="modal-section-label">Add a Blueprint</label>
+            <div style="display:flex; gap:6px;">
+                <select id="sop-add-blueprint" class="modal-input tiny" style="flex:1;">
+                    <option value="">Select a blueprint...</option>
+                    ${blueprints.map(bp => `<option value="${bp.id}">${esc(bp.title)}</option>`).join('')}
+                </select>
+                <button type="button" class="btn tiny primary" onclick="OL.addSopItem()">Add</button>
             </div>
-            <p class="tiny muted" style="margin-top:6px;">Applied in the order shown above (the order blueprints were created in).</p>
+
+            <label class="modal-section-label">Workflow Order</label>
+            <p class="tiny muted" style="margin-top:-6px; margin-bottom:8px;">Applied in this order. Each task can either use its blueprint's own due-date offset, or be due N days after an earlier task in this SOP is completed.</p>
+            <div id="sop-items-list" style="max-height:320px; overflow-y:auto;"></div>
 
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
@@ -318,6 +325,75 @@ OL.openSopModal = function(sopId) {
         </div>
     `;
     openModal(html);
+    OL.renderSopItemsEditor();
+};
+
+OL.addSopItem = function() {
+    const blueprintId = document.getElementById('sop-add-blueprint')?.value;
+    if (!blueprintId) return;
+    window._sopEditingItems = window._sopEditingItems || [];
+    window._sopEditingItems.push({ blueprintId, dueMode: 'default', relativeToIndex: null, offsetDays: 3 });
+    OL.renderSopItemsEditor();
+};
+
+OL.removeSopItem = function(index) {
+    window._sopEditingItems.splice(index, 1);
+    // Fix up any relative references that pointed at, or after, the removed item.
+    window._sopEditingItems.forEach(item => {
+        if (item.relativeToIndex === index) { item.dueMode = 'default'; item.relativeToIndex = null; }
+        else if (item.relativeToIndex !== null && item.relativeToIndex !== undefined && item.relativeToIndex > index) item.relativeToIndex -= 1;
+    });
+    OL.renderSopItemsEditor();
+};
+
+OL.updateSopItemField = function(index, field, value) {
+    const item = window._sopEditingItems?.[index];
+    if (!item) return;
+    if (field === 'relativeToIndex') item[field] = value === '' ? null : Number(value);
+    else if (field === 'offsetDays') item[field] = value === '' ? null : Number(value);
+    else item[field] = value;
+    if (field === 'dueMode' && value !== 'relative') item.relativeToIndex = null;
+    OL.renderSopItemsEditor();
+};
+
+OL.renderSopItemsEditor = function() {
+    const container = document.getElementById('sop-items-list');
+    if (!container) return;
+    const blueprints = state.master.taskBlueprints || [];
+    const items = window._sopEditingItems || [];
+
+    container.innerHTML = items.length === 0 ? `<p class="tiny muted">No blueprints added yet.</p>` : items.map((item, i) => {
+        const bp = blueprints.find(b => b.id === item.blueprintId);
+        const priorItems = items.slice(0, i); // only earlier items are valid predecessors — no forward/circular refs
+
+        return `
+            <div class="card-section" style="margin-bottom:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong class="tiny">${i + 1}. ${esc(bp?.title || '(deleted blueprint)')}</strong>
+                    <button type="button" class="btn tiny soft" onclick="OL.removeSopItem(${i})" title="Remove"><i data-lucide="x" style="width:11px;height:11px;"></i></button>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                    <select class="modal-input tiny" style="width:auto;" onchange="OL.updateSopItemField(${i}, 'dueMode', this.value)">
+                        <option value="default" ${item.dueMode !== 'relative' ? 'selected' : ''}>Use blueprint's own due offset</option>
+                        <option value="relative" ${item.dueMode === 'relative' ? 'selected' : ''} ${priorItems.length === 0 ? 'disabled' : ''}>Due relative to an earlier task</option>
+                    </select>
+                    ${item.dueMode === 'relative' ? `
+                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateSopItemField(${i}, 'relativeToIndex', this.value)">
+                            <option value="">Select task...</option>
+                            ${priorItems.map((pItem, pIdx) => {
+                                const pBp = blueprints.find(b => b.id === pItem.blueprintId);
+                                return `<option value="${pIdx}" ${item.relativeToIndex === pIdx ? 'selected' : ''}>${pIdx + 1}. ${esc(pBp?.title || '?')}</option>`;
+                            }).join('')}
+                        </select>
+                        <span class="tiny">due</span>
+                        <input type="number" min="0" class="modal-input tiny" style="width:55px;" value="${item.offsetDays ?? 3}" onchange="OL.updateSopItemField(${i}, 'offsetDays', this.value)">
+                        <span class="tiny">days after it's completed</span>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
 };
 
 OL.saveSop = function(sopId) {
@@ -325,22 +401,31 @@ OL.saveSop = function(sopId) {
     if (!name) { alert('Give the SOP a name first.'); return; }
 
     const description = document.getElementById('sop-description')?.value || '';
-    const blueprintIds = Array.from(document.querySelectorAll('.sop-bp-checkbox:checked')).map(cb => cb.value);
+    const items = (window._sopEditingItems || []).filter(i => i.blueprintId);
+
+    for (const item of items) {
+        if (item.dueMode === 'relative' && (item.relativeToIndex === null || item.relativeToIndex === undefined)) {
+            alert('Pick which earlier task each relative due date is based on (or switch it back to "use blueprint\'s own due offset").');
+            return;
+        }
+    }
 
     updateAndSync(() => {
         if (!state.master.sops) state.master.sops = [];
+        const blueprintIds = items.map(i => i.blueprintId); // kept for backward compatibility with any older reader
         if (sopId) {
             const existing = state.master.sops.find(s => s.id === sopId);
-            if (existing) Object.assign(existing, { name, description, blueprintIds });
+            if (existing) Object.assign(existing, { name, description, items, blueprintIds });
         } else {
             state.master.sops.push({
                 id: uid(),
-                name, description, blueprintIds,
+                name, description, items, blueprintIds,
                 createdAt: new Date().toISOString()
             });
         }
     });
 
+    window._sopEditingItems = null;
     OL.closeModal();
     OL.renderMasterTaskBlueprints();
 };
@@ -356,16 +441,56 @@ OL.deleteSop = function(sopId) {
 // Applies every blueprint in an SOP to a client in one shot — one
 // updateAndSync call so all the resulting tasks land in a single
 // persist cycle instead of one write per blueprint.
+// Normalizes an SOP's items (supports old SOPs saved as a flat
+// blueprintIds list, before relative due dates existed) and resolves
+// each to its actual blueprint object.
+OL.resolveSopItems = function(sop) {
+    const items = (sop.items && sop.items.length)
+        ? sop.items
+        : (sop.blueprintIds || []).map(id => ({ blueprintId: id, dueMode: 'default' }));
+    return items
+        .map(item => ({ ...item, blueprint: (state.master.taskBlueprints || []).find(b => b.id === item.blueprintId) }))
+        .filter(item => item.blueprint);
+};
+
+// Creates every task in an SOP for a client in one shot, wiring relative
+// due dates between the tasks created in THIS run — so "task 2 due 3 days
+// after task 1 completes" works even though both are brand new right now.
+// baseCtx is passed through to buildTaskFromBlueprint for each task (so
+// automation-fired SOPs can carry resourceName/title placeholders, an
+// asSubtask flag, etc. — see automations.js).
+OL.createTasksFromSop = function(sop, client, baseCtx) {
+    const items = OL.resolveSopItems(sop);
+    const createdTasks = [];
+
+    items.forEach(item => {
+        const newTask = OL.buildTaskFromBlueprint(item.blueprint, client, baseCtx || {});
+        newTask.sopId = sop.id;
+
+        if (item.dueMode === 'relative' && item.relativeToIndex !== null && item.relativeToIndex !== undefined && createdTasks[item.relativeToIndex]) {
+            const predecessorTask = createdTasks[item.relativeToIndex];
+            newTask.dueRelativeTo = {
+                taskId: predecessorTask.id,
+                offsetDays: Number(item.offsetDays) || 0,
+                predecessorTitle: predecessorTask.title
+            };
+            newTask.dueDate = ''; // unresolved until the predecessor completes
+        }
+
+        createdTasks.push(newTask);
+        client.projectData.clientTasks.unshift(newTask);
+    });
+
+    return createdTasks;
+};
+
 OL.applySopToClient = function(sopId, clientId) {
     const sop = (state.master.sops || []).find(s => s.id === sopId);
     if (!sop) return;
     if (!clientId) { alert('Pick a client first.'); return; }
 
-    const blueprints = (sop.blueprintIds || [])
-        .map(id => (state.master.taskBlueprints || []).find(b => b.id === id))
-        .filter(Boolean);
-
-    if (blueprints.length === 0) {
+    const items = OL.resolveSopItems(sop);
+    if (items.length === 0) {
         alert('This SOP has no blueprints in it yet — edit it and add some first.');
         return;
     }
@@ -375,16 +500,11 @@ OL.applySopToClient = function(sopId, clientId) {
         if (!client) return;
         if (!client.projectData) client.projectData = {};
         if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
-
-        blueprints.forEach(bp => {
-            const newTask = OL.buildTaskFromBlueprint(bp, client, {});
-            newTask.sopId = sop.id;
-            client.projectData.clientTasks.unshift(newTask);
-        });
+        OL.createTasksFromSop(sop, client, {});
     }, clientId);
 
     OL.closeModal();
-    alert(`"${sop.name}" (${blueprints.length} task${blueprints.length === 1 ? '' : 's'}) applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
+    alert(`"${sop.name}" (${items.length} task${items.length === 1 ? '' : 's'}) applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
 };
 
 OL.openApplySopModal = function(sopId) {

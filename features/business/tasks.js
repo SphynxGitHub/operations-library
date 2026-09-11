@@ -415,7 +415,122 @@ OL.renderFilteredTaskGroups = function(allTasks) {
 // immediately after its parent, for visually nested rendering. Orphaned
 // sub-tasks (parent filtered out of this list, e.g. by a status filter)
 // just render in place, unindented.
-OL.sortTasksWithSubtasksNested = function(tasks) {
+// ================= 🔗 RELATIONAL DUE DATES =================
+// A task can be due N days after another task in the same client
+// completes, instead of a fixed calendar date:
+//   task.dueRelativeTo = { taskId: '<predecessor task id>', offsetDays: 3 }
+// While waiting on its predecessor, task.dueDate stays blank. The moment
+// the predecessor's status flips to a closed status, its completedAt gets
+// stamped and every task relative to it gets its dueDate computed and set.
+
+OL.isClosedStatus = function(statusName) {
+    const s = (OL.getSystemStatuses() || []).find(x => x.name === statusName);
+    return !!s?.isClosed;
+};
+
+// Call right after a task's status is mutated (before persisting). Stamps
+// completedAt the moment a task first becomes closed, and cascades the due
+// date to anything waiting on it. Safe to call unconditionally — it's a
+// no-op unless the status actually just became closed.
+OL.handleTaskCompletionCascade = function(client, task, previousStatus) {
+    const wasClosed = OL.isClosedStatus(previousStatus);
+    const isClosed = OL.isClosedStatus(task.status);
+    if (!isClosed || wasClosed) return; // only fires on the transition INTO closed
+
+    task.completedAt = new Date().toISOString();
+
+    const tasks = client.projectData?.clientTasks || [];
+    tasks.forEach(other => {
+        if (other.dueRelativeTo?.taskId === task.id) {
+            const d = new Date(task.completedAt);
+            d.setDate(d.getDate() + Number(other.dueRelativeTo.offsetDays || 0));
+            other.dueDate = d.toISOString().slice(0, 10);
+        }
+    });
+};
+
+// Sets (or clears, if predecessorTaskId is falsy) a task's relational due
+// date. If the predecessor is already closed, resolves the due date
+// immediately instead of waiting for a future status change.
+OL.setRelativeTaskDueDate = function(clientId, taskId, predecessorTaskId, offsetDays) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (!predecessorTaskId) {
+            task.dueRelativeTo = null;
+            return;
+        }
+
+        const predecessor = client.projectData.clientTasks.find(t => t.id === predecessorTaskId);
+
+        task.dueRelativeTo = { taskId: predecessorTaskId, offsetDays: Number(offsetDays) || 0, predecessorTitle: predecessor?.title || predecessor?.name || '' };
+        task.dueDate = ''; // unresolved until the predecessor completes
+
+        if (predecessor?.completedAt) {
+            const d = new Date(predecessor.completedAt);
+            d.setDate(d.getDate() + (Number(offsetDays) || 0));
+            task.dueDate = d.toISOString().slice(0, 10);
+        }
+    }, clientId);
+    OL.closePopoverDropdown();
+    OL.refreshTaskView();
+};
+
+// Sets a plain fixed due date, clearing any relational link that was
+// previously set on this task (fixed and relative are mutually exclusive).
+OL.setFixedTaskDueDate = function(clientId, taskId, newDueDate) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        task.dueRelativeTo = null;
+        task.dueDate = newDueDate;
+    }, clientId);
+    OL.closePopoverDropdown();
+    OL.refreshTaskView();
+};
+
+OL.openDueDateDropdown = function(event, clientId, taskId) {
+    const popover = OL.createPopoverContainer(event);
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+    if (!task) return;
+
+    const otherTasks = (client.projectData?.clientTasks || []).filter(t => t.id !== taskId);
+
+    popover.innerHTML = `
+        <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Due Date</div>
+        <div style="display:grid; gap:6px; min-width:240px;">
+            <div>
+                <label class="tiny muted">Fixed date</label>
+                <input type="date" class="modal-input tiny" value="${task.dueRelativeTo ? '' : (task.dueDate ? task.dueDate.slice(0,10) : '')}"
+                       onchange="OL.setFixedTaskDueDate('${clientId}', '${taskId}', this.value)">
+            </div>
+            <div style="border-top:1px solid var(--line); padding-top:6px;">
+                <label class="tiny muted">— or — due after another task completes</label>
+                <select id="due-rel-predecessor" class="modal-input tiny" style="margin-top:4px;">
+                    <option value="">Select a task...</option>
+                    ${otherTasks.map(t => `<option value="${t.id}" ${task.dueRelativeTo?.taskId === t.id ? 'selected' : ''}>${esc(t.title || t.name)}</option>`).join('')}
+                </select>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+                    <span class="tiny">Due</span>
+                    <input type="number" id="due-rel-offset" class="modal-input tiny" style="width:60px;" value="${task.dueRelativeTo?.offsetDays ?? 3}" min="0">
+                    <span class="tiny">days after it's completed</span>
+                </div>
+                <button class="btn tiny primary" style="width:100%; margin-top:8px;"
+                        onclick="OL.setRelativeTaskDueDate('${clientId}', '${taskId}', document.getElementById('due-rel-predecessor').value, document.getElementById('due-rel-offset').value)">
+                    Set Relative Due Date
+                </button>
+                ${task.dueRelativeTo ? `<button class="btn tiny soft" style="width:100%; margin-top:4px;" onclick="OL.setRelativeTaskDueDate('${clientId}', '${taskId}', null, 0)">Clear (use fixed date)</button>` : ''}
+            </div>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+};
+
+
     const byId = {};
     tasks.forEach(t => { byId[t.id] = t; });
 
@@ -539,12 +654,19 @@ OL.renderTaskRowHTML = function(t, todayStr) {
 
                 <!-- Due Date -->
                 <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
-                    <i data-lucide="calendar" style="position:absolute; left:6px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none;"></i>
-                    <input type="date" 
-                           class="modal-input tiny monospace" 
-                           value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
-                           style="width:125px; padding-left:22px; border:none; background:transparent; font-size:11px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
-                           onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
+                    ${t.dueRelativeTo ? `
+                        <span class="pill tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')" title="Due ${t.dueRelativeTo.offsetDays}d after '${esc(t.dueRelativeTo.predecessorTitle)}' completes">
+                            <i data-lucide="link" style="width:10px;height:10px;"></i>
+                            ${t.dueDate ? esc(t.dueDate.slice(0,10)) : `+${t.dueRelativeTo.offsetDays}d after predecessor`}
+                        </span>
+                    ` : `
+                        <i data-lucide="calendar" style="position:absolute; left:6px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none; cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')"></i>
+                        <input type="date" 
+                               class="modal-input tiny monospace" 
+                               value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
+                               style="width:125px; padding-left:22px; border:none; background:transparent; font-size:11px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
+                               onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
+                    `}
                 </div>
             </div>
 
@@ -724,6 +846,7 @@ OL.applyBulkTaskEdit = function() {
                 if (newStatus) {
                     const previousStatus = task.status;
                     task.status = newStatus;
+                    OL.handleTaskCompletionCascade(client, task, previousStatus);
                     if (typeof OL.runAutomationRules === 'function') {
                         OL.runAutomationRules('task_status_change', {
                             clientId, client, task,
@@ -930,6 +1053,8 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
             const previousStatus = task.status;
             task.status = newStatus;
             console.log(`✅ Status updated successfully for [${taskId}] -> ${newStatus}`);
+
+            OL.handleTaskCompletionCascade(client, task, previousStatus);
 
             if (typeof OL.runAutomationRules === 'function') {
                 OL.runAutomationRules('task_status_change', {

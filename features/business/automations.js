@@ -94,6 +94,33 @@ OL.executeAutomationAction = function(rule, ctx) {
         return;
     }
 
+    if (action.type === 'apply_sop') {
+        const sop = (state.master.sops || []).find(s => s.id === action.sopId);
+        if (!sop) {
+            console.warn(`🤖 Automation "${rule.name}" references an SOP that no longer exists.`);
+            return;
+        }
+        if (typeof OL.createTasksFromSop !== 'function') return;
+
+        const itemCount = (typeof OL.resolveSopItems === 'function' ? OL.resolveSopItems(sop) : []).length;
+        if (itemCount === 0) {
+            console.warn(`🤖 Automation "${rule.name}" fired an empty SOP "${sop.name}" — nothing to create.`);
+            return;
+        }
+
+        const createdTasks = OL.createTasksFromSop(sop, client, {
+            resourceName: ctx.resourceName,
+            title: ctx.title,
+            asSubtask: action.asSubtask,
+            task: ctx.task,
+            dueInDaysOverride: (action.dueInDays === undefined || action.dueInDays === null || action.dueInDays === '') ? undefined : action.dueInDays,
+            automationRuleId: rule.id
+        });
+
+        console.log(`🤖 Automation "${rule.name}" applied SOP "${sop.name}" (${createdTasks.length} tasks) for ${client.meta?.name || client.id}`);
+        return;
+    }
+
     if (action.type !== 'create_task') return;
 
     const fill = (str) => String(str || '')
@@ -165,7 +192,9 @@ OL.renderAutomationBuilder = function() {
                             ${(rule.conditions || []).length ? ' and ' + rule.conditions.map(c => `<code>${esc(c.field)} ${c.op === 'not_equals' ? '≠' : '='} ${esc(c.value)}</code>`).join(' and ') : ''}
                             → ${rule.action?.type === 'apply_blueprint'
                                 ? `apply blueprint <code>${esc((state.master.taskBlueprints || []).find(b => b.id === rule.action.blueprintId)?.title || '(deleted blueprint)')}</code>`
-                                : `create task <code>${esc(rule.action?.titleTemplate || '')}</code>`}
+                                : rule.action?.type === 'apply_sop'
+                                    ? `apply SOP <code>${esc((state.master.sops || []).find(s => s.id === rule.action.sopId)?.name || '(deleted SOP)')}</code>`
+                                    : `create task <code>${esc(rule.action?.titleTemplate || '')}</code>`}
                             ${rule.action?.asSubtask ? ' <span class="tiny">(as sub-task)</span>' : ''}
                         </div>
                     </div>
@@ -231,8 +260,9 @@ OL.openAutomationRuleModal = function(ruleId) {
             <div class="card-section">
                 <label class="tiny muted uppercase bold">Action Type</label>
                 <select id="auto-action-type" class="modal-input tiny" style="margin-bottom:10px;" onchange="OL.refreshAutomationActionFields()">
-                    <option value="create_task" ${action.type !== 'apply_blueprint' ? 'selected' : ''}>Create a freeform task</option>
+                    <option value="create_task" ${!action.type || action.type === 'create_task' ? 'selected' : ''}>Create a freeform task</option>
                     <option value="apply_blueprint" ${action.type === 'apply_blueprint' ? 'selected' : ''}>Apply a Master Task blueprint</option>
+                    <option value="apply_sop" ${action.type === 'apply_sop' ? 'selected' : ''}>Apply an SOP (multiple blueprints)</option>
                 </select>
 
                 <div id="auto-action-freeform" style="${action.type === 'apply_blueprint' ? 'display:none;' : ''}">
@@ -276,6 +306,16 @@ OL.openAutomationRuleModal = function(ruleId) {
                     </select>
                     <label class="tiny muted uppercase bold">Due In (days) — leave blank to use the blueprint's own default</label>
                     <input type="number" id="auto-action-blueprint-due" class="modal-input tiny" value="${esc(action.type === 'apply_blueprint' ? (action.dueInDays ?? '') : '')}" placeholder="optional override">
+                </div>
+
+                <div id="auto-action-sop" style="${action.type === 'apply_sop' ? '' : 'display:none;'}">
+                    <label class="tiny muted uppercase bold">SOP</label>
+                    <select id="auto-action-sop-id" class="modal-input tiny" style="margin-bottom:8px;">
+                        <option value="">Select an SOP...</option>
+                        ${(state.master.sops || []).map(sop => `<option value="${sop.id}" ${action.sopId === sop.id ? 'selected' : ''}>${esc(sop.name)} (${(sop.blueprintIds || []).length} tasks)</option>`).join('')}
+                    </select>
+                    <label class="tiny muted uppercase bold">Due In (days) override — applies to every task in the SOP; leave blank to use each blueprint's own default</label>
+                    <input type="number" id="auto-action-sop-due" class="modal-input tiny" value="${esc(action.type === 'apply_sop' ? (action.dueInDays ?? '') : '')}" placeholder="optional override">
                 </div>
 
                 <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-top:10px; cursor:pointer;">
@@ -332,8 +372,10 @@ OL.refreshAutomationActionFields = function() {
     const type = document.getElementById('auto-action-type')?.value || 'create_task';
     const freeformEl = document.getElementById('auto-action-freeform');
     const blueprintEl = document.getElementById('auto-action-blueprint');
-    if (freeformEl) freeformEl.style.display = type === 'apply_blueprint' ? 'none' : '';
+    const sopEl = document.getElementById('auto-action-sop');
+    if (freeformEl) freeformEl.style.display = type === 'create_task' ? '' : 'none';
     if (blueprintEl) blueprintEl.style.display = type === 'apply_blueprint' ? '' : 'none';
+    if (sopEl) sopEl.style.display = type === 'apply_sop' ? '' : 'none';
 };
 
 OL.saveAutomationRule = function(ruleId) {
@@ -360,6 +402,16 @@ OL.saveAutomationRule = function(ruleId) {
         action = {
             type: 'apply_blueprint',
             blueprintId,
+            dueInDays: dueRaw === '' || dueRaw === undefined ? null : Number(dueRaw),
+            asSubtask
+        };
+    } else if (actionType === 'apply_sop') {
+        const sopId = document.getElementById('auto-action-sop-id')?.value || '';
+        if (!sopId) { alert('Pick an SOP for this action.'); return; }
+        const dueRaw = document.getElementById('auto-action-sop-due')?.value;
+        action = {
+            type: 'apply_sop',
+            sopId,
             dueInDays: dueRaw === '' || dueRaw === undefined ? null : Number(dueRaw),
             asSubtask
         };
