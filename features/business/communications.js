@@ -199,24 +199,30 @@ OL.checkGoogleAuthReturn = function() {
 };
 
 OL.fetchLiveGmailMessages = async function() {
+    if (OL.commTabState.loading) return; // Prevent concurrent loops
     OL.commTabState.loading = true;
-    OL.renderBusinessCommunications();
 
     try {
         const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/get-gmail-messages");
-        const data = await response.json();
+        
+        if (!response.ok) {
+            console.warn("Gmail function endpoint not available yet (HTTP " + response.status + ")");
+            return;
+        }
 
+        const data = await response.json();
         if (data.threads) {
             updateAndSync(() => {
+                if (!state.master) state.master = {};
                 if (!state.master.communications) state.master.communications = {};
                 state.master.communications.threads = data.threads;
             });
+            OL.renderBusinessCommunications(); // Only re-render on success!
         }
     } catch (err) {
         console.error("Error fetching Gmail messages:", err);
     } finally {
         OL.commTabState.loading = false;
-        OL.renderBusinessCommunications();
     }
 };
 
