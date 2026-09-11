@@ -417,12 +417,12 @@ window.buildLayout = function () {
         { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
     ];
 
-    const partnerBusinessTabs = [
-        { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
-        { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
-        { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
-        { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
-        { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" }
+    const partnerCoreTabs = [
+        { key: "tasks", label: "Tasks", icon: "check-square", href: "#/business/tasks" },
+        { key: "resources", label: "Resource Templates", icon: "database", href: "#/resources" },
+        { key: "analysis", label: "Analysis Templates", icon: "trending-up", href: "#/analyze" },
+        { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+        { key: "team", label: "Team Members", icon: "users", href: "#/team" }
     ];
 
     const clientTabs = [
@@ -517,11 +517,34 @@ window.buildLayout = function () {
                         ` : ''}
 
                         ${isPartnerProject ? `
-                            <div class="menu-category-label" style="margin-top:14px;">My Business Manager</div>
+                            <div class="menu-category-label" style="margin-top:14px;">Partner Portal</div>
                             <nav class="menu">
-                                ${partnerBusinessTabs.map(item => {
-                                    const isModuleEnabled = effectiveAdminMode || (client.businessModules && client.businessModules[item.key] === true);
+                                ${partnerCoreTabs.map(item => {
+                                    const isActive = hash.startsWith(item.href);
+                                    return `
+                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
+                                            <span class="menu-item">${item.label}</span>
+                                        </a>
+                                    `;
+                                }).join('')}
+                                ${clientTabs.filter(item => !partnerCoreTabs.some(core => core.key === item.key) && item.key !== 'checklist').map(item => {
+                                    const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
                                     if (!isModuleEnabled) return '';
+                                    const isActive = hash.startsWith(item.href);
+                                    return `
+                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
+                                            <span class="menu-item">${item.label}</span>
+                                        </a>
+                                    `;
+                                }).join('')}
+                                ${[
+                                    { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
+                                    { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
+                                    { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
+                                    { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" }
+                                ].filter(item => client.businessModules && client.businessModules[item.key] === true).map(item => {
                                     const isActive = hash.startsWith(item.href);
                                     return `
                                         <a href="${item.href}" class="${isActive ? 'active' : ''}">
@@ -534,6 +557,7 @@ window.buildLayout = function () {
                             <div class="divider" style="margin: 15px 0;"></div>
                         ` : ''}
 
+                        ${!isPartnerProject ? `
                         <nav class="menu" style="margin-top:10px;">
                             ${clientTabs.map(item => {
                                 const perm = OL.checkPermission(item.key);
@@ -550,6 +574,7 @@ window.buildLayout = function () {
                                 `;
                             }).join('')}
                         </nav>
+                        ` : ''}
                     </div>
                 ` : `
                     <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>

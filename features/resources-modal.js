@@ -52,6 +52,11 @@ export function renderResourceCard(res) {
                             ${isMaster ? 'MASTER' : 'LOCAL'}
                         </span>
                         ${res.isArchived ? `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
+                        ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
+                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client">
+                                <i data-lucide="send" style="width:12px;height:12px;"></i>
+                            </button>
+                        ` : ''}
                         <button class="card-delete-btn" 
                                 onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                                 title="${res.isArchived ? 'Unarchive' : 'Archive'}"

@@ -126,6 +126,11 @@ export function renderHowToCard(clientId, ht, isClientView) {
                     <i data-lucide="x" style="width:14px; height:14px;"></i>
                 </button>
                 ` : ''}
+                ${(isLocal && client?.meta?.status === 'Partner') ? `
+                <button class="card-delete-btn" style="position:static;" title="Push to a client" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('howto', '${ht.id}')">
+                    <i data-lucide="send" style="width:14px; height:14px;"></i>
+                </button>
+                ` : ''}
             </div>
             
             <div class="card-body" style="padding-top: 12px;">

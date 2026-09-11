@@ -532,6 +532,83 @@ export function openPartnerClientModulesModal(clientId) {
     openModal(html);
 };
 
+// ================= PARTNER TEMPLATE LIBRARY: PUSH TO A MANAGED CLIENT =================
+// Lets a Partner push one of their own local resources/analyses/how-to
+// guides down into one of the clients they manage. Complements the
+// existing admin-only "Promote to Master" actions already on each of
+// those items (that stays as-is — this is the other direction).
+
+const SOP_ITEM_TYPE_CONFIG = {
+    resource: { arrayKey: 'localResources', label: 'Resource' },
+    analysis: { arrayKey: 'localAnalyses', label: 'Analysis' },
+    howto: { arrayKey: 'localHowTo', label: 'How-To Guide' }
+};
+
+export function openPushLocalItemToClientModal(itemType, itemId) {
+    const config = SOP_ITEM_TYPE_CONFIG[itemType];
+    if (!config) return;
+
+    const sourceClient = getActiveClient();
+    const item = sourceClient?.projectData?.[config.arrayKey]?.find(x => x.id === itemId);
+    if (!item) { alert(`Couldn't find that ${config.label.toLowerCase()}.`); return; }
+
+    // Only the partner's own managed clients are valid push targets.
+    const managedClients = Object.values(state.clients || {})
+        .filter(c => String(c.meta?.partnerOwner) === String(sourceClient.id))
+        .sort((a, b) => (a.meta?.name || '').localeCompare(b.meta?.name || ''));
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">Push "${esc(item.name || item.title)}" to a Client</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            ${managedClients.length === 0 ? `
+                <p class="tiny muted">You don't have any clients assigned to you yet.</p>
+            ` : `
+                <label class="modal-section-label">Client</label>
+                <select id="push-item-client" class="modal-input">
+                    <option value="">Select a client...</option>
+                    ${managedClients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
+                </select>
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                    <button class="btn primary" onclick="OL.pushLocalItemToClient('${itemType}', '${itemId}', document.getElementById('push-item-client').value)">Push</button>
+                </div>
+            `}
+        </div>
+    `;
+    openModal(html);
+};
+
+export function pushLocalItemToClient(itemType, itemId, targetClientId) {
+    const config = SOP_ITEM_TYPE_CONFIG[itemType];
+    if (!config) return;
+    if (!targetClientId) { alert('Pick a client first.'); return; }
+
+    const sourceClient = getActiveClient();
+    const item = sourceClient?.projectData?.[config.arrayKey]?.find(x => x.id === itemId);
+    if (!item) return;
+
+    updateAndSync(() => {
+        const targetClient = state.clients[targetClientId];
+        if (!targetClient) return;
+        if (!targetClient.projectData) targetClient.projectData = {};
+        if (!targetClient.projectData[config.arrayKey]) targetClient.projectData[config.arrayKey] = [];
+
+        const copy = JSON.parse(JSON.stringify(item));
+        copy.id = uid();
+        copy.pushedFrom = { partnerId: sourceClient.id, originalId: item.id };
+        copy.createdAt = new Date().toISOString();
+
+        targetClient.projectData[config.arrayKey].push(copy);
+    }, targetClientId);
+
+    OL.closeModal();
+    alert(`"${item.name || item.title}" pushed to ${state.clients[targetClientId]?.meta?.name || targetClientId}.`);
+};
+
 export function toggleClientModule(clientId, moduleId) {
     OL.updateAndSync(() => {
         const client = state.clients[clientId];
@@ -786,7 +863,7 @@ Object.assign(window.OL, {
     renderPartnerDashboard, partnerCreateClient, handlePartnerAssignment,
     onboardNewClient, provisionSphynxTemplates, getDynamicPartners,
     openClientProfileModal, toggleClientModule, toggleClientBusinessModule, copyShareLink,
-    openPartnerClientModulesModal,
+    openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
     deleteClient, setAllPermissions, pushFeaturesToAllClients
 });

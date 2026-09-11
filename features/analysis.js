@@ -96,6 +96,11 @@ export function renderAnalysisCard(anly, isMaster) {
                 <div class="card-title card-title-${anly.id}">${esc(anly.name)}</div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
+                    ${(!isMaster && client?.meta?.status === 'Partner') ? `
+                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('analysis', '${anly.id}')" title="Push to a client">
+                            <i data-lucide="send" style="width:12px;height:12px;"></i>
+                        </button>
+                    ` : ''}
                     <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteAnalysis('${anly.id}', ${isMaster})">×</button>
                 </div>
             </div>
