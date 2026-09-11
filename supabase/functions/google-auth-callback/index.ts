@@ -39,18 +39,21 @@ serve(async (req) => {
     });
     const userData = await userResponse.json();
 
-    // 3. Store Tokens in Supabase Database
+    // 3. Store or Upsert Tokens in Supabase Database using Service Role Key
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    await supabase.from("google_auth_tokens").upsert({
+    const { error: dbError } = await supabase.from("google_auth_tokens").upsert({
       email: userData.email,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-    });
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'email' });
+
+    if (dbError) throw dbError;
 
     // 4. Redirect Back to Quo Communications on GitHub Pages
     const returnUrl = "https://sphynxgithub.github.io/operations-library/?admin=pizza123#/business/communications?connected=true";
