@@ -32,3 +32,11 @@ jobs:
             --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy get-gmail-messages
+        run: |
+          supabase functions deploy get-gmail-messages \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
