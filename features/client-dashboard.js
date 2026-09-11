@@ -489,12 +489,55 @@ export function openClientProfileModal(clientId) {
     openModal(html);
 };
 
+// Scoped-down version of the Client Profile modal for a Partner managing
+// one of THEIR OWN clients (client.meta.partnerOwner === them) — just the
+// tab-visibility toggles, none of the admin-only sections (partner
+// assignment, setup links, permissions, delete).
+export function openPartnerClientModulesModal(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">Client Access: ${esc(client.meta.name)}</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom:10px;">Choose which tabs ${esc(client.meta.name)} can see in their project workspace.</p>
+            <label class="modal-section-label">Active Modules (Client Access)</label>
+            <div class="card-section">
+                ${[
+                    { id: 'checklist', label: 'Tasks' },
+                    { id: 'apps', label: 'Apps' },
+                    { id: 'functions', label: 'Functions' },
+                    { id: 'resources', label: 'Resources' },
+                    { id: 'visualizer', label: 'Flow Map' },
+                    { id: 'scoping', label: 'Scoping' },
+                    { id: 'analysis', label: 'Analysis' },
+                    { id: 'how-to', label: 'How-To' },
+                    { id: 'team', label: 'Team' },
+                    { id: 'data', label: 'Data' }
+                ].map(m => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
+                        <input type="checkbox" 
+                            ${client.modules?.[m.id] ? 'checked' : ''} 
+                            onchange="OL.toggleClientModule('${clientId}', '${m.id}')">
+                        ${m.label}
+                    </label>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
 export function toggleClientModule(clientId, moduleId) {
     OL.updateAndSync(() => {
         const client = state.clients[clientId];
         if (!client.modules) client.modules = {};
         client.modules[moduleId] = !client.modules[moduleId];
-    });
+    }, clientId);
 };
 
 export function toggleClientBusinessModule(clientId, moduleId) {
@@ -502,7 +545,7 @@ export function toggleClientBusinessModule(clientId, moduleId) {
         const client = state.clients[clientId];
         if (!client.businessModules) client.businessModules = {};
         client.businessModules[moduleId] = !client.businessModules[moduleId];
-    });
+    }, clientId);
 };
 
 export function copyShareLink(token) {
@@ -524,6 +567,7 @@ export function updateClientStatus(clientId, newStatus) {
     client.meta.status = newStatus;
     
     OL.provisionSphynxTemplates(clientId);
+    OL.markClientDirty(clientId);
     OL.persist().then(() => {
         window.handleRoute();
     });
@@ -544,6 +588,7 @@ export function updateClientNameInline(clientId, newName) {
     client.meta.name = cleanName;
 
     // Persist to Firebase
+    OL.markClientDirty(clientId);
     OL.persist();
     
     console.log(`✅ Client renamed to: ${cleanName}`);
@@ -588,6 +633,7 @@ export function setAllPermissions(clientId, level) {
         client.permissions[key] = level;
     });
 
+    OL.markClientDirty(clientId);
     OL.persist();
     OL.closeModal();
     handleRoute(); // Refresh the sidebar and view immediately
@@ -724,6 +770,7 @@ export function handlePartnerAssignment(clientId, partnerKey) {
 
     console.log(`🎯 Client "${client.meta.name}" ownership updated to: ${partnerKey || 'None'}`);
 
+    OL.markClientDirty(clientId);
     persist().then(() => {
         if (typeof OL.openClientProfileModal === 'function') {
             OL.openClientProfileModal(clientId);
@@ -739,6 +786,7 @@ Object.assign(window.OL, {
     renderPartnerDashboard, partnerCreateClient, handlePartnerAssignment,
     onboardNewClient, provisionSphynxTemplates, getDynamicPartners,
     openClientProfileModal, toggleClientModule, toggleClientBusinessModule, copyShareLink,
+    openPartnerClientModulesModal,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
     deleteClient, setAllPermissions, pushFeaturesToAllClients
 });

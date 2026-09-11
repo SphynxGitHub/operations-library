@@ -40,6 +40,42 @@ OL.getAutomationConditionFields = function(trigger) {
     return trigger === 'scoping_status_change' ? SCOPING_STATUS_FIELDS : TASK_STATUS_FIELDS;
 };
 
+// Fields whose value is a known, enumerable set get a dropdown instead of
+// free text — mainly status fields (pulled from the real status pipeline)
+// and assignee. Everything else (responsibleParty, arbitrary field names)
+// stays free text since it isn't reliably enumerable at the master level.
+OL.getAutomationConditionValueOptions = function(field) {
+    if (['newStatus', 'previousStatus', 'status'].includes(field)) {
+        return (OL.getSystemStatuses ? OL.getSystemStatuses() : []).map(s => s.name);
+    }
+    if (field === 'assignee') {
+        const opts = ['Sphynx Task', 'Client Task'];
+        (state.master?.sphynxTeam || []).forEach(m => opts.push(m.name));
+        (OL.thirdPartyAssignees || []).forEach(tp => opts.push(tp));
+        return opts;
+    }
+    return null; // signals free text
+};
+
+OL.renderAutomationConditionValueControl = function(field, currentValue) {
+    const options = OL.getAutomationConditionValueOptions(field);
+    if (options) {
+        return `<select class="modal-input tiny cond-value">
+            <option value="">Select...</option>
+            ${options.map(v => `<option value="${esc(v)}" ${currentValue === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+        </select>`;
+    }
+    return `<input type="text" class="modal-input tiny cond-value" placeholder="value" value="${esc(currentValue || '')}">`;
+};
+
+// Fired when a condition row's field selector changes — swaps the value
+// cell between a dropdown and free text as appropriate for the new field.
+OL.onAutomationConditionFieldChange = function(selectEl) {
+    const row = selectEl.closest('.automation-condition-row');
+    const valueCell = row?.querySelector('.cond-value-cell');
+    if (valueCell) valueCell.innerHTML = OL.renderAutomationConditionValueControl(selectEl.value, '');
+};
+
 // ---- ENGINE: called from the hook points in tasks.js / scoping.js ----
 // IMPORTANT: this must be called from *inside* an updateAndSync mutationFn
 // so any tasks it creates are captured in the same dirty/persist cycle.
@@ -224,12 +260,12 @@ OL.openAutomationRuleModal = function(ruleId) {
 
     const conditionRowHtml = (c = { field: '', op: 'equals', value: '' }, idx) => `
         <div class="automation-condition-row" data-idx="${idx}" style="display:grid; grid-template-columns: 1fr 90px 1fr auto; gap:6px; margin-bottom:6px; align-items:center;">
-            <select class="modal-input tiny cond-field">${fieldOptions(c.field, trigger)}</select>
+            <select class="modal-input tiny cond-field" onchange="OL.onAutomationConditionFieldChange(this)">${fieldOptions(c.field, trigger)}</select>
             <select class="modal-input tiny cond-op">
                 <option value="equals" ${c.op !== 'not_equals' ? 'selected' : ''}>is</option>
                 <option value="not_equals" ${c.op === 'not_equals' ? 'selected' : ''}>is not</option>
             </select>
-            <input type="text" class="modal-input tiny cond-value" placeholder="value" value="${esc(c.value || '')}">
+            <span class="cond-value-cell">${OL.renderAutomationConditionValueControl(c.field, c.value)}</span>
             <button type="button" class="btn tiny soft" onclick="this.closest('.automation-condition-row').remove()">✕</button>
         </div>
     `;
@@ -347,12 +383,12 @@ OL.addAutomationConditionRow = function() {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = `
         <div class="automation-condition-row" data-idx="${idx}" style="display:grid; grid-template-columns: 1fr 90px 1fr auto; gap:6px; margin-bottom:6px; align-items:center;">
-            <select class="modal-input tiny cond-field">${OL.getAutomationConditionFields(trigger).map(f => `<option value="${f.key}">${f.label}</option>`).join('')}</select>
+            <select class="modal-input tiny cond-field" onchange="OL.onAutomationConditionFieldChange(this)">${OL.getAutomationConditionFields(trigger).map(f => `<option value="${f.key}">${f.label}</option>`).join('')}</select>
             <select class="modal-input tiny cond-op">
                 <option value="equals">is</option>
                 <option value="not_equals">is not</option>
             </select>
-            <input type="text" class="modal-input tiny cond-value" placeholder="value">
+            <span class="cond-value-cell">${OL.renderAutomationConditionValueControl('', '')}</span>
             <button type="button" class="btn tiny soft" onclick="this.closest('.automation-condition-row').remove()">✕</button>
         </div>
     `;
@@ -361,10 +397,13 @@ OL.addAutomationConditionRow = function() {
 
 OL.refreshAutomationConditionFields = function() {
     const trigger = document.getElementById('auto-rule-trigger')?.value || 'task_status_change';
-    document.querySelectorAll('#auto-rule-conditions .cond-field').forEach(sel => {
+    document.querySelectorAll('#auto-rule-conditions .automation-condition-row').forEach(row => {
+        const sel = row.querySelector('.cond-field');
+        if (!sel) return;
         const current = sel.value;
         sel.innerHTML = OL.getAutomationConditionFields(trigger).map(f => `<option value="${f.key}">${f.label}</option>`).join('');
         sel.value = current; // keep selection if the new trigger happens to share that field name
+        OL.onAutomationConditionFieldChange(sel); // field set may differ per trigger — refresh the value control too
     });
 };
 

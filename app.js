@@ -496,7 +496,11 @@ window.buildLayout = function () {
                     <div class="client-nav-zone">
                         <div class="menu-category-label">Project Workspace</div>
                         <div class="client-profile-trigger" 
-                            ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                            ${(isAdmin || effectiveAdminMode)
+                                ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"`
+                                : (!isPublic && client.meta?.partnerOwner)
+                                    ? `onclick="OL.openPartnerClientModulesModal('${client.id}')" style="cursor:pointer;"`
+                                    : `style="cursor:default;"`}>
                             <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                             <div class="client-info">
                                 <div class="client-name">${esc(client.meta.name)}</div>

@@ -279,6 +279,18 @@ export async function switchClient(id) {
     if (typeof window.handleRoute === 'function') window.handleRoute();
 }
 
+// ---- markClientDirty: flag a client for the next persist() cycle ----
+// For code paths that mutate state.clients[id] directly and call persist()
+// themselves rather than going through updateAndSync (e.g. status/name/
+// permission edits from the global client registry, where id often isn't
+// state.activeClientId). Call this before persist() or the write is silently
+// dropped — persist() only ever saves activeClientId plus whatever's here.
+export function markClientDirty(clientId) {
+    if (!clientId) return;
+    if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
+    state.dirtyClientIds.add(clientId);
+}
+
 // ---- updateAndSync: run a local mutation, then queue a persist ----
 export async function updateAndSync(mutationFn, targetClientId) {
     state.isSaving = true;
@@ -484,10 +496,12 @@ window.db = db;
 window.state = state;
 window.getActiveClient = getActiveClient;
 window.getBusinessScopedClients = getBusinessScopedClients;
+window.markClientDirty = markClientDirty;
 window.OL = window.OL || {};
 
 Object.assign(window.OL, {
     getBusinessScopedClients,
+    markClientDirty,
     state, persist, sync, loadFullClient, switchClient, updateAndSync,
     exportMasterBackup, importMasterBackup
 });
