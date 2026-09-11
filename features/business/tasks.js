@@ -530,7 +530,7 @@ OL.openDueDateDropdown = function(event, clientId, taskId) {
     if (window.lucide) lucide.createIcons();
 };
 
-
+OL.sortTasksWithSubtasksNested = function(tasks) {
     const byId = {};
     tasks.forEach(t => { byId[t.id] = t; });
 
