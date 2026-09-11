@@ -96,26 +96,29 @@ OL.renderBusinessCalendar = function() {
 // LIVE GOOGLE CALENDAR FETCH API
 // -------------------------------------------------------------
 OL.fetchLiveGoogleCalendar = async function() {
+    if (OL.calendarState.loading) return; // Prevent concurrent loops
     OL.calendarState.loading = true;
-    OL.renderBusinessCalendar();
 
     try {
         const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/get-calendar-events");
-        const data = await response.json();
+        
+        if (!response.ok) {
+            console.warn("Calendar function endpoint not available yet (HTTP " + response.status + ")");
+            return;
+        }
 
+        const data = await response.json();
         if (data.events) {
             updateAndSync(() => {
                 if (!state.master) state.master = {};
                 state.master.googleCalendarEvents = data.events;
             });
-        } else if (data.error) {
-            console.warn("Google Calendar Sync Notice:", data.error);
+            OL.renderBusinessCalendar(); // Only re-render on success!
         }
     } catch (err) {
         console.error("Failed to fetch Google Calendar events:", err);
     } finally {
         OL.calendarState.loading = false;
-        OL.renderBusinessCalendar();
     }
 };
 
