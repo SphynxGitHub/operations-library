@@ -880,6 +880,34 @@ export function printAnalysisMatrix(analysisId, isMaster) {
         `;
     });
 
+    // ── Final Scores + Est. Monthly Cost, mirrors the live matrix's totals row ──
+    const finalScoresHtml = `
+        <div class="final-scores-block">
+            <div class="final-scores-title">Final Scores</div>
+            <div class="final-scores-row" style="grid-template-columns: 220px 64px repeat(${apps.length || 1}, minmax(180px, 1fr));">
+                <div></div><div></div>
+                ${apps.map(a => {
+                    const score = OL.calculateAnalysisScore(a, anly.features || []);
+                    const cost = OL.calculateAppTotalCost(a);
+                    return `
+                        <div class="final-score-cell">
+                            <div class="fsc-label">Total Score</div>
+                            <div class="fsc-score ${score > 2.5 ? 'high' : ''}">${score}</div>
+                            <div class="fsc-cost">$${cost.toLocaleString()} <span class="fsc-cost-unit">/ user / mo</span></div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    const summaryHtml = anly.summary ? `
+        <div class="exec-summary">
+            <div class="exec-summary-title">Executive Summary &amp; Recommendations</div>
+            <div class="exec-summary-body">${esc(anly.summary).replace(/\n/g, '<br>')}</div>
+        </div>
+    ` : '';
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>${esc(anly.name)} — Weighted Analysis</title>
 <style>
@@ -925,6 +953,23 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .feature-score-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; }
 .fs-label { font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
 .fs-val { font-size: 12px; font-weight: 800; color: #0f172a; }
+
+.final-scores-block { margin-top: 20px; border-top: 2px solid #0f172a; padding-top: 10px; break-inside: avoid; }
+.final-scores-title { font-size: 10px; font-weight: 800; text-transform: uppercase;
+                       letter-spacing: 0.07em; color: #64748b; margin-bottom: 6px; }
+.final-scores-row { display: grid; gap: 10px; align-items: stretch; }
+.final-score-cell { text-align: center; background: #f8fafc; border: 1px solid #e2e8f0;
+                     border-radius: 6px; padding: 10px 8px; }
+.fsc-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+.fsc-score { font-size: 20px; font-weight: 800; color: #0f172a; margin: 4px 0; }
+.fsc-score.high { color: #15803d; }
+.fsc-cost { font-size: 10px; font-weight: 700; color: #0ea5e9; }
+.fsc-cost-unit { font-size: 8px; font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
+
+.exec-summary { margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 16px; break-inside: avoid; }
+.exec-summary-title { font-size: 10px; font-weight: 800; text-transform: uppercase;
+                       letter-spacing: 0.06em; color: #0ea5e9; margin-bottom: 8px; }
+.exec-summary-body { font-size: 11px; line-height: 1.6; color: #334155; white-space: pre-wrap; }
 </style></head><body>
 <div class="print-header">
   <div><div class="ph-title">${esc(anly.name)}</div><div class="ph-sub">Weighted Analysis</div></div>
@@ -935,6 +980,8 @@ ${rateCardHtml}
   <div>Feature</div><div>Weight</div>${apps.map(a => `<div>${esc(a.appName)}</div>`).join('')}
 </div>
 ${rowsHtml}
+${finalScoresHtml}
+${summaryHtml}
 </body></html>`;
 
     const win = window.open('', '_blank', 'width=1200,height=850');
