@@ -175,15 +175,26 @@ OL.initiateGoogleAuth = function() {
 
 OL.checkGoogleAuthReturn = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('connected') === 'true') {
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+
+    const isConnected = urlParams.get('connected') === 'true' || hashParams.get('connected') === 'true';
+
+    if (isConnected) {
         updateAndSync(() => {
             if (!state.master) state.master = {};
             if (!state.master.communications) state.master.communications = {};
             if (!state.master.communications.gmail) state.master.communications.gmail = {};
+
             state.master.communications.gmail.connected = true;
+            state.master.googleConnected = true;
         });
+
+        // Clean query parameters from address bar without reloading
         window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-        OL.fetchLiveGmailMessages();
+
+        // Auto-fetch both Live Feeds
+        if (typeof OL.fetchLiveGmailMessages === 'function') OL.fetchLiveGmailMessages();
+        if (typeof OL.fetchLiveGoogleCalendar === 'function') OL.fetchLiveGoogleCalendar();
     }
 };
 
