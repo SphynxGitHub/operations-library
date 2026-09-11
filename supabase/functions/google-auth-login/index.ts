@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-serve(async (req) => {
+serve(async () => {
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI");
 
@@ -10,11 +10,12 @@ serve(async (req) => {
     "https://www.googleapis.com/auth/userinfo.email"
   ];
 
+  // Scopes MUST be space-separated
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri!)}` +
     `&response_type=code` +
-    `&scope=${encodeURIComponent(scopes.join(" "))}` +
+    `&scope=${encodeURIComponent(scopes.join(" "))}` + 
     `&access_type=offline` +
     `&prompt=consent`;
 
