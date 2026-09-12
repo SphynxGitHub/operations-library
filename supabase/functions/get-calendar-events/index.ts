@@ -33,7 +33,7 @@ async function getCalendarSummaries(accessToken: string): Promise<Map<string, st
   return map;
 }
 
-async function listEventsForCalendar(accessToken: string, calendarId: string): Promise<any[]> {
+async function listEventsForCalendar(accessToken: string, calendarId: string): Promise<{ items: any[]; error: string | null }> {
   const timeMin = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString();
   const timeMax = new Date(Date.now() + DAYS_FORWARD * 24 * 60 * 60 * 1000).toISOString();
 
@@ -54,17 +54,20 @@ async function listEventsForCalendar(accessToken: string, calendarId: string): P
     if (res.status === 401) throw new GoogleAuthError("Google rejected the token while listing events.");
     const data = await res.json();
     if (data.error) {
-      // Don't let one bad/removed calendar id kill the whole sync — skip it.
-      console.error(`Failed to list events for calendar "${calendarId}":`, data.error.message);
-      return items;
+      // Don't let one bad/removed calendar id kill the whole sync — skip it,
+      // but report it back to the caller instead of only logging server-side.
+      const message = data.error.message || `HTTP ${res.status}`;
+      console.error(`Failed to list events for calendar "${calendarId}": ${message}`);
+      return { items, error: message };
     }
 
+    console.log(`[Calendar Sync] "${calendarId}" page ${page + 1}: ${(data.items || []).length} item(s)${data.nextPageToken ? ' (more pages)' : ''}`);
     items.push(...(data.items || []));
     pageToken = data.nextPageToken;
     page++;
   } while (pageToken && page < MAX_LIST_PAGES);
 
-  return items;
+  return { items, error: null };
 }
 
 serve(async (req) => {
@@ -88,13 +91,16 @@ serve(async (req) => {
     const perCalendarResults = await Promise.all(
       calendarIds.map(async (calendarId: string) => ({
         calendarId,
-        items: await listEventsForCalendar(accessToken, calendarId)
+        ...(await listEventsForCalendar(accessToken, calendarId))
       }))
     );
 
     const parsed: any[] = [];
-    for (const { calendarId, items } of perCalendarResults) {
+    const perCalendarSummary: { calendarId: string; summary: string; rawCount: number; error: string | null }[] = [];
+
+    for (const { calendarId, items, error: calError } of perCalendarResults) {
       const calendarSummary = calendarId === "primary" ? "Primary" : (calendarSummaries.get(calendarId) || calendarId);
+      perCalendarSummary.push({ calendarId, summary: calendarSummary, rawCount: items.length, error: calError });
 
       items
         .filter((evt: any) => evt.status !== "cancelled")
@@ -124,7 +130,7 @@ serve(async (req) => {
     }
 
     if (parsed.length === 0) {
-      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }), { status: 200, headers: corsHeaders });
     }
 
     // Figure out which of these events we've already stored, so we only
@@ -187,7 +193,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ syncedCount: parsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length }),
+      JSON.stringify({ syncedCount: parsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }),
       { status: 200, headers: corsHeaders }
     );
 

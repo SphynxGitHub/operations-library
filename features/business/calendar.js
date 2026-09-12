@@ -81,6 +81,13 @@ OL.renderBusinessCalendar = function() {
                 ${OL.calendarState.lastSyncSummary ? `
                     <div class="tiny muted" style="margin-bottom:14px;">
                         Last sync: ${OL.calendarState.lastSyncSummary.syncedCount ?? 0} event(s) scanned across ${OL.calendarState.lastSyncSummary.calendarsScanned ?? '?'} calendar(s), ${OL.calendarState.lastSyncSummary.newCount ?? 0} new.
+                        ${(OL.calendarState.lastSyncSummary.perCalendar || []).length ? `
+                            <div style="margin-top:4px; display:grid; gap:2px;">
+                                ${OL.calendarState.lastSyncSummary.perCalendar.map(c => `
+                                    <div>— ${esc(c.summary)}: ${c.error ? `<span style="color:#ef4444;">error — ${esc(c.error)}</span>` : `${c.rawCount} event(s)`}</div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
 
