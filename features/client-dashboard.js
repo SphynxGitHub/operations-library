@@ -482,6 +482,22 @@ export function openClientProfileModal(clientId) {
                 <div class="small">Onboarded: ${client.meta.onboarded}</div>
             </div>
 
+            <label class="modal-section-label">Gmail Auto-Labeling</label>
+            <div class="card-section">
+                <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer; margin-bottom:10px;">
+                    <input type="checkbox" ${client.meta.gmailLabelEnabled ? 'checked' : ''} onchange="OL.toggleGmailLabelForClient('${clientId}', this.checked)">
+                    Auto-label incoming emails for this project
+                </label>
+                <p class="tiny muted" style="margin-bottom:8px;">
+                    Matches each synced email's sender/recipients against this project's Team tab email addresses and applies this Gmail label.
+                </p>
+                <input type="text" id="gmail-label-input-${clientId}" class="modal-input small"
+                       placeholder="Label name"
+                       value="${esc(client.meta.gmailLabel || client.meta.name || '')}"
+                       ${client.meta.gmailLabelEnabled ? '' : 'disabled'}
+                       onchange="OL.updateGmailLabelName('${clientId}', this.value)">
+            </div>
+
            <label class="modal-section-label">Partner / Client Login</label>
            <div class="card-section">
                <p class="tiny muted">Generate a one-time setup link so they can create their own login.</p>
@@ -874,6 +890,25 @@ export function handlePartnerAssignment(clientId, partnerKey) {
     });
 }
 
+// ---- Gmail auto-labeling config (per client) ----
+export function toggleGmailLabelForClient(clientId, enabled) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        if (!client.meta.gmailLabel) client.meta.gmailLabel = client.meta.name;
+        client.meta.gmailLabelEnabled = enabled;
+    }, clientId);
+    openClientProfileModal(clientId); // re-render so the label input enables/disables
+}
+
+export function updateGmailLabelName(clientId, value) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        client.meta.gmailLabel = value.trim() || client.meta.name;
+    }, clientId);
+}
+
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
@@ -882,6 +917,7 @@ Object.assign(window.OL, {
     openClientProfileModal, toggleClientModule, toggleClientBusinessModule, copyShareLink,
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
-    deleteClient, setAllPermissions, pushFeaturesToAllClients
+    deleteClient, setAllPermissions, pushFeaturesToAllClients,
+    toggleGmailLabelForClient, updateGmailLabelName
 });
 window.renderClientDashboard = renderClientDashboard;

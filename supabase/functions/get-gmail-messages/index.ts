@@ -15,6 +15,8 @@ const corsHeaders = {
 const MAX_LIST_PAGES = 3;
 const LIST_PAGE_SIZE = 100;
 
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
+
 function decodeBase64Url(data: string): string {
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
   try {
@@ -47,6 +49,12 @@ function extractPlainTextBody(payload: any): string {
   return "";
 }
 
+function extractEmails(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(EMAIL_RE) || [];
+  return matches.map((e) => e.toLowerCase());
+}
+
 async function listInboxMessageIds(accessToken: string): Promise<string[]> {
   const ids: string[] = [];
   let pageToken: string | undefined;
@@ -70,6 +78,73 @@ async function listInboxMessageIds(accessToken: string): Promise<string[]> {
   return ids;
 }
 
+// ---- Project label rules: which clients want auto-labeling, and which
+// email addresses (their Team tab) identify a message as belonging to them.
+interface ProjectRule {
+  clientId: string;
+  labelName: string;
+  emails: Set<string>;
+}
+
+async function loadProjectRules(supabase: any): Promise<ProjectRule[]> {
+  const { data, error } = await supabase.from("workspace_clients").select("id, meta, project_data");
+  if (error) throw new Error(`Failed to load client label rules: ${error.message}`);
+
+  const rules: ProjectRule[] = [];
+  for (const row of data || []) {
+    const meta = row.meta || {};
+    if (!meta.gmailLabelEnabled) continue;
+    const labelName = (meta.gmailLabel || meta.name || "").trim();
+    if (!labelName) continue;
+
+    const teamMembers = row.project_data?.teamMembers || [];
+    const emails = new Set<string>(
+      teamMembers.map((m: any) => (m?.email || "").trim().toLowerCase()).filter(Boolean)
+    );
+    if (emails.size === 0) continue;
+
+    rules.push({ clientId: row.id, labelName, emails });
+  }
+  return rules;
+}
+
+// ---- Gmail label lookup/creation, cached for the duration of one sync run ----
+async function loadExistingLabels(accessToken: string): Promise<Map<string, string>> {
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const data = await res.json();
+  const map = new Map<string, string>();
+  (data.labels || []).forEach((l: any) => map.set(l.name.toLowerCase(), l.id));
+  return map;
+}
+
+async function ensureLabelId(accessToken: string, labelCache: Map<string, string>, labelName: string): Promise<string | null> {
+  const key = labelName.toLowerCase();
+  if (labelCache.has(key)) return labelCache.get(key)!;
+
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: labelName, labelListVisibility: "labelShow", messageListVisibility: "show" })
+  });
+
+  if (!res.ok) {
+    // Most likely: another concurrent sync created it a moment ago — re-check.
+    const refreshed = await loadExistingLabels(accessToken);
+    if (refreshed.has(key)) {
+      labelCache.set(key, refreshed.get(key)!);
+      return refreshed.get(key)!;
+    }
+    console.error(`Failed to create Gmail label "${labelName}":`, await res.text());
+    return null;
+  }
+
+  const created = await res.json();
+  labelCache.set(key, created.id);
+  return created.id;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -87,7 +162,7 @@ serve(async (req) => {
     const inboxIds = await listInboxMessageIds(accessToken);
 
     if (inboxIds.length === 0) {
-      return new Response(JSON.stringify({ scannedCount: 0, importedCount: 0 }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ scannedCount: 0, importedCount: 0, labeledCount: 0 }), { status: 200, headers: corsHeaders });
     }
 
     // 2. Find which ones we've already imported (chunk the .in() filter to be safe on size)
@@ -102,11 +177,19 @@ serve(async (req) => {
     const newIds = inboxIds.filter((id) => !alreadyImported.has(id));
 
     if (newIds.length === 0) {
-      return new Response(JSON.stringify({ scannedCount: inboxIds.length, importedCount: 0 }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ scannedCount: inboxIds.length, importedCount: 0, labeledCount: 0 }), { status: 200, headers: corsHeaders });
     }
 
-    // 3. Fetch full detail + body for each new message
-    const rows = await Promise.all(
+    // 3. Load project label-matching rules (client Gmail-label config + Team emails)
+    const projectRules = await loadProjectRules(supabase);
+
+    // 4. Fetch full detail + body for each new message, and work out which
+    // project(s) it matches by comparing From/To/Cc addresses to each
+    // project's Team tab emails.
+    const rows: any[] = [];
+    const labelPlan: { id: string; labelNames: string[] }[] = [];
+
+    await Promise.all(
       newIds.map(async (id) => {
         const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
           headers: { Authorization: `Bearer ${accessToken}` }
@@ -114,32 +197,88 @@ serve(async (req) => {
         const detail = await detailRes.json();
 
         const headers = detail.payload?.headers || [];
-        const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
-        const sender = headers.find((h: any) => h.name === "From")?.value || "Unknown";
-        const dateHeader = headers.find((h: any) => h.name === "Date")?.value || "";
+        const getHeader = (name: string) => headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+        const subject = getHeader("Subject") || "No Subject";
+        const sender = getHeader("From") || "Unknown";
+        const dateHeader = getHeader("Date");
         const parsedDate = dateHeader ? new Date(dateHeader) : null;
 
-        return {
+        const participantEmails = new Set([
+          ...extractEmails(getHeader("From")),
+          ...extractEmails(getHeader("To")),
+          ...extractEmails(getHeader("Cc"))
+        ]);
+
+        const matchedClientIds: string[] = [];
+        const matchedLabelNames: string[] = [];
+        for (const rule of projectRules) {
+          for (const addr of participantEmails) {
+            if (rule.emails.has(addr)) {
+              matchedClientIds.push(rule.clientId);
+              matchedLabelNames.push(rule.labelName);
+              break;
+            }
+          }
+        }
+
+        rows.push({
           id,
           thread_id: detail.threadId || null,
           sender,
           subject,
           snippet: detail.snippet || "",
           body: extractPlainTextBody(detail.payload).slice(0, 20000),
-          date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null
-        };
+          date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
+          // Only auto-link when exactly one project matches — ambiguous
+          // matches are left for manual linking rather than guessed.
+          linked_client_id: matchedClientIds.length === 1 ? matchedClientIds[0] : null
+        });
+
+        if (matchedLabelNames.length > 0) {
+          labelPlan.push({ id, labelNames: [...new Set(matchedLabelNames)] });
+        }
       })
     );
 
-    // 4. Save them (upsert guards against a race if two syncs overlap).
+    // 5. Save them (upsert guards against a race if two syncs overlap).
     // Note: importing does NOT touch the real Gmail inbox — these stay in
     // Gmail until explicitly archived (see the separate archive-gmail-message
     // function, triggered from the app when a message is archived/linked).
     const { error: insertError } = await supabase.from("gmail_messages").upsert(rows, { onConflict: "id" });
     if (insertError) throw new Error(`Insert failed: ${insertError.message}`);
 
+    // 6. Apply Gmail labels for any project matches (creating labels on
+    // first use, named after the project — editable later from Project
+    // Settings, which just renames the same Gmail label going forward).
+    let labeledCount = 0;
+    if (labelPlan.length > 0) {
+      const labelCache = await loadExistingLabels(accessToken);
+
+      await Promise.all(
+        labelPlan.map(async ({ id, labelNames }) => {
+          const labelIds = (
+            await Promise.all(labelNames.map((name) => ensureLabelId(accessToken, labelCache, name)))
+          ).filter((x): x is string => !!x);
+
+          if (labelIds.length === 0) return;
+
+          try {
+            const modRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ addLabelIds: labelIds })
+            });
+            if (modRes.ok) labeledCount++;
+            else console.error(`Failed to label message ${id}:`, await modRes.text());
+          } catch (e) {
+            console.error(`Failed to label message ${id}:`, e);
+          }
+        })
+      );
+    }
+
     return new Response(
-      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length }),
+      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount }),
       { status: 200, headers: corsHeaders }
     );
 
