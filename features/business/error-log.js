@@ -1,4 +1,4 @@
-import { esc, state, db, updateAndSync, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
+import { esc, uid, state, db, updateAndSync, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
 
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
@@ -273,6 +273,36 @@ OL.assignErrorClientAndRefreshModal = async function(id, clientId) {
 OL.assignErrorResource = async function(id, resourceId) {
     const row = OL.errorLogState.rows.find(r => r.id === id);
     const clientId = row?.client_id || OL.errorLogState.lockedClientId;
+
+    if (resourceId === '__create_new') {
+        const defaultName = row?.title || row?.service || 'New Zap';
+        const name = prompt('Name this resource:', defaultName);
+        if (!name || !name.trim()) return;
+
+        const newId = uid();
+        const link = row?.zap_link || (row?.root_id ? `https://zapier.com/editor/${row.root_id}` : '');
+
+        await updateAndSync(() => {
+            const client = state.clients[clientId];
+            if (!client) return;
+            if (!client.projectData) client.projectData = {};
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push({
+                id: newId,
+                name: name.trim(),
+                type: 'Zap',
+                archetype: 'Multi-Step',
+                category: 'Flows',
+                visible: true,
+                steps: [],
+                externalUrl: link
+            });
+        }, clientId);
+
+        resourceId = newId;
+        // Fall through to the normal assignment below, using the new resource.
+    }
+
     const resource = (state.clients[clientId]?.projectData?.localResources || []).find(res => res.id === resourceId);
 
     const { error } = await db.from('error_log').update({ resource_id: resourceId || null, resource_name: resource?.name || null }).eq('id', id);
@@ -290,6 +320,8 @@ OL.assignErrorResource = async function(id, resourceId) {
             if (res) res.externalUrl = link;
         }, clientId);
     }
+
+    OL.openErrorDetailModal(id);
 };
 
 // Status dropdown — also stamps/clears Resolution Date automatically
@@ -380,6 +412,7 @@ OL.openErrorDetailModal = function(id) {
                     ${(r.client_id || OL.errorLogState.lockedClientId) ? `
                         <select class="modal-input tiny" onchange="OL.assignErrorResource('${r.id}', this.value)">
                             <option value="">-- None --</option>
+                            <option value="__create_new">+ Create new resource...</option>
                             ${(state.clients[r.client_id || OL.errorLogState.lockedClientId]?.projectData?.localResources || []).map(res => `<option value="${res.id}" ${r.resource_id === res.id ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
                         </select>
                     ` : `<div class="tiny muted" style="padding:7px 0;">Assign a project first</div>`}
