@@ -1,9 +1,13 @@
-import { esc, state, updateAndSync, getBusinessScopedClients } from '../../core/data.js';
+import { esc, state, db, updateAndSync, getBusinessScopedClients } from '../../core/data.js';
+
+const GMAIL_FEED_LIMIT = 150;
 
 OL.commTabState = {
     activeTab: 'feed', // 'feed' | 'gmail' | 'quo'
     query: '',
-    loading: false
+    loading: false,
+    showArchived: false,
+    feedLoadedOnce: false
 };
 
 OL.renderBusinessCommunications = function() {
@@ -21,6 +25,13 @@ OL.renderBusinessCommunications = function() {
     };
 
     const endpointUrl = `https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/quo-webhook`;
+
+    // Auto-load the feed from Supabase once per session if connected and not yet loaded
+    const isConnected = commsData.gmail?.connected || state.master?.googleConnected || false;
+    if (isConnected && !OL.commTabState.feedLoadedOnce && !OL.commTabState.loading) {
+        OL.commTabState.feedLoadedOnce = true;
+        OL.loadGmailFeed().then(() => OL.renderBusinessCommunications());
+    }
 
     main.innerHTML = `
         <div class="section-header">
@@ -55,23 +66,32 @@ OL.switchCommTab = function(tabName) {
 };
 
 // -------------------------------------------------------------
-// 1. UNIFIED CLIENT FEED VIEW (LIVE GMAIL THREADS)
+// 1. UNIFIED CLIENT FEED VIEW (GMAIL MESSAGES SYNCED INTO SUPABASE)
 // -------------------------------------------------------------
 OL.renderCommFeedView = function(commsData, clients) {
-    const isConnected = commsData.gmail?.connected;
-    const threads = commsData.threads || [];
+    const isConnected = commsData.gmail?.connected || state.master?.googleConnected || false;
+    const allThreads = commsData.threads || [];
+    const q = OL.commTabState.query.trim().toLowerCase();
+    const threads = q ? allThreads.filter(m =>
+        (m.sender || '').toLowerCase().includes(q) ||
+        (m.subject || '').toLowerCase().includes(q) ||
+        (m.snippet || '').toLowerCase().includes(q)
+    ) : allThreads;
 
     return `
         <div class="card" style="padding: 20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 15px; flex-wrap:wrap; gap:10px;">
                 <div style="display:flex; gap:10px; flex:1; max-width: 350px;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted); margin-top:6px;"></i>
                     <input type="text" class="modal-input tiny" placeholder="Search communications..." value="${esc(OL.commTabState.query)}" oninput="OL.commTabState.query = this.value; OL.renderBusinessCommunications();">
                 </div>
                 <div style="display:flex; gap:12px; align-items:center;">
                     ${isConnected ? `
+                        <button class="btn tiny ${OL.commTabState.showArchived ? 'primary' : 'soft'}" onclick="OL.toggleShowArchivedGmail()">
+                            <i data-lucide="archive" style="width:12px;height:12px;"></i> ${OL.commTabState.showArchived ? 'Showing Archived' : 'Archived'}
+                        </button>
                         <button class="btn tiny soft" onclick="OL.fetchLiveGmailMessages()" ${OL.commTabState.loading ? 'disabled' : ''}>
-                            <i data-lucide="refresh-cw" style="width:12px;height:12px;${OL.commTabState.loading ? 'animation: spin 1s linear infinite;' : ''}"></i> 
+                            <i data-lucide="refresh-cw" style="width:12px;height:12px;${OL.commTabState.loading ? 'animation: spin 1s linear infinite;' : ''}"></i>
                             ${OL.commTabState.loading ? 'Syncing...' : 'Sync Gmail'}
                         </button>
                     ` : ''}
@@ -83,24 +103,44 @@ OL.renderCommFeedView = function(commsData, clients) {
                 ${threads.length === 0 ? `
                     <div style="text-align:center; padding: 40px; color: var(--muted);">
                         <i data-lucide="inbox" style="width:36px;height:32px;margin-bottom:8px;opacity:0.5;"></i>
-                        <div>${isConnected ? 'No recent client emails found. Click "Sync Gmail" above.' : 'Connect your Google account under Gmail Settings to stream real emails.'}</div>
+                        <div>${isConnected ? (OL.commTabState.showArchived ? 'No archived emails.' : 'No recent client emails found. Click "Sync Gmail" above.') : 'Connect your Google account under Gmail Settings to stream real emails.'}</div>
                     </div>
                 ` : threads.map(m => `
-                    <div style="display:grid; grid-template-columns: 100px 200px 160px 1fr 120px; gap: 12px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center;">
+                    <div style="display:grid; grid-template-columns: 100px 200px 1fr 120px 130px; gap: 12px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center;">
                         <div>
-                            <span class="pill tiny ${m.source === 'Gmail' ? 'accent' : 'soft'}" style="font-weight:bold;">
-                                ${m.source === 'Gmail' ? '✉️ Gmail' : '⚡ Quo'}
-                            </span>
+                            <span class="pill tiny accent" style="font-weight:bold;">✉️ Gmail</span>
                         </div>
-                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><strong>${esc(m.sender)}</strong></div>
-                        <div><span class="pill tiny soft">📁 ${esc(m.clientName || 'General')}</span></div>
-                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject)}</div>
-                        <div class="tiny muted monospace text-right">${esc(m.date)}</div>
+                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')"><strong>${esc(m.sender)}</strong></div>
+                        <div style="overflow:hidden; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
+                            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject)}</div>
+                            ${m.snippet ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.snippet)}</div>` : ''}
+                            ${m.linked_task_id ? `<span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="link" style="width:9px;height:9px;"></i> ${esc(OL.getLinkedTaskLabel(m))}</span>` : ''}
+                        </div>
+                        <div class="tiny muted monospace text-right">${m.date ? new Date(m.date).toLocaleDateString() : ''}</div>
+                        <div style="display:flex; gap:6px; justify-content:flex-end;">
+                            ${m.archived ? `
+                                <button class="btn tiny soft" title="Move back to inbox" onclick="event.stopPropagation(); OL.unarchiveGmailMessage('${m.id}')"><i data-lucide="inbox" style="width:11px;height:11px;"></i></button>
+                            ` : `
+                                <button class="btn tiny soft" title="Archive" onclick="event.stopPropagation(); OL.archiveGmailMessage('${m.id}')"><i data-lucide="archive" style="width:11px;height:11px;"></i></button>
+                            `}
+                            <button class="btn tiny soft" title="Link to task" onclick="event.stopPropagation(); OL.openGmailLinkPicker('${m.id}')"><i data-lucide="link" style="width:11px;height:11px;"></i></button>
+                        </div>
                     </div>
                 `).join('')}
             </div>
         </div>
     `;
+};
+
+OL.getLinkedTaskLabel = function(m) {
+    const client = m.linked_client_id ? state.clients[m.linked_client_id] : null;
+    const task = client?.projectData?.clientTasks?.find(t => t.id === m.linked_task_id);
+    return task ? (task.title || task.name) : 'Linked task';
+};
+
+OL.toggleShowArchivedGmail = function() {
+    OL.commTabState.showArchived = !OL.commTabState.showArchived;
+    OL.loadGmailFeed().then(() => OL.renderBusinessCommunications());
 };
 
 // -------------------------------------------------------------
@@ -198,9 +238,33 @@ OL.checkGoogleAuthReturn = function() {
     }
 };
 
+// Loads the feed straight from the gmail_messages table (this is the
+// durable store now — nothing Gmail-related lives in the big JSON state
+// blob anymore, so this doesn't bloat every save).
+OL.loadGmailFeed = async function() {
+    const { data, error } = await db
+        .from('gmail_messages')
+        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, archived')
+        .eq('archived', OL.commTabState.showArchived)
+        .order('date', { ascending: false })
+        .limit(GMAIL_FEED_LIMIT);
+
+    if (error) {
+        console.error('Failed to load Gmail feed:', error.message);
+        return;
+    }
+
+    if (!state.master) state.master = {};
+    if (!state.master.communications) state.master.communications = {};
+    state.master.communications.threads = data || [];
+};
+
+// Triggers an actual sync (imports anything new from the inbox into
+// gmail_messages), then reloads the feed from the table.
 OL.fetchLiveGmailMessages = async function() {
     if (OL.commTabState.loading) return; // Prevent concurrent loops
     OL.commTabState.loading = true;
+    OL.renderBusinessCommunications();
 
     try {
         const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/get-gmail-messages");
@@ -212,28 +276,23 @@ OL.fetchLiveGmailMessages = async function() {
                 if (state.master?.communications?.gmail) state.master.communications.gmail.connected = false;
                 if (state.master) state.master.googleConnected = false;
             });
-            OL.renderBusinessCommunications();
             return;
         }
 
         if (!response.ok) {
-            console.warn("Gmail function endpoint not available yet (HTTP " + response.status + ")");
+            console.warn("Gmail sync failed (HTTP " + response.status + ")");
             return;
         }
 
-        const data = await response.json();
-        if (data.threads) {
-            updateAndSync(() => {
-                if (!state.master) state.master = {};
-                if (!state.master.communications) state.master.communications = {};
-                state.master.communications.threads = data.threads;
-            });
-            OL.renderBusinessCommunications(); // Only re-render on success!
-        }
+        const syncResult = await response.json();
+        console.log(`Gmail sync: ${syncResult.importedCount ?? 0} new of ${syncResult.scannedCount ?? 0} scanned`);
+
+        await OL.loadGmailFeed();
     } catch (err) {
-        console.error("Error fetching Gmail messages:", err);
+        console.error("Error syncing Gmail:", err);
     } finally {
         OL.commTabState.loading = false;
+        OL.renderBusinessCommunications();
     }
 };
 
@@ -245,6 +304,176 @@ OL.disconnectGmailAccount = function() {
             state.master.communications.threads = [];
         }
     });
+    OL.commTabState.feedLoadedOnce = false;
+    OL.renderBusinessCommunications();
+};
+
+// -------------------------------------------------------------
+// ARCHIVE / UNARCHIVE — app-side by default (hides from the feed here).
+// Archiving also best-effort removes it from your real Gmail inbox, since
+// you said that's fine once you're done with something.
+// -------------------------------------------------------------
+OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
+    const { error } = await db.from('gmail_messages').update({ archived: true }).eq('id', id);
+    if (error) { alert('Failed to archive: ' + error.message); return; }
+
+    if (alsoInGmail) {
+        fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/archive-gmail-message", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        }).catch(err => console.warn('Could not archive in Gmail (still archived in-app):', err));
+    }
+
+    await OL.loadGmailFeed();
+    OL.renderBusinessCommunications();
+};
+
+OL.unarchiveGmailMessage = async function(id) {
+    const { error } = await db.from('gmail_messages').update({ archived: false }).eq('id', id);
+    if (error) { alert('Failed to move back to inbox: ' + error.message); return; }
+    await OL.loadGmailFeed();
+    OL.renderBusinessCommunications();
+};
+
+// -------------------------------------------------------------
+// READ AN EMAIL — always pulled fresh from Supabase (works from the
+// feed list or from a task's "Linked Emails" section either way).
+// -------------------------------------------------------------
+OL.openGmailMessageModal = async function(id) {
+    const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
+    if (error || !m) { alert('Could not load that email.'); return; }
+
+    const linkLabel = m.linked_task_id ? OL.getLinkedTaskLabel(m) : '';
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">✉️ ${esc(m.subject || 'No Subject')}</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" style="max-width:650px; width:100%;">
+            <div class="tiny muted" style="margin-bottom:14px; display:flex; flex-direction:column; gap:2px;">
+                <div><strong>From:</strong> ${esc(m.sender)}</div>
+                <div><strong>Date:</strong> ${m.date ? new Date(m.date).toLocaleString() : 'Unknown'}</div>
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+                ${m.linked_task_id ? `
+                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="link" style="width:11px;height:11px;"></i> Linked to: ${esc(linkLabel)}</span>
+                ` : ''}
+                <button class="btn tiny soft" onclick="OL.openGmailLinkPicker('${m.id}')">${m.linked_task_id ? 'Change Link' : 'Link to Task'}</button>
+                ${m.archived ? `
+                    <button class="btn tiny soft" onclick="OL.unarchiveGmailMessage('${m.id}'); OL.closeModal();">Move Back to Inbox</button>
+                ` : `
+                    <button class="btn tiny soft" onclick="OL.archiveGmailMessage('${m.id}'); OL.closeModal();">Archive</button>
+                `}
+            </div>
+
+            <div style="white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:420px; overflow:auto; border-top:1px solid var(--line); padding-top:14px;">
+                ${esc(m.body || m.snippet || 'No preview available for this message.')}
+            </div>
+        </div>
+    `;
+    openModal(html);
+    if (window.lucide) lucide.createIcons();
+};
+window.OL.openGmailMessageModal = OL.openGmailMessageModal;
+
+// -------------------------------------------------------------
+// LINK TO TASK
+// -------------------------------------------------------------
+OL.openGmailLinkPicker = async function(id) {
+    const { data: m, error } = await db.from('gmail_messages').select('id, subject, linked_client_id, linked_task_id').eq('id', id).single();
+    if (error || !m) { alert('Could not load that email.'); return; }
+
+    OL._gmailLinkState = { emailId: id, clientId: m.linked_client_id || '', taskId: m.linked_task_id || '' };
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔗 Link "${esc(m.subject || 'Email')}" to a Task</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" id="gmail-link-body" style="max-width:500px; width:100%;"></div>
+    `;
+    openModal(html);
+    OL.renderGmailLinkStep();
+};
+
+OL.renderGmailLinkStep = function() {
+    const st = OL._gmailLinkState;
+    const container = document.getElementById('gmail-link-body');
+    if (!container || !st) return;
+
+    const clients = Object.values(state.clients || {});
+    const client = st.clientId ? state.clients[st.clientId] : null;
+    const tasks = client?.projectData?.clientTasks || [];
+
+    container.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+            <label class="tiny muted bold">Client Project</label>
+            <select class="modal-input tiny" onchange="OL.setGmailLinkClient(this.value)">
+                <option value="">-- Select a client --</option>
+                ${clients.map(c => `<option value="${c.id}" ${st.clientId === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+            </select>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
+            <label class="tiny muted bold">Task / Deliverable</label>
+            <select class="modal-input tiny" onchange="OL.setGmailLinkTask(this.value)" ${!client ? 'disabled' : ''}>
+                <option value="">-- Select a task --</option>
+                ${tasks.map(t => `<option value="${t.id}" ${st.taskId === t.id ? 'selected' : ''}>${esc(t.title || t.name)}</option>`).join('')}
+            </select>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            ${st.taskId ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
+            <button class="btn small primary" onclick="OL.saveGmailLink()" style="font-weight:bold;" ${!st.taskId ? 'disabled' : ''}>Save Link</button>
+        </div>
+    `;
+};
+
+OL.setGmailLinkClient = function(id) {
+    OL._gmailLinkState.clientId = id;
+    OL._gmailLinkState.taskId = '';
+    OL.renderGmailLinkStep();
+};
+
+OL.setGmailLinkTask = function(id) {
+    OL._gmailLinkState.taskId = id;
+    OL.renderGmailLinkStep();
+};
+
+OL.saveGmailLink = async function() {
+    const st = OL._gmailLinkState;
+    if (!st?.taskId) return;
+
+    const { error } = await db.from('gmail_messages').update({
+        linked_client_id: st.clientId,
+        linked_task_id: st.taskId,
+        archived: true // linking means you're done triaging it — out of the inbox feed
+    }).eq('id', st.emailId);
+
+    if (error) { alert('Failed to save link: ' + error.message); return; }
+
+    // Best-effort: also archive in real Gmail, since you're fine with that once linked
+    fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/archive-gmail-message", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: st.emailId })
+    }).catch(err => console.warn('Could not archive in Gmail (still linked + archived in-app):', err));
+
+    OL.closeModal();
+    await OL.loadGmailFeed();
+    OL.renderBusinessCommunications();
+};
+
+OL.unlinkGmailMessage = async function() {
+    const st = OL._gmailLinkState;
+    if (!st) return;
+
+    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_task_id: null }).eq('id', st.emailId);
+    if (error) { alert('Failed to unlink: ' + error.message); return; }
+
+    OL.closeModal();
+    await OL.loadGmailFeed();
     OL.renderBusinessCommunications();
 };
 

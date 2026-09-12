@@ -1,4 +1,4 @@
-import { esc, uid, state, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
+import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -1350,6 +1350,13 @@ OL.renderInContextTaskModal = function(client, task) {
                     </div>
                 ` : ''}
 
+                <div style="margin-bottom: 20px;">
+                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+                        <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
+                    </label>
+                    <div id="linked-emails-list" class="tiny muted">Loading…</div>
+                </div>
+
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
                     <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:6px;">
                         <i data-lucide="pencil" style="width:12px;height:12px;"></i> Adjust Logged Time
@@ -1361,9 +1368,41 @@ OL.renderInContextTaskModal = function(client, task) {
     `;
 
     OL.showOverlayModal(content);
+    OL.loadLinkedEmailsForTask(task.id);
 };
 
-// ================= RETROACTIVE TIME EDIT MODAL ================= //
+OL.loadLinkedEmailsForTask = async function(taskId) {
+    const container = document.getElementById('linked-emails-list');
+    const { data, error } = await db
+        .from('gmail_messages')
+        .select('id, sender, subject, snippet, date')
+        .eq('linked_task_id', taskId)
+        .order('date', { ascending: false });
+
+    if (!container) return; // modal already closed before this resolved
+
+    if (error) {
+        container.innerHTML = `<span style="color:#ef4444;">Failed to load linked emails.</span>`;
+        return;
+    }
+    if (!data || !data.length) {
+        container.innerHTML = `No emails linked yet — use the 🔗 icon on an email in Communications to link one here.`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="display:grid; gap:6px;">
+            ${data.map(m => `
+                <div style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
+                    <strong>${esc(m.subject || 'No Subject')}</strong>
+                    <div class="muted">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
+                    ${m.snippet ? `<div class="muted" style="margin-top:2px;">${esc(m.snippet)}</div>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+};
 
 OL.openEditTaskTimeModal = function(clientId, taskId) {
     const client = state.clients?.[clientId];
