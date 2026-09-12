@@ -78,6 +78,12 @@ OL.renderBusinessCalendar = function() {
                     </div>
                 </div>
 
+                ${OL.calendarState.lastSyncSummary ? `
+                    <div class="tiny muted" style="margin-bottom:14px;">
+                        Last sync: ${OL.calendarState.lastSyncSummary.syncedCount ?? 0} event(s) scanned across ${OL.calendarState.lastSyncSummary.calendarsScanned ?? '?'} calendar(s), ${OL.calendarState.lastSyncSummary.newCount ?? 0} new.
+                    </div>
+                ` : ''}
+
                 ${OL.calendarState.view === 'grid' ? OL.renderCalendarGrid(events) : OL.renderCalendarList(events)}
             </div>
         `}
@@ -370,6 +376,8 @@ OL.fetchLiveGoogleCalendar = async function() {
         // Run task-creation automation rules for any newly-matched events —
         // this is what syncs meeting time to a client's timesheet.
         await OL.processCalendarAutomations();
+
+        OL.calendarState.lastSyncSummary = syncResult;
     } catch (err) {
         console.error("Failed to fetch Google Calendar events:", err);
     } finally {
