@@ -11,12 +11,23 @@ const corsHeaders = {
 // the Zapier webhook step — snake_case and camelCase variants of each field
 // are both recognized. Only "message" is required.
 //
+// Client matching, tried in this order (first match wins):
+//   1. client_id     — the project's actual id in this app (exact, no
+//                       guessing). Find it under Project Settings — copy
+//                       button next to "OL Project ID".
+//   2. client_email   — matched against the project's Team tab email
+//                       addresses (same mechanism Gmail/Calendar use).
+//   3. sheet_id       — matched against the "Tracking Sheet ID" you set once
+//                       under Project Settings > Error Tracking.
+//   4. client_name    — fuzzy match against the project name.
+// If none match, the error is saved as unassigned rather than guessed.
+//
 // Example payload (matches the fields in the sample error email):
 // {
-//   "client_name": "Brent Hamilton",        // used to match a project if sheet_id doesn't
-//   "sheet_id": "1d6BYiMpp1gPkHiKKgUC9usT-_zBfYQgqC27QNUk5Xjk",  // preferred match key — set this
-//                                                                 // once per client under Project
-//                                                                 // Settings > Error Tracking
+//   "client_id": "abc123",                  // most reliable — exact project id
+//   "client_email": "brent@client.com",     // matched against Team tab emails
+//   "client_name": "Brent Hamilton",        // last-resort fuzzy fallback
+//   "sheet_id": "1d6BYiMpp1gPkHiKKgUC9usT-_zBfYQgqC27QNUk5Xjk",
 //   "title": "Create Wealthbox Note with Content of Voicemail Transcripts",
 //   "message": "Trigger partner failure: Cannot read properties of undefined (reading 'uri')",
 //   "history_link": "https://zapier.com/app/history?root_id=231798906",
@@ -54,12 +65,31 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const explicitClientId = pick(body, "client_id", "clientId", "project_id", "projectId");
+    const clientEmail = pick(body, "client_email", "clientEmail", "email");
     const sheetId = pick(body, "sheet_id", "sheetId", "Sheet ID");
     const clientName = pick(body, "client_name", "clientName", "client");
 
     let clientId: string | null = null;
 
-    if (sheetId) {
+    // 1. Exact project id — no lookup needed, just confirm it's real.
+    if (explicitClientId) {
+      const { data } = await supabase.from("workspace_clients").select("id").eq("id", explicitClientId).maybeSingle();
+      if (data) clientId = data.id;
+    }
+
+    // 2. Email against each project's Team tab addresses.
+    if (!clientId && clientEmail) {
+      const target = String(clientEmail).trim().toLowerCase();
+      const { data } = await supabase.from("workspace_clients").select("id, project_data");
+      const match = (data || []).find((c: any) =>
+        (c.project_data?.teamMembers || []).some((m: any) => (m?.email || "").trim().toLowerCase() === target)
+      );
+      if (match) clientId = match.id;
+    }
+
+    // 3. Legacy tracking-sheet id.
+    if (!clientId && sheetId) {
       const { data } = await supabase
         .from("workspace_clients")
         .select("id, meta")
@@ -69,6 +99,7 @@ serve(async (req) => {
       if (data) clientId = data.id;
     }
 
+    // 4. Fuzzy name match, last resort.
     if (!clientId && clientName) {
       const { data } = await supabase.from("workspace_clients").select("id, meta");
       const match = (data || []).find((c: any) =>

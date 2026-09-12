@@ -501,7 +501,14 @@ export function openClientProfileModal(clientId) {
             <label class="modal-section-label">Error Tracking</label>
             <div class="card-section">
                 <p class="tiny muted" style="margin-bottom:8px;">
-                    If this client's Zapier error notifications include a Google Sheet ID (from the old per-client tracking sheet), enter it here so errors auto-match to this project instead of landing unassigned.
+                    For direct, no-guessing matching in the error webhook, send this project's ID as <code>client_id</code> in the Zap payload.
+                </p>
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <input type="text" class="modal-input small monospace" value="${esc(clientId)}" readonly style="flex:1;">
+                    <button class="btn tiny soft" onclick="navigator.clipboard.writeText('${esc(clientId)}'); alert('Project ID copied!');">Copy</button>
+                </div>
+                <p class="tiny muted" style="margin-bottom:8px;">
+                    Alternatively, send <code>client_email</code> matching one of this project's Team tab addresses, or the legacy tracking sheet ID below.
                 </p>
                 <input type="text" class="modal-input small"
                        placeholder="Tracking Sheet ID (optional)"
