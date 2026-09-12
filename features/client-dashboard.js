@@ -444,7 +444,8 @@ export function openClientProfileModal(clientId) {
                     { id: 'analysis', label: 'Analysis' },
                     { id: 'how-to', label: 'How-To' },
                     { id: 'team', label: 'Team' },
-                    { id: 'data', label: 'Data' }
+                    { id: 'data', label: 'Data' },
+                    { id: 'errors', label: 'Error Tracking' }
                 ].map(m => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
                         <input type="checkbox" 

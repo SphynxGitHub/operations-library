@@ -1,4 +1,4 @@
-import { esc, state, db, getBusinessScopedClients } from '../../core/data.js';
+import { esc, state, db, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
 
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
@@ -8,26 +8,49 @@ OL.errorLogState = {
     rows: [],
     services: [],
     loading: false,
-    loadedOnce: false
+    loadedOnce: false,
+    loadedForScope: null,
+    lockedClientId: null    // set when viewing from inside a specific client's project
+};
+
+// Re-render whichever mode is currently active (centralized vs client-locked)
+OL._rerenderErrorLog = function() {
+    if (OL.errorLogState.lockedClientId) OL.renderClientErrorLog();
+    else OL.renderBusinessErrorLog();
 };
 
 OL.renderBusinessErrorLog = function() {
+    OL.errorLogState.lockedClientId = null;
+    OL._renderErrorLogShell('Error Tracking', 'Centralized log across every client project — Zapier failures, manual notes, and quirks');
+};
+
+OL.renderClientErrorLog = function() {
+    const client = getActiveClient();
+    if (!client) return;
+    OL.errorLogState.lockedClientId = client.id;
+    OL._renderErrorLogShell(`Error Tracking — ${client.meta?.name || 'Project'}`, 'Zapier failures, manual notes, and quirks for this project');
+};
+
+OL._renderErrorLogShell = function(title, subtitle) {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    if (!OL.errorLogState.loadedOnce && !OL.errorLogState.loading) {
+    const desiredScope = OL.errorLogState.lockedClientId || '__global';
+    if ((!OL.errorLogState.loadedOnce || OL.errorLogState.loadedForScope !== desiredScope) && !OL.errorLogState.loading) {
         OL.errorLogState.loadedOnce = true;
-        OL.loadErrorLog().then(() => OL.renderBusinessErrorLog());
+        OL.errorLogState.loadedForScope = desiredScope;
+        OL.loadErrorLog().then(() => OL._rerenderErrorLog());
     }
 
+    const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
     const rows = OL.errorLogState.rows;
 
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2><i data-lucide="alert-triangle" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Error Tracking</h2>
-                <div class="small muted">Centralized log across every client project — Zapier failures, manual notes, and quirks</div>
+                <h2><i data-lucide="alert-triangle" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>${esc(title)}</h2>
+                <div class="small muted">${esc(subtitle)}</div>
             </div>
             <div class="header-actions">
                 <button class="btn small primary" onclick="OL.openAddErrorModal()">
@@ -43,11 +66,13 @@ OL.renderBusinessErrorLog = function() {
                     <button class="btn tiny ${OL.errorLogState.statusFilter === 'resolved' ? 'primary' : 'soft'}" onclick="OL.setErrorLogFilter('statusFilter', 'resolved')">Resolved</button>
                     <button class="btn tiny ${OL.errorLogState.statusFilter === 'all' ? 'primary' : 'soft'}" onclick="OL.setErrorLogFilter('statusFilter', 'all')">All</button>
                 </div>
-                <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('clientFilter', this.value)">
-                    <option value="">All Clients</option>
-                    <option value="__unassigned" ${OL.errorLogState.clientFilter === '__unassigned' ? 'selected' : ''}>Unassigned</option>
-                    ${clients.map(c => `<option value="${c.id}" ${OL.errorLogState.clientFilter === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                </select>
+                ${!locked ? `
+                    <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('clientFilter', this.value)">
+                        <option value="">All Clients</option>
+                        <option value="__unassigned" ${OL.errorLogState.clientFilter === '__unassigned' ? 'selected' : ''}>Unassigned</option>
+                        ${clients.map(c => `<option value="${c.id}" ${OL.errorLogState.clientFilter === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                    </select>
+                ` : ''}
                 <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('serviceFilter', this.value)">
                     <option value="">All Services</option>
                     ${OL.errorLogState.services.map(s => `<option value="${esc(s)}" ${OL.errorLogState.serviceFilter === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
@@ -65,15 +90,14 @@ OL.renderBusinessErrorLog = function() {
             ` : ''}
 
             <div style="display:grid; gap:10px;">
-                ${rows.map(r => OL.renderErrorLogRow(r, clients)).join('')}
+                ${rows.map(r => OL.renderErrorLogRow(r, clients, locked)).join('')}
             </div>
         </div>
     `;
     if (window.lucide) lucide.createIcons();
 };
 
-OL.renderErrorLogRow = function(r, clients) {
-    const client = r.client_id ? state.clients[r.client_id] : null;
+OL.renderErrorLogRow = function(r, clients, locked) {
     const sourceIcon = r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️');
     const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
 
@@ -89,12 +113,14 @@ OL.renderErrorLogRow = function(r, clients) {
                     </div>
                     <div class="tiny muted">${esc(occurred)}${r.service ? ` · ${esc(r.service)}` : ''}</div>
                 </div>
-                <div style="min-width:160px;">
-                    <select class="modal-input tiny" onchange="OL.assignErrorClient('${r.id}', this.value)">
-                        <option value="">-- Unassigned --</option>
-                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                    </select>
-                </div>
+                ${!locked ? `
+                    <div style="min-width:160px;">
+                        <select class="modal-input tiny" onchange="OL.assignErrorClient('${r.id}', this.value)">
+                            <option value="">-- Unassigned --</option>
+                            ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                        </select>
+                    </div>
+                ` : ''}
                 <div>
                     <button class="btn tiny ${r.status === 'resolved' ? 'soft' : 'primary'}" onclick="OL.toggleErrorStatus('${r.id}', '${r.status === 'resolved' ? 'open' : 'resolved'}')">
                         ${r.status === 'resolved' ? '↩ Reopen' : '✓ Resolve'}
@@ -122,7 +148,7 @@ OL.renderErrorLogRow = function(r, clients) {
 
 OL.setErrorLogFilter = function(key, value) {
     OL.errorLogState[key] = value;
-    OL.loadErrorLog().then(() => OL.renderBusinessErrorLog());
+    OL.loadErrorLog().then(() => OL._rerenderErrorLog());
 };
 
 OL.loadErrorLog = async function() {
@@ -130,13 +156,16 @@ OL.loadErrorLog = async function() {
 
     let query = db.from('error_log').select('*');
 
-    if (OL.errorLogState.statusFilter !== 'all') {
-        query = query.eq('status', OL.errorLogState.statusFilter);
-    }
-    if (OL.errorLogState.clientFilter === '__unassigned') {
+    if (OL.errorLogState.lockedClientId) {
+        query = query.eq('client_id', OL.errorLogState.lockedClientId);
+    } else if (OL.errorLogState.clientFilter === '__unassigned') {
         query = query.is('client_id', null);
     } else if (OL.errorLogState.clientFilter) {
         query = query.eq('client_id', OL.errorLogState.clientFilter);
+    }
+
+    if (OL.errorLogState.statusFilter !== 'all') {
+        query = query.eq('status', OL.errorLogState.statusFilter);
     }
     if (OL.errorLogState.serviceFilter) {
         query = query.eq('service', OL.errorLogState.serviceFilter);
@@ -170,11 +199,11 @@ OL.toggleErrorStatus = async function(id, newStatus) {
     if (OL.errorLogState.statusFilter !== 'all') {
         // no longer matches the current filter — just reload
         await OL.loadErrorLog();
-        OL.renderBusinessErrorLog();
+        OL._rerenderErrorLog();
     } else {
         const row = OL.errorLogState.rows.find(r => r.id === id);
         if (row) row.status = newStatus;
-        OL.renderBusinessErrorLog();
+        OL._rerenderErrorLog();
     }
 };
 
@@ -221,7 +250,10 @@ window.OL.openErrorDetailModal = OL.openErrorDetailModal;
 // MANUAL ADD
 // -------------------------------------------------------------
 OL.openAddErrorModal = function() {
+    const locked = OL.errorLogState.lockedClientId;
+    const lockedClientName = locked ? (state.clients[locked]?.meta?.name || 'This project') : null;
     const clients = getBusinessScopedClients();
+
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">➕ Add Error / Quirk</div>
@@ -231,10 +263,14 @@ OL.openAddErrorModal = function() {
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <div>
                     <label class="tiny muted bold">Client</label>
-                    <select id="add-error-client" class="modal-input tiny">
-                        <option value="">-- Unassigned --</option>
-                        ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                    </select>
+                    ${locked ? `
+                        <input type="text" class="modal-input tiny" value="${esc(lockedClientName)}" disabled>
+                    ` : `
+                        <select id="add-error-client" class="modal-input tiny">
+                            <option value="">-- Unassigned --</option>
+                            ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                        </select>
+                    `}
                 </div>
                 <div>
                     <label class="tiny muted bold">Title</label>
@@ -270,7 +306,7 @@ OL.saveManualError = async function() {
     if (!message) { alert('Message is required.'); return; }
 
     const row = {
-        client_id: document.getElementById('add-error-client')?.value || null,
+        client_id: OL.errorLogState.lockedClientId || document.getElementById('add-error-client')?.value || null,
         source: 'manual',
         title: document.getElementById('add-error-title')?.value.trim() || null,
         service: document.getElementById('add-error-service')?.value.trim() || null,
@@ -285,7 +321,8 @@ OL.saveManualError = async function() {
 
     OL.closeModal();
     await OL.loadErrorLog();
-    OL.renderBusinessErrorLog();
+    OL._rerenderErrorLog();
 };
 
 window.OL.renderBusinessErrorLog = OL.renderBusinessErrorLog;
+window.OL.renderClientErrorLog = OL.renderClientErrorLog;

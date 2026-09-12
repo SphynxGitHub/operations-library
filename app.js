@@ -435,6 +435,7 @@ window.buildLayout = function () {
         { key: "scoping", label: "Scoping & Pricing", icon: "bar-chart-2", href: "#/scoping-sheet" },
         { key: "analysis", label: "Weighted Analysis", icon: "trending-up", href: "#/analyze" },
         { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+        { key: "errors", label: "Error Tracking", icon: "alert-triangle", href: "#/client-errors" },
         { key: "team", label: "Team Members", icon: "users", href: "#/team" },
         { key: "data", label: "Data Tags", icon: "tag", href: "#/data" }
     ];
@@ -778,6 +779,7 @@ window.handleRoute = function () {
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
         else if (hash.includes("team")) renderTeamManager();
+        else if (hash.includes("client-errors") && typeof OL.renderClientErrorLog === 'function') OL.renderClientErrorLog();
         else if (hash.includes("data")) {
             if (typeof ol.renderGlobalDataManager === 'function') ol.renderGlobalDataManager();
         }
