@@ -218,12 +218,20 @@ OL.initiateGoogleAuth = function() {
 };
 
 OL.checkGoogleAuthReturn = function() {
+    // Guard against re-processing: renderBusinessCommunications calls this on
+    // every render, and fetchLiveGmailMessages/fetchLiveGoogleCalendar both
+    // re-render when they finish — so without a one-time guard, and combined
+    // with the hash-cleanup bug below, this was firing an infinite sync loop.
+    if (OL._googleAuthReturnHandled) return;
+
     const urlParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
 
     const isConnected = urlParams.get('connected') === 'true' || hashParams.get('connected') === 'true';
 
     if (isConnected) {
+        OL._googleAuthReturnHandled = true;
+
         updateAndSync(() => {
             if (!state.master) state.master = {};
             if (!state.master.communications) state.master.communications = {};
@@ -233,8 +241,13 @@ OL.checkGoogleAuthReturn = function() {
             state.master.googleConnected = true;
         });
 
-        // Clean query parameters from address bar without reloading
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+        // Clean the address bar without reloading. The redirect puts
+        // "connected=true" INSIDE the hash (e.g. "#/business/communications
+        // ?connected=true"), not in the page's real query string — stripping
+        // only window.location.search (the old behavior) left it sitting in
+        // the hash forever, which is what caused the loop above.
+        const hashPath = window.location.hash.split('?')[0];
+        window.history.replaceState({}, document.title, window.location.pathname + hashPath);
 
         // Auto-fetch both Live Feeds
         if (typeof OL.fetchLiveGmailMessages === 'function') OL.fetchLiveGmailMessages();

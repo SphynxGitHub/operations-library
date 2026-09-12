@@ -370,7 +370,9 @@ OL.fetchLiveGoogleCalendar = async function() {
         }
 
         if (!response.ok) {
-            console.warn("Calendar sync failed (HTTP " + response.status + ")");
+            let detail = '';
+            try { detail = (await response.json())?.message || ''; } catch (e) { /* body wasn't JSON */ }
+            console.warn("Calendar sync failed (HTTP " + response.status + ")" + (detail ? ": " + detail : ""));
             return;
         }
 
