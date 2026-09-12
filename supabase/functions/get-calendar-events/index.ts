@@ -13,10 +13,27 @@ const corsHeaders = {
 // pulling your whole calendar history on every run.
 const DAYS_BACK = 180;
 const DAYS_FORWARD = 365;
-const MAX_LIST_PAGES = 10; // safety cap on pagination for a single sync run
+const MAX_LIST_PAGES = 10; // safety cap on pagination, per calendar, per sync run
 const PAGE_SIZE = 250;
 
-async function listCalendarEvents(accessToken: string): Promise<any[]> {
+async function getSyncedCalendarIds(supabase: any): Promise<string[]> {
+  const { data, error } = await supabase.from("workspace_masters").select("synced_calendar_ids").eq("id", "main_state").maybeSingle();
+  if (error) throw new Error(`Failed to load synced calendar list: ${error.message}`);
+  const ids = data?.synced_calendar_ids;
+  return Array.isArray(ids) && ids.length > 0 ? ids : ["primary"];
+}
+
+async function getCalendarSummaries(accessToken: string): Promise<Map<string, string>> {
+  const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const data = await res.json();
+  const map = new Map<string, string>();
+  (data.items || []).forEach((c: any) => map.set(c.id, c.summaryOverride || c.summary || c.id));
+  return map;
+}
+
+async function listEventsForCalendar(accessToken: string, calendarId: string): Promise<any[]> {
   const timeMin = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString();
   const timeMax = new Date(Date.now() + DAYS_FORWARD * 24 * 60 * 60 * 1000).toISOString();
 
@@ -25,7 +42,7 @@ async function listCalendarEvents(accessToken: string): Promise<any[]> {
   let page = 0;
 
   do {
-    const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
     url.searchParams.set("timeMin", timeMin);
     url.searchParams.set("timeMax", timeMax);
     url.searchParams.set("singleEvents", "true"); // expands recurring events into instances
@@ -36,7 +53,11 @@ async function listCalendarEvents(accessToken: string): Promise<any[]> {
     const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
     if (res.status === 401) throw new GoogleAuthError("Google rejected the token while listing events.");
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message || "Failed to fetch calendar events");
+    if (data.error) {
+      // Don't let one bad/removed calendar id kill the whole sync — skip it.
+      console.error(`Failed to list events for calendar "${calendarId}":`, data.error.message);
+      return items;
+    }
 
     items.push(...(data.items || []));
     pageToken = data.nextPageToken;
@@ -58,42 +79,59 @@ serve(async (req) => {
     );
 
     const accessToken = await getFreshGoogleAccessToken(supabase);
-    const [items, projectRules] = await Promise.all([
-      listCalendarEvents(accessToken),
-      loadProjectRules(supabase)
+    const [calendarIds, projectRules, calendarSummaries] = await Promise.all([
+      getSyncedCalendarIds(supabase),
+      loadProjectRules(supabase),
+      getCalendarSummaries(accessToken)
     ]);
 
-    const parsed = items
-      .filter((evt: any) => evt.status !== "cancelled")
-      .map((evt: any) => {
-        const isAllDay = !!evt.start?.date && !evt.start?.dateTime;
-        const attendeeEmails = new Set<string>();
-        if (evt.organizer?.email) attendeeEmails.add(evt.organizer.email.toLowerCase());
-        (evt.attendees || []).forEach((a: any) => { if (a?.email) attendeeEmails.add(a.email.toLowerCase()); });
+    const perCalendarResults = await Promise.all(
+      calendarIds.map(async (calendarId: string) => ({
+        calendarId,
+        items: await listEventsForCalendar(accessToken, calendarId)
+      }))
+    );
 
-        return {
-          id: evt.id,
-          title: evt.summary || "Untitled Event",
-          description: evt.description || "",
-          location: evt.location || "",
-          link: evt.htmlLink || "",
-          start: evt.start?.dateTime || (evt.start?.date ? `${evt.start.date}T00:00:00Z` : null),
-          end: evt.end?.dateTime || (evt.end?.date ? `${evt.end.date}T00:00:00Z` : null),
-          all_day: isAllDay,
-          attendeeEmails
-        };
-      })
-      .filter((r: any) => r.start); // skip anything with no usable date
+    const parsed: any[] = [];
+    for (const { calendarId, items } of perCalendarResults) {
+      const calendarSummary = calendarId === "primary" ? "Primary" : (calendarSummaries.get(calendarId) || calendarId);
+
+      items
+        .filter((evt: any) => evt.status !== "cancelled")
+        .forEach((evt: any) => {
+          const isAllDay = !!evt.start?.date && !evt.start?.dateTime;
+          const start = evt.start?.dateTime || (evt.start?.date ? `${evt.start.date}T00:00:00Z` : null);
+          if (!start) return; // skip anything with no usable date
+
+          const attendeeEmails = new Set<string>();
+          if (evt.organizer?.email) attendeeEmails.add(evt.organizer.email.toLowerCase());
+          (evt.attendees || []).forEach((a: any) => { if (a?.email) attendeeEmails.add(a.email.toLowerCase()); });
+
+          parsed.push({
+            id: `${calendarId}::${evt.id}`,
+            calendar_id: calendarId,
+            calendar_summary: calendarSummary,
+            title: evt.summary || "Untitled Event",
+            description: evt.description || "",
+            location: evt.location || "",
+            link: evt.htmlLink || "",
+            start,
+            end: evt.end?.dateTime || (evt.end?.date ? `${evt.end.date}T00:00:00Z` : null),
+            all_day: isAllDay,
+            attendeeEmails
+          });
+        });
+    }
 
     if (parsed.length === 0) {
-      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0 }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length }), { status: 200, headers: corsHeaders });
     }
 
     // Figure out which of these events we've already stored, so we only
     // set linked_client_id / automation_processed on genuinely new rows —
     // re-syncing an existing event must never clobber a project match that
     // was already acted on (that's what automation_processed guards).
-    const allIds = parsed.map((r: any) => r.id);
+    const allIds = parsed.map((r) => r.id);
     const existingIds = new Set<string>();
     for (let i = 0; i < allIds.length; i += 200) {
       const chunk = allIds.slice(i, i + 200);
@@ -104,6 +142,8 @@ serve(async (req) => {
 
     const coreFields = (r: any) => ({
       id: r.id,
+      calendar_id: r.calendar_id,
+      calendar_summary: r.calendar_summary,
       title: r.title,
       description: r.description,
       location: r.location,
@@ -113,8 +153,8 @@ serve(async (req) => {
       all_day: r.all_day
     });
 
-    const existingRows = parsed.filter((r: any) => existingIds.has(r.id)).map(coreFields);
-    const newRows = parsed.filter((r: any) => !existingIds.has(r.id)).map((r: any) => {
+    const existingRows = parsed.filter((r) => existingIds.has(r.id)).map(coreFields);
+    const newRows = parsed.filter((r) => !existingIds.has(r.id)).map((r) => {
       const matched = matchProjectRules(projectRules, r.attendeeEmails);
       return {
         ...coreFields(r),
@@ -147,7 +187,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ syncedCount: parsed.length, newCount: newRows.length }),
+      JSON.stringify({ syncedCount: parsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length }),
       { status: 200, headers: corsHeaders }
     );
 
