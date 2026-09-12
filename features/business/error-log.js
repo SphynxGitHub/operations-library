@@ -153,7 +153,8 @@ OL.groupErrorRows = function(rows, groupBy) {
 // -------------------------------------------------------------
 OL.renderErrorLogRow = function(r, locked) {
     const sourceIcon = r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️');
-    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+    const resolvedDate = r.resolution_date ? new Date(r.resolution_date).toLocaleDateString([], { dateStyle: 'medium' }) : '';
     const clientName = (!locked && r.client_id) ? (state.clients[r.client_id]?.meta?.name || 'Unknown') : '';
     const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
     const statusStyle = r.status === 'resolved'
@@ -162,38 +163,42 @@ OL.renderErrorLogRow = function(r, locked) {
 
     return `
         <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:220px;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
-                        <span class="tiny" title="${esc(r.source)}">${sourceIcon}</span>
-                        <strong style="font-size:14px;">${esc(r.title || r.service || 'Untitled Error')}</strong>
-                        ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
-                        ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
-                    </div>
-                    <div class="tiny muted">
-                        ${esc(occurred)}
-                        ${r.service ? ` · 🛠️ ${esc(r.service)}` : ''}
-                        ${clientName ? ` · 📁 ${esc(clientName)}` : ''}
-                    </div>
-                </div>
+            <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:6px;">
+                <span class="tiny" title="${esc(r.source)}" style="margin-right:auto;">${sourceIcon}</span>
+                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
+                ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
                 <div onclick="event.stopPropagation();">
-                    <select class="tiny" style="border:none; border-radius:14px; padding:5px 10px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
+                    <select class="tiny" style="border:none; border-radius:14px; padding:4px 9px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
                         <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
                         <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
                     </select>
                 </div>
             </div>
 
-            <div class="tiny muted" style="margin-top:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                ${esc(snippet)}
-            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px 16px;">
+                ${OL.errorCell('Date', esc(occurred))}
+                ${OL.errorCell(null, `<strong style="font-size:14px;">${esc(r.title || 'Untitled Error')}</strong>`)}
+                ${OL.errorCell('Project', clientName ? `<span class="pill tiny soft">📁 ${esc(clientName)}</span>` : '—')}
 
-            ${(r.cause || r.resolution) ? `
-                <div style="margin-top:8px; display:flex; gap:16px; flex-wrap:wrap;">
-                    ${r.cause ? `<div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;"><strong>🔧 Cause:</strong> ${esc(r.cause)}</div>` : ''}
-                    ${r.resolution ? `<div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;"><strong>✅ Resolution:</strong> ${esc(r.resolution)}</div>` : ''}
-                </div>
-            ` : ''}
+                ${OL.errorCell('System', esc(r.service || '—'))}
+                ${OL.errorCell('Error', esc(snippet || '—'))}
+                ${OL.errorCell('Cause', esc(r.cause || '—'))}
+
+                ${OL.errorCell('Resolution', esc(r.resolution || '—'))}
+                ${OL.errorCell('Resolved Date', resolvedDate ? esc(resolvedDate) : '—')}
+                ${OL.errorCell('Additional Notes', esc(r.notes || '—'))}
+            </div>
+        </div>
+    `;
+};
+
+// One cell of the 3x3 card grid: optional small caption + a value line,
+// both truncated to a single line so every card stays a consistent height.
+OL.errorCell = function(label, valueHtml) {
+    return `
+        <div style="min-width:0; overflow:hidden;">
+            ${label ? `<div class="tiny muted" style="line-height:1.3;">${esc(label)}</div>` : ''}
+            <div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.4;">${valueHtml}</div>
         </div>
     `;
 };
