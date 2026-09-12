@@ -21,26 +21,45 @@ serve(async (req) => {
 
     const accessToken = await getFreshGoogleAccessToken(supabase);
 
-    const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+    // showHidden=true matters here: Google excludes any calendar you've
+    // unchecked/hidden in the Calendar UI by default, which is exactly the
+    // kind of calendar that tends to live under "Other calendars" — without
+    // this you'd only ever see a subset of what's actually in your account.
+    const calendars: any[] = [];
+    let pageToken: string | undefined;
+    let page = 0;
 
-    if (res.status === 401) {
-      return new Response(
-        JSON.stringify({ error: "reauth_required", message: "Google rejected the refreshed token. Please reconnect the account." }),
-        { status: 401, headers: corsHeaders }
-      );
-    }
+    do {
+      const url = new URL("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+      url.searchParams.set("showHidden", "true");
+      url.searchParams.set("maxResults", "250");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message || "Failed to list calendars");
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
 
-    const calendars = (data.items || []).map((c: any) => ({
-      id: c.id,
-      summary: c.summaryOverride || c.summary || c.id,
-      primary: !!c.primary,
-      backgroundColor: c.backgroundColor || null
-    }));
+      if (res.status === 401) {
+        return new Response(
+          JSON.stringify({ error: "reauth_required", message: "Google rejected the refreshed token. Please reconnect the account." }),
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || "Failed to list calendars");
+
+      (data.items || []).forEach((c: any) => {
+        calendars.push({
+          id: c.id,
+          summary: c.summaryOverride || c.summary || c.id,
+          primary: !!c.primary,
+          accessRole: c.accessRole || "reader",
+          backgroundColor: c.backgroundColor || null
+        });
+      });
+
+      pageToken = data.nextPageToken;
+      page++;
+    } while (pageToken && page < 5);
 
     return new Response(JSON.stringify({ calendars }), { status: 200, headers: corsHeaders });
 

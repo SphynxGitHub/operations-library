@@ -472,15 +472,31 @@ OL.openManageCalendarsModal = async function() {
 
         OL._manageCalendarsSelection = selected;
 
+        const mine = calendars.filter(c => c.accessRole === 'owner');
+        const others = calendars.filter(c => c.accessRole !== 'owner');
+
+        const calendarRow = (c) => `
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+                <input type="checkbox" ${selected.has(c.id) ? 'checked' : ''} onchange="OL.toggleManageCalendarSelection('${esc(c.id).replace(/'/g, "\\'")}', this.checked)">
+                ${esc(c.summary)}${c.primary ? ` <span class="pill tiny soft" style="font-size:9px;">Primary</span>` : ''}
+            </label>
+        `;
+
         container.innerHTML = `
             <p class="tiny muted" style="margin-bottom:12px;">Choose which calendars to sync into the app. Syncing more calendars pulls in more events on your next "Sync Calendar."</p>
-            <div style="display:grid; gap:8px; max-height:280px; overflow:auto; margin-bottom:16px;">
-                ${calendars.map(c => `
-                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
-                        <input type="checkbox" ${selected.has(c.id) ? 'checked' : ''} onchange="OL.toggleManageCalendarSelection('${esc(c.id).replace(/'/g, "\\'")}', this.checked)">
-                        ${esc(c.summary)}${c.primary ? ` <span class="pill tiny soft" style="font-size:9px;">Primary</span>` : ''}
-                    </label>
-                `).join('')}
+            <div style="max-height:320px; overflow:auto; margin-bottom:16px;">
+                ${mine.length ? `
+                    <div class="tiny bold uppercase muted" style="margin-bottom:6px;">My Calendars</div>
+                    <div style="display:grid; gap:8px; margin-bottom:${others.length ? '16px' : '0'};">
+                        ${mine.map(calendarRow).join('')}
+                    </div>
+                ` : ''}
+                ${others.length ? `
+                    <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Other Calendars</div>
+                    <div style="display:grid; gap:8px;">
+                        ${others.map(calendarRow).join('')}
+                    </div>
+                ` : ''}
             </div>
             <div style="display:flex; justify-content:flex-end;">
                 <button class="btn small primary" onclick="OL.saveManageCalendarsSelection()" style="font-weight:bold;">Save & Sync</button>
@@ -507,6 +523,12 @@ OL.saveManageCalendarsSelection = async function() {
         if (!state.master) state.master = {};
         state.master.syncedCalendarIds = selected;
     });
+
+    // updateAndSync's own persist is debounced (1.5s) so the sync below could
+    // otherwise fire before the new selection actually lands in Supabase —
+    // write it immediately here so get-calendar-events reads the right list.
+    const { error } = await db.from('workspace_masters').update({ synced_calendar_ids: selected }).eq('id', 'main_state');
+    if (error) console.error('Failed to save calendar selection immediately (debounced save will still catch it):', error.message);
 
     OL.closeModal();
     OL.fetchLiveGoogleCalendar();
