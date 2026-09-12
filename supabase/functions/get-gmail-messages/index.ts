@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
 import { loadProjectRules, matchProjectRules } from "../_shared/project-rules.ts";
+import { matchResourceByRootId } from "../_shared/resource-match.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -249,6 +250,7 @@ serve(async (req) => {
         if (isZapierErrorEmail(sender, subject)) {
           const parsed = parseZapierErrorBody(body);
           const sheetId = parsed["Sheet ID"] || null;
+          const rootId = parsed["Root ID"] || null;
 
           let errorClientId: string | null = (sheetId && sheetIdToClient.get(sheetId)) || null;
           if (!errorClientId) {
@@ -262,6 +264,11 @@ serve(async (req) => {
             if (match) errorClientId = match.id;
           }
 
+          // Auto-match to a specific resource (e.g. the Zap itself) within
+          // that project, by finding a resource whose External Link
+          // contains this error's root_id.
+          const resourceMatch = errorClientId ? await matchResourceByRootId(supabase, errorClientId, rootId) : null;
+
           errorRows.push({
             client_id: errorClientId,
             source: "email",
@@ -270,12 +277,14 @@ serve(async (req) => {
             service: parsed["Service"] || null,
             history_link: parsed["History Link"] || null,
             zap_link: parsed["Zap Link"] || null,
-            root_id: parsed["Root ID"] || null,
+            root_id: rootId,
             outage: parsed["Outage"] !== undefined ? parsed["Outage"].toLowerCase() === "true" : null,
             occurrence_count: parsed["Count"] ? Number(parsed["Count"]) : null,
             sheet_id: sheetId,
             occurred_at: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : new Date().toISOString(),
-            gmail_message_id: id
+            gmail_message_id: id,
+            resource_id: resourceMatch?.id || null,
+            resource_name: resourceMatch?.name || null
           });
         }
       })

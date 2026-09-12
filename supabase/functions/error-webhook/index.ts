@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { matchResourceByRootId } from "../_shared/resource-match.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,12 +23,21 @@ const corsHeaders = {
 //   4. client_name    — fuzzy match against the project name.
 // If none match, the error is saved as unassigned rather than guessed.
 //
+// Resource matching (only once a client is known): tried in this order —
+//   1. resource_id    — exact resource id, if you happen to have it.
+//   2. root_id         — auto-matched against that project's resources by
+//                        finding one whose External Link contains this Zap's
+//                        root_id (Zapier's editor/history links both embed
+//                        it, so this works without any manual setup as long
+//                        as the resource's External Link is the Zap editor URL).
+//
 // Example payload (matches the fields in the sample error email):
 // {
 //   "client_id": "abc123",                  // most reliable — exact project id
 //   "client_email": "brent@client.com",     // matched against Team tab emails
 //   "client_name": "Brent Hamilton",        // last-resort fuzzy fallback
 //   "sheet_id": "1d6BYiMpp1gPkHiKKgUC9usT-_zBfYQgqC27QNUk5Xjk",
+//   "resource_id": "res_abc123",            // optional — exact resource override
 //   "title": "Create Wealthbox Note with Content of Voicemail Transcripts",
 //   "message": "Trigger partner failure: Cannot read properties of undefined (reading 'uri')",
 //   "history_link": "https://zapier.com/app/history?root_id=231798906",
@@ -109,6 +119,19 @@ serve(async (req) => {
       if (match) clientId = match.id;
     }
 
+    const rootId = pick(body, "root_id", "rootId", "Root ID");
+    const explicitResourceId = pick(body, "resource_id", "resourceId");
+
+    let resourceMatch: { id: string; name: string } | null = null;
+    if (explicitResourceId && clientId) {
+      const { data } = await supabase.from("workspace_clients").select("project_data").eq("id", clientId).maybeSingle();
+      const found = (data?.project_data?.localResources || []).find((r: any) => r.id === explicitResourceId);
+      if (found) resourceMatch = { id: found.id, name: found.name };
+    }
+    if (!resourceMatch && clientId && rootId) {
+      resourceMatch = await matchResourceByRootId(supabase, clientId, rootId);
+    }
+
     const row = {
       client_id: clientId,
       source: "webhook",
@@ -117,7 +140,7 @@ serve(async (req) => {
       service: pick(body, "service", "Service"),
       history_link: pick(body, "history_link", "historyLink", "History Link"),
       zap_link: pick(body, "zap_link", "zapLink", "Zap Link"),
-      root_id: pick(body, "root_id", "rootId", "Root ID"),
+      root_id: rootId,
       outage: (() => {
         const v = pick(body, "outage", "Outage");
         if (v === null) return null;
@@ -128,13 +151,15 @@ serve(async (req) => {
         return v !== null ? Number(v) : null;
       })(),
       sheet_id: sheetId,
-      occurred_at: pick(body, "occurred_at", "occurredAt") || new Date().toISOString()
+      occurred_at: pick(body, "occurred_at", "occurredAt") || new Date().toISOString(),
+      resource_id: resourceMatch?.id || null,
+      resource_name: resourceMatch?.name || null
     };
 
     const { data: inserted, error } = await supabase.from("error_log").insert(row).select("id").single();
     if (error) throw new Error(error.message);
 
-    return new Response(JSON.stringify({ success: true, id: inserted.id, matchedClientId: clientId }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true, id: inserted.id, matchedClientId: clientId, matchedResourceId: resourceMatch?.id || null }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
     console.error("Error webhook failed:", err.message);

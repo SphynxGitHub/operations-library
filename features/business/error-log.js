@@ -4,10 +4,12 @@ OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
     clientFilter: '',
     serviceFilter: '',
+    resourceFilter: '',
     query: '',
-    groupBy: 'none',        // 'none' | 'message' | 'service' | 'client' | 'date'
+    groupBy: 'none',        // 'none' | 'message' | 'service' | 'client' | 'date' | 'resource'
     rows: [],
     services: [],
+    resources: [],
     loading: false,
     loadedOnce: false,
     loadedForScope: null,
@@ -79,10 +81,15 @@ OL._renderErrorLogShell = function(title, subtitle) {
                     <option value="">All Services</option>
                     ${OL.errorLogState.services.map(s => `<option value="${esc(s)}" ${OL.errorLogState.serviceFilter === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
                 </select>
+                <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('resourceFilter', this.value)">
+                    <option value="">All Resources</option>
+                    ${OL.errorLogState.resources.map(s => `<option value="${esc(s)}" ${OL.errorLogState.resourceFilter === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+                </select>
                 <select class="modal-input tiny" style="width:150px;" onchange="OL.setErrorLogFilter('groupBy', this.value)">
                     <option value="none" ${OL.errorLogState.groupBy === 'none' ? 'selected' : ''}>No Grouping</option>
                     <option value="message" ${OL.errorLogState.groupBy === 'message' ? 'selected' : ''}>Group: Error Message</option>
                     <option value="service" ${OL.errorLogState.groupBy === 'service' ? 'selected' : ''}>Group: Service</option>
+                    <option value="resource" ${OL.errorLogState.groupBy === 'resource' ? 'selected' : ''}>Group: Resource</option>
                     ${!locked ? `<option value="client" ${OL.errorLogState.groupBy === 'client' ? 'selected' : ''}>Group: Project</option>` : ''}
                     <option value="date" ${OL.errorLogState.groupBy === 'date' ? 'selected' : ''}>Group: Date</option>
                 </select>
@@ -124,6 +131,9 @@ OL.groupErrorRows = function(rows, groupBy) {
         } else if (groupBy === 'service') {
             key = r.service || '__none';
             label = r.service || 'No Service';
+        } else if (groupBy === 'resource') {
+            key = r.resource_id || '__none';
+            label = r.resource_name || 'No Resource';
         } else if (groupBy === 'client') {
             key = r.client_id || '__unassigned';
             label = r.client_id ? (state.clients[r.client_id]?.meta?.name || 'Unknown Project') : 'Unassigned';
@@ -178,6 +188,7 @@ OL.renderErrorLogRow = function(r, locked) {
                 ${occurred ? `<span class="pill tiny soft">${esc(occurred)}</span>` : ''}
                 ${r.service ? `<span class="pill tiny soft">${esc(r.service)}</span>` : ''}
                 ${clientName ? `<span class="pill tiny" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent);">📁 ${esc(clientName)}</span>` : ''}
+                ${r.resource_name ? `<span class="pill tiny soft">🔧 ${esc(r.resource_name)}</span>` : ''}
                 ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
@@ -220,6 +231,9 @@ OL.loadErrorLog = async function() {
     if (OL.errorLogState.serviceFilter) {
         query = query.eq('service', OL.errorLogState.serviceFilter);
     }
+    if (OL.errorLogState.resourceFilter) {
+        query = query.eq('resource_name', OL.errorLogState.resourceFilter);
+    }
     if (OL.errorLogState.query.trim()) {
         const q = OL.errorLogState.query.trim();
         query = query.or(`title.ilike.%${q}%,message.ilike.%${q}%`);
@@ -234,13 +248,36 @@ OL.loadErrorLog = async function() {
     // Populate the service filter dropdown from whatever's actually in the table
     const { data: serviceRows } = await db.from('error_log').select('service').not('service', 'is', null);
     OL.errorLogState.services = [...new Set((serviceRows || []).map(r => r.service).filter(Boolean))].sort();
+
+    // Same, for the resource filter dropdown
+    const { data: resourceRows } = await db.from('error_log').select('resource_name').not('resource_name', 'is', null);
+    OL.errorLogState.resources = [...new Set((resourceRows || []).map(r => r.resource_name).filter(Boolean))].sort();
 };
 
 OL.assignErrorClient = async function(id, clientId) {
-    const { error } = await db.from('error_log').update({ client_id: clientId || null }).eq('id', id);
+    // Changing the project invalidates any resource assignment from the
+    // previous project's resource list.
+    const { error } = await db.from('error_log').update({ client_id: clientId || null, resource_id: null, resource_name: null }).eq('id', id);
     if (error) { alert('Failed to assign client: ' + error.message); return; }
     const row = OL.errorLogState.rows.find(r => r.id === id);
-    if (row) row.client_id = clientId || null;
+    if (row) { row.client_id = clientId || null; row.resource_id = null; row.resource_name = null; }
+};
+
+// Used by the detail modal's Project select — reopens the modal afterward so
+// the Resource dropdown refreshes to the newly-selected project's resources.
+OL.assignErrorClientAndRefreshModal = async function(id, clientId) {
+    await OL.assignErrorClient(id, clientId);
+    OL.openErrorDetailModal(id);
+};
+
+OL.assignErrorResource = async function(id, resourceId) {
+    const row = OL.errorLogState.rows.find(r => r.id === id);
+    const clientId = row?.client_id || OL.errorLogState.lockedClientId;
+    const resource = (state.clients[clientId]?.projectData?.localResources || []).find(res => res.id === resourceId);
+
+    const { error } = await db.from('error_log').update({ resource_id: resourceId || null, resource_name: resource?.name || null }).eq('id', id);
+    if (error) { alert('Failed to assign resource: ' + error.message); return; }
+    if (row) { row.resource_id = resourceId || null; row.resource_name = resource?.name || null; }
 };
 
 // Status dropdown — also stamps/clears Resolution Date automatically
@@ -320,12 +357,21 @@ OL.openErrorDetailModal = function(id) {
                 ${!locked ? `
                     <div>
                         <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
-                        <select class="modal-input tiny" onchange="OL.assignErrorClient('${r.id}', this.value)">
+                        <select class="modal-input tiny" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
                             <option value="">-- Unassigned --</option>
                             ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
                         </select>
                     </div>
                 ` : ''}
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resource</label>
+                    ${(r.client_id || OL.errorLogState.lockedClientId) ? `
+                        <select class="modal-input tiny" onchange="OL.assignErrorResource('${r.id}', this.value)">
+                            <option value="">-- None --</option>
+                            ${(state.clients[r.client_id || OL.errorLogState.lockedClientId]?.projectData?.localResources || []).map(res => `<option value="${res.id}" ${r.resource_id === res.id ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
+                        </select>
+                    ` : `<div class="tiny muted" style="padding:7px 0;">Assign a project first</div>`}
+                </div>
                 <div>
                     <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Error Date</label>
                     <div class="tiny" style="padding:7px 0;">${r.occurred_at ? new Date(r.occurred_at).toLocaleString() : 'Unknown'}</div>
