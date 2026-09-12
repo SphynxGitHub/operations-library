@@ -652,6 +652,12 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                     ${esc(t.resourceName || t.category || 'General Resource')}
                 </span>
 
+                ${(t.clickupComments && t.clickupComments.length) ? `
+                <span class="pill tiny soft" title="Imported from ClickUp" style="font-size:10px; display:inline-flex; align-items:center; gap:4px;">
+                    <i data-lucide="message-square" style="width:11px;height:11px; pointer-events:none;"></i>
+                    ${t.clickupComments.length}
+                </span>` : ''}
+
                 <!-- Due Date -->
                 <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
                     ${t.dueRelativeTo ? `
@@ -1320,6 +1326,27 @@ OL.renderInContextTaskModal = function(client, task) {
                 ${task.timeAuditNote ? `
                     <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
                         <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
+                    </div>
+                ` : ''}
+
+                ${(task.clickupComments && task.clickupComments.length) ? `
+                    <div style="margin-bottom: 20px;">
+                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+                            <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i>
+                            Comments (imported from ClickUp)
+                        </label>
+                        <div style="display:grid; gap:8px; max-height:220px; overflow:auto;">
+                            ${task.clickupComments.map(c => `
+                                <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                                    ${(c.author || c.date) ? `
+                                        <div class="tiny muted bold" style="margin-bottom:4px;">
+                                            ${esc(c.author || 'Unknown')}${c.date ? ` · ${esc(c.date)}` : ''}
+                                        </div>
+                                    ` : ''}
+                                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${esc(c.text)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 ` : ''}
 

@@ -17,6 +17,345 @@
 
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
 
+//======================= CLICKUP CSV IMPORT =======================//
+// One-way import of ClickUp tasks (+ comments + tracked time) from a
+// CSV export. Uses the *Workspace* export (Settings > Import/Export >
+// Export), not a plain List/Table view export — only the workspace
+// export includes Comments and rolled-up Time Spent as columns.
+// Column names aren't hardcoded: the user maps CSV columns to OL
+// fields in the modal, since exports vary by workspace/custom fields.
+
+function guessColumn(fields, candidates) {
+    const lower = fields.map(f => f.toLowerCase());
+    for (const c of candidates) {
+        const idx = lower.indexOf(c.toLowerCase());
+        if (idx > -1) return fields[idx];
+    }
+    for (const c of candidates) {
+        const idx = lower.findIndex(f => f.includes(c.toLowerCase()));
+        if (idx > -1) return fields[idx];
+    }
+    return '';
+}
+
+function parseClickUpTimeToHours(raw) {
+    if (!raw) return 0;
+    const s = String(raw).trim();
+    if (!s) return 0;
+    let m = s.match(/(\d+)\s*h(?:ours?)?\s*(?:(\d+)\s*m)?/i);
+    if (m) {
+        const h = parseInt(m[1], 10) || 0;
+        const min = parseInt(m[2], 10) || 0;
+        return +(h + min / 60).toFixed(2);
+    }
+    m = s.match(/^(\d+):(\d{2})$/);
+    if (m) return +(parseInt(m[1], 10) + parseInt(m[2], 10) / 60).toFixed(2);
+    const n = Number(s.replace(/,/g, ''));
+    // ClickUp's raw/unformatted time fields are milliseconds.
+    if (!isNaN(n)) return +(n / 3600000).toFixed(2);
+    return 0;
+}
+
+function parseClickUpDate(raw) {
+    if (!raw) return '';
+    const s = String(raw).trim();
+    if (!s) return '';
+    if (/^\d+$/.test(s)) {
+        const n = Number(s);
+        const ms = s.length <= 10 ? n * 1000 : n; // seconds vs ms epoch
+        const d = new Date(ms);
+        if (!isNaN(d)) return d.toISOString().slice(0, 10);
+    }
+    const d = new Date(s);
+    if (!isNaN(d)) return d.toISOString().slice(0, 10);
+    return '';
+}
+
+function parseClickUpComments(raw) {
+    if (!raw) return [];
+    const s = String(raw).trim();
+    if (!s) return [];
+    try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) {
+            return parsed.map(c => (typeof c === 'string') ? { author: '', date: '', text: c } : {
+                author: c.user || c.author || c.username || '',
+                date: c.date || c.created || c.time || '',
+                text: c.text || c.comment || c.content || JSON.stringify(c)
+            });
+        }
+    } catch (e) { /* not JSON — fall through and keep it as one raw blob */ }
+    return [{ author: '', date: '', text: s }];
+}
+
+function fieldSelectHTML(st, key, label) {
+    const opts = ['<option value="">-- None --</option>']
+        .concat(st.fields.map(f => `<option value="${esc(f)}" ${st.mapping[key] === f ? 'selected' : ''}>${esc(f)}</option>`));
+    return `<div style="display:flex; flex-direction:column; gap:4px;">
+        <label class="tiny muted bold">${label}</label>
+        <select class="modal-input tiny" onchange="OL.setClickUpMapping('${key}', this.value)">${opts.join('')}</select>
+    </div>`;
+}
+
+function renderRoutingMapTable(st) {
+    const values = [...new Set(st.rows.map(r => (r[st.routingColumn] || '').trim()).filter(Boolean))];
+    st.routingValues = values;
+    const clients = Object.values(state.clients || {});
+    return `
+    <div style="margin-top:12px; display:grid; gap:6px; max-height:220px; overflow:auto;">
+        ${values.map((v, i) => {
+            if (st.routingMap[v] === undefined) {
+                const guess = clients.find(c => {
+                    const n = (c.meta?.name || '').toLowerCase();
+                    return n && (n.includes(v.toLowerCase()) || v.toLowerCase().includes(n));
+                });
+                st.routingMap[v] = guess ? guess.id : '';
+            }
+            return `<div style="display:flex; align-items:center; gap:8px;">
+                <span class="tiny" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(v)}">${esc(v)}</span>
+                <select class="modal-input tiny" style="width:200px;" onchange="OL.setClickUpRoutingMapByIndex(${i}, this.value)">
+                    <option value="">-- Skip --</option>
+                    ${clients.map(c => `<option value="${c.id}" ${st.routingMap[v] === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                </select>
+            </div>`;
+        }).join('')}
+    </div>`;
+}
+
+function renderTargetSection(st) {
+    const clients = Object.values(state.clients || {});
+    const clientOptions = clients.map(c => `<option value="${c.id}" ${st.targetClientId === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('');
+    return `
+    <div class="card" style="padding:14px; margin-top:16px;">
+        <label class="tiny muted bold" style="display:block; margin-bottom:8px;">Where should these tasks go?</label>
+        <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+            <input type="radio" name="cu-target-mode" value="single" ${st.targetMode === 'single' ? 'checked' : ''} onchange="OL.setClickUpTargetMode('single')">
+            Import all rows into one project:
+        </label>
+        <select class="modal-input tiny" style="margin-left:22px; margin-bottom:10px; width: calc(100% - 22px);" onchange="OL.setClickUpTargetClient(this.value)" ${st.targetMode !== 'single' ? 'disabled' : ''}>
+            <option value="">-- Select a client --</option>
+            ${clientOptions}
+        </select>
+        <label class="tiny" style="display:flex; align-items:center; gap:6px;">
+            <input type="radio" name="cu-target-mode" value="auto" ${st.targetMode === 'auto' ? 'checked' : ''} onchange="OL.setClickUpTargetMode('auto')">
+            Auto-route by a column (e.g. List / Folder / Space name):
+        </label>
+        <select class="modal-input tiny" style="margin-left:22px; width: calc(100% - 22px);" onchange="OL.setClickUpRoutingColumn(this.value)" ${st.targetMode !== 'auto' ? 'disabled' : ''}>
+            <option value="">-- Select column --</option>
+            ${st.fields.map(f => `<option value="${esc(f)}" ${st.routingColumn === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}
+        </select>
+        ${st.targetMode === 'auto' && st.routingColumn ? renderRoutingMapTable(st) : ''}
+    </div>`;
+}
+
+export function openClickUpImportModal() {
+    OL._clickupImportState = null;
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📥 Import ClickUp CSV</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" id="clickup-import-body">
+            <p class="tiny muted" style="margin-bottom:14px;">
+                In ClickUp, use the <strong>Workspace</strong> export (Settings → Import/Export → Export), not a plain List export —
+                only the workspace export includes Comments and Time Spent as columns. Upload the CSV below.
+            </p>
+            <input type="file" id="clickup-csv-file" accept=".csv" class="modal-input tiny" onchange="OL.handleClickUpCSVFile(this)">
+            <div id="clickup-import-preview" style="margin-top:16px;"></div>
+        </div>
+    `;
+    openModal(html);
+}
+
+export function handleClickUpCSVFile(inputEl) {
+    const file = inputEl.files?.[0];
+    if (!file) return;
+    if (typeof Papa === 'undefined') {
+        alert('CSV parser did not load — refresh the page and try again.');
+        return;
+    }
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+            const fields = results.meta.fields || [];
+            const rows = results.data || [];
+            if (!rows.length) { alert('No rows found in that file.'); return; }
+            OL._clickupImportState = {
+                fileName: file.name,
+                fields,
+                rows,
+                mapping: {
+                    taskId: guessColumn(fields, ['Task ID', 'ID']),
+                    title: guessColumn(fields, ['Task Name', 'Name']),
+                    status: guessColumn(fields, ['Status']),
+                    assignee: guessColumn(fields, ['Assignees', 'Assignee']),
+                    dueDate: guessColumn(fields, ['Due Date']),
+                    timeSpent: guessColumn(fields, ['Time Spent', 'Time Tracked', 'Time Logged']),
+                    comments: guessColumn(fields, ['Comments']),
+                    description: guessColumn(fields, ['Description', 'Task Content', 'Content']),
+                    parentId: guessColumn(fields, ['Parent ID', 'Parent'])
+                },
+                routingColumn: '',
+                routingMap: {},
+                targetMode: 'single',
+                targetClientId: state.activeClientId || ''
+            };
+            OL.renderClickUpImportStep();
+        },
+        error: (err) => alert('Could not read CSV: ' + err.message)
+    });
+}
+
+export function renderClickUpImportStep() {
+    const st = OL._clickupImportState;
+    const container = document.getElementById('clickup-import-body');
+    if (!container || !st) return;
+
+    container.innerHTML = `
+        <div class="tiny muted" style="margin-bottom:10px;">${esc(st.fileName)} — ${st.rows.length} rows detected</div>
+
+        <div class="card" style="padding:14px;">
+            <label class="tiny muted bold" style="display:block; margin-bottom:10px;">Map your CSV columns:</label>
+            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;">
+                ${fieldSelectHTML(st, 'title', 'Task Title *')}
+                ${fieldSelectHTML(st, 'taskId', 'ClickUp Task ID (safe re-import)')}
+                ${fieldSelectHTML(st, 'status', 'Status')}
+                ${fieldSelectHTML(st, 'assignee', 'Assignee')}
+                ${fieldSelectHTML(st, 'dueDate', 'Due Date')}
+                ${fieldSelectHTML(st, 'timeSpent', 'Time Spent (Tracked Time)')}
+                ${fieldSelectHTML(st, 'comments', 'Comments')}
+                ${fieldSelectHTML(st, 'description', 'Description')}
+                ${fieldSelectHTML(st, 'parentId', 'Parent Task ID (subtasks)')}
+            </div>
+        </div>
+
+        ${renderTargetSection(st)}
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+            <button class="btn small primary" onclick="OL.runClickUpImport()" style="font-weight:bold;">Run Import</button>
+        </div>
+    `;
+    requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+}
+
+export function setClickUpMapping(key, value) {
+    if (!OL._clickupImportState) return;
+    OL._clickupImportState.mapping[key] = value;
+}
+
+export function setClickUpTargetMode(mode) {
+    if (!OL._clickupImportState) return;
+    OL._clickupImportState.targetMode = mode;
+    OL.renderClickUpImportStep();
+}
+
+export function setClickUpTargetClient(id) {
+    if (!OL._clickupImportState) return;
+    OL._clickupImportState.targetClientId = id;
+}
+
+export function setClickUpRoutingColumn(col) {
+    if (!OL._clickupImportState) return;
+    OL._clickupImportState.routingColumn = col;
+    OL._clickupImportState.routingMap = {};
+    OL.renderClickUpImportStep();
+}
+
+export function setClickUpRoutingMapByIndex(i, clientId) {
+    const st = OL._clickupImportState;
+    if (!st) return;
+    const v = st.routingValues[i];
+    st.routingMap[v] = clientId;
+}
+
+export async function runClickUpImport() {
+    const st = OL._clickupImportState;
+    if (!st) return;
+    const m = st.mapping;
+    if (!m.title) { alert('Please map a Task Title column.'); return; }
+    if (st.targetMode === 'single' && !st.targetClientId) { alert('Please select a target client project.'); return; }
+    if (st.targetMode === 'auto' && !st.routingColumn) { alert('Please select a routing column.'); return; }
+
+    let created = 0, updated = 0, skipped = 0;
+    const idMapByClient = {};      // clientId -> { clickupTaskId -> ourTaskId }
+    const pendingParents = [];     // { clientId, ourTaskId, clickupParentId }
+
+    st.rows.forEach(row => {
+        let clientId = st.targetClientId;
+        if (st.targetMode === 'auto') {
+            const routeVal = (row[st.routingColumn] || '').trim();
+            clientId = st.routingMap[routeVal] || '';
+        }
+        if (!clientId || !state.clients[clientId]) { skipped++; return; }
+
+        const client = state.clients[clientId];
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        const title = (row[m.title] || '').trim();
+        if (!title) { skipped++; return; }
+
+        const clickupId = m.taskId ? (row[m.taskId] || '').trim() : '';
+        const externalId = clickupId ? `cu-${clickupId}` : '';
+
+        const taskData = {
+            title, name: title,
+            assignee: m.assignee ? ((row[m.assignee] || '').split(',')[0].trim() || 'Sphynx Task') : 'Sphynx Task',
+            dueDate: m.dueDate ? parseClickUpDate(row[m.dueDate]) : '',
+            loggedHours: m.timeSpent ? parseClickUpTimeToHours(row[m.timeSpent]) : 0,
+            clickupComments: m.comments ? parseClickUpComments(row[m.comments]) : [],
+            description: m.description ? (row[m.description] || '').trim() : '',
+            source: 'clickup'
+        };
+        const statusVal = m.status ? (row[m.status] || '').trim() : '';
+        if (statusVal) taskData.status = statusVal;
+        if (externalId) taskData.externalId = externalId;
+
+        let taskObj;
+        if (externalId) {
+            const existingIdx = client.projectData.clientTasks.findIndex(t => t.externalId === externalId);
+            if (existingIdx > -1) {
+                taskObj = client.projectData.clientTasks[existingIdx];
+                Object.assign(taskObj, taskData);
+                updated++;
+            } else {
+                taskObj = { id: uid(), createdAt: new Date().toISOString(), isClientTask: false, ...taskData };
+                client.projectData.clientTasks.push(taskObj);
+                created++;
+            }
+        } else {
+            taskObj = { id: uid(), createdAt: new Date().toISOString(), isClientTask: false, ...taskData };
+            client.projectData.clientTasks.push(taskObj);
+            created++;
+        }
+
+        if (clickupId) {
+            if (!idMapByClient[clientId]) idMapByClient[clientId] = {};
+            idMapByClient[clientId][clickupId] = taskObj.id;
+        }
+
+        const clickupParentId = m.parentId ? (row[m.parentId] || '').trim() : '';
+        if (clickupParentId) pendingParents.push({ clientId, ourTaskId: taskObj.id, clickupParentId });
+    });
+
+    pendingParents.forEach(({ clientId, ourTaskId, clickupParentId }) => {
+        const map = idMapByClient[clientId];
+        const parentOurId = map && map[clickupParentId];
+        if (parentOurId && parentOurId !== ourTaskId) {
+            const client = state.clients[clientId];
+            const t = client.projectData.clientTasks.find(t => t.id === ourTaskId);
+            if (t) t.parentTaskId = parentOurId;
+        }
+    });
+
+    await OL.persist();
+    OL.closeModal();
+    if (typeof window.renderClientTaskManager === 'function' && state.activeClientId) window.renderClientTaskManager();
+    alert(`✅ ClickUp Import Complete\nCreated: ${created}\nUpdated: ${updated}\nSkipped (unmapped/blank): ${skipped}`);
+}
+
 export function processZapLogic(zap, isMaster = false) {
     const client = getActiveClient();
     const library = isMaster ? state.master.resources : client.projectData.localResources;
@@ -500,6 +839,12 @@ export function openImportHub() {
                     <div style="font-size: 24px; margin-bottom: 10px;">🏁</div>
                     <div class="bold">Process Street</div>
                     <div class="tiny muted">Sync Checklists</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.openClickUpImportModal()">
+                    <div style="font-size: 24px; margin-bottom: 10px;">✅</div>
+                    <div class="bold">ClickUp</div>
+                    <div class="tiny muted">Import Tasks (CSV)</div>
                 </div>
 
             </div>
@@ -1394,5 +1739,8 @@ Object.assign(window.OL, {
     upsertExternalResource, syncExternalIntegrations, importCalendly,
     importYCBM, importActiveCampaign, importMailerLite, importJotform,
     syncProcessStreet, syncRedtail, getCredsForApp, printFlowMap,
-    _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml
+    _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
+    openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,
+    setClickUpMapping, setClickUpTargetMode, setClickUpTargetClient,
+    setClickUpRoutingColumn, setClickUpRoutingMapByIndex, runClickUpImport
 });

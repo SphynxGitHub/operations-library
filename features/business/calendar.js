@@ -101,7 +101,18 @@ OL.fetchLiveGoogleCalendar = async function() {
 
     try {
         const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/get-calendar-events");
-        
+
+        if (response.status === 401) {
+            // Token expired and refresh failed — flip back to "disconnected" so
+            // the Connect button reappears instead of silently doing nothing.
+            updateAndSync(() => {
+                if (state.master?.communications?.gmail) state.master.communications.gmail.connected = false;
+                if (state.master) state.master.googleConnected = false;
+            });
+            OL.renderBusinessCalendar();
+            return;
+        }
+
         if (!response.ok) {
             console.warn("Calendar function endpoint not available yet (HTTP " + response.status + ")");
             return;
