@@ -147,58 +147,50 @@ OL.groupErrorRows = function(rows, groupBy) {
 };
 
 // -------------------------------------------------------------
-// CARD ROW — compact, but surfaces status (as a full dropdown),
-// system, project, date, and a cause/resolution preview up front.
-// Click anywhere else on the card for the full structured modal.
+// CARD ROW — accent bar reflects status at a glance, a tag row for
+// date/system/project, a message preview, and a notes box previewing
+// cause/resolution/resolved-date (muted placeholders when empty).
+// Click anywhere on the card for the full structured modal.
 // -------------------------------------------------------------
 OL.renderErrorLogRow = function(r, locked) {
-    const sourceIcon = r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️');
+    const isResolved = r.status === 'resolved';
+    const accentColor = isResolved ? '#22c55e' : '#f59e0b';
+    const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
+
     const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleDateString([], { dateStyle: 'medium' }) : '';
     const resolvedDate = r.resolution_date ? new Date(r.resolution_date).toLocaleDateString([], { dateStyle: 'medium' }) : '';
     const clientName = (!locked && r.client_id) ? (state.clients[r.client_id]?.meta?.name || 'Unknown') : '';
     const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
-    const statusStyle = r.status === 'resolved'
-        ? 'background:var(--accent); color:#04202b; font-weight:bold;'
-        : 'background:rgba(255,255,255,0.06);';
 
     return `
-        <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
-            <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:6px;">
-                <span class="tiny" title="${esc(r.source)}" style="margin-right:auto;">${sourceIcon}</span>
-                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
-                ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
+        <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); border-left:3px solid ${accentColor}; border-radius:0 8px 8px 0; cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
+                <strong style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
                 <div onclick="event.stopPropagation();">
-                    <select class="tiny" style="border:none; border-radius:14px; padding:4px 9px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
-                        <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
-                        <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
+                    <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.updateErrorStatus('${r.id}', this.value)">
+                        <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
+                        <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
                     </select>
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px 16px;">
-                ${OL.errorCell('Date', esc(occurred))}
-                ${OL.errorCell(null, `<strong style="font-size:14px;">${esc(r.title || 'Untitled Error')}</strong>`)}
-                ${OL.errorCell('Project', clientName ? `<span class="pill tiny soft">📁 ${esc(clientName)}</span>` : '—')}
-
-                ${OL.errorCell('System', esc(r.service || '—'))}
-                ${OL.errorCell('Error', esc(snippet || '—'))}
-                ${OL.errorCell('Cause', esc(r.cause || '—'))}
-
-                ${OL.errorCell('Resolution', esc(r.resolution || '—'))}
-                ${OL.errorCell('Resolved Date', resolvedDate ? esc(resolvedDate) : '—')}
-                ${OL.errorCell('Additional Notes', esc(r.notes || '—'))}
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                ${occurred ? `<span class="pill tiny soft">${esc(occurred)}</span>` : ''}
+                ${r.service ? `<span class="pill tiny soft">${esc(r.service)}</span>` : ''}
+                ${clientName ? `<span class="pill tiny" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent);">📁 ${esc(clientName)}</span>` : ''}
+                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
+                ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
-        </div>
-    `;
-};
 
-// One cell of the 3x3 card grid: optional small caption + a value line,
-// both truncated to a single line so every card stays a consistent height.
-OL.errorCell = function(label, valueHtml) {
-    return `
-        <div style="min-width:0; overflow:hidden;">
-            ${label ? `<div class="tiny muted" style="line-height:1.3;">${esc(label)}</div>` : ''}
-            <div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.4;">${valueHtml}</div>
+            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${esc(snippet)}
+            </div>
+
+            <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
+                <div class="tiny ${r.cause ? '' : 'muted'}">🔧 ${r.cause ? 'Cause: ' + esc(r.cause) : 'Cause not yet noted'}</div>
+                <div class="tiny ${r.resolution ? '' : 'muted'}">✅ ${r.resolution ? 'Resolution: ' + esc(r.resolution) : 'Resolution not yet noted'}</div>
+                <div class="tiny ${resolvedDate ? '' : 'muted'}">🗓️ ${resolvedDate ? 'Resolved: ' + esc(resolvedDate) : 'Not yet resolved'}</div>
+            </div>
         </div>
     `;
 };
