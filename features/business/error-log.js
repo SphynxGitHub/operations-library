@@ -1,4 +1,4 @@
-import { esc, state, db, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
+import { esc, state, db, updateAndSync, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
 
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
@@ -278,6 +278,18 @@ OL.assignErrorResource = async function(id, resourceId) {
     const { error } = await db.from('error_log').update({ resource_id: resourceId || null, resource_name: resource?.name || null }).eq('id', id);
     if (error) { alert('Failed to assign resource: ' + error.message); return; }
     if (row) { row.resource_id = resourceId || null; row.resource_name = resource?.name || null; }
+
+    // First time this resource gets linked to a Zap error and it doesn't
+    // have its External Link set yet — fill it in from this error's Zap
+    // link, so future errors from the same Zap auto-match by root_id.
+    if (resource && !resource.externalUrl && (row?.zap_link || row?.root_id)) {
+        const link = row.zap_link || `https://zapier.com/editor/${row.root_id}`;
+        updateAndSync(() => {
+            const client = state.clients[clientId];
+            const res = client?.projectData?.localResources?.find(r => r.id === resourceId);
+            if (res) res.externalUrl = link;
+        }, clientId);
+    }
 };
 
 // Status dropdown — also stamps/clears Resolution Date automatically
