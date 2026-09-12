@@ -32,14 +32,6 @@ OL.renderClientErrorLog = function() {
     OL._renderErrorLogShell(`Error Tracking — ${client.meta?.name || 'Project'}`, 'Zapier failures, manual notes, and quirks for this project');
 };
 
-// Column widths shared between header and rows so everything lines up.
-// Locked (client-scoped) view drops the Project column.
-function errorTableColumns(locked) {
-    return locked
-        ? '110px 1fr 90px 130px 1fr 1fr 110px 1fr'
-        : '110px 140px 1fr 90px 130px 1fr 1fr 110px 1fr';
-}
-
 OL._renderErrorLogShell = function(title, subtitle) {
     const main = document.getElementById("mainContent");
     if (!main) return;
@@ -54,23 +46,7 @@ OL._renderErrorLogShell = function(title, subtitle) {
     const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
     const rows = OL.errorLogState.rows;
-    const cols = errorTableColumns(locked);
-
-    const headerRow = `
-        <div style="display:grid; grid-template-columns:${cols}; gap:1px; background:var(--accent); border-radius:6px 6px 0 0; overflow:hidden;">
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Status</div>
-            ${!locked ? `<div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Project</div>` : ''}
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Error</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Error Date</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">System</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Cause</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Resolution</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Resolution Date</div>
-            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Additional Notes</div>
-        </div>
-    `;
-
-    const renderRows = (rowList) => rowList.map((r, i) => OL.renderErrorLogRow(r, locked, cols, i)).join('');
+    const renderRows = (rowList) => `<div style="display:grid; gap:10px;">${rowList.map(r => OL.renderErrorLogRow(r, locked)).join('')}</div>`;
 
     main.innerHTML = `
         <div class="section-header">
@@ -120,18 +96,19 @@ OL._renderErrorLogShell = function(title, subtitle) {
                     <i data-lucide="check-circle" style="width:36px;height:32px;margin-bottom:8px;opacity:0.5;"></i>
                     <div>No errors match these filters.</div>
                 </div>
-            ` : `
-                <div style="border:1px solid var(--line); border-radius:6px; overflow:hidden;">
-                    ${headerRow}
-                    ${OL.errorLogState.groupBy === 'none' ? renderRows(rows) : OL.groupErrorRows(rows, OL.errorLogState.groupBy).map(g => `
-                        <div class="tiny bold uppercase" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.08); border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(g.label)}</span>
-                            <span class="pill tiny soft" style="flex-shrink:0;">${g.rows.length}</span>
+            ` : (OL.errorLogState.groupBy === 'none' ? renderRows(rows) : `
+                <div style="display:grid; gap:20px;">
+                    ${OL.groupErrorRows(rows, OL.errorLogState.groupBy).map(g => `
+                        <div>
+                            <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(g.label)}</span>
+                                <span class="pill tiny soft" style="flex-shrink:0;">${g.rows.length}</span>
+                            </div>
+                            ${renderRows(g.rows)}
                         </div>
-                        ${renderRows(g.rows)}
                     `).join('')}
                 </div>
-            `}
+            `)}
         </div>
     `;
     if (window.lucide) lucide.createIcons();
@@ -170,55 +147,53 @@ OL.groupErrorRows = function(rows, groupBy) {
 };
 
 // -------------------------------------------------------------
-// TABLE ROW — matches the old spreadsheet's columns, inline-editable
+// CARD ROW — compact, but surfaces status (as a full dropdown),
+// system, project, date, and a cause/resolution preview up front.
+// Click anywhere else on the card for the full structured modal.
 // -------------------------------------------------------------
-OL.renderErrorLogRow = function(r, locked, cols, i) {
-    const clients = locked ? null : getBusinessScopedClients();
-    const shortDate = (iso) => iso ? new Date(iso).toLocaleDateString([], { dateStyle: 'short' }) : '';
-    const dateInputVal = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
-    const errorText = (r.title || r.message || '').replace(/\s+/g, ' ').trim();
-    const stripe = i % 2 === 1 ? 'background: rgba(255,255,255,0.02);' : '';
-
+OL.renderErrorLogRow = function(r, locked) {
+    const sourceIcon = r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️');
+    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const clientName = (!locked && r.client_id) ? (state.clients[r.client_id]?.meta?.name || 'Unknown') : '';
+    const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
     const statusStyle = r.status === 'resolved'
         ? 'background:var(--accent); color:#04202b; font-weight:bold;'
         : 'background:rgba(255,255,255,0.06);';
 
     return `
-        <div style="display:grid; grid-template-columns:${cols}; gap:1px; border-top:1px solid var(--line); ${stripe}">
-            <div style="padding:6px 8px; display:flex; align-items:center;">
-                <select class="tiny" style="width:100%; border:none; border-radius:14px; padding:4px 8px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
-                    <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
-                    <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
-                </select>
-            </div>
-            ${!locked ? `
-                <div style="padding:6px 8px; display:flex; align-items:center;">
-                    <select class="tiny modal-input" style="width:100%;" onchange="OL.assignErrorClient('${r.id}', this.value)">
-                        <option value="">-- Unassigned --</option>
-                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+        <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:220px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                        <span class="tiny" title="${esc(r.source)}">${sourceIcon}</span>
+                        <strong style="font-size:14px;">${esc(r.title || r.service || 'Untitled Error')}</strong>
+                        ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
+                        ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
+                    </div>
+                    <div class="tiny muted">
+                        ${esc(occurred)}
+                        ${r.service ? ` · 🛠️ ${esc(r.service)}` : ''}
+                        ${clientName ? ` · 📁 ${esc(clientName)}` : ''}
+                    </div>
+                </div>
+                <div onclick="event.stopPropagation();">
+                    <select class="tiny" style="border:none; border-radius:14px; padding:5px 10px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
+                        <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
+                        <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="tiny muted" style="margin-top:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${esc(snippet)}
+            </div>
+
+            ${(r.cause || r.resolution) ? `
+                <div style="margin-top:8px; display:flex; gap:16px; flex-wrap:wrap;">
+                    ${r.cause ? `<div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;"><strong>🔧 Cause:</strong> ${esc(r.cause)}</div>` : ''}
+                    ${r.resolution ? `<div class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;"><strong>✅ Resolution:</strong> ${esc(r.resolution)}</div>` : ''}
+                </div>
             ` : ''}
-            <div style="padding:6px 8px; display:flex; align-items:center; gap:6px; overflow:hidden; cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')" title="Click for full message and links">
-                <span class="tiny" title="${esc(r.source)}" style="flex-shrink:0;">${r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️')}</span>
-                <span class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(errorText)}</span>
-                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444; flex-shrink:0;">Outage</span>` : ''}
-                ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft" style="flex-shrink:0;">×${r.occurrence_count}</span>` : ''}
-            </div>
-            <div class="tiny" style="padding:6px 8px; display:flex; align-items:center;">${esc(shortDate(r.occurred_at))}</div>
-            <div class="tiny" style="padding:6px 8px; display:flex; align-items:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.service || '')}</div>
-            <div style="padding:4px;">
-                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
-            </div>
-            <div style="padding:4px;">
-                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
-            </div>
-            <div style="padding:4px; display:flex; align-items:center;">
-                <input type="date" class="tiny modal-input" style="width:100%;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
-            </div>
-            <div style="padding:4px;">
-                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
-            </div>
         </div>
     `;
 };
@@ -292,6 +267,15 @@ OL.updateErrorStatus = async function(id, newStatus) {
     }
 };
 
+// Same as above, but for use inside the detail modal — re-opens the modal
+// afterward (or closes it, if the row toggled out of the current filter).
+OL.updateErrorStatusAndRefreshModal = async function(id, newStatus) {
+    await OL.updateErrorStatus(id, newStatus);
+    const stillPresent = OL.errorLogState.rows.find(r => r.id === id);
+    if (stillPresent) OL.openErrorDetailModal(id);
+    else OL.closeModal();
+};
+
 OL.saveErrorField = async function(id, field, value) {
     const { error } = await db.from('error_log').update({ [field]: value }).eq('id', id);
     if (error) { console.error(`Failed to save ${field}:`, error.message); return; }
@@ -305,34 +289,97 @@ OL.saveErrorDateField = async function(id, field, value) {
     if (error) { console.error(`Failed to save ${field}:`, error.message); return; }
     const row = OL.errorLogState.rows.find(r => r.id === id);
     if (row) row[field] = iso;
+    OL._rerenderErrorLog();
 };
 
 // -------------------------------------------------------------
-// DETAIL MODAL — read-only quick view of the full message + links
-// (Cause/Resolution/Notes/Status now edit inline in the table itself)
+// DETAIL MODAL — fully structured: status/project/dates/system up top,
+// message + links, then editable cause/resolution/notes.
 // -------------------------------------------------------------
 OL.openErrorDetailModal = function(id) {
     const r = OL.errorLogState.rows.find(x => x.id === id);
     if (!r) return;
+
+    const locked = !!OL.errorLogState.lockedClientId;
+    const clients = getBusinessScopedClients();
+    const dateInputVal = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
 
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">⚠️ ${esc(r.title || r.service || 'Error Detail')}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:600px; width:100%;">
-            <div class="tiny muted" style="margin-bottom:12px; display:flex; flex-direction:column; gap:2px;">
-                <div><strong>Occurred:</strong> ${r.occurred_at ? new Date(r.occurred_at).toLocaleString() : 'Unknown'}</div>
-                ${r.service ? `<div><strong>Service:</strong> ${esc(r.service)}</div>` : ''}
-                ${r.root_id ? `<div><strong>Root ID:</strong> ${esc(r.root_id)}</div>` : ''}
-                <div><strong>Source:</strong> ${esc(r.source)}</div>
+        <div class="modal-body" style="max-width:620px; width:100%;">
+
+            <label class="modal-section-label">Overview</label>
+            <div class="card-section" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Status</label>
+                    <select class="modal-input tiny" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
+                        <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
+                        <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
+                    </select>
+                </div>
+                ${!locked ? `
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
+                        <select class="modal-input tiny" onchange="OL.assignErrorClient('${r.id}', this.value)">
+                            <option value="">-- Unassigned --</option>
+                            ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                        </select>
+                    </div>
+                ` : ''}
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Error Date</label>
+                    <div class="tiny" style="padding:7px 0;">${r.occurred_at ? new Date(r.occurred_at).toLocaleString() : 'Unknown'}</div>
+                </div>
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">System</label>
+                    <div class="tiny" style="padding:7px 0;">${esc(r.service || '—')}</div>
+                </div>
+                ${r.root_id ? `
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Root ID</label>
+                        <div class="tiny" style="padding:7px 0;">${esc(r.root_id)}</div>
+                    </div>
+                ` : ''}
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Source</label>
+                    <div class="tiny" style="padding:7px 0;">${esc(r.source)}</div>
+                </div>
             </div>
-            <div style="white-space:pre-wrap; line-height:1.6; font-size:13px; border-top:1px solid var(--line); padding-top:12px; margin-bottom:14px;">
-                ${esc(r.message || '')}
+
+            <label class="modal-section-label">Error Message</label>
+            <div class="card-section">
+                <div style="white-space:pre-wrap; line-height:1.6; font-size:13px;">${esc(r.message || '')}</div>
+                ${(r.history_link || r.zap_link) ? `
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                        ${r.history_link ? `<a href="${r.history_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">History Link</a>` : ''}
+                        ${r.zap_link ? `<a href="${r.zap_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">Zap Link</a>` : ''}
+                    </div>
+                ` : ''}
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                ${r.history_link ? `<a href="${r.history_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">History Link</a>` : ''}
-                ${r.zap_link ? `<a href="${r.zap_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">Zap Link</a>` : ''}
+
+            <label class="modal-section-label">Cause &amp; Resolution</label>
+            <div class="card-section">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
+                        <textarea class="modal-input tiny" rows="3" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution</label>
+                        <textarea class="modal-input tiny" rows="3" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
+                    </div>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution Date</label>
+                    <input type="date" class="modal-input tiny" style="max-width:200px;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
+                </div>
+                <div>
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
+                    <textarea class="modal-input tiny" rows="2" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
+                </div>
             </div>
         </div>
     `;
