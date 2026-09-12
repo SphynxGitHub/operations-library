@@ -137,12 +137,17 @@ serve(async (req) => {
     // set linked_client_id / automation_processed on genuinely new rows —
     // re-syncing an existing event must never clobber a project match that
     // was already acted on (that's what automation_processed guards).
-    const allIds = parsed.map((r) => r.id);
+    //
+    // This used to check via .in('id', <up to 200 ids at once>), but some
+    // recurring-event instance ids (Reclaim.ai in particular) run 100+
+    // characters, and a couple hundred of those joined into one URL blew
+    // past the request's practical size limit ("error sending request").
+    // Filtering by calendar_id instead keeps every query small regardless
+    // of how long individual event ids get.
     const existingIds = new Set<string>();
-    for (let i = 0; i < allIds.length; i += 200) {
-      const chunk = allIds.slice(i, i + 200);
-      const { data, error } = await supabase.from("calendar_events").select("id").in("id", chunk);
-      if (error) throw new Error(`Lookup failed: ${error.message}`);
+    for (const calendarId of calendarIds) {
+      const { data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId);
+      if (error) throw new Error(`Lookup failed for calendar "${calendarId}": ${error.message}`);
       (data || []).forEach((r: any) => existingIds.add(r.id));
     }
 
