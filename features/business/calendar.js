@@ -33,6 +33,9 @@ OL.renderBusinessCalendar = function() {
             </div>
             <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
                 ${isConnected ? `
+                    <button class="btn small soft" onclick="OL.openManageCalendarsModal()">
+                        <i data-lucide="calendar-plus" style="width:14px;height:14px;"></i> Manage Calendars
+                    </button>
                     <button class="btn small soft" onclick="OL.fetchLiveGoogleCalendar()" ${OL.calendarState.loading ? 'disabled' : ''}>
                         <i data-lucide="refresh-cw" style="width:14px;height:14px;${OL.calendarState.loading ? 'animation: spin 1s linear infinite;' : ''}"></i>
                         ${OL.calendarState.loading ? 'Syncing...' : 'Sync Calendar'}
@@ -138,6 +141,7 @@ OL.renderCalendarEventRow = function(evt) {
         ? 'All Day'
         : new Date(evt.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const projectName = evt.linked_client_id ? (state.clients[evt.linked_client_id]?.meta?.name || 'Project') : '';
+    const showCalendarBadge = (state.master?.syncedCalendarIds || []).length > 1 && evt.calendar_summary;
 
     return `
         <div style="display:grid; grid-template-columns: 100px 1fr 140px; gap: 16px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center; cursor:pointer;" onclick="OL.openCalendarEventModal('${evt.id}')">
@@ -147,8 +151,9 @@ OL.renderCalendarEventRow = function(evt) {
             <div style="overflow:hidden;">
                 <strong style="display:block; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(evt.title)}</strong>
                 <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                    ${evt.location ? `📍 ${esc(evt.location)}` : ''}
-                    ${projectName ? ` ${evt.location ? '·' : ''} 📁 ${esc(projectName)}` : ''}
+                    ${showCalendarBadge ? `🗓️ ${esc(evt.calendar_summary)}` : ''}
+                    ${evt.location ? ` ${showCalendarBadge ? '·' : ''} 📍 ${esc(evt.location)}` : ''}
+                    ${projectName ? ` ${(evt.location || showCalendarBadge) ? '·' : ''} 📁 ${esc(projectName)}` : ''}
                 </div>
             </div>
             <div class="text-right">
@@ -226,7 +231,7 @@ OL.renderCalendarGrid = function() {
                 const visible = dayEvents.slice(0, 3);
                 const overflow = dayEvents.length - visible.length;
                 return `
-                    <div style="background:var(--card-bg, #111); min-height:90px; padding:5px; opacity:${inMonth ? '1' : '0.35'};">
+                    <div style="min-height:90px; padding:5px; opacity:${inMonth ? '1' : '0.4'};">
                         <div class="tiny ${key === todayKey ? 'bold' : ''}" style="margin-bottom:4px; ${key === todayKey ? 'color:var(--accent);' : ''}">${d.getDate()}</div>
                         <div style="display:grid; gap:2px;">
                             ${visible.map(evt => `
@@ -254,7 +259,7 @@ OL.loadCalendarGridMonth = async function() {
 
     const { data, error } = await db
         .from('calendar_events')
-        .select('id, title, start, end, all_day, location, link, linked_client_id')
+        .select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary')
         .gte('start', start.toISOString())
         .lt('start', end.toISOString())
         .order('start', { ascending: true });
@@ -267,7 +272,7 @@ OL.loadCalendarGridMonth = async function() {
 // LOAD (LIST VIEW) FROM SUPABASE
 // -------------------------------------------------------------
 OL.loadCalendarEvents = async function() {
-    let query = db.from('calendar_events').select('id, title, start, end, all_day, location, link, linked_client_id');
+    let query = db.from('calendar_events').select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary');
 
     const nowIso = new Date().toISOString();
     if (OL.calendarState.filter === 'upcoming') {
@@ -295,6 +300,7 @@ OL.openCalendarEventModal = async function(id) {
     if (error || !evt) { alert('Could not load that event.'); return; }
 
     const projectName = evt.linked_client_id ? (state.clients[evt.linked_client_id]?.meta?.name || 'Project') : '';
+    const showCalendarBadge = (state.master?.syncedCalendarIds || []).length > 1 && evt.calendar_summary;
     const startLabel = evt.all_day
         ? new Date(evt.start).toLocaleDateString([], { dateStyle: 'medium' })
         : new Date(evt.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -309,6 +315,7 @@ OL.openCalendarEventModal = async function(id) {
             <div class="tiny muted" style="margin-bottom:14px; display:flex; flex-direction:column; gap:4px;">
                 <div><strong>When:</strong> ${esc(startLabel)}${endLabel ? ` – ${esc(endLabel)}` : ''}</div>
                 ${evt.location ? `<div><strong>Where:</strong> ${esc(evt.location)}</div>` : ''}
+                ${showCalendarBadge ? `<div><strong>Calendar:</strong> ${esc(evt.calendar_summary)}</div>` : ''}
                 ${projectName ? `<div><strong>Project:</strong> <span class="pill tiny soft">📁 ${esc(projectName)}</span></div>` : ''}
             </div>
             ${evt.description ? `
@@ -420,3 +427,81 @@ OL.processCalendarAutomations = async function() {
 };
 
 window.OL.renderBusinessCalendar = OL.renderBusinessCalendar;
+
+// -------------------------------------------------------------
+// MANAGE CALENDARS — pick which Google Calendars to sync
+// -------------------------------------------------------------
+OL.openManageCalendarsModal = async function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🗓️ Manage Calendars</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" id="manage-calendars-body" style="max-width:450px; width:100%;">
+            <div class="tiny muted">Loading your Google Calendars...</div>
+        </div>
+    `;
+    openModal(html);
+
+    try {
+        const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/list-google-calendars");
+        const container = document.getElementById('manage-calendars-body');
+        if (!container) return; // modal closed already
+
+        if (response.status === 401) {
+            container.innerHTML = `<div class="tiny" style="color:#ef4444;">Your Google connection expired — reconnect it from Gmail Settings, then try again.</div>`;
+            return;
+        }
+        if (!response.ok) {
+            container.innerHTML = `<div class="tiny" style="color:#ef4444;">Could not load your calendars.</div>`;
+            return;
+        }
+
+        const data = await response.json();
+        const calendars = data.calendars || [];
+        const currentIds = (state.master?.syncedCalendarIds || []);
+        // First time configuring: default to just the primary calendar, since
+        // that matches the pre-multi-calendar behavior.
+        const selected = new Set(currentIds.length > 0 ? currentIds : calendars.filter(c => c.primary).map(c => c.id));
+
+        OL._manageCalendarsSelection = selected;
+
+        container.innerHTML = `
+            <p class="tiny muted" style="margin-bottom:12px;">Choose which calendars to sync into the app. Syncing more calendars pulls in more events on your next "Sync Calendar."</p>
+            <div style="display:grid; gap:8px; max-height:280px; overflow:auto; margin-bottom:16px;">
+                ${calendars.map(c => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+                        <input type="checkbox" ${selected.has(c.id) ? 'checked' : ''} onchange="OL.toggleManageCalendarSelection('${esc(c.id).replace(/'/g, "\\'")}', this.checked)">
+                        ${esc(c.summary)}${c.primary ? ` <span class="pill tiny soft" style="font-size:9px;">Primary</span>` : ''}
+                    </label>
+                `).join('')}
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+                <button class="btn small primary" onclick="OL.saveManageCalendarsSelection()" style="font-weight:bold;">Save & Sync</button>
+            </div>
+        `;
+    } catch (err) {
+        const container = document.getElementById('manage-calendars-body');
+        if (container) container.innerHTML = `<div class="tiny" style="color:#ef4444;">Something went wrong loading your calendars.</div>`;
+        console.error('Failed to load calendar list:', err);
+    }
+};
+
+OL.toggleManageCalendarSelection = function(calendarId, checked) {
+    if (!OL._manageCalendarsSelection) return;
+    if (checked) OL._manageCalendarsSelection.add(calendarId);
+    else OL._manageCalendarsSelection.delete(calendarId);
+};
+
+OL.saveManageCalendarsSelection = async function() {
+    const selected = [...(OL._manageCalendarsSelection || [])];
+    if (selected.length === 0) { alert('Pick at least one calendar to sync.'); return; }
+
+    await updateAndSync(() => {
+        if (!state.master) state.master = {};
+        state.master.syncedCalendarIds = selected;
+    });
+
+    OL.closeModal();
+    OL.fetchLiveGoogleCalendar();
+};

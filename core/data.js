@@ -85,7 +85,8 @@ export function persist() {
                 analyses: masterCopy.analyses || [],
                 sphynx_team: masterCopy.sphynxTeam || [],
                 automation_rules: masterCopy.automationRules || [],
-                sops: masterCopy.sops || []
+                sops: masterCopy.sops || [],
+                synced_calendar_ids: masterCopy.syncedCalendarIds || []
             };
 
             const { error: masterErr } = await db
@@ -170,6 +171,7 @@ export async function sync() {
             if (Array.isArray(masterData.sphynx_team) && masterData.sphynx_team.length > 0) state.master.sphynxTeam = masterData.sphynx_team;
             if (Array.isArray(masterData.automation_rules)) state.master.automationRules = masterData.automation_rules;
             if (Array.isArray(masterData.sops)) state.master.sops = masterData.sops;
+            if (Array.isArray(masterData.synced_calendar_ids)) state.master.syncedCalendarIds = masterData.synced_calendar_ids;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
         }
 
