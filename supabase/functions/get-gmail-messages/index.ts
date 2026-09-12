@@ -56,6 +56,35 @@ function extractEmails(text: string): string[] {
   return matches.map((e) => e.toLowerCase());
 }
 
+// ---- Zapier error email detection + best-effort parsing ----
+// This is a fallback for existing "send me an error email" Zaps. It's
+// inherently fragile (regex over free text) — if you switch a Zap's error
+// step to POST straight to the error-webhook function instead, that path
+// skips all of this and is far more reliable. Kept here so errors still
+// land in the centralized log even before you've migrated a given client's Zap.
+function isZapierErrorEmail(sender: string, subject: string): boolean {
+  const s = (sender || "").toLowerCase();
+  const subj = (subject || "").toLowerCase();
+  return s.includes("zapiermail.com") || subj.includes("zapier error");
+}
+
+const ZAP_ERROR_LABELS = ["Title", "Message", "History Link", "Zap Link", "Service", "Root ID", "Outage", "Count", "Sheet ID"];
+
+function parseZapierErrorBody(body: string): Record<string, string> {
+  const clean = (body || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const result: Record<string, string> = {};
+
+  for (let i = 0; i < ZAP_ERROR_LABELS.length; i++) {
+    const label = ZAP_ERROR_LABELS[i];
+    const rest = ZAP_ERROR_LABELS.slice(i + 1).map(esc).join("|");
+    const re = new RegExp(esc(label) + "\\s*:\\s*(.*?)" + (rest ? "(?=\\s(?:" + rest + ")\\s*:)" : "$"), "i");
+    const m = clean.match(re);
+    if (m) result[label] = m[1].trim();
+  }
+  return result;
+}
+
 async function listInboxMessageIds(accessToken: string): Promise<string[]> {
   const ids: string[] = [];
   let pageToken: string | undefined;
@@ -159,11 +188,21 @@ serve(async (req) => {
     // 3. Load project label-matching rules (client Gmail-label config + Team emails)
     const projectRules = await loadProjectRules(supabase);
 
+    // Lightweight client directory for error-email matching (by Sheet ID
+    // primarily, falling back to a name found in the subject line).
+    const { data: clientDirectory } = await supabase.from("workspace_clients").select("id, meta");
+    const sheetIdToClient = new Map<string, string>();
+    (clientDirectory || []).forEach((c: any) => {
+      const sid = c.meta?.errorSheetId;
+      if (sid) sheetIdToClient.set(sid, c.id);
+    });
+
     // 4. Fetch full detail + body for each new message, and work out which
     // project(s) it matches by comparing From/To/Cc addresses to each
     // project's Team tab emails.
     const rows: any[] = [];
     const labelPlan: { id: string; labelNames: string[] }[] = [];
+    const errorRows: any[] = [];
 
     await Promise.all(
       newIds.map(async (id) => {
@@ -178,6 +217,7 @@ serve(async (req) => {
         const sender = getHeader("From") || "Unknown";
         const dateHeader = getHeader("Date");
         const parsedDate = dateHeader ? new Date(dateHeader) : null;
+        const body = extractPlainTextBody(detail.payload);
 
         const participantEmails = new Set([
           ...extractEmails(getHeader("From")),
@@ -195,7 +235,7 @@ serve(async (req) => {
           sender,
           subject,
           snippet: detail.snippet || "",
-          body: extractPlainTextBody(detail.payload).slice(0, 20000),
+          body: body.slice(0, 20000),
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
           // Only auto-link when exactly one project matches — ambiguous
           // matches are left for manual linking rather than guessed.
@@ -204,6 +244,39 @@ serve(async (req) => {
 
         if (matchedLabelNames.length > 0) {
           labelPlan.push({ id, labelNames: [...new Set(matchedLabelNames)] });
+        }
+
+        if (isZapierErrorEmail(sender, subject)) {
+          const parsed = parseZapierErrorBody(body);
+          const sheetId = parsed["Sheet ID"] || null;
+
+          let errorClientId: string | null = (sheetId && sheetIdToClient.get(sheetId)) || null;
+          if (!errorClientId) {
+            // Fall back to a fuzzy match against the subject line, e.g.
+            // "Brent Hamilton - Zapier Error" -> "Brent Hamilton".
+            const subjectName = subject.split(/[-–]/)[0].trim().toLowerCase();
+            const match = (clientDirectory || []).find((c: any) => {
+              const n = (c.meta?.name || "").toLowerCase();
+              return n && subjectName && (n.includes(subjectName) || subjectName.includes(n));
+            });
+            if (match) errorClientId = match.id;
+          }
+
+          errorRows.push({
+            client_id: errorClientId,
+            source: "email",
+            title: parsed["Title"] || null,
+            message: parsed["Message"] || body.slice(0, 2000),
+            service: parsed["Service"] || null,
+            history_link: parsed["History Link"] || null,
+            zap_link: parsed["Zap Link"] || null,
+            root_id: parsed["Root ID"] || null,
+            outage: parsed["Outage"] !== undefined ? parsed["Outage"].toLowerCase() === "true" : null,
+            occurrence_count: parsed["Count"] ? Number(parsed["Count"]) : null,
+            sheet_id: sheetId,
+            occurred_at: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : new Date().toISOString(),
+            gmail_message_id: id
+          });
         }
       })
     );
@@ -214,6 +287,18 @@ serve(async (req) => {
     // function, triggered from the app when a message is archived/linked).
     const { error: insertError } = await supabase.from("gmail_messages").upsert(rows, { onConflict: "id" });
     if (insertError) throw new Error(`Insert failed: ${insertError.message}`);
+
+    // 5b. Save any detected Zapier error emails into the centralized error
+    // log. ignoreDuplicates + the unique index on gmail_message_id means a
+    // re-synced/re-labeled email never creates a second row.
+    let errorsLogged = 0;
+    if (errorRows.length > 0) {
+      const { error: errorInsertError, count } = await supabase
+        .from("error_log")
+        .upsert(errorRows, { onConflict: "gmail_message_id", ignoreDuplicates: true, count: "exact" });
+      if (errorInsertError) console.error("Failed to log parsed errors:", errorInsertError.message);
+      else errorsLogged = count ?? errorRows.length;
+    }
 
     // 6. Apply Gmail labels for any project matches (creating labels on
     // first use, named after the project — editable later from Project
@@ -246,7 +331,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount }),
+      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount, errorsLogged }),
       { status: 200, headers: corsHeaders }
     );
 

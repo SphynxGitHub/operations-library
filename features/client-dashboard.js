@@ -498,6 +498,17 @@ export function openClientProfileModal(clientId) {
                        onchange="OL.updateGmailLabelName('${clientId}', this.value)">
             </div>
 
+            <label class="modal-section-label">Error Tracking</label>
+            <div class="card-section">
+                <p class="tiny muted" style="margin-bottom:8px;">
+                    If this client's Zapier error notifications include a Google Sheet ID (from the old per-client tracking sheet), enter it here so errors auto-match to this project instead of landing unassigned.
+                </p>
+                <input type="text" class="modal-input small"
+                       placeholder="Tracking Sheet ID (optional)"
+                       value="${esc(client.meta.errorSheetId || '')}"
+                       onchange="OL.updateErrorSheetId('${clientId}', this.value)">
+            </div>
+
            <label class="modal-section-label">Partner / Client Login</label>
            <div class="card-section">
                <p class="tiny muted">Generate a one-time setup link so they can create their own login.</p>
@@ -909,6 +920,14 @@ export function updateGmailLabelName(clientId, value) {
     }, clientId);
 }
 
+export function updateErrorSheetId(clientId, value) {
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        client.meta.errorSheetId = value.trim() || null;
+    }, clientId);
+}
+
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
@@ -918,6 +937,6 @@ Object.assign(window.OL, {
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
     deleteClient, setAllPermissions, pushFeaturesToAllClients,
-    toggleGmailLabelForClient, updateGmailLabelName
+    toggleGmailLabelForClient, updateGmailLabelName, updateErrorSheetId
 });
 window.renderClientDashboard = renderClientDashboard;
