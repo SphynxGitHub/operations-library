@@ -208,6 +208,27 @@ export async function sync() {
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         }
+
+        // Google connection status was previously only ever set in-memory
+        // right after the OAuth redirect, so it reset to "disconnected" on
+        // every page load/reload even though the tokens were still valid
+        // server-side. Check for a real stored token instead, so the UI
+        // reflects the actual connection state.
+        const { data: googleTokenRow, error: googleTokenErr } = await db
+            .from('google_auth_tokens')
+            .select('email')
+            .limit(1)
+            .maybeSingle();
+
+        if (googleTokenErr) {
+            console.error("❌ Google Token Check Error:", googleTokenErr.message);
+        } else if (googleTokenRow) {
+            state.master.googleConnected = true;
+            if (!state.master.communications) state.master.communications = {};
+            if (!state.master.communications.gmail) state.master.communications.gmail = {};
+            state.master.communications.gmail.connected = true;
+            state.master.communications.gmail.email = googleTokenRow.email || '';
+        }
     } catch (error) {
         console.error("❌ Sync Error:", error);
     } finally {
