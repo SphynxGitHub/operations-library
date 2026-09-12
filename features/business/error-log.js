@@ -32,6 +32,14 @@ OL.renderClientErrorLog = function() {
     OL._renderErrorLogShell(`Error Tracking — ${client.meta?.name || 'Project'}`, 'Zapier failures, manual notes, and quirks for this project');
 };
 
+// Column widths shared between header and rows so everything lines up.
+// Locked (client-scoped) view drops the Project column.
+function errorTableColumns(locked) {
+    return locked
+        ? '110px 1fr 90px 130px 1fr 1fr 110px 1fr'
+        : '110px 140px 1fr 90px 130px 1fr 1fr 110px 1fr';
+}
+
 OL._renderErrorLogShell = function(title, subtitle) {
     const main = document.getElementById("mainContent");
     if (!main) return;
@@ -46,6 +54,23 @@ OL._renderErrorLogShell = function(title, subtitle) {
     const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
     const rows = OL.errorLogState.rows;
+    const cols = errorTableColumns(locked);
+
+    const headerRow = `
+        <div style="display:grid; grid-template-columns:${cols}; gap:1px; background:var(--accent); border-radius:6px 6px 0 0; overflow:hidden;">
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Status</div>
+            ${!locked ? `<div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Project</div>` : ''}
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Error</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Error Date</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">System</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Cause</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Resolution</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Resolution Date</div>
+            <div class="tiny bold" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.18);">Additional Notes</div>
+        </div>
+    `;
+
+    const renderRows = (rowList) => rowList.map((r, i) => OL.renderErrorLogRow(r, locked, cols, i)).join('');
 
     main.innerHTML = `
         <div class="section-header">
@@ -95,24 +120,15 @@ OL._renderErrorLogShell = function(title, subtitle) {
                     <i data-lucide="check-circle" style="width:36px;height:32px;margin-bottom:8px;opacity:0.5;"></i>
                     <div>No errors match these filters.</div>
                 </div>
-            ` : ''}
-
-            ${OL.errorLogState.groupBy === 'none' ? `
-                <div style="display:grid; gap:8px;">
-                    ${rows.map(r => OL.renderErrorLogRow(r, locked)).join('')}
-                </div>
             ` : `
-                <div style="display:grid; gap:20px;">
-                    ${OL.groupErrorRows(rows, OL.errorLogState.groupBy).map(g => `
-                        <div>
-                            <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(g.label)}</span>
-                                <span class="pill tiny soft" style="flex-shrink:0;">${g.rows.length}</span>
-                            </div>
-                            <div style="display:grid; gap:8px;">
-                                ${g.rows.map(r => OL.renderErrorLogRow(r, locked)).join('')}
-                            </div>
+                <div style="border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+                    ${headerRow}
+                    ${OL.errorLogState.groupBy === 'none' ? renderRows(rows) : OL.groupErrorRows(rows, OL.errorLogState.groupBy).map(g => `
+                        <div class="tiny bold uppercase" style="padding:8px 10px; background:rgba(var(--accent-rgb),0.08); border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(g.label)}</span>
+                            <span class="pill tiny soft" style="flex-shrink:0;">${g.rows.length}</span>
                         </div>
+                        ${renderRows(g.rows)}
                     `).join('')}
                 </div>
             `}
@@ -154,32 +170,55 @@ OL.groupErrorRows = function(rows, groupBy) {
 };
 
 // -------------------------------------------------------------
-// COMPACT ROW — one or two lines, click anywhere to open full detail
+// TABLE ROW — matches the old spreadsheet's columns, inline-editable
 // -------------------------------------------------------------
-OL.renderErrorLogRow = function(r, locked) {
-    const sourceIcon = r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️');
-    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    const clientName = (!locked && r.client_id) ? (state.clients[r.client_id]?.meta?.name || 'Unknown') : '';
-    const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
+OL.renderErrorLogRow = function(r, locked, cols, i) {
+    const clients = locked ? null : getBusinessScopedClients();
+    const shortDate = (iso) => iso ? new Date(iso).toLocaleDateString([], { dateStyle: 'short' }) : '';
+    const dateInputVal = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
+    const errorText = (r.title || r.message || '').replace(/\s+/g, ' ').trim();
+    const stripe = i % 2 === 1 ? 'background: rgba(255,255,255,0.02);' : '';
+
+    const statusStyle = r.status === 'resolved'
+        ? 'background:var(--accent); color:#04202b; font-weight:bold;'
+        : 'background:rgba(255,255,255,0.06);';
 
     return `
-        <div onclick="OL.openErrorDetailModal('${r.id}')" style="cursor:pointer; display:flex; align-items:center; gap:10px; padding:9px 12px; background: rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
-            <span class="tiny" title="${esc(r.source)}" style="flex-shrink:0;">${sourceIcon}</span>
-            <div style="flex:1; overflow:hidden; min-width:0;">
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <strong style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || r.service || 'Untitled Error')}</strong>
-                    ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444; flex-shrink:0;">Outage</span>` : ''}
-                    ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft" style="flex-shrink:0;">×${r.occurrence_count}</span>` : ''}
-                    ${r.status === 'resolved' ? `<span class="pill tiny soft" style="flex-shrink:0;">✓ Resolved</span>` : ''}
-                    ${(r.cause || r.resolution) ? `<span class="tiny muted" title="Has notes" style="flex-shrink:0;">📝</span>` : ''}
-                </div>
-                <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(snippet)}</div>
+        <div style="display:grid; grid-template-columns:${cols}; gap:1px; border-top:1px solid var(--line); ${stripe}">
+            <div style="padding:6px 8px; display:flex; align-items:center;">
+                <select class="tiny" style="width:100%; border:none; border-radius:14px; padding:4px 8px; cursor:pointer; ${statusStyle}" onchange="OL.updateErrorStatus('${r.id}', this.value)">
+                    <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
+                    <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
+                </select>
             </div>
-            ${clientName ? `<span class="pill tiny soft" style="flex-shrink:0;">📁 ${esc(clientName)}</span>` : ''}
-            <span class="tiny muted monospace" style="flex-shrink:0; white-space:nowrap;">${esc(occurred)}</span>
-            <button class="btn tiny ${r.status === 'resolved' ? 'soft' : 'primary'}" style="flex-shrink:0;" onclick="event.stopPropagation(); OL.toggleErrorStatus('${r.id}', '${r.status === 'resolved' ? 'open' : 'resolved'}')" title="${r.status === 'resolved' ? 'Reopen' : 'Resolve'}">
-                ${r.status === 'resolved' ? '↩' : '✓'}
-            </button>
+            ${!locked ? `
+                <div style="padding:6px 8px; display:flex; align-items:center;">
+                    <select class="tiny modal-input" style="width:100%;" onchange="OL.assignErrorClient('${r.id}', this.value)">
+                        <option value="">-- Unassigned --</option>
+                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                    </select>
+                </div>
+            ` : ''}
+            <div style="padding:6px 8px; display:flex; align-items:center; gap:6px; overflow:hidden; cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')" title="Click for full message and links">
+                <span class="tiny" title="${esc(r.source)}" style="flex-shrink:0;">${r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️')}</span>
+                <span class="tiny" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(errorText)}</span>
+                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444; flex-shrink:0;">Outage</span>` : ''}
+                ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft" style="flex-shrink:0;">×${r.occurrence_count}</span>` : ''}
+            </div>
+            <div class="tiny" style="padding:6px 8px; display:flex; align-items:center;">${esc(shortDate(r.occurred_at))}</div>
+            <div class="tiny" style="padding:6px 8px; display:flex; align-items:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.service || '')}</div>
+            <div style="padding:4px;">
+                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
+            </div>
+            <div style="padding:4px;">
+                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
+            </div>
+            <div style="padding:4px; display:flex; align-items:center;">
+                <input type="date" class="tiny modal-input" style="width:100%;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
+            </div>
+            <div style="padding:4px;">
+                <textarea class="tiny modal-input" rows="1" style="width:100%; resize:vertical; min-height:28px;" placeholder="—" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
+            </div>
         </div>
     `;
 };
@@ -232,29 +271,25 @@ OL.assignErrorClient = async function(id, clientId) {
     if (row) row.client_id = clientId || null;
 };
 
-OL.toggleErrorStatus = async function(id, newStatus) {
-    const { error } = await db.from('error_log').update({ status: newStatus }).eq('id', id);
+// Status dropdown — also stamps/clears Resolution Date automatically
+// (never overwrites a Resolution Date you've already set by hand).
+OL.updateErrorStatus = async function(id, newStatus) {
+    const row = OL.errorLogState.rows.find(r => r.id === id);
+    const updates = { status: newStatus };
+    if (newStatus === 'resolved' && !row?.resolution_date) updates.resolution_date = new Date().toISOString();
+    if (newStatus === 'open') updates.resolution_date = null;
+
+    const { error } = await db.from('error_log').update(updates).eq('id', id);
     if (error) { alert('Failed to update status: ' + error.message); return; }
+
     if (OL.errorLogState.statusFilter !== 'all') {
-        // no longer matches the current filter — just reload
+        // toggled out of the current filter view — just reload
         await OL.loadErrorLog();
         OL._rerenderErrorLog();
     } else {
-        const row = OL.errorLogState.rows.find(r => r.id === id);
-        if (row) row.status = newStatus;
+        if (row) Object.assign(row, updates);
         OL._rerenderErrorLog();
     }
-};
-
-// Used by the detail modal's Resolve/Reopen button — waits for the toggle to
-// actually land before deciding whether to refresh the modal (still in the
-// current filter) or close it (toggled out of view, e.g. resolved while
-// looking at "Open").
-OL.toggleErrorStatusAndRefreshModal = async function(id, newStatus) {
-    await OL.toggleErrorStatus(id, newStatus);
-    const stillPresent = OL.errorLogState.rows.find(r => r.id === id);
-    if (stillPresent) OL.openErrorDetailModal(id);
-    else OL.closeModal();
 };
 
 OL.saveErrorField = async function(id, field, value) {
@@ -264,15 +299,21 @@ OL.saveErrorField = async function(id, field, value) {
     if (row) row[field] = value;
 };
 
+OL.saveErrorDateField = async function(id, field, value) {
+    const iso = value ? new Date(value + 'T00:00:00').toISOString() : null;
+    const { error } = await db.from('error_log').update({ [field]: iso }).eq('id', id);
+    if (error) { console.error(`Failed to save ${field}:`, error.message); return; }
+    const row = OL.errorLogState.rows.find(r => r.id === id);
+    if (row) row[field] = iso;
+};
+
 // -------------------------------------------------------------
-// DETAIL MODAL (full message, links, editable cause/resolution/status/client)
+// DETAIL MODAL — read-only quick view of the full message + links
+// (Cause/Resolution/Notes/Status now edit inline in the table itself)
 // -------------------------------------------------------------
 OL.openErrorDetailModal = function(id) {
     const r = OL.errorLogState.rows.find(x => x.id === id);
     if (!r) return;
-
-    const locked = !!OL.errorLogState.lockedClientId;
-    const clients = getBusinessScopedClients();
 
     const html = `
         <div class="modal-head">
@@ -289,33 +330,9 @@ OL.openErrorDetailModal = function(id) {
             <div style="white-space:pre-wrap; line-height:1.6; font-size:13px; border-top:1px solid var(--line); padding-top:12px; margin-bottom:14px;">
                 ${esc(r.message || '')}
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 ${r.history_link ? `<a href="${r.history_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">History Link</a>` : ''}
                 ${r.zap_link ? `<a href="${r.zap_link}" target="_blank" class="btn tiny soft" style="text-decoration:none;">Zap Link</a>` : ''}
-                <button class="btn tiny ${r.status === 'resolved' ? 'soft' : 'primary'}" onclick="OL.toggleErrorStatusAndRefreshModal('${r.id}', '${r.status === 'resolved' ? 'open' : 'resolved'}')">
-                    ${r.status === 'resolved' ? '↩ Reopen' : '✓ Mark Resolved'}
-                </button>
-            </div>
-
-            ${!locked ? `
-                <div style="margin-bottom:14px;">
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
-                    <select class="modal-input tiny" onchange="OL.assignErrorClient('${r.id}', this.value)">
-                        <option value="">-- Unassigned --</option>
-                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                    </select>
-                </div>
-            ` : ''}
-
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
-                    <textarea class="modal-input tiny" rows="3" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
-                </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution</label>
-                    <textarea class="modal-input tiny" rows="3" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
-                </div>
             </div>
         </div>
     `;
@@ -350,11 +367,11 @@ OL.openAddErrorModal = function() {
                     `}
                 </div>
                 <div>
-                    <label class="tiny muted bold">Title</label>
+                    <label class="tiny muted bold">Error (title)</label>
                     <input type="text" id="add-error-title" class="modal-input tiny" placeholder="Short summary">
                 </div>
                 <div>
-                    <label class="tiny muted bold">Service</label>
+                    <label class="tiny muted bold">System</label>
                     <input type="text" id="add-error-service" class="modal-input tiny" placeholder="e.g. RingCentral, Wealthbox">
                 </div>
                 <div>
@@ -368,6 +385,10 @@ OL.openAddErrorModal = function() {
                 <div>
                     <label class="tiny muted bold">Resolution</label>
                     <textarea id="add-error-resolution" class="modal-input tiny" rows="2"></textarea>
+                </div>
+                <div>
+                    <label class="tiny muted bold">Additional Notes</label>
+                    <textarea id="add-error-notes" class="modal-input tiny" rows="2"></textarea>
                 </div>
             </div>
             <div style="display:flex; justify-content:flex-end; margin-top:16px;">
@@ -390,6 +411,7 @@ OL.saveManualError = async function() {
         message,
         cause: document.getElementById('add-error-cause')?.value.trim() || null,
         resolution: document.getElementById('add-error-resolution')?.value.trim() || null,
+        notes: document.getElementById('add-error-notes')?.value.trim() || null,
         occurred_at: new Date().toISOString()
     };
 
