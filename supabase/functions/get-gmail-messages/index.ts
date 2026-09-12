@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
+import { loadProjectRules, matchProjectRules } from "../_shared/project-rules.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,33 +81,8 @@ async function listInboxMessageIds(accessToken: string): Promise<string[]> {
 
 // ---- Project label rules: which clients want auto-labeling, and which
 // email addresses (their Team tab) identify a message as belonging to them.
-interface ProjectRule {
-  clientId: string;
-  labelName: string;
-  emails: Set<string>;
-}
-
-async function loadProjectRules(supabase: any): Promise<ProjectRule[]> {
-  const { data, error } = await supabase.from("workspace_clients").select("id, meta, project_data");
-  if (error) throw new Error(`Failed to load client label rules: ${error.message}`);
-
-  const rules: ProjectRule[] = [];
-  for (const row of data || []) {
-    const meta = row.meta || {};
-    if (!meta.gmailLabelEnabled) continue;
-    const labelName = (meta.gmailLabel || meta.name || "").trim();
-    if (!labelName) continue;
-
-    const teamMembers = row.project_data?.teamMembers || [];
-    const emails = new Set<string>(
-      teamMembers.map((m: any) => (m?.email || "").trim().toLowerCase()).filter(Boolean)
-    );
-    if (emails.size === 0) continue;
-
-    rules.push({ clientId: row.id, labelName, emails });
-  }
-  return rules;
-}
+// (loadProjectRules/matchProjectRules now live in ../_shared/project-rules.ts,
+// shared with get-calendar-events.)
 
 // ---- Gmail label lookup/creation, cached for the duration of one sync run ----
 async function loadExistingLabels(accessToken: string): Promise<Map<string, string>> {
@@ -209,17 +185,9 @@ serve(async (req) => {
           ...extractEmails(getHeader("Cc"))
         ]);
 
-        const matchedClientIds: string[] = [];
-        const matchedLabelNames: string[] = [];
-        for (const rule of projectRules) {
-          for (const addr of participantEmails) {
-            if (rule.emails.has(addr)) {
-              matchedClientIds.push(rule.clientId);
-              matchedLabelNames.push(rule.labelName);
-              break;
-            }
-          }
-        }
+        const matchedRules = matchProjectRules(projectRules, participantEmails);
+        const matchedClientIds = matchedRules.map((r) => r.clientId);
+        const matchedLabelNames = matchedRules.map((r) => r.labelName);
 
         rows.push({
           id,

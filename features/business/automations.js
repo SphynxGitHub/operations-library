@@ -36,8 +36,14 @@ const SCOPING_STATUS_FIELDS = [
     { key: 'party', label: 'Billable Party' }
 ];
 
+const CALENDAR_EVENT_FIELDS = [
+    { key: 'eventTitle', label: 'Event Title' }
+];
+
 OL.getAutomationConditionFields = function(trigger) {
-    return trigger === 'scoping_status_change' ? SCOPING_STATUS_FIELDS : TASK_STATUS_FIELDS;
+    if (trigger === 'scoping_status_change') return SCOPING_STATUS_FIELDS;
+    if (trigger === 'calendar_event_synced') return CALENDAR_EVENT_FIELDS;
+    return TASK_STATUS_FIELDS;
 };
 
 // Fields whose value is a known, enumerable set get a dropdown instead of
@@ -88,7 +94,9 @@ OL.runAutomationRules = function(triggerType, ctx) {
             const actual = ctx[c.field];
             const actualStr = (actual === undefined || actual === null) ? '' : String(actual);
             const expected = String(c.value ?? '');
-            return c.op === 'not_equals' ? actualStr !== expected : actualStr === expected;
+            if (c.op === 'not_equals') return actualStr !== expected;
+            if (c.op === 'contains') return actualStr.toLowerCase().includes(expected.toLowerCase());
+            return actualStr === expected;
         });
 
         if (matches) {
@@ -162,7 +170,8 @@ OL.executeAutomationAction = function(rule, ctx) {
     const fill = (str) => String(str || '')
         .replace(/\{resourceName\}/g, ctx.resourceName || '')
         .replace(/\{taskTitle\}/g, ctx.title || '')
-        .replace(/\{clientName\}/g, client.meta?.name || '');
+        .replace(/\{clientName\}/g, client.meta?.name || '')
+        .replace(/\{eventTitle\}/g, ctx.eventTitle || '');
 
     let dueDate = '';
     if (action.dueInDays !== undefined && action.dueInDays !== null && action.dueInDays !== '') {
@@ -173,6 +182,7 @@ OL.executeAutomationAction = function(rule, ctx) {
 
     const assignee = action.assignee || 'Sphynx Task';
     const title = fill(action.titleTemplate) || 'Automated Task';
+    const loggedHours = (action.logDurationAsHours && typeof ctx.durationHours === 'number') ? ctx.durationHours : 0;
 
     const newTask = {
         id: uid(),
@@ -182,7 +192,7 @@ OL.executeAutomationAction = function(rule, ctx) {
         assignee,
         dueDate,
         isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
-        loggedHours: 0,
+        loggedHours,
         parentTaskId: (action.asSubtask && ctx.task) ? ctx.task.id : null,
         createdBy: 'automation',
         automationRuleId: rule.id,
@@ -224,8 +234,8 @@ OL.renderAutomationBuilder = function() {
                             <strong style="font-size:13px;">${esc(rule.name || 'Untitled Rule')}</strong>
                         </div>
                         <div class="tiny muted" style="margin-top:4px;">
-                            When <b>${rule.trigger === 'scoping_status_change' ? 'a scoping item changes' : 'a task status changes'}</b>
-                            ${(rule.conditions || []).length ? ' and ' + rule.conditions.map(c => `<code>${esc(c.field)} ${c.op === 'not_equals' ? '≠' : '='} ${esc(c.value)}</code>`).join(' and ') : ''}
+                            When <b>${rule.trigger === 'scoping_status_change' ? 'a scoping item changes' : (rule.trigger === 'calendar_event_synced' ? 'a calendar event syncs' : 'a task status changes')}</b>
+                            ${(rule.conditions || []).length ? ' and ' + rule.conditions.map(c => `<code>${esc(c.field)} ${c.op === 'not_equals' ? '≠' : (c.op === 'contains' ? 'contains' : '=')} ${esc(c.value)}</code>`).join(' and ') : ''}
                             → ${rule.action?.type === 'apply_blueprint'
                                 ? `apply blueprint <code>${esc((state.master.taskBlueprints || []).find(b => b.id === rule.action.blueprintId)?.title || '(deleted blueprint)')}</code>`
                                 : rule.action?.type === 'apply_sop'
@@ -262,8 +272,9 @@ OL.openAutomationRuleModal = function(ruleId) {
         <div class="automation-condition-row" data-idx="${idx}" style="display:grid; grid-template-columns: 1fr 90px 1fr auto; gap:6px; margin-bottom:6px; align-items:center;">
             <select class="modal-input tiny cond-field" onchange="OL.onAutomationConditionFieldChange(this)">${fieldOptions(c.field, trigger)}</select>
             <select class="modal-input tiny cond-op">
-                <option value="equals" ${c.op !== 'not_equals' ? 'selected' : ''}>is</option>
+                <option value="equals" ${(!c.op || c.op === 'equals') ? 'selected' : ''}>is</option>
                 <option value="not_equals" ${c.op === 'not_equals' ? 'selected' : ''}>is not</option>
+                <option value="contains" ${c.op === 'contains' ? 'selected' : ''}>contains</option>
             </select>
             <span class="cond-value-cell">${OL.renderAutomationConditionValueControl(c.field, c.value)}</span>
             <button type="button" class="btn tiny soft" onclick="this.closest('.automation-condition-row').remove()">✕</button>
@@ -284,6 +295,7 @@ OL.openAutomationRuleModal = function(ruleId) {
             <select id="auto-rule-trigger" class="modal-input" onchange="OL.refreshAutomationConditionFields()">
                 <option value="task_status_change" ${trigger === 'task_status_change' ? 'selected' : ''}>Task status changes</option>
                 <option value="scoping_status_change" ${trigger === 'scoping_status_change' ? 'selected' : ''}>Scoping line item status/party changes</option>
+                <option value="calendar_event_synced" ${trigger === 'calendar_event_synced' ? 'selected' : ''}>Calendar event syncs</option>
             </select>
 
             <label class="modal-section-label">Conditions (all must match)</label>
@@ -302,7 +314,7 @@ OL.openAutomationRuleModal = function(ruleId) {
                 </select>
 
                 <div id="auto-action-freeform" style="${action.type === 'apply_blueprint' ? 'display:none;' : ''}">
-                    <label class="tiny muted uppercase bold">Title (use {resourceName}, {taskTitle}, {clientName})</label>
+                    <label class="tiny muted uppercase bold">Title (use {resourceName}, {taskTitle}, {clientName}, {eventTitle})</label>
                     <input type="text" id="auto-action-title" class="modal-input tiny" value="${esc(action.titleTemplate || '')}" placeholder="Implementation: {resourceName}" style="margin-bottom:8px;">
 
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
@@ -332,6 +344,11 @@ OL.openAutomationRuleModal = function(ruleId) {
                             <input type="number" id="auto-action-due" class="modal-input tiny" value="${esc(action.dueInDays ?? '')}" placeholder="e.g. 3">
                         </div>
                     </div>
+
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-top:10px; cursor:pointer;">
+                        <input type="checkbox" id="auto-action-log-duration" ${action.logDurationAsHours ? 'checked' : ''}>
+                        Log the calendar event's duration as time worked on this task (syncs to the client's timesheet — calendar triggers only)
+                    </label>
                 </div>
 
                 <div id="auto-action-blueprint" style="${action.type === 'apply_blueprint' ? '' : 'display:none;'}">
@@ -387,6 +404,7 @@ OL.addAutomationConditionRow = function() {
             <select class="modal-input tiny cond-op">
                 <option value="equals">is</option>
                 <option value="not_equals">is not</option>
+                <option value="contains">contains</option>
             </select>
             <span class="cond-value-cell">${OL.renderAutomationConditionValueControl('', '')}</span>
             <button type="button" class="btn tiny soft" onclick="this.closest('.automation-condition-row').remove()">✕</button>
@@ -461,7 +479,8 @@ OL.saveAutomationRule = function(ruleId) {
             assignee: document.getElementById('auto-action-assignee')?.value || 'Sphynx Task',
             status: document.getElementById('auto-action-status')?.value || 'Pending Sphynx Action',
             dueInDays: document.getElementById('auto-action-due')?.value === '' ? null : Number(document.getElementById('auto-action-due')?.value),
-            asSubtask
+            asSubtask,
+            logDurationAsHours: !!document.getElementById('auto-action-log-duration')?.checked
         };
     }
 
