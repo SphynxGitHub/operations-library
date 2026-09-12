@@ -453,7 +453,13 @@ OL.openManageCalendarsModal = async function() {
             return;
         }
         if (!response.ok) {
-            container.innerHTML = `<div class="tiny" style="color:#ef4444;">Could not load your calendars.</div>`;
+            let detail = '';
+            try { detail = (await response.json())?.message || ''; } catch (e) { /* body wasn't JSON */ }
+            container.innerHTML = `
+                <div class="tiny" style="color:#ef4444; margin-bottom:6px;">Could not load your calendars (HTTP ${response.status}).</div>
+                ${detail ? `<div class="tiny muted" style="font-family:monospace; white-space:pre-wrap;">${esc(detail)}</div>` : ''}
+            `;
+            console.error('list-google-calendars failed:', response.status, detail);
             return;
         }
 
