@@ -394,9 +394,8 @@ OL.openErrorDetailModal = function(id) {
         </div>
         <div class="modal-body" style="max-width:600px; width:100%;">
 
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <strong style="font-size:15px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
-                <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold; flex-shrink:0;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
                     <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                     <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
                 </select>
@@ -407,7 +406,7 @@ OL.openErrorDetailModal = function(id) {
                 <span class="pill tiny soft">${r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️')} ${esc(r.source)}</span>
                 <span class="pill tiny soft">📅 ${esc(occurred)}</span>
                 ${!locked ? `
-                    <select class="tiny" style="border:none; border-radius:var(--radius, 6px); padding:3px 8px; background:rgba(255,255,255,0.06); cursor:pointer;" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
+                    <select class="pill tiny soft" style="cursor:pointer;" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
                         <option value="">📁 Unassigned</option>
                         ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>📁 ${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
                     </select>
@@ -430,14 +429,14 @@ OL.openErrorDetailModal = function(id) {
                     <div style="width:8px; height:8px; border-radius:50%; background:#f59e0b; margin-top:8px; flex-shrink:0;"></div>
                     <div style="flex:1; min-width:0;">
                         <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
-                        <textarea class="modal-input tiny" rows="2" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
+                        <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; align-items:flex-start;">
                     <div style="width:8px; height:8px; border-radius:50%; background:#22c55e; margin-top:8px; flex-shrink:0;"></div>
                     <div style="flex:1; min-width:0;">
                         <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution</label>
-                        <textarea class="modal-input tiny" rows="2" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
+                        <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; align-items:flex-start;">
@@ -445,11 +444,11 @@ OL.openErrorDetailModal = function(id) {
                     <div style="flex:1; min-width:0; display:flex; gap:14px; flex-wrap:wrap;">
                         <div style="flex:0 0 160px;">
                             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution Date</label>
-                            <input type="date" class="modal-input tiny" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
+                            <input type="date" class="modal-input tiny" style="width:100%; box-sizing:border-box;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
                         </div>
                         <div style="flex:1; min-width:180px;">
                             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
-                            <textarea class="modal-input tiny" rows="2" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
+                            <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
                         </div>
                     </div>
                 </div>
@@ -481,11 +480,7 @@ OL.renderResourceTag = function(id) {
     }
 
     if (!OL._resourcePickerOpen) {
-        container.outerHTML = `
-            <span id="error-resource-tag" class="pill tiny" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="OL.openResourcePicker('${id}')">
-                🔧 ${r.resource_name ? esc(r.resource_name) : 'Link a resource'}
-            </span>
-        `;
+        container.outerHTML = `<span id="error-resource-tag" class="pill tiny soft" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="OL.openResourcePicker('${id}')">🔧 ${r.resource_name ? esc(r.resource_name) : 'Link a resource'}</span>`;
         return;
     }
 
