@@ -172,7 +172,7 @@ export function renderClientDashboard() {
                                                     border:1px solid var(--panel-border);
                                                     border-radius:6px;cursor:pointer;transition:border-color 0.2s;"
                                              onclick="OL.switchClient('${client.id}');
-                                                      setTimeout(()=>OL.openTaskModal('${task.id}', false), 200);"
+                                                      setTimeout(()=>OL.openTaskInContext('${client.id}', '${task.id}'), 200);"
                                              onmouseover="this.style.borderColor='var(--accent)'"
                                              onmouseout="this.style.borderColor='var(--panel-border)'">
                                             <div style="width:8px;height:8px;border-radius:50%;

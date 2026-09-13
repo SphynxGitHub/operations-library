@@ -1407,9 +1407,10 @@ export function renderDependencyRow(dep, parentId) {
 
     const icon = isTask ? OL.getLucideSVG('clipboard-list', 14, 'currentColor') : OL.getLucideSVG(OL.getRegistryIcon(obj?.type), 14, 'currentColor');
     
-    // 🎯 Navigation Logic
-    const clickAction = isTask 
-        ? `OL.openTaskModal('${dep.id}', false)` 
+    // openTaskModal was never actually defined — openTaskInContext is the
+    // real, working modal launcher.
+    const clickAction = isTask
+        ? `OL.openTaskInContext('${client?.id}', '${dep.id}')`
         : `OL.openResourceModal('${dep.id}')`;
 
     return `
@@ -1562,7 +1563,9 @@ export async function createAndLinkTaskDependency(resId, taskName) {
     });
 
     // 🚀 AUTO-OPEN: Open the task immediately for editing
-    OL.openTaskModal(taskId, false); 
+    // (openTaskModal was never actually defined — openTaskInContext is the
+    // real, working modal launcher.)
+    OL.openTaskInContext(client.id, taskId);
     
     // Refresh background if needed
     if (typeof renderClientTaskManager === 'function') renderClientTaskManager();

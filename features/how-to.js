@@ -1432,7 +1432,13 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault) {
         }
         
         OL.persist();
-        OL.openTaskModal(taskId, isVault); 
+        // openTaskModal was never actually defined anywhere in the app —
+        // openTaskInContext is the real, working modal launcher. Vault
+        // (blueprint) tasks aren't real client tasks, so there's no modal
+        // to reopen for those.
+        if (!isVault && client) {
+            OL.openTaskInContext(client.id, taskId);
+        }
     }
 };
 
