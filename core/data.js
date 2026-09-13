@@ -221,13 +221,16 @@ export async function sync() {
             .maybeSingle();
 
         if (googleTokenErr) {
-            console.error("❌ Google Token Check Error:", googleTokenErr.message);
+            console.error("❌ Google Token Check Error (RLS on google_auth_tokens likely blocking anon reads — connection status will keep resetting on reload until this is fixed):", googleTokenErr.message);
         } else if (googleTokenRow) {
+            console.log("✅ Google Token Found — restoring Connected status:", googleTokenRow.email);
             state.master.googleConnected = true;
             if (!state.master.communications) state.master.communications = {};
             if (!state.master.communications.gmail) state.master.communications.gmail = {};
             state.master.communications.gmail.connected = true;
             state.master.communications.gmail.email = googleTokenRow.email || '';
+        } else {
+            console.warn("⚠️ No row found in google_auth_tokens — Google will show as disconnected until you reconnect.");
         }
     } catch (error) {
         console.error("❌ Sync Error:", error);
