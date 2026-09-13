@@ -1,5 +1,10 @@
 import { esc, uid, state, db, updateAndSync, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
 
+// Small Lucide icon helper for inline pill/tag labels.
+function ic(name) {
+    return `<i data-lucide="${name}" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"></i>`;
+}
+
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
     clientFilter: '',
@@ -185,11 +190,11 @@ OL.renderErrorLogRow = function(r, locked) {
             </div>
 
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-                ${occurred ? `<span class="pill tiny soft">${esc(occurred)}</span>` : ''}
-                ${r.service ? `<span class="pill tiny soft">${esc(r.service)}</span>` : ''}
-                ${clientName ? `<span class="pill tiny" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent);">📁 ${esc(clientName)}</span>` : ''}
-                ${r.resource_name ? `<span class="pill tiny soft">🔧 ${esc(r.resource_name)}</span>` : ''}
-                ${r.outage ? `<span class="pill tiny" style="background:rgba(239,68,68,0.15); color:#ef4444;">Outage</span>` : ''}
+                ${occurred ? `<span class="pill tiny soft">${ic('calendar')}${esc(occurred)}</span>` : ''}
+                ${r.service ? `<span class="pill tiny soft">${ic('wrench')}${esc(r.service)}</span>` : ''}
+                ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent);">${ic('folder')}${esc(clientName)}</span>` : ''}
+                ${r.resource_name ? `<span class="pill tiny soft">${ic('git-branch')}${esc(r.resource_name)}</span>` : ''}
+                ${r.outage ? `<span class="pill tiny" style="border:none; background:rgba(239,68,68,0.15); color:#ef4444;">${ic('alert-circle')}Outage</span>` : ''}
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
 
@@ -198,9 +203,9 @@ OL.renderErrorLogRow = function(r, locked) {
             </div>
 
             <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
-                <div class="tiny ${r.cause ? '' : 'muted'}">🔧 ${r.cause ? 'Cause: ' + esc(r.cause) : 'Cause not yet noted'}</div>
-                <div class="tiny ${r.resolution ? '' : 'muted'}">✅ ${r.resolution ? 'Resolution: ' + esc(r.resolution) : 'Resolution not yet noted'}</div>
-                <div class="tiny ${resolvedDate ? '' : 'muted'}">🗓️ ${resolvedDate ? 'Resolved: ' + esc(resolvedDate) : 'Not yet resolved'}</div>
+                <div class="tiny ${r.cause ? '' : 'muted'}">${ic('wrench')}${r.cause ? 'Cause: ' + esc(r.cause) : 'Cause not yet noted'}</div>
+                <div class="tiny ${r.resolution ? '' : 'muted'}">${ic('check')}${r.resolution ? 'Resolution: ' + esc(r.resolution) : 'Resolution not yet noted'}</div>
+                <div class="tiny ${resolvedDate ? '' : 'muted'}">${ic('calendar-check')}${resolvedDate ? 'Resolved: ' + esc(resolvedDate) : 'Not yet resolved'}</div>
             </div>
         </div>
     `;
@@ -386,10 +391,11 @@ OL.openErrorDetailModal = function(id) {
     const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
     const statusColor = isResolved ? '#22c55e' : '#f59e0b';
     const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
+    const sourceIcon = r.source === 'webhook' ? 'webhook' : (r.source === 'email' ? 'mail' : 'pencil');
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">⚠️ ${esc(r.title || r.service || 'Error Detail')}</div>
+            <div class="modal-title-text"><i data-lucide="alert-triangle" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;"></i>${esc(r.title || r.service || 'Error Detail')}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body" style="max-width:600px; width:100%;">
@@ -402,13 +408,13 @@ OL.openErrorDetailModal = function(id) {
             </div>
 
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
-                ${r.service ? `<span class="pill tiny soft">🛠️ ${esc(r.service)}</span>` : ''}
-                <span class="pill tiny soft">${r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️')} ${esc(r.source)}</span>
-                <span class="pill tiny soft">📅 ${esc(occurred)}</span>
+                ${r.service ? `<span class="pill tiny soft" style="border:none;">${ic('wrench')}${esc(r.service)}</span>` : ''}
+                <span class="pill tiny soft" style="border:none;">${ic(sourceIcon)}${esc(r.source)}</span>
+                <span class="pill tiny soft" style="border:none;">${ic('calendar')}${esc(occurred)}</span>
                 ${!locked ? `
-                    <select class="pill tiny soft" style="cursor:pointer;" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
-                        <option value="">📁 Unassigned</option>
-                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>📁 ${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                    <select class="pill tiny soft" style="border:none; cursor:pointer;" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
+                        <option value="">Unassigned</option>
+                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
                     </select>
                 ` : ''}
                 <span id="error-resource-tag"></span>
@@ -456,6 +462,7 @@ OL.openErrorDetailModal = function(id) {
         </div>
     `;
     openModal(html);
+    if (window.lucide) lucide.createIcons();
     OL._resourcePickerOpen = false;
     OL.renderResourceTag(id);
 };
@@ -480,7 +487,8 @@ OL.renderResourceTag = function(id) {
     }
 
     if (!OL._resourcePickerOpen) {
-        container.outerHTML = `<span id="error-resource-tag" class="pill tiny soft" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="OL.openResourcePicker('${id}')">🔧 ${r.resource_name ? esc(r.resource_name) : 'Link a resource'}</span>`;
+        container.outerHTML = `<span id="error-resource-tag" class="pill tiny soft" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="OL.openResourcePicker('${id}')">${ic('git-branch')}${r.resource_name ? esc(r.resource_name) : 'Link a resource'}</span>`;
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
@@ -492,14 +500,15 @@ OL.renderResourceTag = function(id) {
         <span id="error-resource-tag" style="display:inline-flex; flex-direction:column; gap:4px; width:220px;">
             <input type="text" class="modal-input tiny" placeholder="Search resources..." value="${esc(OL._resourcePickerQuery || '')}" oninput="OL.setResourcePickerQuery(this.value, '${id}')" autofocus>
             <div style="max-height:160px; overflow:auto; display:flex; flex-direction:column; gap:2px; background:var(--panel-soft, rgba(0,0,0,0.02)); border:1px solid var(--line); border-radius:6px; padding:4px;">
-                <div class="tiny" style="padding:5px 8px; cursor:pointer; color:var(--accent);" onclick="OL.pickResource('${id}', '__create_new')">+ Create new resource...</div>
-                ${r.resource_id ? `<div class="tiny" style="padding:5px 8px; cursor:pointer;" onclick="OL.pickResource('${id}', '')">✕ Remove current link</div>` : ''}
+                <div class="tiny" style="padding:5px 8px; cursor:pointer; color:var(--accent);" onclick="OL.pickResource('${id}', '__create_new')">${ic('plus')}Create new resource...</div>
+                ${r.resource_id ? `<div class="tiny" style="padding:5px 8px; cursor:pointer;" onclick="OL.pickResource('${id}', '')">${ic('x')}Remove current link</div>` : ''}
                 ${filtered.length ? filtered.map(res => `
                     <div class="tiny" style="padding:5px 8px; cursor:pointer; ${res.id === r.resource_id ? 'font-weight:bold;' : ''}" onclick="OL.pickResource('${id}', '${res.id}')">${esc(res.name)}</div>
                 `).join('') : `<div class="tiny muted" style="padding:5px 8px;">No matching resources.</div>`}
             </div>
         </span>
     `;
+    if (window.lucide) lucide.createIcons();
 };
 
 OL.openResourcePicker = function(id) {
@@ -529,7 +538,7 @@ OL.openAddErrorModal = function() {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">➕ Add Error / Quirk</div>
+            <div class="modal-title-text"><i data-lucide="plus-circle" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;"></i>Add Error / Quirk</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body" style="max-width:500px; width:100%;">
@@ -576,6 +585,7 @@ OL.openAddErrorModal = function() {
         </div>
     `;
     openModal(html);
+    if (window.lucide) lucide.createIcons();
 };
 
 OL.saveManualError = async function() {
