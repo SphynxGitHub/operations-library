@@ -371,8 +371,9 @@ OL.saveErrorDateField = async function(id, field, value) {
 };
 
 // -------------------------------------------------------------
-// DETAIL MODAL — fully structured: status/project/dates/system up top,
-// message + links, then editable cause/resolution/notes.
+// DETAIL MODAL — compact header strip (status pill + tag row for
+// system/source/date/project/resource), message + links, then a
+// cause/resolution/notes timeline. Resource tag opens a searchable picker.
 // -------------------------------------------------------------
 OL.openErrorDetailModal = function(id) {
     const r = OL.errorLogState.rows.find(x => x.id === id);
@@ -381,64 +382,40 @@ OL.openErrorDetailModal = function(id) {
     const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
     const dateInputVal = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
+    const isResolved = r.status === 'resolved';
+    const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
+    const statusColor = isResolved ? '#22c55e' : '#f59e0b';
+    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
 
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">⚠️ ${esc(r.title || r.service || 'Error Detail')}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:620px; width:100%;">
+        <div class="modal-body" style="max-width:600px; width:100%;">
 
-            <label class="modal-section-label">Overview</label>
-            <div class="card-section" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Status</label>
-                    <select class="modal-input tiny" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
-                        <option value="open" ${r.status !== 'resolved' ? 'selected' : ''}>Open</option>
-                        <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Complete</option>
-                    </select>
-                </div>
-                ${!locked ? `
-                    <div>
-                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
-                        <select class="modal-input tiny" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
-                            <option value="">-- Unassigned --</option>
-                            ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                        </select>
-                    </div>
-                ` : ''}
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resource</label>
-                    ${(r.client_id || OL.errorLogState.lockedClientId) ? `
-                        <select class="modal-input tiny" onchange="OL.assignErrorResource('${r.id}', this.value)">
-                            <option value="">-- None --</option>
-                            <option value="__create_new">+ Create new resource...</option>
-                            ${(state.clients[r.client_id || OL.errorLogState.lockedClientId]?.projectData?.localResources || []).map(res => `<option value="${res.id}" ${r.resource_id === res.id ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
-                        </select>
-                    ` : `<div class="tiny muted" style="padding:7px 0;">Assign a project first</div>`}
-                </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Error Date</label>
-                    <div class="tiny" style="padding:7px 0;">${r.occurred_at ? new Date(r.occurred_at).toLocaleString() : 'Unknown'}</div>
-                </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">System</label>
-                    <div class="tiny" style="padding:7px 0;">${esc(r.service || '—')}</div>
-                </div>
-                ${r.root_id ? `
-                    <div>
-                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Root ID</label>
-                        <div class="tiny" style="padding:7px 0;">${esc(r.root_id)}</div>
-                    </div>
-                ` : ''}
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Source</label>
-                    <div class="tiny" style="padding:7px 0;">${esc(r.source)}</div>
-                </div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <strong style="font-size:15px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
+                <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold; flex-shrink:0;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
+                    <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
+                    <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
+                </select>
             </div>
 
-            <label class="modal-section-label">Error Message</label>
-            <div class="card-section">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+                ${r.service ? `<span class="pill tiny soft">🛠️ ${esc(r.service)}</span>` : ''}
+                <span class="pill tiny soft">${r.source === 'webhook' ? '🔗' : (r.source === 'email' ? '✉️' : '✍️')} ${esc(r.source)}</span>
+                <span class="pill tiny soft">📅 ${esc(occurred)}</span>
+                ${!locked ? `
+                    <select class="tiny" style="border:none; border-radius:var(--radius, 6px); padding:3px 8px; background:rgba(255,255,255,0.06); cursor:pointer;" onchange="OL.assignErrorClientAndRefreshModal('${r.id}', this.value)">
+                        <option value="">📁 Unassigned</option>
+                        ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>📁 ${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                    </select>
+                ` : ''}
+                <span id="error-resource-tag"></span>
+            </div>
+
+            <div style="border-top:1px solid var(--line); padding-top:14px; margin-bottom:14px;">
                 <div style="white-space:pre-wrap; line-height:1.6; font-size:13px;">${esc(r.message || '')}</div>
                 ${(r.history_link || r.zap_link) ? `
                     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
@@ -448,32 +425,104 @@ OL.openErrorDetailModal = function(id) {
                 ` : ''}
             </div>
 
-            <label class="modal-section-label">Cause &amp; Resolution</label>
-            <div class="card-section">
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
-                    <div>
+            <div style="border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:14px;">
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <div style="width:8px; height:8px; border-radius:50%; background:#f59e0b; margin-top:8px; flex-shrink:0;"></div>
+                    <div style="flex:1; min-width:0;">
                         <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
-                        <textarea class="modal-input tiny" rows="3" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
+                        <textarea class="modal-input tiny" rows="2" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
                     </div>
-                    <div>
+                </div>
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <div style="width:8px; height:8px; border-radius:50%; background:#22c55e; margin-top:8px; flex-shrink:0;"></div>
+                    <div style="flex:1; min-width:0;">
                         <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution</label>
-                        <textarea class="modal-input tiny" rows="3" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
+                        <textarea class="modal-input tiny" rows="2" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
                     </div>
                 </div>
-                <div style="margin-bottom:10px;">
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution Date</label>
-                    <input type="date" class="modal-input tiny" style="max-width:200px;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
-                </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
-                    <textarea class="modal-input tiny" rows="2" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <div style="width:8px; height:8px; border-radius:50%; background:var(--accent); margin-top:8px; flex-shrink:0;"></div>
+                    <div style="flex:1; min-width:0; display:flex; gap:14px; flex-wrap:wrap;">
+                        <div style="flex:0 0 160px;">
+                            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution Date</label>
+                            <input type="date" class="modal-input tiny" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
+                        </div>
+                        <div style="flex:1; min-width:180px;">
+                            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
+                            <textarea class="modal-input tiny" rows="2" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
     openModal(html);
+    OL._resourcePickerOpen = false;
+    OL.renderResourceTag(id);
 };
 window.OL.openErrorDetailModal = OL.openErrorDetailModal;
+
+// -------------------------------------------------------------
+// SEARCHABLE RESOURCE PICKER — renders into #error-resource-tag,
+// a compact pill by default, expanding into a search box + filtered
+// list (including "+ Create new resource") when clicked.
+// -------------------------------------------------------------
+OL.renderResourceTag = function(id) {
+    const container = document.getElementById('error-resource-tag');
+    if (!container) return;
+
+    const r = OL.errorLogState.rows.find(x => x.id === id);
+    if (!r) return;
+
+    const clientId = r.client_id || OL.errorLogState.lockedClientId;
+    if (!clientId) {
+        container.outerHTML = `<span id="error-resource-tag" class="tiny muted">Assign a project to link a resource</span>`;
+        return;
+    }
+
+    if (!OL._resourcePickerOpen) {
+        container.outerHTML = `
+            <span id="error-resource-tag" class="pill tiny" style="background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="OL.openResourcePicker('${id}')">
+                🔧 ${r.resource_name ? esc(r.resource_name) : 'Link a resource'}
+            </span>
+        `;
+        return;
+    }
+
+    const resources = state.clients[clientId]?.projectData?.localResources || [];
+    const q = (OL._resourcePickerQuery || '').trim().toLowerCase();
+    const filtered = q ? resources.filter(res => (res.name || '').toLowerCase().includes(q)) : resources;
+
+    container.outerHTML = `
+        <span id="error-resource-tag" style="display:inline-flex; flex-direction:column; gap:4px; width:220px;">
+            <input type="text" class="modal-input tiny" placeholder="Search resources..." value="${esc(OL._resourcePickerQuery || '')}" oninput="OL.setResourcePickerQuery(this.value, '${id}')" autofocus>
+            <div style="max-height:160px; overflow:auto; display:flex; flex-direction:column; gap:2px; background:var(--panel-soft, rgba(0,0,0,0.02)); border:1px solid var(--line); border-radius:6px; padding:4px;">
+                <div class="tiny" style="padding:5px 8px; cursor:pointer; color:var(--accent);" onclick="OL.pickResource('${id}', '__create_new')">+ Create new resource...</div>
+                ${r.resource_id ? `<div class="tiny" style="padding:5px 8px; cursor:pointer;" onclick="OL.pickResource('${id}', '')">✕ Remove current link</div>` : ''}
+                ${filtered.length ? filtered.map(res => `
+                    <div class="tiny" style="padding:5px 8px; cursor:pointer; ${res.id === r.resource_id ? 'font-weight:bold;' : ''}" onclick="OL.pickResource('${id}', '${res.id}')">${esc(res.name)}</div>
+                `).join('') : `<div class="tiny muted" style="padding:5px 8px;">No matching resources.</div>`}
+            </div>
+        </span>
+    `;
+};
+
+OL.openResourcePicker = function(id) {
+    OL._resourcePickerOpen = true;
+    OL._resourcePickerQuery = '';
+    OL.renderResourceTag(id);
+};
+
+OL.setResourcePickerQuery = function(value, id) {
+    OL._resourcePickerQuery = value;
+    OL.renderResourceTag(id);
+};
+
+OL.pickResource = async function(id, resourceId) {
+    OL._resourcePickerOpen = false;
+    await OL.assignErrorResource(id, resourceId);
+    // assignErrorResource already reopens the full modal
+};
 
 // -------------------------------------------------------------
 // MANUAL ADD
