@@ -17,6 +17,8 @@ export const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export const state = {
     activeClientId: null,
     isCloudSynced: false,
+    teamMemberMode: false,
+    currentUser: null,
     viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
     ui: {
         showCompleted: false,
