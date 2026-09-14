@@ -313,6 +313,29 @@ OL.fetchLiveGmailMessages = async function() {
     }
 };
 
+// -------------------------------------------------------------
+// AUTO-SYNC — periodically re-runs the same sync fetchLiveGmailMessages()
+// does, so the feed updates without a manual "Sync Gmail" click while a
+// tab is open. Only fires while Gmail is connected, and skips a tick if a
+// sync (manual or auto) is already in flight. Complements the server-side
+// pg_cron job (see supabase/migrations/auto_sync_cron.sql), which keeps
+// gmail_messages fresh even when no tab is open at all.
+// -------------------------------------------------------------
+OL._gmailAutoSyncTimer = null;
+OL.startGmailAutoSync = function(intervalMs = 5 * 60 * 1000) {
+    if (OL._gmailAutoSyncTimer) return; // already running, don't stack timers
+    OL._gmailAutoSyncTimer = setInterval(() => {
+        const isConnected = state.master?.communications?.gmail?.connected || state.master?.googleConnected || false;
+        if (!isConnected || OL.commTabState.loading) return;
+        OL.fetchLiveGmailMessages();
+    }, intervalMs);
+};
+
+OL.stopGmailAutoSync = function() {
+    if (OL._gmailAutoSyncTimer) clearInterval(OL._gmailAutoSyncTimer);
+    OL._gmailAutoSyncTimer = null;
+};
+
 OL.disconnectGmailAccount = function() {
     if (!confirm("Disconnect Google Account?")) return;
     updateAndSync(() => {
