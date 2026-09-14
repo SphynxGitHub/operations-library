@@ -1324,8 +1324,9 @@ OL.renderInContextTaskModal = function(client, task) {
             <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
                 <div style="min-width:0;">
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
-                        <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
-                            <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
+                        <span class="client-link-badge pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
+                              onclick="OL.closeModal(); OL.navigateToClientProject('${client?.id}')" title="Jump to Workspace">
+                            <i data-lucide="folder" style="width:12px;height:12px; pointer-events:none;"></i> ${esc(client?.meta?.name || 'Workspace')}
                         </span>
                         <span class="pill tiny accent" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
                               onclick="OL.openEditTaskStatusQuickDropdown(event, '${client?.id}', '${task.id}')">
