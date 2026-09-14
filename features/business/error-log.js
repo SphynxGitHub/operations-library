@@ -198,7 +198,7 @@ OL.renderErrorLogRow = function(r, locked) {
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
 
-            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; white-space:normal; word-break:break-word;">
                 ${esc(snippet)}
             </div>
 
