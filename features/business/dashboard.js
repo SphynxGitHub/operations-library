@@ -1,4 +1,4 @@
-import { esc, state } from '../../core/data.js';
+import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
 // -------------------------------------------------------------
 // TASK STREAM FILTER STATE — due-date presets + grouping, mirroring the
@@ -10,12 +10,44 @@ OL.dashboardTaskState = {
     groupBy: 'none'      // 'none' | 'client' | 'date' | 'status' | 'assignee'
 };
 
+// Builds the task list with the exact same normalization the master Task
+// Engine uses (features/business/tasks.js OL.renderBusinessTaskManager),
+// so rows rendered via OL.renderTaskRowHTML here look and behave
+// identically — status dot dropdown, assignee avatar dropdown, inline due
+// date, time logging, workspace link, bulk-select — not a simplified copy.
+OL.getDashboardMasterTasks = function() {
+    const clients = getBusinessScopedClients();
+    return clients.flatMap(c =>
+        (c.projectData?.clientTasks || []).map(t => {
+            const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
+
+            let taskType = "Sphynx Task";
+            if (OL.thirdPartyAssignees.includes(t.assignee)) {
+                taskType = "Developer / 3rd Party Task";
+            } else if (t.isClientTask || (t.assignee && t.assignee !== 'Sphynx Task' && t.assignee !== 'Sphynx')) {
+                taskType = "Client Task";
+            }
+
+            return {
+                ...t,
+                clientName: c.meta?.name || 'Unknown Client',
+                clientId: c.id,
+                teamMembers: teamMembers,
+                assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
+                taskType: taskType,
+                resourceName: t.resourceName || t.category || 'General Resource',
+                loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
+            };
+        })
+    );
+};
+
 OL.renderDailyDashboard = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    const clients = Object.values(state.clients || {});
-    const allTasks = clients.flatMap(c => (c.projectData?.clientTasks || []).map(t => ({ ...t, clientName: c.meta?.name || 'Client', clientId: c.id })));
+    const clients = getBusinessScopedClients();
+    const allTasks = OL.getDashboardMasterTasks();
     const openTasks = allTasks.filter(t => t.status !== 'Done');
     const dueTodayOrOverdue = OL.filterTasksByDueRange(openTasks, 'overdue').length + OL.filterTasksByDueRange(openTasks, 'today').length;
 
@@ -88,10 +120,7 @@ OL.renderDailyDashboard = function() {
 
 OL.setDashboardTaskFilter = function(key, value) {
     OL.dashboardTaskState[key] = value;
-    const clients = Object.values(state.clients || {});
-    const openTasks = clients.flatMap(c => (c.projectData?.clientTasks || [])
-        .filter(t => t.status !== 'Done')
-        .map(t => ({ ...t, clientName: c.meta?.name || 'Client', clientId: c.id })));
+    const openTasks = OL.getDashboardMasterTasks().filter(t => t.status !== 'Done');
 
     const container = document.getElementById('dashboard-task-stream');
     if (container) {
@@ -121,8 +150,13 @@ OL.filterTasksByDueRange = function(tasks, range) {
     });
 };
 
+// Renders rows with OL.renderTaskRowHTML — the exact same row component
+// the master Task Engine uses — so status dot, assignee avatar, inline
+// due date, time logging, workspace link, and bulk-select all behave
+// identically here.
 OL.renderDashboardTaskStream = function(openTasks) {
     const { dueRange, groupBy } = OL.dashboardTaskState;
+    const todayStr = new Date().toISOString().slice(0, 10);
     const filtered = OL.filterTasksByDueRange(openTasks, dueRange)
         .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
 
@@ -131,7 +165,7 @@ OL.renderDashboardTaskStream = function(openTasks) {
     }
 
     if (groupBy === 'none') {
-        return `<div style="display:flex; flex-direction:column; gap:2px;">${filtered.map(t => OL.renderDashboardTaskRow(t)).join('')}</div>`;
+        return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
     }
 
     const groups = {};
@@ -152,28 +186,9 @@ OL.renderDashboardTaskStream = function(openTasks) {
                 <span>${esc(groupTitle)}</span>
                 <span class="pill tiny soft" style="font-size:10px;">${groupTasks.length}</span>
             </div>
-            <div style="display:flex; flex-direction:column; gap:2px;">
-                ${groupTasks.map(t => OL.renderDashboardTaskRow(t)).join('')}
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                ${groupTasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
             </div>
         </div>
     `).join('');
-};
-
-OL.renderDashboardTaskRow = function(t) {
-    const dueLabel = t.dueDate ? new Date(t.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : '';
-    const isOverdue = t.dueDate && new Date(t.dueDate).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
-
-    return `
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor:pointer;"
-             onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
-            <div style="min-width:0;">
-                <strong style="display:block; white-space:normal; word-break:break-word;">${esc(t.title || t.name)}</strong>
-                <div style="display:flex; gap:6px; align-items:center; margin-top:2px; flex-wrap:wrap;">
-                    <span class="pill tiny soft">${esc(t.clientName)}</span>
-                    ${dueLabel ? `<span class="pill tiny soft" style="${isOverdue ? 'color:#ef4444;' : ''}">${esc(dueLabel)}</span>` : ''}
-                </div>
-            </div>
-            <span class="pill tiny accent" style="flex-shrink:0;">${esc(t.status || 'Pending')}</span>
-        </div>
-    `;
 };
