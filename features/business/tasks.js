@@ -624,11 +624,14 @@ OL.renderTaskRowHTML = function(t, todayStr) {
             </div>
 
             <!-- Full-Width Task Title -->
-            <div class="task-title-cell" 
-                 style="font-weight:600; font-size:13px; color:var(--text); cursor:pointer; flex:1; min-width:0; max-width:100%; overflow:hidden; word-break:break-word; overflow-wrap:break-word; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.3;"
+            <div class="task-title-cell"
+                 id="task-title-display-${t.id}"
+                 style="font-weight:600; font-size:13px; color:var(--text); cursor:pointer; flex:1; min-width:0; max-width:100%; overflow:hidden; word-break:break-word; overflow-wrap:break-word; display:flex; align-items:center; gap:6px; line-height:1.3;"
                  title="${esc(t.title || t.name)}"
                  onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
-                ${esc(t.title || t.name)}
+                <span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(t.title || t.name)}</span>
+                <i data-lucide="pencil" style="width:11px;height:11px; flex-shrink:0; opacity:0.5; cursor:pointer;"
+                   onclick="event.stopPropagation(); OL.startInlineTaskTitleEdit('${t.clientId}', '${t.id}')"></i>
             </div>
 
             <!-- Workspace Tag -->
@@ -1413,6 +1416,41 @@ OL.updateTaskTitle = function(clientId, taskId, newTitle) {
     }, clientId);
 
     OL.refreshTaskView();
+};
+
+// -------------------------------------------------------------
+// INLINE ROW TITLE EDIT — swaps the title cell (wherever it's rendered:
+// master task manager, client workspace list, etc.) into a text input
+// without opening the full task modal. Saves on blur/Enter via the same
+// OL.updateTaskTitle used by the modal.
+// -------------------------------------------------------------
+OL.startInlineTaskTitleEdit = function(clientId, taskId) {
+    const cell = document.getElementById(`task-title-display-${taskId}`);
+    if (!cell) return;
+
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t =>
+        String(t.id) === String(taskId) || String(t.key) === String(taskId)
+    );
+    if (!task) return;
+
+    cell.outerHTML = `
+        <div class="task-title-cell" id="task-title-display-${taskId}" style="flex:1; min-width:0; max-width:100%;" onclick="event.stopPropagation();">
+            <input type="text" id="task-title-inline-input-${taskId}" class="modal-input tiny"
+                   value="${esc(task.title || task.name || '')}"
+                   style="width:100%; box-sizing:border-box; font-weight:600; font-size:13px;"
+                   onblur="OL.saveInlineTaskTitleEdit('${clientId}', '${taskId}')"
+                   onkeydown="if(event.key==='Enter'){ this.blur(); } if(event.key==='Escape'){ OL.refreshTaskView(); }">
+        </div>
+    `;
+    const input = document.getElementById(`task-title-inline-input-${taskId}`);
+    if (input) { input.focus(); input.select(); }
+};
+
+OL.saveInlineTaskTitleEdit = function(clientId, taskId) {
+    const input = document.getElementById(`task-title-inline-input-${taskId}`);
+    if (!input) return;
+    OL.updateTaskTitle(clientId, taskId, input.value);
 };
 
 OL.addTaskComment = function(clientId, taskId) {
