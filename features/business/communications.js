@@ -66,6 +66,30 @@ OL.switchCommTab = function(tabName) {
 };
 
 // -------------------------------------------------------------
+// FOCUS-PRESERVING RE-RENDER — several search boxes here re-render their
+// whole container on every keystroke (oninput), which was wiping the
+// input's focus and cursor position after each letter typed. This
+// remembers which element (by id) had focus and where the cursor was,
+// runs the render, then restores both — so typing feels normal again.
+// -------------------------------------------------------------
+OL.reRenderPreservingFocus = function(renderFn) {
+    const active = document.activeElement;
+    const id = active && active.id;
+    const start = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+    const end = active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
+
+    renderFn();
+
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.focus();
+    if (start !== null && typeof el.setSelectionRange === 'function') {
+        try { el.setSelectionRange(start, end); } catch (e) { /* not a text-selectable input, ignore */ }
+    }
+};
+
+// -------------------------------------------------------------
 // 1. UNIFIED CLIENT FEED VIEW (GMAIL MESSAGES SYNCED INTO SUPABASE)
 // -------------------------------------------------------------
 OL.renderCommFeedView = function(commsData, clients) {
@@ -83,7 +107,7 @@ OL.renderCommFeedView = function(commsData, clients) {
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 15px; flex-wrap:wrap; gap:10px;">
                 <div style="display:flex; gap:10px; flex:1; max-width: 350px;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted); margin-top:6px;"></i>
-                    <input type="text" class="modal-input tiny" placeholder="Search communications..." value="${esc(OL.commTabState.query)}" oninput="OL.commTabState.query = this.value; OL.renderBusinessCommunications();">
+                    <input type="text" id="comm-search-input" class="modal-input tiny" placeholder="Search communications..." value="${esc(OL.commTabState.query)}" oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL.commTabState.query = v; OL.renderBusinessCommunications(); });">
                 </div>
                 <div style="display:flex; gap:12px; align-items:center;">
                     ${isConnected ? `
@@ -261,7 +285,7 @@ OL.checkGoogleAuthReturn = function() {
 OL.loadGmailFeed = async function() {
     const { data, error } = await db
         .from('gmail_messages')
-        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, archived')
+        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, archived, participants')
         .eq('archived', OL.commTabState.showArchived)
         .order('date', { ascending: false })
         .limit(GMAIL_FEED_LIMIT);
@@ -274,6 +298,72 @@ OL.loadGmailFeed = async function() {
     if (!state.master) state.master = {};
     if (!state.master.communications) state.master.communications = {};
     state.master.communications.threads = data || [];
+
+    await OL.autoLinkGmailMessagesToTasks();
+};
+
+// -------------------------------------------------------------
+// AUTO-LINK TO TASK — an email is already matched to a client at import
+// time (server-side, via that project's Team tab emails — see
+// supabase/functions/get-gmail-messages). This goes one step further: if
+// exactly one OPEN task in that client is assigned to someone whose email
+// appears among the message's participants (From/To/Cc), link the email
+// to that task automatically. Zero or multiple candidate tasks are left
+// alone for manual linking via the existing "Link to Task" button —
+// ambiguous matches never get guessed.
+// -------------------------------------------------------------
+OL.autoLinkGmailMessagesToTasks = async function() {
+    const threads = state.master?.communications?.threads || [];
+    const candidates = threads.filter(m => m.linked_client_id && !m.linked_task_id && !m.archived && (m.participants || []).length);
+    if (!candidates.length) return;
+
+    const updates = [];
+    for (const m of candidates) {
+        const client = state.clients?.[m.linked_client_id];
+        if (!client) continue;
+
+        const emailByAssignee = OL.buildAssigneeEmailMap(client);
+        const participants = (m.participants || []).map(p => p.toLowerCase());
+
+        const openTasks = (client.projectData?.clientTasks || []).filter(t => t.status !== 'Done');
+        const matches = openTasks.filter(t => {
+            const assigneeEmail = emailByAssignee[(t.assignee || '').toLowerCase()];
+            return assigneeEmail && participants.includes(assigneeEmail);
+        });
+
+        if (matches.length === 1) {
+            updates.push({ id: m.id, taskId: matches[0].id });
+        }
+    }
+
+    if (!updates.length) return;
+
+    await Promise.all(updates.map(u =>
+        db.from('gmail_messages').update({ linked_task_id: u.taskId }).eq('id', u.id)
+    ));
+
+    // Reflect immediately so the caller's next render shows the link
+    // without needing a second round-trip.
+    updates.forEach(u => {
+        const m = threads.find(t => t.id === u.id);
+        if (m) m.linked_task_id = u.taskId;
+    });
+};
+
+// Lowercased assignee-name -> email, drawn from the same two rosters the
+// assignee picker itself uses (OL.openEditTaskAssigneeDropdown): the
+// internal Sphynx team, and this client's own Team tab.
+OL.buildAssigneeEmailMap = function(client) {
+    const map = {};
+    (state.master?.sphynxTeam || []).forEach(m => {
+        if (m.name && m.email) map[m.name.toLowerCase()] = m.email.toLowerCase();
+    });
+    const clientTeam = client?.projectData?.team || client?.projectData?.teamMembers || [];
+    clientTeam.forEach(m => {
+        if (typeof m === 'string' || !m.name || !m.email) return;
+        map[m.name.toLowerCase()] = m.email.toLowerCase();
+    });
+    return map;
 };
 
 // Triggers an actual sync (imports anything new from the inbox into
@@ -477,7 +567,7 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" onclick="OL.setGmailLinkClient('')">Change</button>
                 </div>
             ` : `
-                <input type="text" class="modal-input tiny" placeholder="Search clients..." value="${esc(st.clientQuery || '')}" oninput="OL.setGmailLinkClientQuery(this.value)">
+                <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search clients..." value="${esc(st.clientQuery || '')}" oninput="OL.setGmailLinkClientQuery(this.value)">
                 <div style="max-height:160px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                     ${filteredClients.length ? filteredClients.map(c => `
                         <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.setGmailLinkClient('${c.id}')">${esc(c.meta?.name || 'Unnamed')}</div>
@@ -495,7 +585,7 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
-                <input type="text" class="modal-input tiny" placeholder="Search tasks..." value="${esc(st.taskQuery || '')}" oninput="OL.setGmailLinkTaskQuery(this.value)">
+                <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks..." value="${esc(st.taskQuery || '')}" oninput="OL.setGmailLinkTaskQuery(this.value)">
                 <div style="max-height:160px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                     ${filteredTasks.length ? filteredTasks.map(t => `
                         <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.setGmailLinkTask('${t.id}')">${esc(t.title || t.name)}</div>
@@ -528,13 +618,17 @@ OL.renderGmailLinkStep = function() {
 };
 
 OL.setGmailLinkClientQuery = function(value) {
-    OL._gmailLinkState.clientQuery = value;
-    OL.renderGmailLinkStep();
+    OL.reRenderPreservingFocus(() => {
+        OL._gmailLinkState.clientQuery = value;
+        OL.renderGmailLinkStep();
+    });
 };
 
 OL.setGmailLinkTaskQuery = function(value) {
-    OL._gmailLinkState.taskQuery = value;
-    OL.renderGmailLinkStep();
+    OL.reRenderPreservingFocus(() => {
+        OL._gmailLinkState.taskQuery = value;
+        OL.renderGmailLinkStep();
+    });
 };
 
 OL.setGmailLinkClient = function(id) {
