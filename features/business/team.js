@@ -71,9 +71,17 @@ OL.renderSphynxTeamPage = function() {
                         <span class="pill tiny soft monospace" style="font-size:11px;">
                             $${m.rate || 150}/hr
                         </span>
-                        <div style="display:flex; gap:6px;">
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            ${m.authUserId
+                                ? `<span class="tiny" style="color:#48bb78;" title="Has logged in">✅ Logged in</span>`
+                                : (m.setupToken
+                                    ? `<span class="tiny" style="color:#fbbf24;" title="Setup link sent, not claimed yet">⏳ Link sent</span>`
+                                    : `<span class="tiny muted" title="No login set up">— No login</span>`)}
+                            <button class="btn tiny soft" onclick="OL.openTeamAccessModal('${m.id}')" title="Login & Permissions">
+                                <i data-lucide="key-round" style="width:12px;height:12px;"></i> Access
+                            </button>
                             <button class="btn tiny soft" onclick="OL.openSphynxMemberModal('${m.id}')" title="Edit Member">
-                                <i data-lucide="pencil" style="width:12px;height:12px;"></i> Edit
+                                <i data-lucide="pencil" style="width:12px;height:12px;"></i>
                             </button>
                             <button class="btn tiny soft danger" onclick="OL.removeSphynxTeamMember('${m.id}')" title="Remove Member">
                                 <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
@@ -201,6 +209,85 @@ OL.removeSphynxTeamMember = function(memberId) {
         }
     });
 
+    OL.renderSphynxTeamPage();
+};
+
+// -------------------------------------------------------------
+// LOGIN & PERMISSIONS PROVISIONING — this is what actually decides what a
+// team member can reach once logged in. See core/auth.js hasTeamPermission
+// (checked in app.js for the Business Manager nav + #/business/* routes)
+// and TEAM_PERMISSION_TABS for the exact list of grantable tabs. A real
+// admin login (the admins table) always has full access regardless of
+// this — this panel only governs the Sphynx-team-member login path.
+// -------------------------------------------------------------
+OL.openTeamAccessModal = function(memberId) {
+    const member = state.master?.sphynxTeam?.find(m => m.id === memberId);
+    if (!member) return;
+
+    const tabs = OL.TEAM_PERMISSION_TABS || [];
+    const perms = member.permissions || {};
+
+    const loginStatusHTML = member.authUserId
+        ? `<span style="color:#48bb78;">✅ ${esc(member.name)} has already logged in.</span>`
+        : member.setupToken
+            ? `<span style="color:#fbbf24;">⏳ Setup link generated, not claimed yet.</span>`
+            : `<span class="muted">No login set up yet.</span>`;
+
+    const content = `
+        <div style="padding: 24px; max-width: 480px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="key-round" style="width:20px;height:20px;color:var(--accent);"></i>
+                    Login & Access — ${esc(member.name)}
+                </h3>
+                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+            </div>
+
+            <div style="margin-bottom:20px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
+                <div class="tiny" style="margin-bottom:8px;">${loginStatusHTML}</div>
+                ${!member.authUserId ? `
+                    <button class="btn tiny primary" onclick="OL.copyTeamSetupLink('${member.id}')" style="width:100%;">
+                        ${member.setupToken ? 'Regenerate & Copy Setup Link' : 'Generate & Copy Setup Link'}
+                    </button>
+                    <div class="tiny muted" style="margin-top:6px;">Sends them to a page where they set their own password, using the email on file (${esc(member.email || 'no email set')}).</div>
+                ` : ''}
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">Business Manager Access</label>
+                <div class="tiny muted" style="margin-bottom:10px;">Which tabs this person can see and use once logged in. The Template Vault (master config) is always admin-only, regardless of these.</div>
+                <div style="display:grid; gap:6px;">
+                    ${tabs.map(t => `
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                            <input type="checkbox" id="tm-perm-${t.key}" ${perms[t.key] ? 'checked' : ''}>
+                            <span class="tiny">${esc(t.label)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn tiny soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn tiny primary" style="font-weight:bold;" onclick="OL.saveTeamMemberPermissions('${member.id}')">Save Access</button>
+            </div>
+        </div>
+    `;
+    OL.showOverlayModal(content);
+};
+
+OL.saveTeamMemberPermissions = function(memberId) {
+    const tabs = OL.TEAM_PERMISSION_TABS || [];
+    const permissions = {};
+    tabs.forEach(t => {
+        permissions[t.key] = !!document.getElementById(`tm-perm-${t.key}`)?.checked;
+    });
+
+    updateAndSync(() => {
+        const m = state.master?.sphynxTeam?.find(item => item.id === memberId);
+        if (m) m.permissions = permissions;
+    });
+
+    OL.closeModal();
     OL.renderSphynxTeamPage();
 };
 
