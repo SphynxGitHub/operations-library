@@ -29,7 +29,38 @@ export async function initializeSecurityContext() {
             state.adminMode = true;
             window.FORCE_ADMIN = true;
             window.IS_GUEST = false;
+            state.teamMemberMode = false;
+            state.currentUser = { id: session.user.id, name: 'Admin', role: 'Master Admin', authType: 'admin' };
             console.log("🛠️ Admin Mode Active (real login)");
+            return true;
+        }
+
+        // Not an admin — check if this is a logged-in Sphynx team member
+        // (see supabase/migrations/team_member_login.sql). Team members get
+        // write access like an admin, but are NOT window.FORCE_ADMIN: the
+        // Business Manager nav and #/business/* routes are filtered down to
+        // whatever OL.hasTeamPermission() says their record allows, and the
+        // Template Vault (master config) stays admin-only either way.
+        const { data: masterRow } = await db
+            .from('workspace_masters')
+            .select('sphynx_team')
+            .eq('id', 'main_state')
+            .maybeSingle();
+
+        const teamMember = (masterRow?.sphynx_team || []).find(m => m.authUserId === session.user.id);
+        if (teamMember) {
+            state.adminMode = false;
+            window.FORCE_ADMIN = false;
+            window.IS_GUEST = false;
+            state.teamMemberMode = true;
+            state.currentUser = {
+                id: teamMember.id,
+                name: teamMember.name,
+                role: teamMember.role || 'Team Member',
+                authType: 'team_member',
+                permissions: teamMember.permissions || {}
+            };
+            console.log(`👤 Team Member Mode Active: ${teamMember.name}`);
             return true;
         }
 
@@ -75,6 +106,8 @@ export async function initializeSecurityContext() {
         state.adminMode = true;
         window.FORCE_ADMIN = true;
         window.IS_GUEST = false;
+        state.teamMemberMode = false;
+        state.currentUser = { id: null, name: 'Admin', role: 'Master Admin', authType: 'admin' };
         console.log("🛠️ Admin Mode Active (LEGACY URL key — remove this fallback once real admin login is confirmed)");
         return true;
     }
@@ -190,6 +223,72 @@ export async function signOut() {
     window.location.href = 'login.html';
 }
 
+/*===================== SPHYNX TEAM PERMISSIONS ==================*/
+
+// The set of Business Manager tabs that are provisionable per team member.
+// (Template Vault / master config tabs are intentionally not in this list
+// — those stay admin-only regardless of what's granted here.)
+export const TEAM_PERMISSION_TABS = [
+    { key: 'communications', label: 'Communications' },
+    { key: 'calendar', label: 'Calendar' },
+    { key: 'errors', label: 'Error Tracking' },
+    { key: 'tasks', label: 'Task Manager' },
+    { key: 'time-reports', label: 'Time Reports' },
+    { key: 'financials', label: 'Financials' },
+    { key: 'team', label: 'Sphynx Team' },
+    { key: 'clients', label: 'Clients' }
+];
+
+// True for real admins (who always see everything) and for a team member
+// whose record has this tab explicitly granted. False otherwise — callers
+// (app.js nav + route guard) treat false as "don't show / don't route".
+export function hasTeamPermission(tabKey) {
+    if (window.FORCE_ADMIN === true) return true;
+    if (!state.teamMemberMode) return false;
+    return !!(state.currentUser?.permissions && state.currentUser.permissions[tabKey]);
+}
+
+// Display name for attribution (task comments, etc.) — falls back to a
+// generic label for the legacy ?admin=pizza123 path or anything else
+// where we don't have a real identified person.
+export function getCurrentUserName() {
+    return state.currentUser?.name || (window.FORCE_ADMIN ? 'Admin' : 'Unknown User');
+}
+
+/*===================== TEAM SETUP LINKS (mirrors client setup links) ==================*/
+
+// Generates a one-time setup link for a Sphynx team member so they can set
+// their own password. team-setup.html later claims it via claim_team_setup
+// (see supabase/migrations/team_member_login.sql).
+export function generateTeamSetupLink(memberId, email) {
+    const member = (state.master.sphynxTeam || []).find(m => m.id === memberId);
+    if (!member) return null;
+
+    const token = crypto.randomUUID();
+    member.setupToken = token;
+    member.setupEmail = email || member.email || '';
+    member.setupUsed = false;
+
+    persist();
+
+    return new URL(`team-setup.html?token=${token}`, window.location.href).toString();
+}
+
+export function copyTeamSetupLink(memberId) {
+    const member = (state.master.sphynxTeam || []).find(m => m.id === memberId);
+    const email = member?.email || '';
+
+    if (!email) {
+        alert('Add an email for this team member first — it\'ll be prefilled on their setup page.');
+        return;
+    }
+
+    const url = generateTeamSetupLink(memberId, email);
+    navigator.clipboard.writeText(url);
+    alert('Setup link copied to clipboard!');
+    if (typeof window.OL?.renderSphynxTeamPage === 'function') window.OL.renderSphynxTeamPage();
+}
+
 /*===================== SETUP LINKS (replaces old share-link) ==================*/
 
 // Generates a one-time setup link for a client/partner project and saves
@@ -228,7 +327,9 @@ export function copySetupLink(clientId) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     initializeSecurityContext, checkPermission, isAdmin, getAdminQuery,
-    signOut, generateSetupLink, copySetupLink, renderClientAccessList
+    signOut, generateSetupLink, copySetupLink, renderClientAccessList,
+    hasTeamPermission, getCurrentUserName, generateTeamSetupLink, copyTeamSetupLink,
+    TEAM_PERMISSION_TABS
 });
 
 // Retired in this version — link-token access is gone, and neither was
