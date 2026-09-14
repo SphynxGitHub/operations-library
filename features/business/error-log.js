@@ -192,7 +192,7 @@ OL.renderErrorLogRow = function(r, locked) {
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
                 ${occurred ? `<span class="pill tiny soft">${ic('calendar')}${esc(occurred)}</span>` : ''}
                 ${r.service ? `<span class="pill tiny soft">${ic('wrench')}${esc(r.service)}</span>` : ''}
-                ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent);">${ic('folder')}${esc(clientName)}</span>` : ''}
+                ${clientName ? `<span class="client-link-badge pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="event.stopPropagation(); OL.navigateToClientProject('${r.client_id}')" title="Jump to Workspace">${ic('folder')}${esc(clientName)}</span>` : ''}
                 ${r.resource_name ? `<span class="pill tiny soft">${ic('git-branch')}${esc(r.resource_name)}</span>` : ''}
                 ${r.outage ? `<span class="pill tiny" style="border:none; background:rgba(239,68,68,0.15); color:#ef4444;">${ic('alert-circle')}Outage</span>` : ''}
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
