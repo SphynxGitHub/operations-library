@@ -446,6 +446,29 @@ OL.processCalendarAutomations = async function() {
 window.OL.renderBusinessCalendar = OL.renderBusinessCalendar;
 
 // -------------------------------------------------------------
+// AUTO-SYNC — periodically re-runs the same sync fetchLiveGoogleCalendar()
+// does, so events update without a manual "Sync Calendar" click while a
+// tab is open. Only fires while Google is connected, and skips a tick if a
+// sync (manual or auto) is already in flight. Complements the server-side
+// pg_cron job (see supabase/migrations/auto_sync_cron.sql), which keeps
+// calendar_events fresh even when no tab is open at all.
+// -------------------------------------------------------------
+OL._calendarAutoSyncTimer = null;
+OL.startCalendarAutoSync = function(intervalMs = 5 * 60 * 1000) {
+    if (OL._calendarAutoSyncTimer) return; // already running, don't stack timers
+    OL._calendarAutoSyncTimer = setInterval(() => {
+        const isConnected = state.master?.communications?.gmail?.connected || state.master?.googleConnected || false;
+        if (!isConnected || OL.calendarState.loading) return;
+        OL.fetchLiveGoogleCalendar();
+    }, intervalMs);
+};
+
+OL.stopCalendarAutoSync = function() {
+    if (OL._calendarAutoSyncTimer) clearInterval(OL._calendarAutoSyncTimer);
+    OL._calendarAutoSyncTimer = null;
+};
+
+// -------------------------------------------------------------
 // MANAGE CALENDARS — pick which Google Calendars to sync
 // -------------------------------------------------------------
 OL.openManageCalendarsModal = async function() {
