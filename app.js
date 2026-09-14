@@ -62,6 +62,15 @@ window.addEventListener("load", async () => {
     }
 
     OL.sync();
+
+    // Background auto-refresh: keeps the Gmail feed and calendar current
+    // without a manual "Sync" click while this tab is open. Each timer
+    // no-ops on ticks where Google isn't connected yet, so it's safe to
+    // start immediately rather than waiting on OL.sync() to resolve.
+    // Server-side coverage (syncing even with no tab open) comes from the
+    // pg_cron job in supabase/migrations/auto_sync_cron.sql.
+    if (typeof OL.startGmailAutoSync === 'function') OL.startGmailAutoSync();
+    if (typeof OL.startCalendarAutoSync === 'function') OL.startCalendarAutoSync();
 });
 
 OL.goToDashboard = function(hash) {
