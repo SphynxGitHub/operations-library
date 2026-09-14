@@ -1024,6 +1024,20 @@ OL.refreshTaskView = function() {
     } else if (typeof OL.renderBusinessTaskManager === 'function') {
         OL.renderBusinessTaskManager();
     }
+
+    // If the task detail modal is currently open (opened from the dashboard,
+    // master task manager, or a client workspace), re-render it too so field
+    // edits (status/assignee/due date/title) made via its controls — or via
+    // a row elsewhere while the modal happens to be open — show up live
+    // instead of only updating the page underneath.
+    const ctx = OL._activeModalTaskContext;
+    if (ctx) {
+        const client = state.clients?.[ctx.clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(ctx.taskId) || String(t.key) === String(ctx.taskId)
+        );
+        if (client && task) OL.renderInContextTaskModal(client, task);
+    }
 };
 
 OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
@@ -1247,6 +1261,7 @@ OL.showOverlayModal = function(htmlContent) {
 };
 
 OL.closeModal = function() {
+    OL._activeModalTaskContext = null;
     const layer = document.getElementById("modal-layer");
     if (layer) {
         layer.style.display = "none";
@@ -1288,6 +1303,7 @@ OL.openTaskInContext = async function(clientId, taskId) {
 };
 
 OL.renderInContextTaskModal = function(client, task) {
+    OL._activeModalTaskContext = { clientId: client?.id, taskId: task.id };
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(task.assignee);
     const isClientAssigned = task.assignee !== 'Sphynx Task' && !is3rdParty;
 
@@ -1311,11 +1327,13 @@ OL.renderInContextTaskModal = function(client, task) {
                         <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
                             <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
                         </span>
-                        <span class="pill tiny accent" style="font-weight:bold;">
-                            Status: ${esc(task.status || 'Pending Sphynx Action')}
+                        <span class="pill tiny accent" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+                              onclick="OL.openEditTaskStatusQuickDropdown(event, '${client?.id}', '${task.id}')">
+                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Status: ${esc(task.status || 'Pending Sphynx Action')}
                         </span>
-                        <span class="pill tiny soft" style="font-weight:bold; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}">
-                            Assignee: ${esc(task.assignee || 'Sphynx Task')}
+                        <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}"
+                              onclick="OL.openEditTaskAssigneeDropdown(event, '${client?.id}', '${task.id}')">
+                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee: ${esc(task.assignee || 'Sphynx Task')}
                         </span>
                     </div>
 
@@ -1325,7 +1343,10 @@ OL.renderInContextTaskModal = function(client, task) {
                     </div>
 
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
-                        <div><strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Unscheduled'}</div>
+                        <div style="cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${client?.id}', '${task.id}')">
+                            <strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : (task.dueRelativeTo ? 'Relative (see below)' : 'Unscheduled')}
+                            <i data-lucide="pencil" style="width:10px;height:10px; opacity:0.5; margin-left:4px;"></i>
+                        </div>
                         <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
                         <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
