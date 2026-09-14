@@ -1401,7 +1401,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         </label>
 
         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
-            <input type="text" id="task-comment-author-${task.id}" class="modal-input tiny" placeholder="Your name (optional)">
+            <div class="tiny muted">Posting as <strong>${esc(OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team')}</strong></div>
             <textarea id="task-comment-input-${task.id}" class="modal-input tiny" rows="3" placeholder="Add a comment..." style="width:100%; box-sizing:border-box;"></textarea>
             <button class="btn tiny primary" style="align-self:flex-end;" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
                 <i data-lucide="send" style="width:12px;height:12px;"></i> Post
@@ -1477,10 +1477,9 @@ OL.saveInlineTaskTitleEdit = function(clientId, taskId) {
 
 OL.addTaskComment = function(clientId, taskId) {
     const textEl = document.getElementById(`task-comment-input-${taskId}`);
-    const authorEl = document.getElementById(`task-comment-author-${taskId}`);
     const text = (textEl?.value || '').trim();
     if (!text) return;
-    const author = (authorEl?.value || '').trim() || 'Sphynx Team';
+    const author = (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Sphynx Team';
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
