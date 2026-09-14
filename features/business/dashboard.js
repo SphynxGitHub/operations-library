@@ -164,10 +164,10 @@ OL.renderDashboardTaskRow = function(t) {
     const isOverdue = t.dueDate && new Date(t.dueDate).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
 
     return `
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor:pointer;"
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor:pointer;"
              onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
             <div style="min-width:0;">
-                <strong style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(t.title || t.name)}</strong>
+                <strong style="display:block; white-space:normal; word-break:break-word;">${esc(t.title || t.name)}</strong>
                 <div style="display:flex; gap:6px; align-items:center; margin-top:2px; flex-wrap:wrap;">
                     <span class="pill tiny soft">${esc(t.clientName)}</span>
                     ${dueLabel ? `<span class="pill tiny soft" style="${isOverdue ? 'color:#ef4444;' : ''}">${esc(dueLabel)}</span>` : ''}
