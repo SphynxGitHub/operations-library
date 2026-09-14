@@ -355,8 +355,8 @@ window.buildLayout = function () {
     let showHome = true;
 
     if (isAdmin) {
-        homeLabel = "Global Registry";
-        homeAction = `OL.goToDashboard('#/business/clients')`;
+        homeLabel = "Daily Snapshot";
+        homeAction = `OL.goToDashboard('#/business/dashboard')`;
     } else if (client && client.meta?.status === "Partner") {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
