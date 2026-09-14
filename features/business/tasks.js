@@ -1289,79 +1289,68 @@ OL.renderInContextTaskModal = function(client, task) {
     const isClientAssigned = task.assignee !== 'Sphynx Task' && !is3rdParty;
 
     const content = `
-        <div style="padding: 24px; max-width: 650px; width: 100%;" onclick="event.stopPropagation()">
+        <div style="padding: 24px; max-width: 920px; width: 100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:10px; font-size:18px;">
-                    <i data-lucide="check-square" style="width:22px;height:22px;color:var(--accent);"></i>
-                    ${esc(task.title || task.name)}
-                </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px;">✕</button>
+                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+                    <i data-lucide="check-square" style="width:22px;height:22px;color:var(--accent); flex-shrink:0;"></i>
+                    <input type="text" class="modal-input" id="task-title-input-${task.id}"
+                           value="${esc(task.title || task.name || '')}"
+                           style="font-size:18px; font-weight:bold; border:none; background:transparent; padding:2px 4px; width:100%;"
+                           onblur="OL.updateTaskTitle('${client?.id}', '${task.id}', this.value)"
+                           onkeydown="if(event.key==='Enter'){ this.blur(); }">
+                </div>
+                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0; margin-left:10px;">✕</button>
             </div>
 
-            <div class="modal-body">
-                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
-                    <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
-                        <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
-                    </span>
-                    <span class="pill tiny accent" style="font-weight:bold;">
-                        Status: ${esc(task.status || 'Pending Sphynx Action')}
-                    </span>
-                    <span class="pill tiny soft" style="font-weight:bold; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}">
-                        Assignee: ${esc(task.assignee || 'Sphynx Task')}
-                    </span>
-                </div>
-
-                <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
-                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
-                    <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
-                </div>
-
-                <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
-                    <div><strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Unscheduled'}</div>
-                    <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
-                    <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
-                    <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
-                </div>
-
-                ${task.timeAuditNote ? `
-                    <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
-                        <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
+            <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
+                <div style="min-width:0;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
+                        <span class="pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                            <i data-lucide="folder" style="width:12px;height:12px;"></i> ${esc(client?.meta?.name || 'Workspace')}
+                        </span>
+                        <span class="pill tiny accent" style="font-weight:bold;">
+                            Status: ${esc(task.status || 'Pending Sphynx Action')}
+                        </span>
+                        <span class="pill tiny soft" style="font-weight:bold; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}">
+                            Assignee: ${esc(task.assignee || 'Sphynx Task')}
+                        </span>
                     </div>
-                ` : ''}
 
-                ${(task.clickupComments && task.clickupComments.length) ? `
+                    <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
+                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
+                        <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
+                        <div><strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Unscheduled'}</div>
+                        <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
+                        <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
+                        <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
+                    </div>
+
+                    ${task.timeAuditNote ? `
+                        <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
+                            <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
+                        </div>
+                    ` : ''}
+
                     <div style="margin-bottom: 20px;">
                         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-                            <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i>
-                            Comments (imported from ClickUp)
+                            <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
                         </label>
-                        <div style="display:grid; gap:8px; max-height:220px; overflow:auto;">
-                            ${task.clickupComments.map(c => `
-                                <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line);">
-                                    ${(c.author || c.date) ? `
-                                        <div class="tiny muted bold" style="margin-bottom:4px;">
-                                            ${esc(c.author || 'Unknown')}${c.date ? ` · ${esc(c.date)}` : ''}
-                                        </div>
-                                    ` : ''}
-                                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${esc(c.text)}</div>
-                                </div>
-                            `).join('')}
-                        </div>
+                        <div id="linked-emails-list" class="tiny muted">Loading…</div>
                     </div>
-                ` : ''}
 
-                <div style="margin-bottom: 20px;">
-                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-                        <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
-                    </label>
-                    <div id="linked-emails-list" class="tiny muted">Loading…</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
+                        <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:6px;">
+                            <i data-lucide="pencil" style="width:12px;height:12px;"></i> Adjust Logged Time
+                        </button>
+                        <button class="btn primary tiny" onclick="OL.closeModal()" style="font-weight:bold;">Close Window</button>
+                    </div>
                 </div>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
-                    <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:6px;">
-                        <i data-lucide="pencil" style="width:12px;height:12px;"></i> Adjust Logged Time
-                    </button>
-                    <button class="btn primary tiny" onclick="OL.closeModal()" style="font-weight:bold;">Close Window</button>
+                <div id="task-comments-sidebar-${task.id}" style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
+                    ${OL.renderTaskCommentsSidebarHTML(client, task)}
                 </div>
             </div>
         </div>
@@ -1369,6 +1358,90 @@ OL.renderInContextTaskModal = function(client, task) {
 
     OL.showOverlayModal(content);
     OL.loadLinkedEmailsForTask(task.id);
+};
+
+// -------------------------------------------------------------
+// COMMENTS SIDEBAR — internal comments (task.comments, stored with the
+// task) merged with any imported ClickUp comments (task.clickupComments,
+// read-only, kept separate from the source data). Newest first.
+// -------------------------------------------------------------
+OL.renderTaskCommentsSidebarHTML = function(client, task) {
+    const internal = (task.comments || []).map(c => ({ ...c, _source: 'internal' }));
+    const imported = (task.clickupComments || []).map(c => ({ ...c, _source: 'clickup' }));
+    const all = [...internal, ...imported].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+    return `
+        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+            <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i> Comments
+        </label>
+
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+            <input type="text" id="task-comment-author-${task.id}" class="modal-input tiny" placeholder="Your name (optional)">
+            <textarea id="task-comment-input-${task.id}" class="modal-input tiny" rows="3" placeholder="Add a comment..." style="width:100%; box-sizing:border-box;"></textarea>
+            <button class="btn tiny primary" style="align-self:flex-end;" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
+                <i data-lucide="send" style="width:12px;height:12px;"></i> Post
+            </button>
+        </div>
+
+        <div style="display:grid; gap:8px; max-height:420px; overflow:auto;">
+            ${all.length ? all.map(c => `
+                <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                    <div class="tiny muted bold" style="margin-bottom:4px; display:flex; justify-content:space-between; gap:8px;">
+                        <span>${esc(c.author || 'Unknown')}${c._source === 'clickup' ? ' <span class="pill tiny soft" style="font-size:9px; margin-left:4px;">ClickUp</span>' : ''}</span>
+                        <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
+                    </div>
+                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${esc(c.text)}</div>
+                </div>
+            `).join('') : `<div class="tiny muted">No comments yet.</div>`}
+        </div>
+    `;
+};
+
+OL.updateTaskTitle = function(clientId, taskId, newTitle) {
+    const trimmed = (newTitle || '').trim();
+    if (!trimmed) return; // don't allow blanking the title out
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+        if (task) {
+            task.title = trimmed;
+            task.name = trimmed;
+        }
+    }, clientId);
+
+    OL.refreshTaskView();
+};
+
+OL.addTaskComment = function(clientId, taskId) {
+    const textEl = document.getElementById(`task-comment-input-${taskId}`);
+    const authorEl = document.getElementById(`task-comment-author-${taskId}`);
+    const text = (textEl?.value || '').trim();
+    if (!text) return;
+    const author = (authorEl?.value || '').trim() || 'Sphynx Team';
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+        if (task) {
+            if (!task.comments) task.comments = [];
+            task.comments.push({ id: uid(), author, text, date: new Date().toISOString() });
+        }
+    }, clientId);
+
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t =>
+        String(t.id) === String(taskId) || String(t.key) === String(taskId)
+    );
+    const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
+    if (sidebar && task) {
+        sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
+        if (window.lucide) lucide.createIcons();
+    }
 };
 
 OL.loadLinkedEmailsForTask = async function(taskId) {
