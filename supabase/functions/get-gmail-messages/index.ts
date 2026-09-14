@@ -238,6 +238,7 @@ serve(async (req) => {
           snippet: detail.snippet || "",
           body: body.slice(0, 20000),
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
+          participants: Array.from(participantEmails),
           // Only auto-link when exactly one project matches — ambiguous
           // matches are left for manual linking rather than guessed.
           linked_client_id: matchedClientIds.length === 1 ? matchedClientIds[0] : null
