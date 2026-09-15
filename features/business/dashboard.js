@@ -1,4 +1,4 @@
-import { esc, state, getBusinessScopedClients } from '../../core/data.js';
+import { esc, state, db, getBusinessScopedClients } from '../../core/data.js';
 
 // -------------------------------------------------------------
 // TASK STREAM FILTER STATE — due-date presets + grouping (mirroring the
@@ -38,6 +38,7 @@ OL.getDashboardMasterTasks = function() {
 
             return {
                 ...t,
+                _type: 'task',
                 clientName: c.meta?.name || 'Unknown Client',
                 clientId: c.id,
                 teamMembers: teamMembers,
@@ -50,17 +51,60 @@ OL.getDashboardMasterTasks = function() {
     );
 };
 
+// Calendar events, normalized to the same shape tasks use for filtering/
+// sorting (dueDate = the event's start time) so they can be merged into
+// one stream. Cached and loaded once per session (like the Gmail feed),
+// covering a rolling window (30 days back, 60 ahead) — refreshed on
+// demand via OL.loadDashboardEvents if you need it wider later.
+OL._dashboardEventsCache = null; // null = not loaded yet; [] once loaded
+
+OL.loadDashboardEvents = async function() {
+    const windowStart = new Date(); windowStart.setDate(windowStart.getDate() - 30);
+    const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
+
+    const { data, error } = await db.from('calendar_events')
+        .select('id, title, start, end, all_day, linked_client_id, assignee, billable, logged_hours, duration_hours_snapshot, comments')
+        .gte('start', windowStart.toISOString())
+        .lte('start', windowEnd.toISOString())
+        .order('start', { ascending: true });
+
+    if (error) { console.error('Failed to load dashboard events:', error.message); OL._dashboardEventsCache = []; return; }
+
+    OL._dashboardEventsCache = data || [];
+    if (typeof OL.applyEventTimeRecalculation === 'function') await OL.applyEventTimeRecalculation(OL._dashboardEventsCache);
+};
+
+OL.getDashboardEventItems = function() {
+    return (OL._dashboardEventsCache || []).map(e => ({
+        ...e,
+        _type: 'event',
+        dueDate: e.start,
+        assignee: e.assignee || 'Unassigned',
+        status: null,
+        clientId: e.linked_client_id,
+        clientName: e.linked_client_id ? (state.clients[e.linked_client_id]?.meta?.name || 'Project') : 'Unassigned'
+    }));
+};
+
 OL.renderDailyDashboard = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
+    if (OL._dashboardEventsCache === null) {
+        OL._dashboardEventsCache = []; // prevents a second load firing while this one's in flight
+        OL.loadDashboardEvents().then(() => OL.renderDailyDashboard());
+    }
+
     const clients = getBusinessScopedClients();
     const allTasks = OL.getDashboardMasterTasks();
     const openTasks = allTasks.filter(t => t.status !== 'Done');
-    const dueTodayOrOverdue = OL.filterTasksByDueRange(openTasks, 'overdue').length + OL.filterTasksByDueRange(openTasks, 'today').length;
+    const eventItems = OL.getDashboardEventItems();
+    const allItems = [...openTasks, ...eventItems];
 
-    const assigneeOptions = OL.getDistinctAssignees(openTasks);
-    const statusOptions = OL.getDistinctStatuses(openTasks);
+    const dueTodayOrOverdue = OL.filterTasksByDueRange(allItems, 'overdue').length + OL.filterTasksByDueRange(allItems, 'today').length;
+
+    const assigneeOptions = OL.getDistinctAssignees(allItems);
+    const statusOptions = OL.getDistinctStatuses(openTasks); // events have no status concept
 
     if (!OL._dashboardAssigneeDefaulted) {
         OL._dashboardAssigneeDefaulted = true;
@@ -81,7 +125,7 @@ OL.renderDailyDashboard = function() {
         <div class="section-header">
             <div>
                 <h2>☀️ Daily Command Dashboard</h2>
-                <div class="small muted">Overview of operations, active tasks, and client communications</div>
+                <div class="small muted">Overview of operations, active tasks, events, and client communications</div>
             </div>
         </div>
 
@@ -103,7 +147,7 @@ OL.renderDailyDashboard = function() {
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items:start;">
             <div class="card" style="padding: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
-                    <h3 style="margin:0;">📋 High-Priority Task Stream</h3>
+                    <h3 style="margin:0;">📋 High-Priority Task &amp; Event Stream</h3>
                     <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
                         <button class="btn tiny soft" onclick="OL.toggleShowTaskComments()" style="display:flex; align-items:center; gap:6px;">
                             <i data-lucide="${OL.showTaskComments ? 'eye-off' : 'eye'}" style="width:12px;height:12px;"></i> ${OL.showTaskComments ? 'Hide' : 'Show'} Comments
@@ -149,7 +193,7 @@ OL.renderDailyDashboard = function() {
                     </div>
                 </div>
                 <div id="dashboard-task-stream">
-                    ${OL.renderDashboardTaskStream(openTasks)}
+                    ${OL.renderDashboardTaskStream(allItems)}
                 </div>
             </div>
 
@@ -165,27 +209,23 @@ OL.renderDailyDashboard = function() {
 
 OL.setDashboardTaskFilter = function(key, value) {
     OL.dashboardTaskState[key] = value;
-    const openTasks = OL.getDashboardMasterTasks().filter(t => t.status !== 'Done');
-
-    // Assignee/status option lists can change what's available, and the
-    // header itself needs to reflect the new selection, so re-render the
-    // whole dashboard rather than just the list container.
     OL.renderDailyDashboard();
 };
 
 // today/week/next-2-weeks/overdue are computed off local midnight so an
-// item due "today" doesn't flip buckets depending on time of day.
-OL.filterTasksByDueRange = function(tasks, range) {
-    if (range === 'all') return tasks;
+// item due "today" doesn't flip buckets depending on time of day. Works
+// for both tasks (dueDate) and events (dueDate = start), same field name.
+OL.filterTasksByDueRange = function(items, range) {
+    if (range === 'all') return items;
 
     const startOfDay = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
     const today = startOfDay(new Date());
     const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
     const twoWeeksOut = new Date(today); twoWeeksOut.setDate(twoWeeksOut.getDate() + 14);
 
-    return tasks.filter(t => {
-        if (!t.dueDate) return false;
-        const due = startOfDay(new Date(t.dueDate));
+    return items.filter(item => {
+        if (!item.dueDate) return false;
+        const due = startOfDay(new Date(item.dueDate));
         if (range === 'overdue') return due < today;
         if (range === 'today') return due.getTime() === today.getTime();
         if (range === 'week') return due >= today && due <= endOfWeek;
@@ -194,48 +234,58 @@ OL.filterTasksByDueRange = function(tasks, range) {
     });
 };
 
-// Renders rows with OL.renderTaskRowWithMentions — the same row the
-// master Task Engine uses (status dot, assignee avatar, inline due date,
-// time logging, workspace link, bulk-select), plus an @mention sub-row
-// under any task where you were tagged, and mention-first ordering so
-// those tasks float to the top of whichever filtered/grouped view is
-// showing.
-OL.renderDashboardTaskStream = function(openTasks) {
+// Status filter only applies to tasks — events have no status concept
+// yet, so they pass through regardless of which status is selected.
+OL.filterDashboardItemsByAssigneeStatus = function(items, assignee, status) {
+    return items.filter(item => {
+        const assigneeMatch = (assignee === 'all') || (item.assignee || 'Unassigned') === assignee;
+        const statusMatch = (status === 'all') || item._type === 'event' || (item.status || 'Pending Sphynx Action') === status;
+        return assigneeMatch && statusMatch;
+    });
+};
+
+// Renders tasks via OL.renderTaskRowWithMentions and events via
+// OL.renderEventRowHTML — both styled the same (task-row-card), sorted
+// together by due date / event time, with mention-tagged items floating
+// to the top of whichever bucket they land in.
+OL.renderDashboardTaskStream = function(allItems) {
     const { dueRange, groupBy, assignee, status } = OL.dashboardTaskState;
     const todayStr = new Date().toISOString().slice(0, 10);
     const filtered = OL.sortTasksMentionsFirst(
-        OL.filterTasksByAssigneeStatus(OL.filterTasksByDueRange(openTasks, dueRange), assignee, status)
+        OL.filterDashboardItemsByAssigneeStatus(OL.filterTasksByDueRange(allItems, dueRange), assignee, status)
             .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
     );
 
     if (!filtered.length) {
-        return `<div class="tiny muted">No tasks match this filter.</div>`;
+        return `<div class="tiny muted">No tasks or events match this filter.</div>`;
     }
 
+    const renderItem = item => item._type === 'event' ? OL.renderEventRowHTML(item) : OL.renderTaskRowWithMentions(item, todayStr);
+
     if (groupBy === 'none') {
-        return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}</div>`;
+        return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(renderItem).join('')}</div>`;
     }
 
     const groups = {};
-    filtered.forEach(t => {
+    filtered.forEach(item => {
         let key = 'Other';
-        if (groupBy === 'client') key = t.clientName || 'Client';
-        else if (groupBy === 'status') key = t.status || 'Pending Sphynx Action';
-        else if (groupBy === 'assignee') key = t.assignee || 'Sphynx Task';
-        else if (groupBy === 'date') key = t.dueDate ? new Date(t.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : 'Unscheduled';
+        if (groupBy === 'client') key = item.clientName || 'Client';
+        else if (groupBy === 'status') key = item._type === 'event' ? 'Scheduled Events' : (item.status || 'Pending Sphynx Action');
+        else if (groupBy === 'assignee') key = item.assignee || 'Sphynx Task';
+        else if (groupBy === 'date') key = item.dueDate ? new Date(item.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : 'Unscheduled';
 
         if (!groups[key]) groups[key] = [];
-        groups[key].push(t);
+        groups[key].push(item);
     });
 
-    return Object.entries(groups).map(([groupTitle, groupTasks]) => `
+    return Object.entries(groups).map(([groupTitle, groupItems]) => `
         <div style="margin-bottom: 16px;">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display:flex; align-items:center; gap:8px;">
                 <span>${esc(groupTitle)}</span>
-                <span class="pill tiny soft" style="font-size:10px;">${groupTasks.length}</span>
+                <span class="pill tiny soft" style="font-size:10px;">${groupItems.length}</span>
             </div>
             <div style="display:flex; flex-direction:column; gap:6px;">
-                ${groupTasks.map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}
+                ${groupItems.map(renderItem).join('')}
             </div>
         </div>
     `).join('');
