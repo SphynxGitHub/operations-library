@@ -721,6 +721,8 @@ export function _geRenderChecklistItem(blockId, item, idx) {
     return `
         <div id="ge-cli-${item.id}" style="display:flex;align-items:center;gap:8px;
              padding:6px 8px;border-radius:7px;transition:background 0.12s;"
+             ondragover="event.preventDefault();"
+             ondrop="OL._geChecklistDrop(event, '${blockId}', '${item.id}')"
              onmouseover="this.style.background='var(--panel-soft)'"
              onmouseout="this.style.background='transparent'">
             <input type="checkbox"
@@ -728,6 +730,11 @@ export function _geRenderChecklistItem(blockId, item, idx) {
                    onchange="OL._geToggleChecklistItem('${blockId}', '${item.id}', this.checked)"
                    style="width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--accent);">
             ${canEdit ? `
+                <span draggable="true" class="ge-cli-drag-handle" title="Drag to reorder"
+                      style="cursor:grab; color:var(--text-muted); flex-shrink:0; display:flex; align-items:center;"
+                      ondragstart="OL._geChecklistDragStart(event, '${blockId}', '${item.id}')">
+                    <i data-lucide="grip-vertical" style="width:13px;height:13px; pointer-events:none;"></i>
+                </span>
                 <input type="text"
                        value="${esc(item.text || '')}"
                        placeholder="Checklist item..."
@@ -735,7 +742,7 @@ export function _geRenderChecklistItem(blockId, item, idx) {
                               font-size:13px;color:${item.checked ? 'var(--text-muted)' : 'var(--text-main)'};
                               font-family:inherit;text-decoration:${item.checked ? 'line-through' : 'none'};"
                        onblur="OL._geUpdateChecklistItem('${blockId}', '${item.id}', 'text', this.value)"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();OL._geAddChecklistItem('${blockId}');}
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();OL._geUpdateChecklistItem('${blockId}','${item.id}','text',this.value);OL._geAddChecklistItem('${blockId}');}
                                   if(event.key==='Backspace'&&this.value===''){event.preventDefault();OL._geDeleteChecklistItem('${blockId}','${item.id}');}">
                 <button onclick="OL._geDeleteChecklistItem('${blockId}', '${item.id}')"
                         style="background:none;border:none;cursor:pointer;
@@ -805,6 +812,39 @@ export function _geUpdateChecklistItem(blockId, itemId, field, value) {
     const item = (block?.data?.items || []).find(i => i.id === itemId);
     if (item) { item[field] = value; OL.persist(); }
 };
+
+let _geDraggedChecklistItemId = null;
+
+export function _geChecklistDragStart(event, blockId, itemId) {
+    _geDraggedChecklistItemId = itemId;
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+export function _geChecklistDrop(event, blockId, targetItemId) {
+    event.preventDefault();
+    const draggedId = _geDraggedChecklistItemId;
+    _geDraggedChecklistItemId = null;
+    if (!draggedId || draggedId === targetItemId) return;
+
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block || !block.data.items) return;
+
+    const items = block.data.items;
+    const fromIdx = items.findIndex(i => i.id === draggedId);
+    const toIdx = items.findIndex(i => i.id === targetItemId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const [moved] = items.splice(fromIdx, 1);
+    items.splice(toIdx, 0, moved);
+    OL.persist();
+
+    const container = document.getElementById(`ge-cl-${blockId}`);
+    if (container) {
+        container.innerHTML = items.map((item, i) => OL._geRenderChecklistItem(blockId, item, i)).join('');
+        if (window.lucide) lucide.createIcons();
+    }
+}
 
 export function _geDeleteChecklistItem(blockId, itemId) {
     const ht = OL._geGetHt();
@@ -1594,6 +1634,7 @@ Object.assign(window.OL, {
     _geAddBlock, _geDeleteBlock, _geMoveBlock, _geRenderAllBlocks, _geRenderBlock,
     _geRenderBlockInner, _geRenderChecklistItem, _geAddChecklistItem,
     _geToggleChecklistItem, _geUpdateChecklistItem, _geDeleteChecklistItem,
+    _geChecklistDragStart, _geChecklistDrop,
     _geUpdateBlockData, _geRefreshImageBlock, _geRefreshVideoPreview,
     _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock
 });
