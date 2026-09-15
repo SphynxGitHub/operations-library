@@ -7,6 +7,7 @@
 // points with apps, resources, tasks, and scoping requirements.
 
 import { state, esc, getActiveClient, persist } from '../core/data.js';
+import { evaluateCondition, renderConditionEditor } from '../core/field-schema.js';
 
 export function renderHowToLibrary() {
     OL.registerView(renderHowToLibrary);
@@ -556,12 +557,40 @@ export function _geRenderAllBlocks(ht) {
             No blocks yet — click <strong>Add Block</strong> above to get started.
         </div>`;
     }
-    return blocks.map((b, i) => OL._geRenderBlock(b, i, blocks.length)).join('');
+    const { canEdit } = OL._ge || {};
+    const values = OL._geGuideChecklistValues(ht);
+    // Editors always see every block (with a "hidden unless..." indicator
+    // on conditional ones); a real viewer only ever sees blocks whose
+    // condition currently evaluates true.
+    const visible = canEdit ? blocks : blocks.filter(b => evaluateCondition(b.condition, values));
+    return visible.map((b, i) => OL._geRenderBlock(b, i, visible.length, ht, values)).join('');
+};
+
+// Checklist blocks are the only block type with a meaningful "value" right
+// now (which items are checked) — text/header/image/link blocks don't hold
+// data a condition could sensibly key off of, so they're targets only, not
+// sources. Keyed by block id, same shape evaluateCondition expects.
+export function _geGuideChecklistValues(ht) {
+    const values = {};
+    (ht?.blocks || []).forEach(b => {
+        if (b.type === 'checklist') {
+            values[b.id] = (b.data?.items || []).filter(i => i.checked).map(i => i.id);
+        }
+    });
+    return values;
+};
+
+// Friendly label for a checklist block when it shows up as a condition's
+// "source field" option — first item's text, since blocks don't have their
+// own name/title.
+export function _geChecklistBlockLabel(block) {
+    return (block.data?.items?.[0]?.text || 'Checklist block').slice(0, 40);
 };
 
 // ── RENDER SINGLE BLOCK ────────────────────────────
-export function _geRenderBlock(block, idx, total) {
+export function _geRenderBlock(block, idx, total, ht, values) {
     const { canEdit } = OL._ge || {};
+    const isHiddenForViewers = block.condition && !evaluateCondition(block.condition, values || {});
     const controls = canEdit ? `
         <div class="ge-block-controls" style="
             position:absolute;top:10px;right:10px;
@@ -594,15 +623,29 @@ export function _geRenderBlock(block, idx, total) {
 
     const inner = OL._geRenderBlockInner(block, canEdit);
 
+    // Only checklist blocks other than this one are meaningful condition
+    // sources right now (see _geGuideChecklistValues above).
+    const possibleSources = canEdit
+        ? (ht?.blocks || []).filter(b => b.type === 'checklist' && b.id !== block.id).map(b => ({ id: b.id, label: OL._geChecklistBlockLabel(b) }))
+        : [];
+
+    const conditionPanel = (canEdit && possibleSources.length) ? `
+        <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--panel-border);">
+            ${renderConditionEditor(block.condition, possibleSources, `OL._geUpdateBlockCondition('${block.id}', __PART__)`)}
+        </div>
+    ` : '';
+
     return `
         <div id="ge-blk-${block.id}"
              class="ge-block"
-             style="position:relative;background:var(--panel);border:1px solid var(--panel-border);
-                    border-radius:10px;padding:18px 20px;transition:border-color 0.15s;"
+             style="position:relative;background:var(--panel);border:1px ${isHiddenForViewers ? 'dashed rgba(var(--accent-rgb),0.4)' : 'solid var(--panel-border)'};
+                    border-radius:10px;padding:18px 20px;transition:border-color 0.15s;${isHiddenForViewers ? 'opacity:0.75;' : ''}"
              onmouseenter="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='flex';"
              onmouseleave="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
             ${controls}
+            ${isHiddenForViewers ? `<div class="tiny" style="color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><i data-lucide="eye-off" style="width:11px;height:11px;"></i> Hidden from viewers right now (condition not met)</div>` : ''}
             ${inner}
+            ${conditionPanel}
         </div>
     `;
 };
@@ -882,6 +925,19 @@ export function _geToggleChecklistItem(blockId, itemId, checked) {
     const item = (block?.data?.items || []).find(i => i.id === itemId);
     if (item) { item.checked = checked; OL._gePersist(); }
 
+    // If anything in this guide has a condition, some other block's
+    // visibility may depend on this checklist's state — full re-render to
+    // reflect that. Otherwise the cheap inline style update below is enough.
+    const hasConditions = (ht?.blocks || []).some(b => b.condition);
+    if (hasConditions) {
+        const container = document.getElementById('ge-blocks-container');
+        if (container) {
+            container.innerHTML = OL._geRenderAllBlocks(ht);
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+    }
+
     // Update styling without full re-render
     const row = document.getElementById(`ge-cli-${itemId}`);
     if (row) {
@@ -996,6 +1052,28 @@ export function _geUpdateBlockData(blockId, newData) {
             inner.innerHTML = OL._geRenderBlockInner(block, OL._ge?.canEdit);
             if (window.lucide) lucide.createIcons();
         }
+    }
+};
+
+// Conditional visibility for a block — see renderConditionEditor in
+// core/field-schema.js for the { fieldId, op, value } shape. A full
+// re-render is needed here (not just this block) since changing which
+// checklist a block depends on can change whether OTHER blocks are shown.
+export function _geUpdateBlockCondition(blockId, part, value) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+
+    if (!block.condition) block.condition = { fieldId: '', op: 'equals', value: '' };
+    block.condition[part] = value;
+    if (part === 'fieldId' && !value) block.condition = null; // "(always show)" clears it entirely
+
+    OL._gePersist();
+
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
     }
 };
 
@@ -1899,7 +1977,8 @@ Object.assign(window.OL, {
     _geRenderBlockInner, _geRenderChecklistItem, _geAddChecklistItem,
     _geToggleChecklistItem, _geUpdateChecklistItem, _geDeleteChecklistItem,
     _geChecklistDragStart, _geChecklistDragOver, _geChecklistDragLeave, _geChecklistDrop,
-    _geUpdateBlockData, _geRefreshImageBlock, _geRefreshVideoPreview,
+    _geUpdateBlockData, _geUpdateBlockCondition, _geGuideChecklistValues, _geChecklistBlockLabel,
+    _geRefreshImageBlock, _geRefreshVideoPreview,
     _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock,
     _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide
 });
