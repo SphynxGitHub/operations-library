@@ -140,9 +140,11 @@ OL.renderCommFeedView = function(commsData, clients) {
                             ${m.snippet ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.snippet)}</div>` : ''}
                             ${m.linked_task_id ? `
                                 <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="link" style="width:9px;height:9px;"></i> ${esc(OL.getLinkedTaskLabel(m))}</span>
+                            ` : (m.linked_resource_id ? `
+                                <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="database" style="width:9px;height:9px;"></i> ${esc(OL.getLinkedResourceLabel(m))}</span>
                             ` : (m.linked_client_id ? `
                                 <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="folder" style="width:9px;height:9px;"></i> ${esc(state.clients[m.linked_client_id]?.meta?.name || 'Project')}</span>
-                            ` : '')}
+                            ` : ''))}
                         </div>
                         <div class="tiny muted monospace text-right">${m.date ? new Date(m.date).toLocaleDateString() : ''}</div>
                         <div style="display:flex; gap:6px; justify-content:flex-end;">
@@ -151,7 +153,7 @@ OL.renderCommFeedView = function(commsData, clients) {
                             ` : `
                                 <button class="btn tiny soft" title="Archive" onclick="event.stopPropagation(); OL.archiveGmailMessage('${m.id}')"><i data-lucide="archive" style="width:11px;height:11px;"></i></button>
                             `}
-                            <button class="btn tiny soft" title="Link to task" onclick="event.stopPropagation(); OL.openGmailLinkPicker('${m.id}')"><i data-lucide="link" style="width:11px;height:11px;"></i></button>
+                            <button class="btn tiny soft" title="Link to project/resource/task" onclick="event.stopPropagation(); OL.openGmailLinkPicker('${m.id}')"><i data-lucide="link" style="width:11px;height:11px;"></i></button>
                         </div>
                     </div>
                 `).join('')}
@@ -164,6 +166,12 @@ OL.getLinkedTaskLabel = function(m) {
     const client = m.linked_client_id ? state.clients[m.linked_client_id] : null;
     const task = client?.projectData?.clientTasks?.find(t => t.id === m.linked_task_id);
     return task ? (task.title || task.name) : 'Linked task';
+};
+
+OL.getLinkedResourceLabel = function(m) {
+    const client = m.linked_client_id ? state.clients[m.linked_client_id] : null;
+    const resource = client?.projectData?.localResources?.find(r => r.id === m.linked_resource_id);
+    return resource ? resource.name : 'Linked resource';
 };
 
 OL.toggleShowArchivedGmail = function() {
@@ -285,7 +293,7 @@ OL.checkGoogleAuthReturn = function() {
 OL.loadGmailFeed = async function() {
     const { data, error } = await db
         .from('gmail_messages')
-        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, archived, participants')
+        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, archived, participants')
         .eq('archived', OL.commTabState.showArchived)
         .order('date', { ascending: false })
         .limit(GMAIL_FEED_LIMIT);
@@ -332,21 +340,22 @@ OL.autoLinkGmailMessagesToTasks = async function() {
         });
 
         if (matches.length === 1) {
-            updates.push({ id: m.id, taskId: matches[0].id });
+            const matchedResource = OL._findResourceForTask(m.linked_client_id, matches[0]);
+            updates.push({ id: m.id, taskId: matches[0].id, resourceId: matchedResource ? matchedResource.id : null });
         }
     }
 
     if (!updates.length) return;
 
     await Promise.all(updates.map(u =>
-        db.from('gmail_messages').update({ linked_task_id: u.taskId }).eq('id', u.id)
+        db.from('gmail_messages').update({ linked_task_id: u.taskId, linked_resource_id: u.resourceId }).eq('id', u.id)
     ));
 
     // Reflect immediately so the caller's next render shows the link
     // without needing a second round-trip.
     updates.forEach(u => {
         const m = threads.find(t => t.id === u.id);
-        if (m) m.linked_task_id = u.taskId;
+        if (m) { m.linked_task_id = u.taskId; m.linked_resource_id = u.resourceId; }
     });
 };
 
@@ -474,7 +483,7 @@ OL.openGmailMessageModal = async function(id) {
     const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
 
-    const linkLabel = m.linked_task_id ? OL.getLinkedTaskLabel(m) : '';
+    const linkLabel = m.linked_task_id ? OL.getLinkedTaskLabel(m) : (m.linked_resource_id ? OL.getLinkedResourceLabel(m) : '');
 
     const html = `
         <div class="modal-head">
@@ -489,11 +498,14 @@ OL.openGmailMessageModal = async function(id) {
 
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
                 ${m.linked_task_id ? `
-                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="link" style="width:11px;height:11px;"></i> Linked to: ${esc(linkLabel)}</span>
-                ` : (m.linked_client_id ? `
-                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="folder" style="width:11px;height:11px;"></i> ${esc(state.clients[m.linked_client_id]?.meta?.name || 'Project')} (auto-detected — not linked to a task yet)</span>
+                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="link" style="width:11px;height:11px;"></i> Task: ${esc(linkLabel)}</span>
+                ` : (m.linked_resource_id ? `
+                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="database" style="width:11px;height:11px;"></i> Resource: ${esc(linkLabel)}</span>
                 ` : '')}
-                <button class="btn tiny soft" onclick="OL.openGmailLinkPicker('${m.id}')">${m.linked_task_id ? 'Change Link' : 'Link to Task'}</button>
+                ${m.linked_client_id ? `
+                    <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="folder" style="width:11px;height:11px;"></i> ${esc(state.clients[m.linked_client_id]?.meta?.name || 'Project')}</span>
+                ` : ''}
+                <button class="btn tiny soft" onclick="OL.openGmailLinkPicker('${m.id}')">${(m.linked_task_id || m.linked_resource_id || m.linked_client_id) ? 'Change Link' : 'Link to Project/Resource/Task'}</button>
                 ${m.archived ? `
                     <button class="btn tiny soft" onclick="OL.unarchiveGmailMessage('${m.id}'); OL.closeModal();">Move Back to Inbox</button>
                 ` : `
@@ -514,15 +526,49 @@ window.OL.openGmailMessageModal = OL.openGmailMessageModal;
 // -------------------------------------------------------------
 // LINK TO TASK
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// LINK TO PROJECT / RESOURCE / TASK — three independent selections.
+// Picking a Resource or a Task (searchable across all clients if no
+// project is chosen yet) auto-fills the Project. Picking a Task also
+// auto-fills Resource by matching the task's resourceName against that
+// project's resource list. Picking Project alone doesn't touch the other
+// two. Changing Project clears Resource/Task (they belong to whichever
+// project was previously selected).
+// -------------------------------------------------------------
+OL._allClientResourcesFlat = function() {
+    return Object.values(state.clients || {}).flatMap(c =>
+        (c.projectData?.localResources || []).map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
+    );
+};
+
+OL._allClientTasksFlat = function() {
+    return Object.values(state.clients || {}).flatMap(c =>
+        (c.projectData?.clientTasks || []).map(t => ({ ...t, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
+    );
+};
+
+// Best-effort match of a task's resourceName against a project's actual
+// resource list — same convention OL.getDashboardMasterTasks/tasks.js
+// already use for resourceName (a free-text label, not a foreign key).
+OL._findResourceForTask = function(clientId, task) {
+    const label = (task?.resourceName || task?.category || '').trim().toLowerCase();
+    if (!label) return null;
+    const client = state.clients?.[clientId];
+    const resources = client?.projectData?.localResources || [];
+    return resources.find(r => (r.name || '').trim().toLowerCase() === label) || null;
+};
+
 OL.openGmailLinkPicker = async function(id) {
-    const { data: m, error } = await db.from('gmail_messages').select('id, subject, linked_client_id, linked_task_id').eq('id', id).single();
+    const { data: m, error } = await db.from('gmail_messages').select('id, subject, linked_client_id, linked_task_id, linked_resource_id').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
 
     OL._gmailLinkState = {
         emailId: id,
         clientId: m.linked_client_id || '',
+        resourceId: m.linked_resource_id || '',
         taskId: m.linked_task_id || '',
         clientQuery: '',
+        resourceQuery: '',
         taskQuery: '',
         creatingTask: false,
         newTaskTitle: ''
@@ -530,10 +576,10 @@ OL.openGmailLinkPicker = async function(id) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔗 Link "${esc(m.subject || 'Email')}" to a Task</div>
+            <div class="modal-title-text">🔗 Link "${esc(m.subject || 'Email')}"</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" id="gmail-link-body" style="max-width:500px; width:100%;"></div>
+        <div class="modal-body" id="gmail-link-body" style="max-width:520px; width:100%;"></div>
     `;
     openModal(html);
     OL.renderGmailLinkStep();
@@ -545,54 +591,99 @@ OL.renderGmailLinkStep = function() {
     if (!container || !st) return;
 
     const selectedClient = st.clientId ? state.clients[st.clientId] : null;
+
+    // ---- Project ----
     const clientQuery = (st.clientQuery || '').trim().toLowerCase();
     const clients = Object.values(state.clients || {});
     const filteredClients = clientQuery
         ? clients.filter(c => (c.meta?.name || '').toLowerCase().includes(clientQuery))
         : clients;
 
-    const tasks = selectedClient?.projectData?.clientTasks || [];
+    // ---- Resource (scoped to project if one's picked, else global) ----
+    const resourceQuery = (st.resourceQuery || '').trim().toLowerCase();
+    const resourcePool = selectedClient
+        ? (selectedClient.projectData?.localResources || []).map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
+        : OL._allClientResourcesFlat();
+    const filteredResources = resourceQuery
+        ? resourcePool.filter(r => (r.name || '').toLowerCase().includes(resourceQuery))
+        : resourcePool;
+    const selectedResource = st.resourceId
+        ? (selectedClient?.projectData?.localResources || []).find(r => r.id === st.resourceId)
+            || OL._allClientResourcesFlat().find(r => r.id === st.resourceId)
+        : null;
+
+    // ---- Task (scoped to project if one's picked, else global) ----
     const taskQuery = (st.taskQuery || '').trim().toLowerCase();
+    const taskPool = selectedClient
+        ? (selectedClient.projectData?.clientTasks || []).map(t => ({ ...t, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
+        : OL._allClientTasksFlat();
     const filteredTasks = taskQuery
-        ? tasks.filter(t => (t.title || t.name || '').toLowerCase().includes(taskQuery))
-        : tasks;
-    const selectedTask = st.taskId ? tasks.find(t => t.id === st.taskId) : null;
+        ? taskPool.filter(t => (t.title || t.name || '').toLowerCase().includes(taskQuery))
+        : taskPool;
+    const selectedTask = st.taskId
+        ? (selectedClient?.projectData?.clientTasks || []).find(t => t.id === st.taskId)
+            || OL._allClientTasksFlat().find(t => t.id === st.taskId)
+        : null;
+
+    const canLink = !!(st.clientId || st.resourceId || st.taskId);
 
     container.innerHTML = `
         <div style="margin-bottom:14px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Client Project</label>
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
             ${selectedClient ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
                     <span class="tiny bold">${esc(selectedClient.meta?.name || 'Unnamed')}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkClient('')">Change</button>
                 </div>
             ` : `
-                <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search clients..." value="${esc(st.clientQuery || '')}" oninput="OL.setGmailLinkClientQuery(this.value)">
-                <div style="max-height:160px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search projects..." value="${esc(st.clientQuery || '')}" oninput="OL.setGmailLinkClientQuery(this.value)">
+                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                     ${filteredClients.length ? filteredClients.map(c => `
                         <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.setGmailLinkClient('${c.id}')">${esc(c.meta?.name || 'Unnamed')}</div>
-                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching clients.</div>`}
+                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching projects.</div>`}
                 </div>
             `}
         </div>
 
-        ${selectedClient ? `
+        <div style="margin-bottom:14px;">
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resource / Deliverable</label>
+            ${selectedResource ? `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
+                    <span class="tiny bold">${esc(selectedResource.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedResource._clientName || '')}</span>` : ''}</span>
+                    <button class="btn tiny soft" onclick="OL.setGmailLinkResource('')">Change</button>
+                </div>
+            ` : `
+                <input type="text" id="gmail-link-resource-search" class="modal-input tiny" placeholder="Search resources...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.resourceQuery || '')}" oninput="OL.setGmailLinkResourceQuery(this.value)">
+                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    ${filteredResources.length ? filteredResources.map(r => `
+                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onclick="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
+                            <span>${esc(r.name)}</span>
+                            ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                        </div>
+                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
+                </div>
+            `}
+        </div>
+
         <div style="margin-bottom:16px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task / Deliverable</label>
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task</label>
             ${selectedTask ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedTask.title || selectedTask.name)}</span>
+                    <span class="tiny bold">${esc(selectedTask.title || selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
-                <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks..." value="${esc(st.taskQuery || '')}" oninput="OL.setGmailLinkTaskQuery(this.value)">
-                <div style="max-height:160px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.taskQuery || '')}" oninput="OL.setGmailLinkTaskQuery(this.value)">
+                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                     ${filteredTasks.length ? filteredTasks.map(t => `
-                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.setGmailLinkTask('${t.id}')">${esc(t.title || t.name)}</div>
+                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onclick="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
+                            <span>${esc(t.title || t.name)}</span>
+                            ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
+                        </div>
                     `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
                 </div>
 
-                ${st.creatingTask ? `
+                ${selectedClient ? (st.creatingTask ? `
                     <div style="margin-top:10px; padding:10px; border:1px dashed var(--accent); border-radius:6px;">
                         <input type="text" id="gmail-new-task-title" class="modal-input tiny" placeholder="New task title..." value="${esc(st.newTaskTitle || '')}" oninput="OL._gmailLinkState.newTaskTitle = this.value">
                         <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
@@ -604,14 +695,13 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" style="margin-top:8px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="OL.startGmailCreateTask()">
                         <i data-lucide="plus" style="width:11px;height:11px;"></i> Create New Task
                     </button>
-                `}
+                `) : `<div class="tiny muted" style="margin-top:6px;">Pick a project first to create a new task.</div>`}
             `}
         </div>
-        ` : ''}
 
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            ${st.taskId ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
-            <button class="btn small primary" onclick="OL.saveGmailLink()" style="font-weight:bold;" ${!st.taskId ? 'disabled' : ''}>Save Link</button>
+            ${(st.clientId || st.resourceId || st.taskId) ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
+            <button class="btn small primary" onclick="OL.saveGmailLink()" style="font-weight:bold;" ${!canLink ? 'disabled' : ''}>Save Link</button>
         </div>
     `;
     if (window.lucide) lucide.createIcons();
@@ -624,6 +714,13 @@ OL.setGmailLinkClientQuery = function(value) {
     });
 };
 
+OL.setGmailLinkResourceQuery = function(value) {
+    OL.reRenderPreservingFocus(() => {
+        OL._gmailLinkState.resourceQuery = value;
+        OL.renderGmailLinkStep();
+    });
+};
+
 OL.setGmailLinkTaskQuery = function(value) {
     OL.reRenderPreservingFocus(() => {
         OL._gmailLinkState.taskQuery = value;
@@ -631,16 +728,45 @@ OL.setGmailLinkTaskQuery = function(value) {
     });
 };
 
+// Changing the project invalidates any resource/task picked under the
+// previous one, so both get cleared.
 OL.setGmailLinkClient = function(id) {
     OL._gmailLinkState.clientId = id;
+    OL._gmailLinkState.resourceId = '';
+    OL._gmailLinkState.resourceQuery = '';
     OL._gmailLinkState.taskId = '';
     OL._gmailLinkState.taskQuery = '';
     OL._gmailLinkState.creatingTask = false;
     OL.renderGmailLinkStep();
 };
 
-OL.setGmailLinkTask = function(id) {
+// Picking a resource auto-fills Project if it wasn't already set —
+// Task is left alone (a resource doesn't imply one specific task).
+OL.setGmailLinkResource = function(id, clientId) {
+    OL._gmailLinkState.resourceId = id;
+    if (id && clientId && !OL._gmailLinkState.clientId) {
+        OL._gmailLinkState.clientId = clientId;
+    }
+    OL.renderGmailLinkStep();
+};
+
+// Picking a task auto-fills Project (if unset) and Resource, by matching
+// the task's resourceName against that project's resource list.
+OL.setGmailLinkTask = function(id, clientId) {
     OL._gmailLinkState.taskId = id;
+    if (!id) { OL.renderGmailLinkStep(); return; }
+
+    const resolvedClientId = OL._gmailLinkState.clientId || clientId;
+    if (resolvedClientId && !OL._gmailLinkState.clientId) {
+        OL._gmailLinkState.clientId = resolvedClientId;
+    }
+
+    const client = state.clients?.[resolvedClientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === id)
+        || OL._allClientTasksFlat().find(t => t.id === id);
+    const matchedResource = resolvedClientId && task ? OL._findResourceForTask(resolvedClientId, task) : null;
+    if (matchedResource) OL._gmailLinkState.resourceId = matchedResource.id;
+
     OL.renderGmailLinkStep();
 };
 
@@ -684,11 +810,12 @@ OL.createAndLinkGmailTask = async function() {
 
 OL.saveGmailLink = async function() {
     const st = OL._gmailLinkState;
-    if (!st?.taskId) return;
+    if (!st || !(st.clientId || st.resourceId || st.taskId)) return;
 
     const { error } = await db.from('gmail_messages').update({
-        linked_client_id: st.clientId,
-        linked_task_id: st.taskId,
+        linked_client_id: st.clientId || null,
+        linked_resource_id: st.resourceId || null,
+        linked_task_id: st.taskId || null,
         archived: true // linking means you're done triaging it — out of the inbox feed
     }).eq('id', st.emailId);
 
@@ -710,7 +837,7 @@ OL.unlinkGmailMessage = async function() {
     const st = OL._gmailLinkState;
     if (!st) return;
 
-    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_task_id: null }).eq('id', st.emailId);
+    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_resource_id: null, linked_task_id: null }).eq('id', st.emailId);
     if (error) { alert('Failed to unlink: ' + error.message); return; }
 
     OL.closeModal();
