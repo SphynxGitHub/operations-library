@@ -101,43 +101,49 @@ OL.openTaskBlueprintModal = function(blueprintId) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <label class="modal-section-label">Title</label>
-            <input type="text" id="bp-title" class="modal-input" value="${esc(bp?.title || '')}" placeholder="e.g. Implementation: {resource}">
+            <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: 8px; border:1px solid var(--line); margin-bottom:16px;">
+                <label class="modal-section-label" style="margin-top:0;">Title</label>
+                <input type="text" id="bp-title" class="modal-input" value="${esc(bp?.title || '')}" placeholder="e.g. Implementation: {resource}">
 
-            <label class="modal-section-label">Description</label>
-            <textarea id="bp-description" class="modal-input" style="height:70px;">${esc(bp?.description || '')}</textarea>
+                <label class="modal-section-label">Description</label>
+                <textarea id="bp-description" class="modal-input" rows="4" style="width:100%; box-sizing:border-box; resize:vertical; min-height:90px;">${esc(bp?.description || '')}</textarea>
+            </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:12px;">
-                <div>
-                    <label class="tiny muted uppercase bold">Default Assignee</label>
-                    <select id="bp-assignee" class="modal-input tiny">
-                        <option value="Sphynx Task" ${(!bp || bp.defaultAssignee === 'Sphynx Task' || !bp.defaultAssignee) ? 'selected' : ''}>Sphynx Task</option>
-                        <option value="Client Task" ${bp?.defaultAssignee === 'Client Task' ? 'selected' : ''}>Client Task</option>
-                        ${(state.master?.sphynxTeam || []).length ? `
-                            <optgroup label="Sphynx Team">
-                                ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}" ${bp?.defaultAssignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+            <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: 8px; border:1px solid var(--line); margin-bottom:16px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Default Assignee</label>
+                        <select id="bp-assignee" class="modal-input tiny">
+                            <option value="Sphynx Task" ${(!bp || bp.defaultAssignee === 'Sphynx Task' || !bp.defaultAssignee) ? 'selected' : ''}>Sphynx Task</option>
+                            <option value="Client Task" ${bp?.defaultAssignee === 'Client Task' ? 'selected' : ''}>Client Task</option>
+                            ${(state.master?.sphynxTeam || []).length ? `
+                                <optgroup label="Sphynx Team">
+                                    ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}" ${bp?.defaultAssignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+                                </optgroup>
+                            ` : ''}
+                            <optgroup label="Vendors / 3rd Party">
+                                ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}" ${bp?.defaultAssignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
                             </optgroup>
-                        ` : ''}
-                        <optgroup label="Vendors / 3rd Party">
-                            ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}" ${bp?.defaultAssignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
-                        </optgroup>
-                    </select>
-                </div>
-                <div>
-                    <label class="tiny muted uppercase bold">Default Status</label>
-                    <select id="bp-status" class="modal-input tiny">
-                        ${(OL.getSystemStatuses ? OL.getSystemStatuses() : []).map(s => `<option value="${esc(s.name)}" ${(bp?.defaultStatus === s.name || (!bp && s.name === 'Pending Sphynx Action')) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
-                    </select>
-                </div>
-                <div>
-                    <label class="tiny muted uppercase bold">Due In (days)</label>
-                    <input type="number" id="bp-due" class="modal-input tiny" value="${esc(bp?.dueInDays ?? '')}" placeholder="optional">
+                        </select>
+                    </div>
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Default Status</label>
+                        <select id="bp-status" class="modal-input tiny">
+                            ${(OL.getSystemStatuses ? OL.getSystemStatuses() : []).map(s => `<option value="${esc(s.name)}" ${(bp?.defaultStatus === s.name || (!bp && s.name === 'Pending Sphynx Action')) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Due In (days)</label>
+                        <input type="number" id="bp-due" class="modal-input tiny" value="${esc(bp?.dueInDays ?? '')}" placeholder="optional">
+                    </div>
                 </div>
             </div>
 
             ${bp ? `
-                <label class="modal-section-label">Linked How-To Guides</label>
-                <div class="card-section">
+                <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: 8px; border:1px solid var(--line); margin-bottom:16px;">
+                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+                        <i data-lucide="book-open" style="width:12px;height:12px;vertical-align:sub;"></i> Linked How-To Guides
+                    </label>
                     ${(bp.howToIds && bp.howToIds.length) ? `
                         <div style="display:grid; gap:8px; margin-bottom:10px;">
                             ${bp.howToIds.map(htId => {
@@ -156,16 +162,17 @@ OL.openTaskBlueprintModal = function(blueprintId) {
                     <div id="task-howto-results" style="max-height:140px; overflow:auto; margin-top:4px;"></div>
                 </div>
             ` : `
-                <div class="tiny muted" style="margin-top:12px;">Save the blueprint first, then reopen it to link How-To guides.</div>
+                <div class="tiny muted" style="margin-bottom:16px;">Save the blueprint first, then reopen it to link How-To guides.</div>
             `}
 
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
                 <button class="btn primary" onclick="OL.saveTaskBlueprint('${bp?.id || ''}')">Save Blueprint</button>
             </div>
         </div>
     `;
     openModal(html);
+    if (window.lucide) lucide.createIcons();
 };
 
 OL.saveTaskBlueprint = function(blueprintId) {
