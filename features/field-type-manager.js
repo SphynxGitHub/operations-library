@@ -5,16 +5,22 @@
 // into features/resources-modal.js), separate from the existing hardcoded
 // sections so nothing already working is touched.
 //
-// OL.openTypeDetailModal / OL.openResourceTypeManager were referenced from
-// the Scoping Variable Library screen (the "⚙️ Types" button, and clicking
-// a type card) but were never actually implemented — this fills that gap,
-// scoped to custom-field management. Rate-variable management for a type
-// (the other half of what that screen implied) isn't rebuilt here.
+// NOTE: OL.openResourceTypeManager and OL.openTypeDetailModal already exist
+// and do something else entirely — resources-grid.js's openResourceTypeManager
+// is the real icon/rename/auto-lock manager, and scoping.js's
+// openTypeDetailModal is the real "Pricing Folder" rate-variable manager.
+// This file used to collide with both by mistake (same names, silently
+// overwriting them at load time) — renamed to openResourceTypeFieldsManager /
+// openResourceTypeFieldsDetail specifically to never collide again. Reached
+// via a dedicated "🧩 Fields" button on each type card in the Scoping
+// Variable Library (renderVaultRatesPage, features/resources-modal.js),
+// which is additive — the card's own click still opens the real pricing
+// manager, unchanged.
 
 import { state, esc, uid } from '../core/data.js';
 import { FIELD_TYPES, CONDITION_OPS, newFieldId, renderConditionEditor } from '../core/field-schema.js';
 
-OL.openResourceTypeManager = function() {
+OL.openResourceTypeFieldsManager = function() {
     const registry = state.master.resourceTypes || [];
     const html = `
         <div class="modal-head">
@@ -26,7 +32,7 @@ OL.openResourceTypeManager = function() {
             <p class="tiny muted" style="margin-bottom:12px;">Pick a type to manage its custom fields.</p>
             <div style="display:grid; gap:6px;">
                 ${registry.map(t => `
-                    <div class="tiny" style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.openTypeDetailModal('${esc(t.type)}')">
+                    <div class="tiny" style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.openResourceTypeFieldsDetail('${esc(t.type)}')">
                         <span>📁 ${esc(t.type)}</span>
                         <span class="pill tiny soft">${(t.customFields || []).length} custom field${(t.customFields || []).length === 1 ? '' : 's'}</span>
                     </div>
@@ -37,7 +43,7 @@ OL.openResourceTypeManager = function() {
     openModal(html);
 };
 
-OL.openTypeDetailModal = function(typeName) {
+OL.openResourceTypeFieldsDetail = function(typeName) {
     const typeDef = (state.master.resourceTypes || []).find(t => t.type === typeName);
     if (!typeDef) return;
     if (!typeDef.customFields) typeDef.customFields = [];
@@ -218,8 +224,8 @@ OL._refreshTypeFieldsList = function(typeName) {
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    openResourceTypeManager: OL.openResourceTypeManager,
-    openTypeDetailModal: OL.openTypeDetailModal,
+    openResourceTypeFieldsManager: OL.openResourceTypeFieldsManager,
+    openResourceTypeFieldsDetail: OL.openResourceTypeFieldsDetail,
     addCustomFieldToType: OL.addCustomFieldToType,
     removeCustomFieldFromType: OL.removeCustomFieldFromType,
     moveCustomField: OL.moveCustomField,
