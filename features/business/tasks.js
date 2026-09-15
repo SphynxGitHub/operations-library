@@ -675,21 +675,16 @@ OL.sortTasksWithSubtasksNested = function(tasks) {
     return ordered;
 };
 
-OL.renderTaskRowHTML = function(t, todayStr) {
-    const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
-    const isGenericSphynx = t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx';
-    const isGenericClient = t.assignee === 'Client Task' || t.assignee === 'Client';
-    const isSphynxTeamMember = (state.master?.sphynxTeam || []).some(m => m.name === t.assignee);
+// 🎨 Shared assignee avatar styling — used by both task rows and event
+// rows (features/business/calendar.js OL.renderEventRowHTML) so the two
+// card types look consistent.
+OL.computeAssigneeAvatar = function(assignee) {
+    const is3rdParty = (OL.thirdPartyAssignees || []).includes(assignee);
+    const isGenericSphynx = assignee === 'Sphynx Task' || assignee === 'Sphynx';
+    const isGenericClient = assignee === 'Client Task' || assignee === 'Client';
+    const isSphynxTeamMember = (state.master?.sphynxTeam || []).some(m => m.name === assignee);
     const isNamedPerson = !isGenericSphynx && !isGenericClient && !is3rdParty;
 
-    const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
-
-    const masterStatuses = OL.getSystemStatuses();
-    const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
-    const dotColor = activeStatusObj.color;
-    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && !activeStatusObj.isClosed;
-
-    // 🎨 Assignee Avatar Badge Styling
     let avatarBg = 'rgba(56, 189, 248, 0.15)';
     let avatarColor = '#38bdf8';
     let avatarContent = '';
@@ -709,22 +704,39 @@ OL.renderTaskRowHTML = function(t, todayStr) {
     } else if (isNamedPerson && isSphynxTeamMember) {
         avatarBg = '#2dd4bf';
         avatarColor = '#ffffff';
-        const nameParts = (t.assignee || 'SP').trim().split(' ');
-        if (nameParts.length >= 2) {
-            avatarContent = `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
-        } else {
-            avatarContent = nameParts[0].substring(0, 2).toUpperCase();
-        }
+        const nameParts = (assignee || 'SP').trim().split(' ');
+        avatarContent = nameParts.length >= 2
+            ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+            : nameParts[0].substring(0, 2).toUpperCase();
     } else if (isNamedPerson) {
         avatarBg = '#ec4899';
         avatarColor = '#ffffff';
-        const nameParts = (t.assignee || 'CL').trim().split(' ');
-        if (nameParts.length >= 2) {
-            avatarContent = `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
-        } else {
-            avatarContent = nameParts[0].substring(0, 2).toUpperCase();
-        }
+        const nameParts = (assignee || 'CL').trim().split(' ');
+        avatarContent = nameParts.length >= 2
+            ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+            : nameParts[0].substring(0, 2).toUpperCase();
+    } else if (!assignee) {
+        avatarContent = `<i data-lucide="user" style="width:12px;height:12px; pointer-events:none; opacity:0.5;"></i>`;
     }
+
+    return { avatarBg, avatarColor, avatarContent, isNamedPerson };
+};
+
+OL.renderTaskRowHTML = function(t, todayStr) {
+    const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
+    const isGenericSphynx = t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx';
+    const isGenericClient = t.assignee === 'Client Task' || t.assignee === 'Client';
+    const isSphynxTeamMember = (state.master?.sphynxTeam || []).some(m => m.name === t.assignee);
+    const isNamedPerson = !isGenericSphynx && !isGenericClient && !is3rdParty;
+
+    const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
+
+    const masterStatuses = OL.getSystemStatuses();
+    const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
+    const dotColor = activeStatusObj.color;
+    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && !activeStatusObj.isClosed;
+
+    const { avatarBg, avatarColor, avatarContent } = OL.computeAssigneeAvatar(t.assignee);
 
     return `
     <div class="task-row-card" 
@@ -1160,6 +1172,8 @@ OL.refreshTaskView = function() {
     const onDashboard = hash.includes('/business/dashboard') || hash === '#/' || hash === '';
     if (hash.includes('client-tasks') && typeof window.renderClientTaskManager === 'function') {
         window.renderClientTaskManager();
+    } else if (hash.includes('/business/calendar') && typeof OL.renderBusinessCalendar === 'function') {
+        OL.renderBusinessCalendar();
     } else if (onDashboard && typeof OL.renderDailyDashboard === 'function') {
         OL.renderDailyDashboard();
     } else if (typeof OL.renderBusinessTaskManager === 'function') {
@@ -1477,6 +1491,10 @@ OL.renderInContextTaskModal = function(client, task) {
                               onclick="OL.openEditTaskAssigneeDropdown(event, '${client?.id}', '${task.id}')">
                             <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee: ${esc(task.assignee || 'Sphynx Task')}
                         </span>
+                        <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+                              onclick="OL.openTaskParentPicker('${client?.id}', '${task.id}')">
+                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Parent: ${OL.getTaskParentLabel(client, task)}
+                        </span>
                     </div>
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
@@ -1536,10 +1554,22 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
     const imported = (task.clickupComments || []).map(c => ({ ...c, _source: 'clickup' }));
     const all = [...internal, ...imported].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
+    let parentLinkHTML = '';
+    if (task.parentResourceId) {
+        const res = client?.projectData?.localResources?.find(r => r.id === task.parentResourceId);
+        if (res) {
+            parentLinkHTML = `<div class="tiny muted" style="margin-bottom:8px; cursor:pointer;" onclick="OL.closeModal(); OL.openResourceModal('${res.id}')"><i data-lucide="corner-left-up" style="width:10px;height:10px;vertical-align:sub;"></i> Part of resource <strong>${esc(res.name)}</strong> — comments here also show on its thread</div>`;
+        }
+    } else if (task.parentEventId) {
+        const evt = OL._taskParentEventCache?.[task.parentEventId];
+        parentLinkHTML = `<div class="tiny muted" style="margin-bottom:8px; cursor:pointer;" onclick="OL.closeModal(); OL.openCalendarEventModal('${task.parentEventId}')"><i data-lucide="corner-left-up" style="width:10px;height:10px;vertical-align:sub;"></i> Part of event <strong>${esc(evt ? evt.title : 'event')}</strong> — comments here also show on its thread</div>`;
+    }
+
     return `
         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
             <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i> Comments
         </label>
+        ${parentLinkHTML}
 
         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; position:relative;">
             <div class="tiny muted">Posting as <strong>${esc(OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team')}</strong></div>
@@ -1681,7 +1711,98 @@ OL.renderCommentTextWithMentions = function(text) {
     ).join('');
 };
 
-OL.updateTaskTitle = function(clientId, taskId, newTitle) {
+// -------------------------------------------------------------
+// PARENT LINKING — most tasks should hang off a Resource or a Calendar
+// Event (personal/internal events are the exception). This just supports
+// setting that link; nothing enforces it. A task's own comments roll up
+// into its parent's merged comment thread at render time (read-only
+// aggregation — see OL.getRolledUpResourceComments in
+// features/resources-modal.js and the event modal in calendar.js), so
+// nothing needs to be copied or kept in sync — the task remains the
+// single source of truth for its own comments.
+// -------------------------------------------------------------
+OL.getTaskParentLabel = function(client, task) {
+    if (task.parentResourceId) {
+        const res = client?.projectData?.localResources?.find(r => r.id === task.parentResourceId);
+        return esc(res ? res.name : 'Resource');
+    }
+    if (task.parentEventId) {
+        const evt = OL._taskParentEventCache?.[task.parentEventId];
+        return esc(evt ? evt.title : 'Event');
+    }
+    return 'None';
+};
+
+OL.openTaskParentPicker = async function(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+    if (!client || !task) return;
+
+    // Fetch this project's events fresh each time the picker opens — cheap,
+    // and keeps the list current without a standing subscription.
+    const { data: events } = await db.from('calendar_events')
+        .select('id, title, start')
+        .eq('linked_client_id', clientId)
+        .order('start', { ascending: false })
+        .limit(100);
+
+    OL._taskParentEventCache = OL._taskParentEventCache || {};
+    (events || []).forEach(e => { OL._taskParentEventCache[e.id] = e; });
+
+    OL._taskParentPickerState = { clientId, taskId, query: '', events: events || [] };
+    OL.renderTaskParentPickerStep();
+};
+
+OL.renderTaskParentPickerStep = function() {
+    const st = OL._taskParentPickerState;
+    if (!st) return;
+    const client = state.clients?.[st.clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === st.taskId);
+    if (!client || !task) return;
+
+    const query = (st.query || '').trim().toLowerCase();
+    const resources = (client.projectData?.localResources || []).filter(r => (r.name || '').toLowerCase().includes(query));
+    const events = (st.events || []).filter(e => (e.title || '').toLowerCase().includes(query));
+
+    const content = `
+        <div style="padding: 20px; max-width: 420px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;">
+                <h3 style="margin:0; font-size:15px;">Set Parent</h3>
+                <button class="btn tiny soft" onclick="OL.closeModal(); OL.openTaskInContext('${st.clientId}', '${st.taskId}')">✕</button>
+            </div>
+            <input type="text" class="modal-input tiny" placeholder="Search resources or events..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
+                   oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._taskParentPickerState.query = v; OL.renderTaskParentPickerStep(); })" id="task-parent-search">
+            <button class="btn tiny soft" style="width:100%; margin-bottom:10px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">None</button>
+            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Resources</div>
+            <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
+                ${resources.length ? resources.map(r => `
+                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentResourceId === r.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'resource', '${r.id}')">${esc(r.name)}</div>
+                `).join('') : `<div class="tiny muted">No resources.</div>`}
+            </div>
+            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Events</div>
+            <div style="display:grid; gap:4px; max-height:140px; overflow:auto;">
+                ${events.length ? events.map(e => `
+                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentEventId === e.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'event', '${e.id}')">${esc(e.title)} <span class="muted">${e.start ? new Date(e.start).toLocaleDateString() : ''}</span></div>
+                `).join('') : `<div class="tiny muted">No events for this project yet.</div>`}
+            </div>
+        </div>
+    `;
+    OL.showOverlayModal(content);
+    document.getElementById('task-parent-search')?.focus();
+};
+
+OL.setTaskParent = function(clientId, taskId, type, id) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        task.parentResourceId = type === 'resource' ? id : null;
+        task.parentEventId = type === 'event' ? id : null;
+    }, clientId);
+
+    OL.closeModal();
+    OL.openTaskInContext(clientId, taskId);
+};
     const trimmed = (newTitle || '').trim();
     if (!trimmed) return; // don't allow blanking the title out
 
