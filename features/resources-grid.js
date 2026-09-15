@@ -477,6 +477,12 @@ export function openResourceTypeManager() {
                             `).join('')}
                         </select>
 
+                        <button class="card-delete-btn" style="position:static; color:var(--accent); border-color:var(--accent);" 
+                                title="Custom Fields"
+                                onclick="OL.openResourceTypeFieldsDetail('${esc(t.type)}')">
+                            <i data-lucide="sliders-horizontal" style="width:14px; height:14px;"></i>
+                        </button>
+
                         <button class="card-delete-btn" style="position:static;" 
                                 onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">
                             <i data-lucide="x" style="width:14px; height:14px;"></i>
