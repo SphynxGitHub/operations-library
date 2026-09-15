@@ -381,6 +381,21 @@ export function getBusinessScopedClients() {
     return all.filter(c => String(c.meta?.partnerOwner) === String(partnerId));
 }
 
+// Was referenced in a couple of places (task comments, and now how-to guide
+// edit-tracking) but never actually defined anywhere — always silently fell
+// back to "Sphynx Team" regardless of who's logged in. Best-effort here
+// across a few plausible property names, since this app's per-member login
+// identity may live somewhere this file doesn't know about yet — correct
+// the property name if it's tracked differently.
+export function getCurrentUserName() {
+    return state.currentUser?.name
+        || state.currentMember?.name
+        || window.CURRENT_USER_NAME
+        || window.LOGGED_IN_MEMBER_NAME
+        || (window.FORCE_ADMIN ? 'Admin' : '')
+        || 'Sphynx Team';
+}
+
 // ---- backup export / import ----
 export async function exportMasterBackup() {
     try {
@@ -527,6 +542,7 @@ window.OL = window.OL || {};
 
 Object.assign(window.OL, {
     getBusinessScopedClients,
+    getCurrentUserName,
     markClientDirty,
     state, persist, sync, loadFullClient, switchClient, updateAndSync,
     exportMasterBackup, importMasterBackup
