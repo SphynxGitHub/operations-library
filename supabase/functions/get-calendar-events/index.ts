@@ -1,13 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
-import { loadProjectRules, matchProjectRules } from "../_shared/project-rules.ts";
+import { loadProjectRules, matchProjectRules, matchProjectRulesByText } from "../_shared/project-rules.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Content-Type": "application/json"
 };
+
+// Keyword-based call categorization from an event's subject + description.
+// Checked in this order — "follow up" and "intro" are checked before the
+// more generic "coaching"/"call" buckets so e.g. "Coaching Follow Up Call"
+// lands as Follow Up rather than Coaching. Anything with no keyword match
+// but that looks like a call/meeting at all falls to General Call; anything
+// that doesn't even look like a call (no call-ish keyword anywhere) is left
+// uncategorized (null) rather than forced into General Call.
+function classifyCallType(title: string, description: string): string | null {
+  const text = `${title || ""} ${description || ""}`.toLowerCase();
+  if (/\bfollow[\s-]?up\b/.test(text)) return "Follow Up Call";
+  if (/\bintro(ductory)?\b/.test(text)) return "Introductory Call";
+  if (/\bcoaching\b/.test(text)) return "Coaching Call";
+  if (/\b(call|meeting|check[\s-]?in|sync|consult(ation)?)\b/.test(text)) return "General Call";
+  return null;
+}
 
 // How far back / forward to sync. Wide enough to cover "historical" without
 // pulling your whole calendar history on every run.
@@ -168,12 +184,21 @@ serve(async (req) => {
       link: r.link,
       start: r.start,
       end: r.end,
-      all_day: r.all_day
+      all_day: r.all_day,
+      call_type: classifyCallType(r.title, r.description)
     });
 
     const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id)).map(coreFields);
     const newRows = dedupedParsed.filter((r) => !existingIds.has(r.id)).map((r) => {
-      const matched = matchProjectRules(projectRules, r.attendeeEmails);
+      // Attendee-email match first (higher confidence); if that's
+      // ambiguous or empty, fall back to the project name appearing in the
+      // subject/description — e.g. an internal prep call with no client
+      // attendee on it, but "Wealth Innovation Group" right there in the title.
+      let matched = matchProjectRules(projectRules, r.attendeeEmails);
+      if (matched.length !== 1) {
+        const textMatched = matchProjectRulesByText(projectRules, `${r.title} ${r.description}`);
+        if (textMatched.length === 1) matched = textMatched;
+      }
       return {
         ...coreFields(r),
         attendee_emails: [...r.attendeeEmails],
