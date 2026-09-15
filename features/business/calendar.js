@@ -1,11 +1,15 @@
 import { esc, state, db, updateAndSync, uid } from '../../core/data.js';
 
 const CALENDAR_PAGE_SIZE = 150;
+const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'General Call'];
 
 OL.calendarState = {
     loading: false,
     view: 'list',        // 'list' | 'grid'
     filter: 'upcoming',  // 'upcoming' | 'past' | 'all'
+    groupBy: 'date',     // 'date' | 'project' | 'type' — list view only
+    callTypeFilter: 'all', // 'all' | one of CALL_TYPES | 'uncategorized'
+    clientFilter: '',    // '' = all projects
     limit: CALENDAR_PAGE_SIZE,
     loadedOnce: false,
     gridMonth: (() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; })()
@@ -121,7 +125,9 @@ OL.renderBusinessCalendar = function() {
                     </div>
                 ` : ''}
 
-                ${OL.calendarState.view === 'grid' ? OL.renderCalendarGrid(events) : OL.renderCalendarList(events)}
+                ${OL.calendarState.view === 'list' ? OL.renderCalendarFilterBar() : ''}
+
+                ${OL.calendarState.view === 'grid' ? OL.renderCalendarGrid(events) : OL.renderCalendarList(OL.applyCalendarFilters(events))}
             </div>
         `}
     `;
@@ -130,40 +136,140 @@ OL.renderBusinessCalendar = function() {
 };
 
 // -------------------------------------------------------------
-// LIST VIEW — grouped by date
+// FILTER BAR — event type (call_type) + project, list view only. Upcoming/
+// Past/All above already covers the "date" filter; this doesn't duplicate
+// that, it adds Group By (Date/Project/Type) for how results are bucketed.
+// -------------------------------------------------------------
+OL.renderCalendarFilterBar = function() {
+    const clientsWithEvents = Object.values(state.clients || {})
+        .filter(c => c.meta?.name)
+        .sort((a, b) => (a.meta?.name || '').localeCompare(b.meta?.name || ''));
+
+    return `
+        <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line);">
+            <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                <span class="tiny muted uppercase bold" style="margin-right:2px;">Type:</span>
+                <button class="btn tiny ${OL.calendarState.callTypeFilter === 'all' ? 'primary' : 'soft'}" onclick="OL.setCalendarCallTypeFilter('all')">All</button>
+                ${CALL_TYPES.map(t => `
+                    <button class="btn tiny ${OL.calendarState.callTypeFilter === t ? 'primary' : 'soft'}" onclick="OL.setCalendarCallTypeFilter('${t}')">${esc(t)}</button>
+                `).join('')}
+                <button class="btn tiny ${OL.calendarState.callTypeFilter === 'uncategorized' ? 'primary' : 'soft'}" onclick="OL.setCalendarCallTypeFilter('uncategorized')">Other</button>
+            </div>
+
+            <div style="display:flex; gap:6px; align-items:center;">
+                <span class="tiny muted uppercase bold">Project:</span>
+                <select class="modal-input tiny" style="width:auto; min-width:160px;" onchange="OL.setCalendarClientFilter(this.value)">
+                    <option value="" ${!OL.calendarState.clientFilter ? 'selected' : ''}>All Projects</option>
+                    <option value="__unlinked__" ${OL.calendarState.clientFilter === '__unlinked__' ? 'selected' : ''}>Unlinked</option>
+                    ${clientsWithEvents.map(c => `<option value="${c.id}" ${OL.calendarState.clientFilter === c.id ? 'selected' : ''}>${esc(c.meta.name)}</option>`).join('')}
+                </select>
+            </div>
+
+            <div style="display:flex; gap:6px; align-items:center; margin-left:auto;">
+                <span class="tiny muted uppercase bold">Group By:</span>
+                <button class="btn tiny ${OL.calendarState.groupBy === 'date' ? 'primary' : 'soft'}" onclick="OL.setCalendarGroupBy('date')">Date</button>
+                <button class="btn tiny ${OL.calendarState.groupBy === 'project' ? 'primary' : 'soft'}" onclick="OL.setCalendarGroupBy('project')">Project</button>
+                <button class="btn tiny ${OL.calendarState.groupBy === 'type' ? 'primary' : 'soft'}" onclick="OL.setCalendarGroupBy('type')">Type</button>
+            </div>
+        </div>
+    `;
+};
+
+OL.applyCalendarFilters = function(events) {
+    return events.filter(evt => {
+        if (OL.calendarState.callTypeFilter === 'uncategorized') {
+            if (evt.call_type) return false;
+        } else if (OL.calendarState.callTypeFilter !== 'all') {
+            if (evt.call_type !== OL.calendarState.callTypeFilter) return false;
+        }
+
+        if (OL.calendarState.clientFilter === '__unlinked__') {
+            if (evt.linked_client_id) return false;
+        } else if (OL.calendarState.clientFilter) {
+            if (evt.linked_client_id !== OL.calendarState.clientFilter) return false;
+        }
+
+        return true;
+    });
+};
+
+OL.setCalendarCallTypeFilter = function(value) {
+    OL.calendarState.callTypeFilter = value;
+    OL.renderBusinessCalendar();
+};
+
+OL.setCalendarClientFilter = function(value) {
+    OL.calendarState.clientFilter = value;
+    OL.renderBusinessCalendar();
+};
+
+OL.setCalendarGroupBy = function(value) {
+    OL.calendarState.groupBy = value;
+    OL.renderBusinessCalendar();
+};
+
+// -------------------------------------------------------------
+// LIST VIEW — grouped by date, project, or event type per OL.calendarState.groupBy
 // -------------------------------------------------------------
 OL.renderCalendarList = function(events) {
     if (events.length === 0) {
         return `
             <div style="text-align:center; padding: 40px; color: var(--muted);">
                 <i data-lucide="calendar-off" style="width:36px;height:32px;margin-bottom:8px;opacity:0.5;"></i>
-                <div>No ${OL.calendarState.filter === 'past' ? 'past' : OL.calendarState.filter === 'all' ? '' : 'upcoming'} events found. Click "Sync Calendar" above to refresh.</div>
+                <div>No ${OL.calendarState.filter === 'past' ? 'past' : OL.calendarState.filter === 'all' ? '' : 'upcoming'} events found${OL.calendarState.callTypeFilter !== 'all' || OL.calendarState.clientFilter ? ' matching these filters' : ''}. ${OL.calendarState.callTypeFilter === 'all' && !OL.calendarState.clientFilter ? 'Click "Sync Calendar" above to refresh.' : ''}</div>
             </div>
         `;
     }
 
-    // Group consecutive events by calendar date
+    const groupBy = OL.calendarState.groupBy || 'date';
     const groups = [];
-    let currentKey = null;
-    events.forEach(evt => {
-        const d = new Date(evt.start);
-        const key = d.toDateString();
-        if (key !== currentKey) {
-            groups.push({ key, date: d, items: [] });
-            currentKey = key;
-        }
-        groups[groups.length - 1].items.push(evt);
-    });
 
-    const todayKey = new Date().toDateString();
+    if (groupBy === 'project') {
+        const byClient = new Map();
+        events.forEach(evt => {
+            const key = evt.linked_client_id || '__unlinked__';
+            if (!byClient.has(key)) byClient.set(key, []);
+            byClient.get(key).push(evt);
+        });
+        [...byClient.entries()]
+            .sort(([a], [b]) => {
+                const nameA = a === '__unlinked__' ? '\uffff' : (state.clients[a]?.meta?.name || '');
+                const nameB = b === '__unlinked__' ? '\uffff' : (state.clients[b]?.meta?.name || '');
+                return nameA.localeCompare(nameB);
+            })
+            .forEach(([key, items]) => {
+                groups.push({ label: key === '__unlinked__' ? 'Unlinked' : (state.clients[key]?.meta?.name || 'Project'), items });
+            });
+    } else if (groupBy === 'type') {
+        const byType = new Map();
+        events.forEach(evt => {
+            const key = evt.call_type || 'Other';
+            if (!byType.has(key)) byType.set(key, []);
+            byType.get(key).push(evt);
+        });
+        const order = [...CALL_TYPES, 'Other'];
+        order.forEach(key => { if (byType.has(key)) groups.push({ label: key, items: byType.get(key) }); });
+    } else {
+        // Group consecutive events by calendar date (original behavior)
+        let currentKey = null;
+        events.forEach(evt => {
+            const d = new Date(evt.start);
+            const key = d.toDateString();
+            if (key !== currentKey) {
+                groups.push({ label: d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), isToday: key === new Date().toDateString(), items: [] });
+                currentKey = key;
+            }
+            groups[groups.length - 1].items.push(evt);
+        });
+    }
 
     return `
         <div style="display:flex; flex-direction:column; gap:18px;">
             ${groups.map(g => `
                 <div>
                     <div class="tiny bold uppercase muted" style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px;">
-                        ${g.date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                        ${g.key === todayKey ? `<span class="pill tiny accent">Today</span>` : ''}
+                        ${esc(g.label)} <span class="pill tiny soft" style="font-size:9px;">${g.items.length}</span>
+                        ${g.isToday ? `<span class="pill tiny accent">Today</span>` : ''}
                     </div>
                     <div style="display:grid; gap:8px;">
                         ${g.items.map(evt => OL.renderCalendarEventRow(evt)).join('')}
@@ -219,6 +325,9 @@ OL.renderEventRowHTML = function(evt) {
                 ` : ''}
             </div>
 
+            ${evt.call_type ? `
+                <span class="pill tiny soft" style="flex-shrink:0; font-size:10px;">${esc(evt.call_type)}</span>
+            ` : ''}
             ${projectName ? `
                 <div style="flex-shrink:0;">
                     <span class="client-link-badge pill tiny soft" style="cursor:pointer; text-decoration:none; font-weight:600; padding:2px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:5px; font-size:11px;"
@@ -374,7 +483,7 @@ OL.loadCalendarGridMonth = async function() {
 
     const { data, error } = await db
         .from('calendar_events')
-        .select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, billable, logged_hours, duration_hours_snapshot, comments')
+        .select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, billable, logged_hours, duration_hours_snapshot, comments, call_type')
         .gte('start', start.toISOString())
         .lt('start', end.toISOString())
         .order('start', { ascending: true });
@@ -388,7 +497,7 @@ OL.loadCalendarGridMonth = async function() {
 // LOAD (LIST VIEW) FROM SUPABASE
 // -------------------------------------------------------------
 OL.loadCalendarEvents = async function() {
-    let query = db.from('calendar_events').select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, billable, logged_hours, duration_hours_snapshot, comments');
+    let query = db.from('calendar_events').select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, billable, logged_hours, duration_hours_snapshot, comments, call_type');
 
     const nowIso = new Date().toISOString();
     if (OL.calendarState.filter === 'upcoming') {
