@@ -1803,6 +1803,8 @@ OL.setTaskParent = function(clientId, taskId, type, id) {
     OL.closeModal();
     OL.openTaskInContext(clientId, taskId);
 };
+
+OL.updateTaskTitle = function(clientId, taskId, newTitle) {
     const trimmed = (newTitle || '').trim();
     if (!trimmed) return; // don't allow blanking the title out
 
