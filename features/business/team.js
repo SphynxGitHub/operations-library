@@ -1,4 +1,4 @@
-import { esc, uid, state, updateAndSync } from '../../core/data.js';
+import { esc, uid, state, db, updateAndSync } from '../../core/data.js';
 
 // ================= 🛡️ SPHYNX TEAM MANAGER (CARD LAYOUT) ================= //
 
@@ -72,6 +72,13 @@ OL.renderSphynxTeamPage = function() {
                             $${m.rate || 150}/hr
                         </span>
                         <div style="display:flex; gap:6px; align-items:center;">
+                            ${window.FORCE_ADMIN && m.authUserId === state.currentUser?.id ? `
+                                <span class="tiny" style="color:#48bb78;" title="Your admin login is linked to this card">✅ This is you</span>
+                            ` : window.FORCE_ADMIN ? `
+                                <button class="btn tiny soft" onclick="OL.linkMyAdminLoginToTeamMember('${m.id}')" title="Link your admin login to this card so comments etc. show your name">
+                                    Set as My Profile
+                                </button>
+                            ` : ''}
                             ${m.authUserId
                                 ? `<span class="tiny" style="color:#48bb78;" title="Has logged in">✅ Logged in</span>`
                                 : (m.setupToken
@@ -289,6 +296,42 @@ OL.saveTeamMemberPermissions = function(memberId) {
 
     OL.closeModal();
     OL.renderSphynxTeamPage();
+};
+
+// -------------------------------------------------------------
+// LINK ADMIN LOGIN TO A TEAM CARD — explicit alternative to the automatic
+// email-match in core/auth.js (which only works if the admin's login
+// email is byte-for-byte identical to the email on their card). Stores
+// the same authUserId field the team-member claim flow uses, so
+// initializeSecurityContext() picks it up first (it checks authUserId
+// before falling back to email) on the next login — and updates the
+// current session immediately so comments/attribution reflect it without
+// requiring a reload.
+// -------------------------------------------------------------
+OL.linkMyAdminLoginToTeamMember = async function(memberId) {
+    if (!window.FORCE_ADMIN) return;
+
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) { alert('Your session could not be verified — try signing in again.'); return; }
+
+    // Clear the link from any other card first — one admin login should
+    // only ever map to one team card.
+    updateAndSync(() => {
+        (state.master?.sphynxTeam || []).forEach(m => {
+            if (m.authUserId === session.user.id) delete m.authUserId;
+        });
+        const target = state.master?.sphynxTeam?.find(m => m.id === memberId);
+        if (target) target.authUserId = session.user.id;
+    });
+
+    const target = state.master?.sphynxTeam?.find(m => m.id === memberId);
+    if (target && state.currentUser) {
+        state.currentUser.name = target.name;
+        state.currentUser.role = target.role || state.currentUser.role;
+    }
+
+    OL.renderSphynxTeamPage();
+    if (typeof window.buildLayout === 'function') window.buildLayout();
 };
 
 window.OL.renderSphynxTeamPage = OL.renderSphynxTeamPage;
