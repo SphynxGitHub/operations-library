@@ -5,6 +5,28 @@ function ic(name) {
     return `<i data-lucide="${name}" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"></i>`;
 }
 
+// Starter set for the Resolution "insert template" picker — still fully
+// free-text after inserting, this just saves retyping the common ones.
+const RESOLUTION_TEMPLATES = [
+    'Reauthorized the app connection in Zapier',
+    'Refreshed expired API credentials',
+    'Added retry/error-handling logic to the Zap',
+    'Disabled duplicate/conflicting Zap',
+    'Corrected a formatting/mapping issue in the Zap step',
+    'Contacted vendor support to resolve on their end',
+    'Manually corrected the affected record(s)',
+    'One-off failure — no fix needed, working as expected on retry'
+];
+
+OL.insertResolutionTemplate = function(id, template) {
+    if (!template) return;
+    const ta = document.getElementById(`error-resolution-${id}`);
+    if (!ta) return;
+    ta.value = ta.value ? `${ta.value}\n${template}` : template;
+    ta.focus();
+    OL.saveErrorField(id, 'resolution', ta.value);
+};
+
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
     clientFilter: '',
@@ -192,13 +214,13 @@ OL.renderErrorLogRow = function(r, locked) {
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
                 ${occurred ? `<span class="pill tiny soft">${ic('calendar')}${esc(occurred)}</span>` : ''}
                 ${r.service ? `<span class="pill tiny soft">${ic('wrench')}${esc(r.service)}</span>` : ''}
-                ${clientName ? `<span class="client-link-badge pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" onclick="event.stopPropagation(); OL.navigateToClientProject('${r.client_id}')" title="Jump to Workspace">${ic('folder')}${esc(clientName)}</span>` : ''}
+                ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent);">${ic('folder')}${esc(clientName)}</span>` : ''}
                 ${r.resource_name ? `<span class="pill tiny soft">${ic('git-branch')}${esc(r.resource_name)}</span>` : ''}
                 ${r.outage ? `<span class="pill tiny" style="border:none; background:rgba(239,68,68,0.15); color:#ef4444;">${ic('alert-circle')}Outage</span>` : ''}
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
 
-            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; white-space:normal; word-break:break-word;">
+            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                 ${esc(snippet)}
             </div>
 
@@ -441,8 +463,14 @@ OL.openErrorDetailModal = function(id) {
                 <div style="display:flex; gap:10px; align-items:flex-start;">
                     <div style="width:8px; height:8px; border-radius:50%; background:#22c55e; margin-top:8px; flex-shrink:0;"></div>
                     <div style="flex:1; min-width:0;">
-                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution</label>
-                        <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <label class="tiny muted bold">Resolution</label>
+                            <select class="tiny" style="border:none; background:transparent; color:var(--accent); cursor:pointer;" onchange="OL.insertResolutionTemplate('${r.id}', this.value); this.selectedIndex=0;">
+                                <option value="">+ Insert template...</option>
+                                ${RESOLUTION_TEMPLATES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <textarea id="error-resolution-${r.id}" class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="How was it fixed?" onblur="OL.saveErrorField('${r.id}', 'resolution', this.value)">${esc(r.resolution || '')}</textarea>
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; align-items:flex-start;">
