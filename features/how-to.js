@@ -1648,13 +1648,18 @@ export function getSOPBacklinks(sopId) {
 
 //======================= HOW-TO TASKS OVERLAP ========================//
 
-export function filterTaskHowToSearch(taskId, query, isVault) {
+export function filterTaskHowToSearch(taskId, query, isVault, clientId) {
     const container = document.getElementById('task-howto-results');
     if (!container) return;
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
 
-    const client = getActiveClient();
+    // 🚀 THE FIX: resolve the task's OWNING client by id, not by whatever
+    // happens to be "active." The global cross-client Business Task Manager
+    // never sets state.activeClientId when you open a task from it, so
+    // getActiveClient() here would silently resolve to the wrong client
+    // (or none) and the task would never be found.
+    const client = clientId ? state.clients[clientId] : getActiveClient();
     const q = (query || "").toLowerCase().trim();
     
     // 1. Resolve current task to find existing links
@@ -1678,15 +1683,17 @@ export function filterTaskHowToSearch(taskId, query, isVault) {
 
     container.innerHTML = results.map(guide => `
         <div class="search-result-item is-clickable" 
-             onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault})">
+             onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault}, '${clientId || ''}')">
             📖 ${esc(guide.name)}
         </div>
     `).join('');
 };
 
-export function toggleTaskHowTo(event, taskId, howToId, isVault) {
+export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
     if (event) event.stopPropagation();
-    const client = getActiveClient();
+    // 🚀 THE FIX: same as filterTaskHowToSearch above — resolve by the
+    // explicit owning clientId when we have one, instead of getActiveClient().
+    const client = clientId ? state.clients[clientId] : getActiveClient();
     
     let task = isVault 
         ? state.master.taskBlueprints.find(t => t.id === taskId)
@@ -1713,6 +1720,15 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault) {
             task.howToIds.splice(idx, 1);
         }
         
+        // Mark the owning client dirty explicitly — it may not be
+        // state.activeClientId, and persist() only ever saves activeClientId
+        // plus whatever's in dirtyClientIds (see markClientDirty in core/data.js).
+        // Without this, a link made from the global Task Manager was silently
+        // dropped on the next debounced save.
+        if (!isVault && client && OL.markClientDirty) {
+            OL.markClientDirty(client.id);
+        }
+
         OL.persist();
         // openTaskModal was never actually defined anywhere in the app —
         // openTaskInContext is the real, working modal launcher. Vault
