@@ -503,6 +503,7 @@ OL.openGmailMessageModal = async function(id) {
 
     OL._gmailLinkState = {
         emailId: id,
+        sender: m.sender || '', // kept for the "add sender as team member?" prompt on manual link
         clientId: m.linked_client_id || '',
         resourceId: m.linked_resource_id || '',
         taskId: m.linked_task_id || '',
@@ -926,7 +927,7 @@ OL.createAndLinkGmailTask = async function() {
 
 OL.saveGmailLink = async function() {
     const st = OL._gmailLinkState;
-    if (!st || !(st.clientId || st.resourceId || st.taskId)) return;
+    if (!st || !(st.clientId || st.resourceId || st.taskId || st.eventId)) return;
 
     const { error } = await db.from('gmail_messages').update({
         linked_client_id: st.clientId || null,
@@ -939,9 +940,58 @@ OL.saveGmailLink = async function() {
 
     if (error) { alert('Failed to save link: ' + error.message); return; }
 
+    // Manually linking to a project (as opposed to auto-linking, which
+    // never runs this function at all) is a signal the sender belongs on
+    // that project's Team tab — offer to add them if they're not already
+    // there, so future emails from the same address auto-link too.
+    if (st.clientId) await OL._maybePromptAddSenderToTeam(st.clientId, st.sender);
+
     OL.closeModal();
     await OL.loadGmailFeed();
     OL.renderBusinessCommunications();
+};
+
+// Parses a Gmail "From" header value like `Name <name@domain.com>` (or a
+// bare address with no display name) into { name, email }.
+OL._parseSenderHeader = function(sender) {
+    const raw = (sender || '').trim();
+    const match = raw.match(/^(.*?)<([^<>]+)>\s*$/);
+    if (match) {
+        const name = match[1].trim().replace(/^"|"$/g, '');
+        const email = match[2].trim().toLowerCase();
+        return { name: name || email, email };
+    }
+    // No angle brackets — either a bare address, or just a display name
+    // with no address at all (nothing to add in that case).
+    const bareEmailMatch = raw.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    return bareEmailMatch ? { name: bareEmailMatch[0], email: bareEmailMatch[0].toLowerCase() } : null;
+};
+
+OL._maybePromptAddSenderToTeam = async function(clientId, senderHeader) {
+    const parsed = OL._parseSenderHeader(senderHeader);
+    if (!parsed?.email) return; // couldn't find an address to offer
+
+    const client = state.clients?.[clientId];
+    if (!client) return;
+    if (!client.projectData) client.projectData = {};
+    const members = client.projectData.teamMembers || [];
+    const alreadyOnTeam = members.some(m => (m.email || '').trim().toLowerCase() === parsed.email);
+    if (alreadyOnTeam) return;
+
+    const clientName = client.meta?.name || 'this project';
+    const add = confirm(`Add ${parsed.name}${parsed.name !== parsed.email ? ` (${parsed.email})` : ''} to ${clientName}'s Team tab?\n\nThis lets future emails and calendar events from this address auto-link to the project.`);
+    if (!add) return;
+
+    await updateAndSync(() => {
+        if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
+        client.projectData.teamMembers.push({
+            id: 'tm-' + Date.now(),
+            name: parsed.name,
+            email: parsed.email,
+            roles: [],
+            createdDate: new Date().toISOString()
+        });
+    }, clientId);
 };
 
 OL.unlinkGmailMessage = async function() {
