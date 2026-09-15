@@ -133,6 +133,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }), { status: 200, headers: corsHeaders });
     }
 
+    // Dedupe within this batch itself — Google's API can return the same
+    // event twice across pages (events shifting relative to the
+    // orderBy=startTime window while paginating), which previously caused
+    // "duplicate key" crashes when two identical new rows landed in the
+    // same insert. Last occurrence wins.
+    const dedupedParsed = [...new Map(parsed.map((r) => [r.id, r])).values()];
+
     // Figure out which of these events we've already stored, so we only
     // set linked_client_id / automation_processed on genuinely new rows —
     // re-syncing an existing event must never clobber a project match that
@@ -164,8 +171,8 @@ serve(async (req) => {
       all_day: r.all_day
     });
 
-    const existingRows = parsed.filter((r) => existingIds.has(r.id)).map(coreFields);
-    const newRows = parsed.filter((r) => !existingIds.has(r.id)).map((r) => {
+    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id)).map(coreFields);
+    const newRows = dedupedParsed.filter((r) => !existingIds.has(r.id)).map((r) => {
       const matched = matchProjectRules(projectRules, r.attendeeEmails);
       return {
         ...coreFields(r),
@@ -188,17 +195,21 @@ serve(async (req) => {
       }
     }
 
-    // New events: plain insert, including the auto-match + fresh automation flag.
+    // New events: upsert rather than a plain insert — belt-and-suspenders
+    // against the same "duplicate key" crash if a row slips past the
+    // existingIds check above (e.g. a concurrent sync landing between that
+    // check and this write). Safe here since a genuine conflict on a truly
+    // new id just means someone else's sync beat us to it.
     if (newRows.length > 0) {
       for (let i = 0; i < newRows.length; i += 500) {
         const chunk = newRows.slice(i, i + 500);
-        const { error } = await supabase.from("calendar_events").insert(chunk);
+        const { error } = await supabase.from("calendar_events").upsert(chunk, { onConflict: "id" });
         if (error) throw new Error(`Insert failed: ${error.message}`);
       }
     }
 
     return new Response(
-      JSON.stringify({ syncedCount: parsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }),
+      JSON.stringify({ syncedCount: dedupedParsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }),
       { status: 200, headers: corsHeaders }
     );
 
