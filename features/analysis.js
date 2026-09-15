@@ -492,7 +492,12 @@ export function openAnalysisMatrix(analysisId, isMaster) {
                                 return `
                                     <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
                                         <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
-                                            <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})">×</button>
+                                            <div style="display:flex; gap:2px;">
+                                                <button class="card-delete-btn" title="Swap for a different app — keeps scores/pricing" onclick="OL.openSwapAppModal('${analysisId}', '${appObj.appId}', ${isMaster})" style="position:static; background:transparent;">
+                                                    <i data-lucide="repeat" style="width:11px;height:11px;pointer-events:none;"></i>
+                                                </button>
+                                                <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})">×</button>
+                                            </div>
                                             <span class="is-clickable" onclick="OL.openAppModal('${matchedApp?.id}')" style="${isWinner ? 'color: var(--vault-gold); font-weight: bold;' : ''}">
                                                 ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown')}
                                             </span>
@@ -1462,6 +1467,81 @@ export async function executeAddAppToAnalysis(anlyId, appId, isMaster) {
     OL.closeModal();
     // 🔄 Surgical Refresh
     OL.openAnalysisMatrix(anlyId, isMaster); 
+};
+
+// 4b. SWAP AN APP IN PLACE — same matrix column, same scores/pricing tiers/
+// notes (all keyed by featId on the same object, not by appId), just
+// pointing at a different app. Picked the wrong app while building out an
+// analysis? This is the fix instead of remove-and-redo-from-scratch.
+export function filterSwapAppSearch(anlyId, oldAppId, isMaster, query) {
+    const listEl = document.getElementById("swap-app-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
+    // Exclude every app already in this matrix (including the one being
+    // swapped out — swapping "into" itself would be a no-op anyway).
+    const existingAppIds = (anly?.apps || []).map(a => a.appId);
+
+    let allApps = isMaster ? (state.master.apps || []) : (client?.projectData?.localApps || []);
+    const matches = allApps.filter(app => app.name.toLowerCase().includes(q) && !existingAppIds.includes(app.id));
+
+    listEl.innerHTML = matches.map(app => `
+        <div class="search-result-item" onmousedown="OL.executeSwapAppInAnalysis('${anlyId}', '${oldAppId}', '${app.id}', ${isMaster})">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                <span>💻 ${esc(app.name)}</span>
+                <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}">
+                    ${String(app.id).startsWith('local') ? 'LOCAL' : 'MASTER'}
+                </span>
+            </div>
+        </div>
+    `).join('') || `<div class="search-result-item muted">No other apps found.</div>`;
+};
+
+export function openSwapAppModal(anlyId, oldAppId, isMaster) {
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const currentApp = allApps.find(a => a.id === oldAppId);
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text"><i data-lucide="repeat" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px;"></i>Swap ${currentApp ? `"${esc(currentApp.name)}"` : 'App'}</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom:10px;">Its scores, pricing tiers, and notes stay in this column — only which app it's for changes.</p>
+            <div class="search-map-container">
+                <input type="text" class="modal-input"
+                       placeholder="Search apps to swap in..."
+                       onfocus="OL.filterSwapAppSearch('${anlyId}', '${oldAppId}', ${isMaster}, '')"
+                       oninput="OL.filterSwapAppSearch('${anlyId}', '${oldAppId}', ${isMaster}, this.value)"
+                       autofocus>
+                <div id="swap-app-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+    if (window.lucide) window.lucide.createIcons();
+};
+
+export async function executeSwapAppInAnalysis(anlyId, oldAppId, newAppId, isMaster) {
+    await OL.updateAndSync(() => {
+        const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
+        const anly = source.find((a) => a.id === anlyId);
+        if (!anly) return;
+
+        const appObj = anly.apps.find(a => a.appId === oldAppId);
+        if (appObj) appObj.appId = newAppId;
+    });
+
+    OL.closeModal();
+    OL.openAnalysisMatrix(anlyId, isMaster);
 };
 
 export async function removeAppFromAnalysis(anlyId, appId, isMaster) {
@@ -2574,6 +2654,7 @@ Object.assign(window.OL, {
     calculateAppTotalCost, handleMatrixPricingChange, addAppTier,
     updateAppTier, removeAppTier, updateAppFeatAddonPrice,
     filterAnalysisAppSearch, addAppToAnalysis, executeAddAppToAnalysis,
+    filterSwapAppSearch, openSwapAppModal, executeSwapAppInAnalysis,
     removeAppFromAnalysis, getGlobalCategories, getGlobalFeatures,
     filterContentManager, universalFeatureSearch, unifiedAddFlow,
     updateAnalysisFeature, syncFeatureChanges, promptFeatureCategory,
