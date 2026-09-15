@@ -486,7 +486,7 @@ OL.openErrorDetailModal = function(id) {
                                 ${CAUSE_TEMPLATES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
                             </select>
                         </div>
-                        <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
+                        <textarea id="error-cause-${r.id}" class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; align-items:flex-start;">
