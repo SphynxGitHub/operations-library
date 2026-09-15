@@ -1917,12 +1917,12 @@ export async function addResourceComment(resId, isClientFacing = false) {
     const client = getActiveClient();
     if (!res) return;
 
-    // 🕵️ AUTHOR RESOLUTION
-    let authorName = "Team Member";
-    if (window.FORCE_ADMIN) {
-        authorName = "Sphynx Team";
-    } else if (window.IS_GUEST && client) {
-        authorName = client.meta.name; // Uses the Company Name from Registry
+    // Author resolution now uses the real logged-in identity (admin or
+    // Sphynx team member — see core/auth.js) instead of a generic
+    // "Sphynx Team"/"Team Member" label, same as task comments.
+    let authorName = OL.getCurrentUserName ? OL.getCurrentUserName() : 'Team Member';
+    if (window.IS_GUEST && client) {
+        authorName = client.meta.name; // client-side guest posting client feedback
     }
 
     if (!res.comments) res.comments = [];
@@ -1939,6 +1939,44 @@ export async function addResourceComment(resId, isClientFacing = false) {
     // Save current tab preference to state so it doesn't flip back on refresh
     state.v2.activeCommentTab = isClientFacing ? 'client' : 'internal';
     OL.openResourceModal(resId);
+}
+
+// -------------------------------------------------------------
+// COMMENT THREAD — internal notes + client feedback on this resource.
+// The 'internal' tab also rolls up comments from any task whose
+// parentResourceId points at this resource (read-only here — reply from
+// the task itself so there's one source of truth), tagged with which
+// task each came from and sorted in with the resource's own notes.
+// -------------------------------------------------------------
+export function getRolledUpResourceComments(resId) {
+    const client = getActiveClient();
+    if (!client) return [];
+    const childTasks = (client.projectData?.clientTasks || []).filter(t => t.parentResourceId === resId);
+    return childTasks.flatMap(t =>
+        (t.comments || []).map(c => ({ ...c, _fromTask: t.title || t.name, _taskId: t.id }))
+    );
+}
+
+function renderCommentsList(res, activeTab) {
+    if (activeTab === 'history') return ''; // handled separately by OL.renderEditHistory at both call sites
+
+    const ownComments = (res.comments || []).filter(c => !!c.isClientFacing === (activeTab === 'client'));
+    const rolledUp = activeTab === 'internal' ? getRolledUpResourceComments(res.id) : [];
+    const all = [...ownComments, ...rolledUp].sort((a, b) => new Date(a.timestamp || a.date || 0) - new Date(b.timestamp || b.date || 0));
+
+    if (!all.length) {
+        return `<div class="tiny muted" style="text-align:center; padding:20px;">${activeTab === 'client' ? 'No client feedback yet.' : 'No internal notes yet.'}</div>`;
+    }
+
+    return all.map(c => `
+        <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line); margin-bottom:8px;">
+            <div class="tiny muted bold" style="margin-bottom:4px; display:flex; justify-content:space-between; gap:8px;">
+                <span>${esc(c.author || 'Unknown')}${c._fromTask ? ` <span class="pill tiny soft" style="font-size:9px; margin-left:4px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${getActiveClient()?.id}', '${c._taskId}')" title="From task: ${esc(c._fromTask)}"><i data-lucide="check-square" style="width:9px;height:9px;"></i> ${esc(c._fromTask)}</span>` : ''}</span>
+                <span>${(c.timestamp || c.date) ? esc(new Date(c.timestamp || c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
+            </div>
+            <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</div>
+        </div>
+    `).join('');
 };
 
 export function renderResourceMiniMaps(targetResId) {
