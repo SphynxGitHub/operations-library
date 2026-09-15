@@ -21,10 +21,14 @@ const RESOLUTION_TEMPLATES = [
 const CAUSE_TEMPLATES = [
     "API Rate Limit",
     "Database Timeout",
-    "Invalid Auth Token",
+    "Invalid Auth Token/API Key",
     "Missing Required Field",
     "Network Interruption",
-    "Third-Party Service Down"
+    "Third-Party Service Down",
+    "Incorrectly-Formatted Entry",
+    "Notification Error (not a real error)",
+    "Polling Issue",
+    "Updated Password; Account Not Reconnected to Zapier"
 ];
 
 OL.insertResolutionTemplate = function(id, template) {
