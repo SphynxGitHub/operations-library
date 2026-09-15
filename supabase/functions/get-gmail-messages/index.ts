@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
-import { loadProjectRules, matchProjectRules } from "../_shared/project-rules.ts";
+import { loadProjectRules, matchProjectRules, matchProjectRulesByText } from "../_shared/project-rules.ts";
 import { matchResourceByRootId } from "../_shared/resource-match.ts";
 
 const corsHeaders = {
@@ -56,7 +56,6 @@ function extractPlainTextBody(payload: any): string {
   }
   if (payload.body?.data) return decodeBase64Url(payload.body.data);
   return "";
-}
 }
 
 function extractEmails(text: string): string[] {
@@ -234,7 +233,17 @@ serve(async (req) => {
           ...extractEmails(getHeader("Cc"))
         ]);
 
-        const matchedRules = matchProjectRules(projectRules, participantEmails);
+        const matchedRules = (() => {
+          // Participant-email match first (higher confidence). If that's
+          // empty or ambiguous, fall back to the project name appearing in
+          // the subject or body — e.g. a Calendly notification or a vendor
+          // email that mentions "Wealth Innovation Group" by name but has
+          // no address on it matching that project's Team tab.
+          const byEmail = matchProjectRules(projectRules, participantEmails);
+          if (byEmail.length === 1) return byEmail;
+          const byText = matchProjectRulesByText(projectRules, `${subject} ${body}`);
+          return byText.length === 1 ? byText : byEmail;
+        })();
         const matchedClientIds = matchedRules.map((r) => r.clientId);
         // Only clients with the Gmail-label toggle on get an actual label
         // applied — everyone else in matchedRules still gets linked_client_id.
