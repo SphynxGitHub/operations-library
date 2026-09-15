@@ -15,6 +15,15 @@ export function getScopingDataForResource(resId) {
     return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
 }
 
+// Was called in 4 places (resources-grid.js, flow-visualizer/core.js) but
+// never actually defined anywhere — an alias of getScopingDataForResource,
+// since "in scope" just means "has a scoping line item". Returns the line
+// item itself (or null), which is what every call site actually expects —
+// some coerce it to a strict boolean themselves, others use it directly.
+export function isResourceInScope(resId) {
+    return getScopingDataForResource(resId);
+}
+
 export function getScopingWorkflowContext() {
     const workflowId = state.focusedWorkflowId;
     if (!workflowId) return null;
@@ -1607,7 +1616,7 @@ export async function removeDependencyById(resId, depId) {
 // ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    getScopingDataForResource, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
+    getScopingDataForResource, isResourceInScope, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
     openTeamAssignmentModal, setTeamMode, updateLineItem, toggleScopingUnits,
     renderUnitBadges, addResourceToScope, removeFromScope, removeFromScopeByID,
     filterResourceForScope, executeScopeAdd, cycleTeamMode, getMultiplierDisplay,
