@@ -21,6 +21,29 @@ export function renderHowToLibrary() {
     const isAdmin = window.FORCE_ADMIN === true;
     const isVaultView = hash.startsWith('#/vault');
 
+    // 1. Data Selection (Mast//======================= FEATURES / HOW-TO =======================//
+// Extracted from app.js "HOW TO SECTION" + "HOW-TO RESOURCES OVERLAP" +
+// "HOW-TO TASKS OVERLAP" + "HOW TO SCOPING OVERLAP" (all combined, no
+// clean boundaries between them — same pattern as analysis.js/scoping.js).
+// Owns: the How-To/SOP library grid, the block-based guide editor (text,
+// checklist, image, and resource-link blocks), and How-To's overlap
+// points with apps, resources, tasks, and scoping requirements.
+
+import { state, esc, getActiveClient, persist } from '../core/data.js';
+
+export function renderHowToLibrary() {
+    OL.registerView(renderHowToLibrary);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const hash = window.location.hash;
+
+    if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isVaultView = hash.startsWith('#/vault');
+
     // 1. Data Selection (Master + Project Local)
     const masterLibrary = state.master.howToLibrary || [];
     const localLibrary = (client && client.projectData.localHowTo) || [];
@@ -1704,20 +1727,22 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
     if (task && guide) {
         if (!task.howToIds) task.howToIds = [];
         const idx = task.howToIds.indexOf(howToId);
+        let activityNote = null;
         
         if (idx === -1) {
-            // 🚀 LINKING: Add ID and Sync Content
+            // 🚀 LINKING
             task.howToIds.push(howToId);
-            
-            // Append Prework and Items Needed to the task description
-            const syncNotice = `\n\n--- Linked SOP: ${guide.name} ---`;
-            const itemsText = guide.itemsNeeded ? `\n📦 Items Needed: ${guide.itemsNeeded}` : "";
-            const preworkText = guide.prework ? `\n⚡ Required Prework: ${guide.prework}` : "";
-            
-            task.description = (task.description || "") + syncNotice + itemsText + preworkText;
+
+            // 🚀 THE FIX: this used to get appended directly into
+            // task.description, which turned the description into a
+            // growing changelog instead of an editable field. Log it as
+            // activity instead; items needed/prework are still visible on
+            // the guide itself via the Linked How-To Guides list.
+            activityNote = `Linked how-to guide "${guide.name}"`;
         } else {
             // UNLINKING: Remove ID
             task.howToIds.splice(idx, 1);
+            activityNote = `Unlinked how-to guide "${guide.name}"`;
         }
         
         // Mark the owning client dirty explicitly — it may not be
@@ -1727,6 +1752,10 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
         // dropped on the next debounced save.
         if (!isVault && client && OL.markClientDirty) {
             OL.markClientDirty(client.id);
+        }
+
+        if (!isVault && client && activityNote && OL.logTaskActivity) {
+            OL.logTaskActivity(client.id, taskId, activityNote);
         }
 
         OL.persist();
