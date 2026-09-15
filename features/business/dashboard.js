@@ -12,6 +12,12 @@ OL.dashboardTaskState = {
     status: 'all'
 };
 
+// Defaults the Assignee filter to whoever's logged in, the first time the
+// dashboard renders in a session — but only if that name actually shows
+// up as an assignee on something, and only once (so picking "All" back
+// deliberately later doesn't get silently reset on the next render).
+OL._dashboardAssigneeDefaulted = false;
+
 // Builds the task list with the exact same normalization the master Task
 // Engine uses (features/business/tasks.js OL.renderBusinessTaskManager),
 // so rows rendered via OL.renderTaskRowHTML here look and behave
@@ -56,6 +62,21 @@ OL.renderDailyDashboard = function() {
     const assigneeOptions = OL.getDistinctAssignees(openTasks);
     const statusOptions = OL.getDistinctStatuses(openTasks);
 
+    if (!OL._dashboardAssigneeDefaulted) {
+        OL._dashboardAssigneeDefaulted = true;
+        const myName = state.currentUser?.name;
+        if (myName && assigneeOptions.includes(myName)) {
+            OL.dashboardTaskState.assignee = myName;
+        }
+    }
+
+    // Logged-in user's name first (if they're an assignee on anything),
+    // everyone else alphabetically after.
+    const myName = state.currentUser?.name;
+    const orderedAssigneeOptions = myName && assigneeOptions.includes(myName)
+        ? [myName, ...assigneeOptions.filter(a => a !== myName)]
+        : assigneeOptions;
+
     main.innerHTML = `
         <div class="section-header">
             <div>
@@ -92,7 +113,7 @@ OL.renderDailyDashboard = function() {
                             <span class="tiny muted bold uppercase">Assignee:</span>
                             <select class="modal-input tiny" style="width:auto;" onchange="OL.setDashboardTaskFilter('assignee', this.value)">
                                 <option value="all" ${OL.dashboardTaskState.assignee === 'all' ? 'selected' : ''}>All</option>
-                                ${assigneeOptions.map(a => `<option value="${esc(a)}" ${OL.dashboardTaskState.assignee === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+                                ${orderedAssigneeOptions.map(a => `<option value="${esc(a)}" ${OL.dashboardTaskState.assignee === a ? 'selected' : ''}>${esc(a)}${a === myName ? ' (you)' : ''}</option>`).join('')}
                             </select>
                         </div>
                         <div style="display:flex; gap:6px; align-items:center;">
