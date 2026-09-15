@@ -205,6 +205,65 @@ OL.getClientReconciliationMetrics = function(clientId) {
     return { scopedHours, scopedValue, loggedHours, hourlyRate, usedValue, remainingHours, remainingValue, burnRate };
 };
 
+// ================= 🗑️ TASK DELETION HANDLERS ================= //
+
+OL.deleteTask = function(clientId, taskId, skipConfirm = false) {
+    if (!skipConfirm && !confirm("Are you sure you want to delete this task? This action cannot be undone.")) {
+        return;
+    }
+
+    if (OL.activeTaskTimer.taskId === taskId) {
+        OL.stopLiveTaskTimer();
+    }
+
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        if (!client || !client.projectData?.clientTasks) return;
+
+        client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
+            String(t.id) !== String(taskId) && String(t.key) !== String(taskId)
+        );
+    }, clientId);
+
+    delete OL.bulkTaskSelection[taskId];
+
+    if (OL._activeModalTaskContext?.taskId === taskId) {
+        OL.closeModal();
+    }
+
+    OL.refreshTaskView();
+};
+
+OL.bulkDeleteTasks = function() {
+    const ids = Object.keys(OL.bulkTaskSelection);
+    if (ids.length === 0) return;
+
+    if (!confirm(`Are you sure you want to permanently delete these ${ids.length} tasks?`)) {
+        return;
+    }
+
+    const byClient = {};
+    Object.entries(OL.bulkTaskSelection).forEach(([taskId, clientId]) => {
+        if (!byClient[clientId]) byClient[clientId] = [];
+        byClient[clientId].push(taskId);
+    });
+
+    Object.entries(byClient).forEach(([clientId, taskIds]) => {
+        updateAndSync(() => {
+            const client = state.clients?.[clientId];
+            if (!client?.projectData?.clientTasks) return;
+
+            const idSet = new Set(taskIds.map(String));
+            client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
+                !idSet.has(String(t.id)) && !idSet.has(String(t.key))
+            );
+        }, clientId);
+    });
+
+    OL.bulkTaskSelection = {};
+    OL.refreshTaskView();
+};
+
 OL.renderBusinessTaskManager = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
@@ -1490,7 +1549,12 @@ OL.renderInContextTaskModal = function(client, task) {
                            onblur="OL.updateTaskTitle('${client?.id}', '${task.id}', this.value)"
                            onkeydown="if(event.key==='Enter'){ this.blur(); }">
                 </div>
-                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0; margin-left:10px;">✕</button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button class="btn tiny soft" onclick="OL.deleteTask('${client?.id}', '${task.id}')" style="color:#ef4444; font-weight:bold; display:flex; align-items:center; gap:4px;" title="Delete Task">
+                        <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
+                    </button>
+                    <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0;">✕</button>
+                </div>
             </div>
 
             <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
@@ -1615,11 +1679,25 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         </label>
         ${parentLinkHTML}
 
-        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; position:relative;">
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px; position:relative;">
             <div class="tiny muted">Posting as <strong>${esc(OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team')}</strong></div>
-            <textarea id="task-comment-input-${task.id}" class="modal-input tiny" rows="3" placeholder="Add a comment... use @ to tag someone" style="width:100%; box-sizing:border-box;"
-                      oninput="OL.handleCommentMentionInput(this, '${task.id}')"
-                      onkeydown="OL.handleCommentMentionKeydown(event, '${task.id}')"></textarea>
+            
+            <div style="display:flex; align-items:center; gap:2px; background:rgba(0,0,0,0.2); padding:4px 6px; border:1px solid var(--line); border-bottom:none; border-radius:6px 6px 0 0;">
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-weight:bold;" title="Bold" onclick="OL.execCommentCommand('bold')">B</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-style:italic;" title="Italic" onclick="OL.execCommentCommand('italic')">I</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Bullet List" onclick="OL.execCommentCommand('insertUnorderedList')">• List</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Numbered List" onclick="OL.execCommentCommand('insertOrderedList')">1. List</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Insert Link" onclick="OL.execCommentCommand('createLink')">🔗</button>
+            </div>
+
+            <div id="task-comment-editor-${task.id}" 
+                 contenteditable="true" 
+                 class="modal-input tiny" 
+                 style="min-height:70px; max-height:160px; overflow-y:auto; border-radius:0 0 6px 6px; background:var(--bg-card, #1e293b); padding:8px; line-height:1.4;"
+                 placeholder="Add a comment... use @ to tag someone"
+                 oninput="OL.handleCommentMentionInput(this, '${task.id}')"
+                 onkeydown="OL.handleCommentMentionKeydown(event, '${task.id}')"></div>
+
             <div id="comment-mention-dropdown-${task.id}"></div>
             <button class="btn tiny primary" style="align-self:flex-end;" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
                 <i data-lucide="send" style="width:12px;height:12px;"></i> Post
@@ -1633,7 +1711,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                         <span>${esc(c.author || 'Unknown')}${c._source === 'clickup' ? ' <span class="pill tiny soft" style="font-size:9px; margin-left:4px;">ClickUp</span>' : ''}</span>
                         <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
                     </div>
-                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${OL.renderCommentTextWithMentions(c.text)}</div>
+                    <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text)}</div>
                 </div>
             `).join('') : `<div class="tiny muted">No comments yet.</div>`}
         </div>
@@ -1929,6 +2007,32 @@ OL.addTaskComment = function(clientId, taskId) {
         if (window.lucide) lucide.createIcons();
     }
 };
+
+// Formatting Helper Function
+function formatComment(command) {
+    document.execCommand(command, false, null);
+}
+
+// Comment Submission Helper
+async function submitFormattedComment(taskId) {
+    const editor = document.getElementById('comment-editor');
+    const content = editor.innerHTML.trim();
+    
+    if (!content) return;
+
+    try {
+        const { error } = await supabase
+            .from('task_comments')
+            .insert([{ task_id: taskId, comment: content }]);
+
+        if (error) throw error;
+        
+        editor.innerHTML = '';
+        if (typeof loadComments === 'function') loadComments(taskId);
+    } catch (err) {
+        console.error("Error adding comment:", err);
+    }
+}
 
 OL.loadLinkedEmailsForTask = async function(taskId) {
     const container = document.getElementById('linked-emails-list');
