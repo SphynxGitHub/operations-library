@@ -355,8 +355,11 @@ window.buildLayout = function () {
     let showHome = true;
 
     if (isAdmin) {
+        // Mislabeled bug: this said "Global Registry" but pointed at
+        // #/business/clients (the Clients list) instead of the actual
+        // vault/master-registry routes (#/vault/apps, /functions, etc.).
         homeLabel = "Global Registry";
-        homeAction = `OL.goToDashboard('#/business/clients')`;
+        homeAction = `OL.goToDashboard('#/vault/apps')`;
     } else if (client && client.meta?.status === "Partner") {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
