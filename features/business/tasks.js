@@ -30,8 +30,29 @@ OL.showTaskComments = true;
 
 OL.toggleShowTaskComments = function() {
     OL.showTaskComments = !OL.showTaskComments;
-    if (typeof OL.renderBusinessTaskManager === 'function' && (window.location.hash || '').includes('/business/tasks')) OL.renderBusinessTaskManager();
-    if (typeof OL.renderDailyDashboard === 'function' && ((window.location.hash || '').includes('/business/dashboard') || window.location.hash === '#/' || window.location.hash === '')) OL.renderDailyDashboard();
+    OL.refreshTaskView();
+};
+
+// Per-card "show every comment" expansion, toggled by clicking the 💬
+// counter on a task's row — independent of the global mentions toggle
+// above (that one auto-surfaces just the comments that tag you; this one
+// is an explicit per-card opt-in to see the whole thread inline).
+OL.expandedCommentCards = {};
+
+OL.toggleExpandedTaskComments = function(taskId) {
+    OL.expandedCommentCards[taskId] = !OL.expandedCommentCards[taskId];
+    OL.refreshTaskView();
+};
+
+OL.toggleTaskBillable = function(clientId, taskId) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+        if (task) task.billable = task.billable === false ? true : false;
+    }, clientId);
+    OL.refreshTaskView();
 };
 
 OL.getMyMentionName = function() {
@@ -64,23 +85,25 @@ OL.sortTasksMentionsFirst = function(tasks) {
     return [...withMentions.map(x => x.t), ...rest];
 };
 
-// The row itself (unchanged) plus, when comments are visible and this
-// task has a mention of me, an indented sub-row beneath it showing that
-// mention (author, when, text) with a quick link into the full task.
+// The row itself (unchanged) plus a sub-row underneath when either:
+// (a) comments are globally visible and this task has a mention of me, or
+// (b) this specific card has been expanded via its 💬 counter — in which
+// case every comment on it shows, not just mentions.
 OL.renderTaskRowWithMentions = function(t, todayStr) {
     const rowHTML = OL.renderTaskRowHTML(t, todayStr);
-    if (!OL.showTaskComments) return rowHTML;
 
-    const mentions = OL.getTaskMentionComments(t);
-    if (!mentions.length) return rowHTML;
+    const isExpanded = !!OL.expandedCommentCards[t.id];
+    const mentions = OL.showTaskComments ? OL.getTaskMentionComments(t) : [];
+    const toShow = isExpanded ? (t.comments || []) : mentions;
+    if (!toShow.length) return rowHTML;
 
-    const sorted = [...mentions].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    const sorted = [...toShow].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     const subrow = `
         <div style="margin: -2px 0 6px ${t.parentTaskId ? '48px' : '20px'}; padding:8px 12px; border-left:2px solid var(--accent); background:rgba(var(--accent-rgb),0.05); border-radius:0 6px 6px 0; cursor:pointer;"
              onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
             ${sorted.map(c => `
                 <div class="tiny" style="display:flex; gap:6px; align-items:baseline; margin-bottom:2px;">
-                    <i data-lucide="at-sign" style="width:10px;height:10px; color:var(--accent); flex-shrink:0;"></i>
+                    <i data-lucide="${isExpanded ? 'message-square' : 'at-sign'}" style="width:10px;height:10px; color:var(--accent); flex-shrink:0;"></i>
                     <strong>${esc(c.author || 'Someone')}</strong>
                     <span class="muted" style="font-size:10px;">${c.date ? esc(new Date(c.date).toLocaleDateString([], { dateStyle: 'medium' })) : ''}</span>
                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</span>
@@ -733,6 +756,13 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                 <span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(t.title || t.name)}</span>
                 <i data-lucide="pencil" style="width:11px;height:11px; flex-shrink:0; opacity:0.5; cursor:pointer;"
                    onclick="event.stopPropagation(); OL.startInlineTaskTitleEdit('${t.clientId}', '${t.id}')"></i>
+                ${(t.comments && t.comments.length) ? `
+                    <span class="pill tiny soft" style="cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;"
+                          onclick="event.stopPropagation(); OL.toggleExpandedTaskComments('${t.id}')"
+                          title="${OL.expandedCommentCards[t.id] ? 'Hide comments' : 'Show all comments'}">
+                        <i data-lucide="message-square" style="width:10px;height:10px; pointer-events:none;"></i> ${t.comments.length}
+                    </span>
+                ` : ''}
             </div>
 
             <!-- Workspace Tag -->
@@ -798,6 +828,15 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                     <button class="btn tiny soft" title="Edit Time Log" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')" style="display:inline-flex; align-items:center; justify-content:center; padding:3px 5px;">
                         <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
                     </button>
+                </div>
+
+                <!-- Billable Toggle -->
+                <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
+                    <span title="${t.billable === false ? 'Non-billable — click to mark billable' : 'Billable — click to mark non-billable'}"
+                          style="cursor:pointer; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px; ${t.billable === false ? 'background:rgba(148,163,184,0.15); color:var(--muted);' : 'background:rgba(34,197,94,0.15); color:#22c55e;'}"
+                          onclick="OL.toggleTaskBillable('${t.clientId}', '${t.id}')">
+                        ${t.billable === false ? '⊘ $' : '$'}
+                    </span>
                 </div>
 
                 <!-- Assignee Avatar -->
@@ -1118,8 +1157,11 @@ OL.openTaskTimerDropdown = function(event, clientId, taskId) {
 // force-navigate back to the master rollup.
 OL.refreshTaskView = function() {
     const hash = window.location.hash || '';
+    const onDashboard = hash.includes('/business/dashboard') || hash === '#/' || hash === '';
     if (hash.includes('client-tasks') && typeof window.renderClientTaskManager === 'function') {
         window.renderClientTaskManager();
+    } else if (onDashboard && typeof OL.renderDailyDashboard === 'function') {
+        OL.renderDailyDashboard();
     } else if (typeof OL.renderBusinessTaskManager === 'function') {
         OL.renderBusinessTaskManager();
     }
