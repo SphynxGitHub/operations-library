@@ -1600,13 +1600,13 @@ OL.renderInContextTaskModal = function(client, task) {
                                                 <strong class="tiny">${esc(guide.name)}</strong>
                                                 ${preview ? `<div class="tiny muted" style="margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(preview.slice(0, 140))}</div>` : ''}
                                             </div>
-                                            <button class="btn tiny soft" style="flex-shrink:0;" title="Unlink" onclick="event.stopPropagation(); OL.toggleTaskHowTo(event, '${task.id}', '${guide.id}', false);">✕</button>
+                                            <button class="btn tiny soft" style="flex-shrink:0;" title="Unlink" onclick="event.stopPropagation(); OL.toggleTaskHowTo(event, '${task.id}', '${guide.id}', false, '${client?.id}');">✕</button>
                                         </div>
                                     `;
                                 }).join('')}
                             </div>
                         ` : ''}
-                        <input type="text" class="modal-input tiny" placeholder="Search guides to link..." oninput="OL.filterTaskHowToSearch('${task.id}', this.value, false)">
+                        <input type="text" class="modal-input tiny" placeholder="Search guides to link..." oninput="OL.filterTaskHowToSearch('${task.id}', this.value, false, '${client?.id}')">
                         <div id="task-howto-results" style="max-height:140px; overflow:auto; margin-top:4px;"></div>
                     </div>
 
