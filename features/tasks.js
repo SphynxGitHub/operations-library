@@ -188,8 +188,8 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
     });
 
     return Object.entries(groups).map(([groupTitle, groupTasks]) => `
-        <div style="margin-bottom: 20px;">
-            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="margin-bottom: 20px; padding: 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     ${OL.renderGroupSelectCheckbox(groupTasks)}
                     <i data-lucide="folder" style="width:13px;height:13px;"></i>
