@@ -236,10 +236,12 @@ export function openGuideEditor(htId, draftObj = null) {
                             border-radius:10px;padding:6px;z-index:100;min-width:180px;
                             box-shadow:0 8px 24px rgba(0,0,0,0.3);">
                             ${[
+                                { type:'header',    icon:'heading',      label:'Header' },
                                 { type:'text',      icon:'align-left',   label:'Text / HTML' },
                                 { type:'checklist', icon:'check-square', label:'Checklist' },
                                 { type:'image',     icon:'image',        label:'Image' },
                                 { type:'resource',  icon:'link',         label:'Resource Link' },
+                                { type:'howto-link',icon:'book-open',    label:'Link to How-To Guide' },
                             ].map(b => `
                                 <div onclick="OL._geAddBlock('${b.type}'); OL._geToggleBlockMenu();"
                                      style="display:flex;align-items:center;gap:10px;padding:9px 12px;
@@ -253,6 +255,11 @@ export function openGuideEditor(htId, draftObj = null) {
                         </div>
                     </div>
                 ` : ''}
+
+                <button class="fv-btn" onclick="OL._gePrintGuide()" style="gap:6px;">
+                    <i data-lucide="printer" style="width:13px;height:13px;"></i>
+                    Print
+                </button>
 
                 <button class="fv-btn" onclick="OL.closeGuideEditor()"
                         style="background:var(--panel-soft);color:var(--text-dim);">
@@ -305,10 +312,12 @@ export function openGuideEditor(htId, draftObj = null) {
                                         padding:6px;z-index:100;min-width:180px;
                                         box-shadow:0 8px 24px rgba(0,0,0,0.3);">
                                 ${[
+                                    { type:'header',    icon:'heading',      label:'Header' },
                                     { type:'text',      icon:'align-left',   label:'Text / HTML' },
                                     { type:'checklist', icon:'check-square', label:'Checklist' },
                                     { type:'image',     icon:'image',        label:'Image' },
                                     { type:'resource',  icon:'link',         label:'Resource Link' },
+                                    { type:'howto-link',icon:'book-open',    label:'Link to How-To Guide' },
                                 ].map(b => `
                                     <div onmousedown="event.preventDefault(); OL._geAddBlock('${b.type}'); this.closest('[style*=position]').style.display='none';"
                                          style="display:flex;align-items:center;gap:10px;padding:9px 12px;
@@ -381,6 +390,25 @@ export function openGuideEditor(htId, draftObj = null) {
                             </div>
                         ` : ''}
                     </div>
+
+                    <!-- Activity -->
+                    <div style="border-top:1px solid var(--panel-border); padding-top:14px;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="history" style="width:11px;height:11px;"></i> Activity
+                        </div>
+                        <div style="font-size:11px; color:var(--text-dim); display:flex; flex-direction:column; gap:6px;">
+                            <div>
+                                <div class="tiny muted" style="text-transform:uppercase; font-size:9px; letter-spacing:0.05em;">Created</div>
+                                <div>${ht.createdAt ? `${esc(new Date(ht.createdAt).toLocaleDateString())} by ${esc(ht.createdBy || 'Unknown')}` : 'Not tracked yet — edit to start tracking'}</div>
+                            </div>
+                            <div>
+                                <div class="tiny muted" style="text-transform:uppercase; font-size:9px; letter-spacing:0.05em;">Last Edited</div>
+                                <div>${ht.updatedAt ? `${esc(new Date(ht.updatedAt).toLocaleDateString())} by ${esc(ht.updatedBy || 'Unknown')}` : 'Not tracked yet — edit to start tracking'}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -429,11 +457,27 @@ export function _geGetHt() {
         || (client?.projectData?.localHowTo || []).find(h => h.id === htId);
 };
 
+// Stamps created/last-edited metadata on the guide, then persists. Used by
+// every content-editing mutation (blocks, checklist items, field edits) so
+// the sidebar can show who touched it and when. createdAt/createdBy get
+// backfilled retroactively on first edit for any guide that predates this.
+export function _gePersist() {
+    const ht = OL._geGetHt();
+    if (ht) {
+        const who = OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team';
+        const now = new Date().toISOString();
+        if (!ht.createdAt) { ht.createdAt = now; ht.createdBy = who; }
+        ht.updatedAt = now;
+        ht.updatedBy = who;
+    }
+    OL.persist();
+};
+
 // ── SAVE BLOCKS ────────────────────────────────────
 export function _geSaveBlocks() {
     const ht = OL._geGetHt();
     if (!ht) return;
-    OL.persist();
+    OL._gePersist();
 };
 
 // ── ADD BLOCK ──────────────────────────────────────
@@ -445,13 +489,15 @@ export function _geAddBlock(type) {
     const id = 'blk-' + Date.now();
     const defaults = {
         text:      { html: '' },
+        header:    { text: '' },
         checklist: { items: [] },
         image:     { url: '', caption: '' },
         resource:  { resourceId: null, resourceName: '', note: '' },
+        'howto-link': { howToId: null, howToName: '', note: '' },
     };
 
     ht.blocks.push({ id, type, data: defaults[type] || {} });
-    OL.persist();
+    OL._gePersist();
 
     // Re-render just the blocks container
     const container = document.getElementById('ge-blocks-container');
@@ -475,7 +521,7 @@ export function _geDeleteBlock(blockId) {
     const ht = OL._geGetHt();
     if (!ht) return;
     ht.blocks = (ht.blocks || []).filter(b => b.id !== blockId);
-    OL.persist();
+    OL._gePersist();
     const container = document.getElementById('ge-blocks-container');
     if (container) {
         container.innerHTML = OL._geRenderAllBlocks(ht);
@@ -494,7 +540,7 @@ export function _geMoveBlock(blockId, dir) {
     const tmp = ht.blocks[idx];
     ht.blocks[idx] = ht.blocks[newIdx];
     ht.blocks[newIdx] = tmp;
-    OL.persist();
+    OL._gePersist();
     const container = document.getElementById('ge-blocks-container');
     if (container) {
         container.innerHTML = OL._geRenderAllBlocks(ht);
@@ -567,11 +613,6 @@ export function _geRenderBlockInner(block, canEdit) {
 
         case 'text':
             return `
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-                    <i data-lucide="align-left" style="width:12px;height:12px;color:var(--accent);"></i>
-                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
-                                 letter-spacing:0.1em;color:var(--text-muted);">Text</span>
-                </div>
                 ${canEdit ? `
                     <textarea
                         style="width:100%;min-height:100px;background:var(--panel-soft);
@@ -594,14 +635,26 @@ export function _geRenderBlockInner(block, canEdit) {
                 `}
             `;
 
+        case 'header':
+            return `
+                ${canEdit ? `
+                    <input type="text"
+                           value="${esc(block.data.text || '')}"
+                           placeholder="Section heading..."
+                           style="width:100%;background:transparent;border:none;outline:none;
+                                  font-size:20px;font-weight:800;color:var(--text-main);
+                                  font-family:inherit;padding:4px 0;box-sizing:border-box;"
+                           onblur="OL._geUpdateBlockData('${block.id}', {text: this.value})">
+                ` : `
+                    <div style="font-size:20px;font-weight:800;color:var(--text-main);">
+                        ${esc(block.data.text || '')}
+                    </div>
+                `}
+            `;
+
         case 'checklist':
             const items = block.data.items || [];
             return `
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-                    <i data-lucide="check-square" style="width:12px;height:12px;color:var(--accent);"></i>
-                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
-                                 letter-spacing:0.1em;color:var(--text-muted);">Checklist</span>
-                </div>
                 <div id="ge-cl-${block.id}" style="display:flex;flex-direction:column;gap:4px;">
                     ${items.map((item, i) => OL._geRenderChecklistItem(block.id, item, i)).join('')}
                 </div>
@@ -622,11 +675,6 @@ export function _geRenderBlockInner(block, canEdit) {
 
         case 'image':
             return `
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-                    <i data-lucide="image" style="width:12px;height:12px;color:var(--accent);"></i>
-                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
-                                 letter-spacing:0.1em;color:var(--text-muted);">Image</span>
-                </div>
                 ${canEdit ? `
                     <input type="text" class="fvi-input" style="margin-bottom:8px;"
                            placeholder="Paste image URL..."
@@ -662,11 +710,6 @@ export function _geRenderBlockInner(block, canEdit) {
 
         case 'resource':
             return `
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-                    <i data-lucide="link" style="width:12px;height:12px;color:var(--accent);"></i>
-                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
-                                 letter-spacing:0.1em;color:var(--text-muted);">Resource Link</span>
-                </div>
                 ${block.data.resourceId ? `
                     <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
                                 background:var(--panel-soft);border:1px solid var(--panel-border);
@@ -710,6 +753,51 @@ export function _geRenderBlockInner(block, canEdit) {
                 `)}
             `;
 
+        case 'howto-link':
+            return `
+                ${block.data.howToId ? `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;"
+                         onclick="OL.openGuideEditor('${block.data.howToId}')">
+                        <i data-lucide="book-open" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:12px;color:var(--text-main);">
+                                ${esc(block.data.howToName || 'Linked Guide')}
+                            </div>
+                            ${block.data.note ? `
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">
+                                    ${esc(block.data.note)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--text-muted);"></i>
+                        ${canEdit ? `
+                            <button onclick="event.stopPropagation();OL._geUpdateBlockData('${block.id}',{howToId:null,howToName:'',note:''})"
+                                    style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;">
+                                <i data-lucide="x" style="width:12px;height:12px;pointer-events:none;"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : (canEdit ? `
+                    <div style="position:relative;">
+                        <input type="text" class="fvi-input"
+                               placeholder="Search how-to guides..."
+                               onfocus="OL._geFilterHowToLinkSearch('${block.id}', '')"
+                               oninput="OL._geFilterHowToLinkSearch('${block.id}', this.value)">
+                        <div id="ge-howto-link-results-${block.id}"
+                             class="search-results-overlay"
+                             style="position:absolute;z-index:50;width:100%;"></div>
+                    </div>
+                    <input type="text" class="fvi-input" style="margin-top:6px;"
+                           placeholder="Note about this guide (optional)..."
+                           id="ge-howto-link-note-${block.id}"
+                           onblur="OL._geUpdateBlockData('${block.id}', {note: this.value})">
+                ` : `
+                    <div style="color:var(--text-muted);font-size:12px;font-style:italic;">No guide linked.</div>
+                `)}
+            `;
+
         default:
             return `<div style="color:var(--text-muted);font-size:12px;">Unknown block type: ${block.type}</div>`;
     }
@@ -721,7 +809,8 @@ export function _geRenderChecklistItem(blockId, item, idx) {
     return `
         <div id="ge-cli-${item.id}" style="display:flex;align-items:center;gap:8px;
              padding:6px 8px;border-radius:7px;transition:background 0.12s;"
-             ondragover="event.preventDefault();"
+             ondragover="OL._geChecklistDragOver(event, '${blockId}', '${item.id}')"
+             ondragleave="OL._geChecklistDragLeave(event, '${item.id}')"
              ondrop="OL._geChecklistDrop(event, '${blockId}', '${item.id}')"
              onmouseover="this.style.background='var(--panel-soft)'"
              onmouseout="this.style.background='transparent'">
@@ -771,7 +860,7 @@ export function _geAddChecklistItem(blockId) {
     if (!block.data.items) block.data.items = [];
     const newItem = { id: 'cli-' + Date.now(), text: '', checked: false };
     block.data.items.push(newItem);
-    OL.persist();
+    OL._gePersist();
 
     const container = document.getElementById(`ge-cl-${blockId}`);
     if (container) {
@@ -791,7 +880,7 @@ export function _geToggleChecklistItem(blockId, itemId, checked) {
     const ht = OL._geGetHt();
     const block = (ht?.blocks || []).find(b => b.id === blockId);
     const item = (block?.data?.items || []).find(i => i.id === itemId);
-    if (item) { item.checked = checked; OL.persist(); }
+    if (item) { item.checked = checked; OL._gePersist(); }
 
     // Update styling without full re-render
     const row = document.getElementById(`ge-cli-${itemId}`);
@@ -810,7 +899,7 @@ export function _geUpdateChecklistItem(blockId, itemId, field, value) {
     const ht = OL._geGetHt();
     const block = (ht?.blocks || []).find(b => b.id === blockId);
     const item = (block?.data?.items || []).find(i => i.id === itemId);
-    if (item) { item[field] = value; OL.persist(); }
+    if (item) { item[field] = value; OL._gePersist(); }
 };
 
 let _geDraggedChecklistItemId = null;
@@ -820,10 +909,38 @@ export function _geChecklistDragStart(event, blockId, itemId) {
     event.dataTransfer.effectAllowed = 'move';
 }
 
+// Highlights the top or bottom edge of the row under the cursor, depending
+// on which half of it you're hovering, so you can see exactly where the
+// dragged item will land before you drop it.
+export function _geChecklistDragOver(event, blockId, itemId) {
+    event.preventDefault();
+    const row = document.getElementById(`ge-cli-${itemId}`);
+    if (!row || itemId === _geDraggedChecklistItemId) return;
+    const rect = row.getBoundingClientRect();
+    const insertAfter = (event.clientY - rect.top) > rect.height / 2;
+    row.style.borderTop = insertAfter ? '2px solid transparent' : '2px solid var(--accent)';
+    row.style.borderBottom = insertAfter ? '2px solid var(--accent)' : '2px solid transparent';
+}
+
+export function _geChecklistDragLeave(event, itemId) {
+    const row = document.getElementById(`ge-cli-${itemId}`);
+    if (row) { row.style.borderTop = ''; row.style.borderBottom = ''; }
+}
+
 export function _geChecklistDrop(event, blockId, targetItemId) {
     event.preventDefault();
     const draggedId = _geDraggedChecklistItemId;
     _geDraggedChecklistItemId = null;
+
+    const targetRow = document.getElementById(`ge-cli-${targetItemId}`);
+    let insertAfter = false;
+    if (targetRow) {
+        const rect = targetRow.getBoundingClientRect();
+        insertAfter = (event.clientY - rect.top) > rect.height / 2;
+        targetRow.style.borderTop = '';
+        targetRow.style.borderBottom = '';
+    }
+
     if (!draggedId || draggedId === targetItemId) return;
 
     const ht = OL._geGetHt();
@@ -832,12 +949,13 @@ export function _geChecklistDrop(event, blockId, targetItemId) {
 
     const items = block.data.items;
     const fromIdx = items.findIndex(i => i.id === draggedId);
-    const toIdx = items.findIndex(i => i.id === targetItemId);
-    if (fromIdx === -1 || toIdx === -1) return;
+    if (fromIdx === -1) return;
 
     const [moved] = items.splice(fromIdx, 1);
-    items.splice(toIdx, 0, moved);
-    OL.persist();
+    const toIdx = items.findIndex(i => i.id === targetItemId); // recompute — may have shifted after removal
+    const insertIdx = toIdx === -1 ? items.length : (insertAfter ? toIdx + 1 : toIdx);
+    items.splice(insertIdx, 0, moved);
+    OL._gePersist();
 
     const container = document.getElementById(`ge-cl-${blockId}`);
     if (container) {
@@ -851,7 +969,7 @@ export function _geDeleteChecklistItem(blockId, itemId) {
     const block = (ht?.blocks || []).find(b => b.id === blockId);
     if (!block) return;
     block.data.items = (block.data.items || []).filter(i => i.id !== itemId);
-    OL.persist();
+    OL._gePersist();
 
     const container = document.getElementById(`ge-cl-${blockId}`);
     if (container) {
@@ -868,7 +986,7 @@ export function _geUpdateBlockData(blockId, newData) {
     const block = (ht?.blocks || []).find(b => b.id === blockId);
     if (!block) return;
     Object.assign(block.data, newData);
-    OL.persist();
+    OL._gePersist();
 
     // Re-render just this block's inner content
     const blockEl = document.getElementById(`ge-blk-${blockId}`);
@@ -966,7 +1084,7 @@ export function _geSetResourceBlock(blockId, resId, resName) {
 
     const note = document.getElementById(`ge-res-note-${blockId}`)?.value || '';
     block.data = { resourceId: resId, resourceName: resName, note };
-    OL.persist();
+    OL._gePersist();
 
     // Re-render just this block
     const blockEl = document.getElementById(`ge-blk-${blockId}`);
@@ -982,6 +1100,130 @@ export function _geSetResourceBlock(blockId, resId, resName) {
         if (window.lucide) lucide.createIcons();
     }
 };
+
+// ── LINK TO ANOTHER HOW-TO GUIDE (block type: howto-link) ──
+export function _geFilterHowToLinkSearch(blockId, query) {
+    const listEl = document.getElementById(`ge-howto-link-results-${blockId}`);
+    if (!listEl) return;
+    const q = (query || '').toLowerCase();
+    const currentHt = OL._geGetHt();
+
+    const guides = (state.master.howToLibrary || []).filter(g =>
+        (g.name || '').toLowerCase().includes(q) && g.id !== currentHt?.id // a guide can't link to itself
+    );
+
+    listEl.innerHTML = guides.slice(0, 8).map(g => `
+        <div class="search-result-item"
+             onmousedown="OL._geSetHowToLinkBlock('${blockId}', '${g.id}', '${esc(g.name)}')">
+            ${esc(g.name)}
+        </div>
+    `).join('') || '<div class="search-result-item" style="opacity:0.5;">No guides found</div>';
+};
+
+export function _geSetHowToLinkBlock(blockId, howToId, howToName) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+
+    const note = document.getElementById(`ge-howto-link-note-${blockId}`)?.value || '';
+    block.data = { howToId, howToName, note };
+    OL._gePersist();
+
+    const blockEl = document.getElementById(`ge-blk-${blockId}`);
+    if (blockEl) {
+        blockEl.innerHTML = (OL._ge?.canEdit ? `
+            <div class="ge-block-controls" style="position:absolute;top:10px;right:10px;display:none;align-items:center;gap:4px;z-index:10;">
+                <button onclick="OL._geDeleteBlock('${blockId}')"
+                        style="width:24px;height:24px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);border-radius:5px;cursor:pointer;color:#ef4444;display:flex;align-items:center;justify-content:center;">
+                    <i data-lucide="trash-2" style="width:11px;height:11px;pointer-events:none;"></i>
+                </button>
+            </div>
+        ` : '') + OL._geRenderBlockInner(block, OL._ge?.canEdit);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── PRINT GUIDE (styled to match printAnalysisMatrix / printScopingSheet) ──
+export function _gePrintGuide() {
+    const ht = OL._geGetHt ? OL._geGetHt() : null;
+    if (!ht) return;
+
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const fmtStamp = (iso, who) => iso ? `${new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}${who ? ' by ' + esc(who) : ''}` : '—';
+
+    const blockHtml = (block) => {
+        switch (block.type) {
+            case 'header':
+                return `<div class="print-block-header">${esc(block.data.text || '')}</div>`;
+            case 'text':
+                return `<div class="print-block-text">${block.data.html || ''}</div>`;
+            case 'checklist':
+                return `<div class="print-checklist">${(block.data.items || []).map(i => `
+                    <div class="print-cl-item"><span class="print-cl-box">${i.checked ? '☑' : '☐'}</span> ${esc(i.text || '')}</div>
+                `).join('')}</div>`;
+            case 'image':
+                return `<div class="print-block-image">
+                    ${block.data.url ? `<img src="${esc(block.data.url)}" alt="">` : ''}
+                    ${block.data.caption ? `<div class="print-caption">${esc(block.data.caption)}</div>` : ''}
+                </div>`;
+            case 'resource':
+                return `<div class="print-link-block"><strong>Resource:</strong> ${esc(block.data.resourceName || 'Linked Resource')}${block.data.note ? ` — ${esc(block.data.note)}` : ''}</div>`;
+            case 'howto-link':
+                return `<div class="print-link-block"><strong>Related Guide:</strong> ${esc(block.data.howToName || 'Linked Guide')}${block.data.note ? ` — ${esc(block.data.note)}` : ''}</div>`;
+            default:
+                return '';
+        }
+    };
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${esc(ht.name || 'How-To Guide')}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, sans-serif; font-size: 12px;
+       color: #0f172a; background: #fff; padding: 28px 32px; }
+@page { size: auto portrait; margin: 14mm 12mm; }
+
+.print-header { display: flex; justify-content: space-between; align-items: flex-end;
+                border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+.ph-title { font-size: 22px; font-weight: 800; }
+.ph-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
+.ph-meta { text-align: right; font-size: 10px; color: #94a3b8; }
+
+.print-meta-bar { display: flex; gap: 24px; font-size: 9.5px; color: #64748b;
+                   border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; }
+.print-meta-bar b { color: #334155; }
+
+.print-summary { font-size: 12px; color: #334155; font-style: italic; margin-bottom: 20px; }
+
+.print-block-header { font-size: 17px; font-weight: 800; margin: 18px 0 8px; break-inside: avoid; }
+.print-block-text { font-size: 12px; line-height: 1.65; color: #1e293b; margin-bottom: 14px; }
+.print-checklist { margin-bottom: 14px; }
+.print-cl-item { font-size: 12px; padding: 3px 0; display: flex; gap: 8px; }
+.print-cl-box { flex-shrink: 0; }
+.print-block-image { margin-bottom: 14px; break-inside: avoid; }
+.print-block-image img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; }
+.print-caption { font-size: 10px; color: #64748b; font-style: italic; margin-top: 4px; }
+.print-link-block { font-size: 11px; color: #334155; background: #f8fafc; border-left: 3px solid #0ea5e9;
+                     border-radius: 0 4px 4px 0; padding: 8px 10px; margin-bottom: 14px; }
+</style></head><body>
+<div class="print-header">
+  <div><div class="ph-title">${esc(ht.name || 'Untitled Guide')}</div><div class="ph-sub">How-To Guide${ht.category ? ' · ' + esc(ht.category) : ''}</div></div>
+  <div class="ph-meta">Generated ${date}</div>
+</div>
+<div class="print-meta-bar">
+  <div><b>Created:</b> ${fmtStamp(ht.createdAt, ht.createdBy)}</div>
+  <div><b>Last Edited:</b> ${fmtStamp(ht.updatedAt, ht.updatedBy)}</div>
+</div>
+${ht.summary ? `<div class="print-summary">${esc(ht.summary)}</div>` : ''}
+${(ht.blocks || []).map(blockHtml).join('')}
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=850');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+}
 
 export function getProjectsSharingSOP(sopId) {
     return Object.values(state.clients || {}).filter(client => 
@@ -1272,7 +1514,7 @@ export function handleHowToSave(id, field, value) {
             console.log("🔒 Revoked sharing for internal guide.");
         }
 
-        OL.persist();
+        OL._gePersist();
         
         // 🔄 Surgical UI Sync for name
         if (field === 'name') {
@@ -1630,13 +1872,14 @@ Object.assign(window.OL, {
     filterMasterHowToImport, getSOPBacklinks, filterTaskHowToSearch, toggleTaskHowTo,
     addHTRequirement, updateHTReq, removeHTRequirement, resolveRequirementTarget,
     deployRequirementsFromResource,
-    _geOutsideClick, _geToggleBlockMenu, _geSaveField, _geGetHt, _geSaveBlocks,
+    _geOutsideClick, _geToggleBlockMenu, _geSaveField, _geGetHt, _geSaveBlocks, _gePersist,
     _geAddBlock, _geDeleteBlock, _geMoveBlock, _geRenderAllBlocks, _geRenderBlock,
     _geRenderBlockInner, _geRenderChecklistItem, _geAddChecklistItem,
     _geToggleChecklistItem, _geUpdateChecklistItem, _geDeleteChecklistItem,
-    _geChecklistDragStart, _geChecklistDrop,
+    _geChecklistDragStart, _geChecklistDragOver, _geChecklistDragLeave, _geChecklistDrop,
     _geUpdateBlockData, _geRefreshImageBlock, _geRefreshVideoPreview,
-    _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock
+    _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock,
+    _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide
 });
 // Called bare from sections still living in app.js — bridge onto window.
 window.renderHowToLibrary = renderHowToLibrary;
