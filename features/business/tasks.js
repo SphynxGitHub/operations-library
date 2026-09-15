@@ -19,6 +19,104 @@ OL.activeTaskTimer = {
     elapsedSeconds: 0 
 };
 
+// -------------------------------------------------------------
+// MENTIONS IN THE TASK LIST — shared by both the master Task Manager and
+// the Daily Dashboard (both render rows via OL.renderTaskRowHTML), so a
+// task you were @mentioned on floats to the top with the mention shown as
+// a sub-row underneath it, and the "Show/Hide Comments" toggle works the
+// same in both places off one shared flag.
+// -------------------------------------------------------------
+OL.showTaskComments = true;
+
+OL.toggleShowTaskComments = function() {
+    OL.showTaskComments = !OL.showTaskComments;
+    if (typeof OL.renderBusinessTaskManager === 'function' && (window.location.hash || '').includes('/business/tasks')) OL.renderBusinessTaskManager();
+    if (typeof OL.renderDailyDashboard === 'function' && ((window.location.hash || '').includes('/business/dashboard') || window.location.hash === '#/' || window.location.hash === '')) OL.renderDailyDashboard();
+};
+
+OL.getMyMentionName = function() {
+    return (state.currentUser?.name || '').toLowerCase();
+};
+
+// Every comment on this task (internal only — ClickUp imports were never
+// tagged by anyone here) that mentions the current logged-in person.
+OL.getTaskMentionComments = function(task) {
+    const myName = OL.getMyMentionName();
+    if (!myName) return [];
+    return (task.comments || []).filter(c => (c.mentions || []).some(m => (m.name || '').toLowerCase() === myName));
+};
+
+OL.taskHasMentionOfMe = function(task) {
+    return OL.getTaskMentionComments(task).length > 0;
+};
+
+// Stable sort: tasks with a mention of me first (most recent mention
+// first among those), everything else keeps its existing relative order.
+OL.sortTasksMentionsFirst = function(tasks) {
+    const withMentions = [];
+    const rest = [];
+    tasks.forEach(t => {
+        const mentions = OL.getTaskMentionComments(t);
+        if (mentions.length) withMentions.push({ t, latest: mentions.reduce((max, c) => Math.max(max, new Date(c.date || 0).getTime()), 0) });
+        else rest.push(t);
+    });
+    withMentions.sort((a, b) => b.latest - a.latest);
+    return [...withMentions.map(x => x.t), ...rest];
+};
+
+// The row itself (unchanged) plus, when comments are visible and this
+// task has a mention of me, an indented sub-row beneath it showing that
+// mention (author, when, text) with a quick link into the full task.
+OL.renderTaskRowWithMentions = function(t, todayStr) {
+    const rowHTML = OL.renderTaskRowHTML(t, todayStr);
+    if (!OL.showTaskComments) return rowHTML;
+
+    const mentions = OL.getTaskMentionComments(t);
+    if (!mentions.length) return rowHTML;
+
+    const sorted = [...mentions].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    const subrow = `
+        <div style="margin: -2px 0 6px ${t.parentTaskId ? '48px' : '20px'}; padding:8px 12px; border-left:2px solid var(--accent); background:rgba(var(--accent-rgb),0.05); border-radius:0 6px 6px 0; cursor:pointer;"
+             onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
+            ${sorted.map(c => `
+                <div class="tiny" style="display:flex; gap:6px; align-items:baseline; margin-bottom:2px;">
+                    <i data-lucide="at-sign" style="width:10px;height:10px; color:var(--accent); flex-shrink:0;"></i>
+                    <strong>${esc(c.author || 'Someone')}</strong>
+                    <span class="muted" style="font-size:10px;">${c.date ? esc(new Date(c.date).toLocaleDateString([], { dateStyle: 'medium' })) : ''}</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    return rowHTML + subrow;
+};
+
+// -------------------------------------------------------------
+// ASSIGNEE / STATUS FILTER — reusable list-building for the two filter
+// dropdowns. Distinct values are pulled from whatever task set is
+// currently in scope so the dropdown never offers an option with zero
+// matches.
+// -------------------------------------------------------------
+OL.getDistinctAssignees = function(tasks) {
+    const names = new Set();
+    tasks.forEach(t => { if (t.assignee) names.add(t.assignee); });
+    return [...names].sort();
+};
+
+OL.getDistinctStatuses = function(tasks) {
+    const names = new Set();
+    tasks.forEach(t => { names.add(t.status || 'Pending Sphynx Action'); });
+    return [...names].sort();
+};
+
+OL.filterTasksByAssigneeStatus = function(tasks, assignee, status) {
+    return tasks.filter(t => {
+        const assigneeMatch = (assignee === 'all') || (t.assignee || 'Sphynx Task') === assignee;
+        const statusMatch = (status === 'all') || (t.status || 'Pending Sphynx Action') === status;
+        return assigneeMatch && statusMatch;
+    });
+};
+
 // 🗂️ Bulk Task Editor selection — { taskId: clientId } so we know which
 // client each selected task belongs to even when selecting across the
 // master rollup (which spans many clients at once).
@@ -125,6 +223,9 @@ OL.renderBusinessTaskManager = function() {
                 <div class="small muted">Consolidated deliverables, team assignments, third-party logs, and scoping reconciliation</div>
             </div>
             <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                <button class="btn small soft" onclick="OL.toggleShowTaskComments()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="${OL.showTaskComments ? 'eye-off' : 'eye'}" style="width:14px;height:14px;"></i> ${OL.showTaskComments ? 'Hide' : 'Show'} Comments
+                </button>
                 <button class="btn small soft" onclick="OL.openStatusManagerModal()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="settings-2" style="width:14px;height:14px;"></i> Status Pipeline
                 </button>
@@ -192,11 +293,11 @@ OL.renderBusinessTaskManager = function() {
                 
                 <div style="display: flex; gap: 8px; flex: 1; min-width: 200px; align-items:center;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
-                    <input type="text" 
+                    <input type="text" id="task-manager-search-input"
                            class="modal-input tiny" 
                            placeholder="Search deliverables or tasks..." 
                            value="${esc(OL.globalTaskFilterState.query)}"
-                           oninput="OL.setGlobalTaskFilter('query', this.value)">
+                           oninput="const v=this.value; OL.reRenderPreservingFocus(() => OL.setGlobalTaskFilter('query', v));">
                 </div>
 
                 <div style="display: flex; gap: 6px; align-items: center;">
@@ -388,7 +489,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
             
             ${subGroupBy === 'none' ? `
                 <div style="display: grid; gap: 8px;">
-                    ${OL.sortTasksWithSubtasksNested(tasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                    ${OL.sortTasksMentionsFirst(OL.sortTasksWithSubtasksNested(tasks)).map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}
                 </div>
             ` : `
                 <div style="display: grid; gap: 16px; padding-left: 12px; border-left: 2px solid rgba(var(--accent-rgb), 0.2);">
@@ -399,7 +500,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                                 <i data-lucide="corner-down-right" style="width:12px;height:12px;"></i> ${esc(subTitle)} (${subTasks.length})
                             </div>
                             <div style="display: grid; gap: 8px;">
-                                ${OL.sortTasksWithSubtasksNested(subTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                                ${OL.sortTasksMentionsFirst(OL.sortTasksWithSubtasksNested(subTasks)).map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}
                             </div>
                         </div>
                     `).join('')}
@@ -694,8 +795,6 @@ OL.renderTaskRowHTML = function(t, todayStr) {
                         ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
                     </span>
 
-                    <button class="btn tiny soft" style="padding:2px 5px; font-size:10px;" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
-                    <button class="btn tiny soft" style="padding:2px 5px; font-size:10px;" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 1.0)">+1h</button>
                     <button class="btn tiny soft" title="Edit Time Log" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')" style="display:inline-flex; align-items:center; justify-content:center; padding:3px 5px;">
                         <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
                     </button>
@@ -1400,9 +1499,12 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
             <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i> Comments
         </label>
 
-        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; position:relative;">
             <div class="tiny muted">Posting as <strong>${esc(OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team')}</strong></div>
-            <textarea id="task-comment-input-${task.id}" class="modal-input tiny" rows="3" placeholder="Add a comment..." style="width:100%; box-sizing:border-box;"></textarea>
+            <textarea id="task-comment-input-${task.id}" class="modal-input tiny" rows="3" placeholder="Add a comment... use @ to tag someone" style="width:100%; box-sizing:border-box;"
+                      oninput="OL.handleCommentMentionInput(this, '${task.id}')"
+                      onkeydown="OL.handleCommentMentionKeydown(event, '${task.id}')"></textarea>
+            <div id="comment-mention-dropdown-${task.id}"></div>
             <button class="btn tiny primary" style="align-self:flex-end;" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
                 <i data-lucide="send" style="width:12px;height:12px;"></i> Post
             </button>
@@ -1415,11 +1517,126 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                         <span>${esc(c.author || 'Unknown')}${c._source === 'clickup' ? ' <span class="pill tiny soft" style="font-size:9px; margin-left:4px;">ClickUp</span>' : ''}</span>
                         <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
                     </div>
-                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${esc(c.text)}</div>
+                    <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${OL.renderCommentTextWithMentions(c.text)}</div>
                 </div>
             `).join('') : `<div class="tiny muted">No comments yet.</div>`}
         </div>
     `;
+};
+
+// -------------------------------------------------------------
+// @MENTIONS — tag a Sphynx team member in a comment. Typing "@" opens a
+// small dropdown of roster names filtered as you keep typing; picking one
+// (click or Enter/Tab) inserts "@Full Name " at the cursor. On post, the
+// final text is scanned against the roster to record structured mentions
+// (comment.mentions = [{id, name}]) — that's what the dashboard and Task
+// Manager use to surface "tasks where you were tagged" and what renders
+// the highlighted @Name styling in the comment thread.
+// -------------------------------------------------------------
+OL.getMentionRoster = function() {
+    return (state.master?.sphynxTeam || []).map(m => ({ id: m.id, name: m.name })).filter(m => m.name);
+};
+
+// Finds an in-progress "@partial" right before the cursor, if any.
+OL._findMentionQuery = function(text, caretPos) {
+    const upToCaret = text.slice(0, caretPos);
+    const at = upToCaret.lastIndexOf('@');
+    if (at === -1) return null;
+    const between = upToCaret.slice(at + 1);
+    if (/[\n@]/.test(between)) return null; // a newline or another @ closes the mention attempt
+    if (between.length > 40) return null; // way too long to still be a name — give up
+    return { start: at, query: between.toLowerCase() };
+};
+
+OL.handleCommentMentionInput = function(textarea, taskId) {
+    const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
+    if (!dropdown) return;
+
+    const match = OL._findMentionQuery(textarea.value, textarea.selectionStart);
+    if (!match) { dropdown.innerHTML = ''; return; }
+
+    const roster = OL.getMentionRoster().filter(m => m.name.toLowerCase().includes(match.query));
+    if (!roster.length) { dropdown.innerHTML = ''; return; }
+
+    dropdown.innerHTML = `
+        <div style="position:absolute; z-index:20; bottom:100%; left:0; right:0; margin-bottom:4px; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:6px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); max-height:160px; overflow:auto;">
+            ${roster.map((m, i) => `
+                <div class="tiny mention-suggestion" data-idx="${i}"
+                     style="padding:7px 10px; cursor:pointer; ${i === 0 ? 'background:rgba(var(--accent-rgb),0.12);' : ''}"
+                     onmousedown="event.preventDefault(); OL.insertMention('${taskId}', '${esc(m.name)}', ${match.start})">
+                    ${esc(m.name)}
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+OL.handleCommentMentionKeydown = function(event, taskId) {
+    const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
+    if (!dropdown || !dropdown.innerHTML.trim()) return;
+
+    if (event.key === 'Escape') {
+        dropdown.innerHTML = '';
+        return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+        const first = dropdown.querySelector('.mention-suggestion');
+        if (first) {
+            event.preventDefault();
+            first.dispatchEvent(new Event('mousedown'));
+        }
+    }
+};
+
+OL.insertMention = function(taskId, name, atPosition) {
+    const textarea = document.getElementById(`task-comment-input-${taskId}`);
+    const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
+    if (!textarea) return;
+
+    const caret = textarea.selectionStart;
+    const before = textarea.value.slice(0, atPosition);
+    const after = textarea.value.slice(caret);
+    const insertion = `@${name} `;
+    textarea.value = before + insertion + after;
+
+    const newCaret = before.length + insertion.length;
+    textarea.focus();
+    textarea.setSelectionRange(newCaret, newCaret);
+    if (dropdown) dropdown.innerHTML = '';
+};
+
+// Scans final comment text for "@Full Name" against the roster. Longest
+// names are matched first so "@Karen Smith" doesn't get short-matched as
+// just "@Karen" when both exist.
+OL.extractMentions = function(text) {
+    const roster = OL.getMentionRoster().sort((a, b) => b.name.length - a.name.length);
+    const found = [];
+    roster.forEach(m => {
+        const needle = `@${m.name}`;
+        if (text.toLowerCase().includes(needle.toLowerCase()) && !found.some(f => f.id === m.id)) {
+            found.push({ id: m.id, name: m.name });
+        }
+    });
+    return found;
+};
+
+// Renders comment text with "@Name" spans highlighted, for any mention
+// the text actually contains against the current roster (escapes
+// everything else normally).
+OL.renderCommentTextWithMentions = function(text) {
+    const raw = text || '';
+    const roster = OL.getMentionRoster().sort((a, b) => b.name.length - a.name.length);
+    if (!roster.length) return esc(raw);
+
+    const pattern = roster.map(m => `@${m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('|');
+    if (!pattern) return esc(raw);
+
+    const re = new RegExp(`(${pattern})`, 'g');
+    return raw.split(re).map(part =>
+        roster.some(m => part === `@${m.name}`)
+            ? `<span class="pill tiny accent" style="padding:1px 6px; font-weight:bold;">${esc(part)}</span>`
+            : esc(part)
+    ).join('');
 };
 
 OL.updateTaskTitle = function(clientId, taskId, newTitle) {
@@ -1480,6 +1697,7 @@ OL.addTaskComment = function(clientId, taskId) {
     const text = (textEl?.value || '').trim();
     if (!text) return;
     const author = (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Sphynx Team';
+    const mentions = OL.extractMentions(text);
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
@@ -1488,7 +1706,7 @@ OL.addTaskComment = function(clientId, taskId) {
         );
         if (task) {
             if (!task.comments) task.comments = [];
-            task.comments.push({ id: uid(), author, text, date: new Date().toISOString() });
+            task.comments.push({ id: uid(), author, text, mentions, date: new Date().toISOString() });
         }
     }, clientId);
 
