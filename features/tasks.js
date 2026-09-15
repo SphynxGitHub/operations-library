@@ -235,3 +235,93 @@ OL.createClientQuickTask = function(clientId) {
 };
 
 window.renderClientTaskManager = renderClientTaskManager;
+
+// -------------------------------------------------------------
+// "Add Deliverable" modal — was calling OL.openClientCreateTaskModal,
+// which was never actually defined anywhere (the button silently did
+// nothing / threw). This is the real implementation. Always auto-linked
+// to the client you're viewing — no client picker needed here, unlike the
+// global cross-client quick-creator.
+// -------------------------------------------------------------
+OL.openClientCreateTaskModal = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+    const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text"><i data-lucide="plus-circle" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;"></i>Add Deliverable — ${esc(client.meta?.name || 'Project')}</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" style="max-width:480px; width:100%;">
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div>
+                    <label class="tiny muted bold">Title *</label>
+                    <input type="text" id="new-deliverable-title" class="modal-input tiny" placeholder="Task or deliverable description">
+                </div>
+                <div>
+                    <label class="tiny muted bold">Description</label>
+                    <textarea id="new-deliverable-desc" class="modal-input tiny" rows="3" placeholder="Optional details"></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div>
+                        <label class="tiny muted bold">Assignee</label>
+                        <select id="new-deliverable-assignee" class="modal-input tiny">
+                            <option value="Sphynx Task" selected>Sphynx Task</option>
+                            <option value="Client Task">Client Task</option>
+                            ${(client.projectData?.teamMembers || []).map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                            <optgroup label="Third-Party / Vendors">
+                                ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join('')}
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="tiny muted bold">Status</label>
+                        <select id="new-deliverable-status" class="modal-input tiny">
+                            ${masterStatuses.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="tiny muted bold">Due Date</label>
+                    <input type="date" id="new-deliverable-duedate" class="modal-input tiny">
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                <button class="btn small primary" onclick="OL.saveClientCreateTask('${clientId}')" style="font-weight:bold;">Create Deliverable</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.saveClientCreateTask = function(clientId) {
+    const title = document.getElementById('new-deliverable-title')?.value.trim();
+    if (!title) { alert('Title is required.'); return; }
+
+    const description = document.getElementById('new-deliverable-desc')?.value.trim() || '';
+    const assignee = document.getElementById('new-deliverable-assignee')?.value || 'Sphynx Task';
+    const status = document.getElementById('new-deliverable-status')?.value || 'Pending Sphynx Action';
+    const dueDate = document.getElementById('new-deliverable-duedate')?.value || '';
+
+    updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        client.projectData.clientTasks.unshift({
+            id: uid(),
+            title, name: title,
+            description,
+            status, assignee, dueDate,
+            isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
+            loggedHours: 0,
+            createdAt: new Date().toISOString()
+        });
+    }, clientId);
+
+    OL.closeModal();
+    renderClientTaskManager();
+};
