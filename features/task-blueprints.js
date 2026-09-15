@@ -135,6 +135,30 @@ OL.openTaskBlueprintModal = function(blueprintId) {
                 </div>
             </div>
 
+            ${bp ? `
+                <label class="modal-section-label">Linked How-To Guides</label>
+                <div class="card-section">
+                    ${(bp.howToIds && bp.howToIds.length) ? `
+                        <div style="display:grid; gap:8px; margin-bottom:10px;">
+                            ${bp.howToIds.map(htId => {
+                                const guide = (state.master.howToLibrary || []).find(g => g.id === htId);
+                                if (!guide) return '';
+                                return `
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
+                                        <strong class="tiny" style="cursor:pointer;" onclick="OL.openGuideEditor('${guide.id}')">${esc(guide.name)}</strong>
+                                        <button class="btn tiny soft" title="Unlink" onclick="OL.toggleTaskHowTo(event, '${bp.id}', '${guide.id}', true); OL.openTaskBlueprintModal('${bp.id}');">✕</button>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : ''}
+                    <input type="text" class="modal-input tiny" placeholder="Search guides to link..." oninput="OL.filterTaskHowToSearch('${bp.id}', this.value, true)">
+                    <div id="task-howto-results" style="max-height:140px; overflow:auto; margin-top:4px;"></div>
+                </div>
+            ` : `
+                <div class="tiny muted" style="margin-top:12px;">Save the blueprint first, then reopen it to link How-To guides.</div>
+            `}
+
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
                 <button class="btn primary" onclick="OL.saveTaskBlueprint('${bp?.id || ''}')">Save Blueprint</button>
@@ -249,6 +273,50 @@ OL.applyTaskBlueprintToClient = function(blueprintId, clientId) {
     alert(`"${blueprint.title}" applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
 };
 
+// Every task ever created from this blueprint, across every client —
+// relies on buildTaskFromBlueprint already stamping task.blueprintId, so
+// no extra linkage bookkeeping is needed beyond that existing field.
+OL.getBlueprintApplications = function(blueprintId) {
+    const results = [];
+    Object.values(state.clients || {}).forEach(client => {
+        (client.projectData?.clientTasks || []).forEach(task => {
+            if (task.blueprintId === blueprintId) {
+                results.push({
+                    clientId: client.id,
+                    clientName: client.meta?.name || client.id,
+                    taskId: task.id,
+                    taskTitle: task.title || task.name,
+                    status: task.status || 'Pending Sphynx Action'
+                });
+            }
+        });
+    });
+    return results;
+};
+
+// Bulk variant — applies the blueprint to every client id given, one
+// updateAndSync per client (so each is correctly marked dirty for persist).
+OL.applyTaskBlueprintToClients = function(blueprintId, clientIds) {
+    const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
+    if (!blueprint) return;
+    if (!clientIds || !clientIds.length) { alert('Pick at least one client first.'); return; }
+
+    clientIds.forEach(clientId => {
+        updateAndSync(() => {
+            const client = state.clients?.[clientId];
+            if (!client) return;
+            if (!client.projectData) client.projectData = {};
+            if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+            const newTask = OL.buildTaskFromBlueprint(blueprint, client, {});
+            client.projectData.clientTasks.unshift(newTask);
+        }, clientId);
+    });
+
+    OL.closeModal();
+    alert(`"${blueprint.title}" applied to ${clientIds.length} client${clientIds.length === 1 ? '' : 's'}.`);
+};
+
 OL.openApplyBlueprintModal = function(blueprintId) {
     const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
     if (!blueprint) return;
@@ -256,23 +324,43 @@ OL.openApplyBlueprintModal = function(blueprintId) {
     const clients = Object.values(state.clients || {}).sort((a, b) =>
         (a.meta?.name || '').localeCompare(b.meta?.name || '')
     );
+    const applications = OL.getBlueprintApplications(blueprintId);
+    const appliedClientIds = new Set(applications.map(a => a.clientId));
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">Apply "${esc(blueprint.title)}" to a Client</div>
+            <div class="modal-title-text">Apply "${esc(blueprint.title)}"</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body">
-            <label class="modal-section-label">Client</label>
-            <select id="apply-bp-client" class="modal-input">
-                <option value="">Select a client...</option>
-                ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
-            </select>
+        <div class="modal-body" style="max-width:480px; width:100%;">
+            <label class="modal-section-label">Apply to Clients</label>
+            <p class="tiny muted" style="margin-bottom:8px;">Check any number of clients — applying creates a fresh copy of this task for each one.</p>
+            <div style="display:grid; gap:6px; max-height:220px; overflow:auto; margin-bottom:14px;">
+                ${clients.map(c => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+                        <input type="checkbox" class="apply-bp-client-cb" value="${c.id}">
+                        ${esc(c.meta?.name || c.id)}
+                        ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="margin-left:auto; font-size:9px;">Already applied</span>` : ''}
+                    </label>
+                `).join('')}
+            </div>
 
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            ${applications.length ? `
+                <label class="modal-section-label">Applied To (${applications.length})</label>
+                <div style="display:grid; gap:6px; max-height:160px; overflow:auto; margin-bottom:14px;">
+                    ${applications.map(a => `
+                        <div class="tiny" style="display:flex; justify-content:space-between; gap:8px; padding:6px 8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${a.clientId}', '${a.taskId}')">
+                            <span>${esc(a.clientName)} — ${esc(a.taskTitle)}</span>
+                            <span class="pill tiny soft" style="flex-shrink:0;">${esc(a.status)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" onclick="OL.applyTaskBlueprintToClient('${blueprintId}', document.getElementById('apply-bp-client').value)">Apply</button>
+                <button class="btn primary" onclick="OL.applyTaskBlueprintToClients('${blueprintId}', [...document.querySelectorAll('.apply-bp-client-cb:checked')].map(el => el.value))">Apply to Selected</button>
             </div>
         </div>
     `;
@@ -537,4 +625,3 @@ OL.openApplySopModal = function(sopId) {
     `;
     openModal(html);
 };
-
