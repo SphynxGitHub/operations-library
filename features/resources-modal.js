@@ -2504,8 +2504,13 @@ export function renderVaultRatesPage() {
                             <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeRegistryTypeByKey('${type.typeKey}')">×</button>
                         </div>
                         <div class="card-body">
-                            <div class="small muted">${varCount} variables defined</div>
-                            <button class="btn small soft full-width" style="margin-top:12px;">Manage Rates ➔</button>
+                            <div class="small muted">${varCount} variables defined · ${(type.customFields || []).length} custom field${(type.customFields || []).length === 1 ? '' : 's'}</div>
+                            <div style="display:flex; gap:6px; margin-top:12px;">
+                                <button class="btn small soft" style="flex:1;">Manage Rates ➔</button>
+                                <button class="btn small soft" style="flex:1;" onclick="event.stopPropagation(); OL.openResourceTypeFieldsDetail('${esc(type.type)}')">
+                                    🧩 Fields
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
