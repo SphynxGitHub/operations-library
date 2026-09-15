@@ -1,337 +1,477 @@
-import { esc, uid, state, db, updateAndSync } from '../../core/data.js';
+//======================= FEATURES / TEAM =======================//
+// Extracted from app.js "TEAM MANAGEMENT SECTION".
+// Owns: the team roster grid, the team member modal (roles, signature,
+// contact details, access section trigger), and team-to-scoping-item assignment.
 
-// ================= 🛡️ SPHYNX TEAM MANAGER (CARD LAYOUT) ================= //
+import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
 
-OL.renderSphynxTeamPage = function() {
-    const main = document.getElementById("mainContent");
-    if (!main) return;
+export function renderTeamManager() {
+    if (typeof OL.registerView === 'function') OL.registerView(renderTeamManager);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    if (!client || !container) return;
 
-    if (!state.master) state.master = {};
-    if (!state.master.sphynxTeam) {
-        state.master.sphynxTeam = [
-            { id: "tm-1", name: "Admin Owner", email: "admin@sphynx.agency", phone: "", role: "Master Admin", signature: "Admin Owner | Sphynx Agency", rate: 300 },
-            { id: "tm-2", name: "Lead Developer", email: "dev@sphynx.agency", phone: "", role: "Developer", signature: "Development Team | Sphynx Agency", rate: 150 }
-        ];
+    if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
+    const members = client.projectData.teamMembers;
+
+    const memberCardsHtml = members
+        .map((m) => {
+            const rolesHtml = (m.roles || []).length
+                ? m.roles
+                    .map(
+                        (r) =>
+                            `<span class="pill tiny soft" style="font-size: 8px; display:flex; align-items:center; gap:3px;">
+                  <i data-lucide="shield" style="width:8px; height:8px;"></i> ${esc(r)}
+                </span>`,
+                    )
+                    .join("")
+                : `<span class="tiny muted uppercase" style="display:flex; align-items:center; gap:4px;">
+            <i data-lucide="user" style="width:10px; height:10px;"></i> ${esc(m.role || "Contributor")}
+           </span>`;
+
+            return `
+           <div class="card is-clickable hover-trigger" onclick="OL.openTeamMemberModal('${m.id}')" style="padding:15px; display:flex; flex-direction:column; justify-between; gap:10px;">
+              <div>
+                  <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                      <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="background:var(--accent); color:black; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">
+                            ${m.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                        </div>
+                        <div style="min-width:0;">
+                            <div class="card-title tm-card-title-${m.id}" style="font-weight:bold; font-size:14px;">${esc(m.name)}</div>
+                            <div class="pills-row" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top:2px;">
+                                ${rolesHtml}
+                            </div>
+                        </div>
+                      </div>
+                      <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">
+                        <i data-lucide="x" style="width:14px; height:14px;"></i>
+                      </button>
+                  </div>
+
+                  <!-- Contact Information Row -->
+                  <div class="card-body" style="display:grid; gap:4px; font-size:11px; margin-top:10px;" class="muted">
+                      ${m.email ? `
+                      <div style="display:flex; align-items:center; gap:6px; opacity:0.8;">
+                          <i data-lucide="mail" style="width:12px; height:12px; color:var(--accent);"></i>
+                          <a href="mailto:${esc(m.email)}" style="color:inherit; text-decoration:none;" onclick="event.stopPropagation();">${esc(m.email)}</a>
+                      </div>` : ''}
+                      ${m.phone ? `
+                      <div style="display:flex; align-items:center; gap:6px; opacity:0.8;">
+                          <i data-lucide="phone" style="width:12px; height:12px; color:var(--accent);"></i>
+                          <span>${esc(m.phone)}</span>
+                      </div>` : ''}
+                  </div>
+              </div>
+          </div>
+      `;
+        })
+        .join("");
+
+    container.innerHTML = `
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="users" style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex:1;">
+                <h2 style="margin:0;">Team Members</h2>
+                <div class="small muted subheader">Manage client members assigned to ${esc(client.meta.name)}</div>
+            </div>
+            <button class="btn primary" onclick="OL.promptAddTeamMember()" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="user-plus" style="width:16px; height:16px;"></i> Add Member
+            </button>
+            ${typeof OL.viewToggleBtn === 'function' ? OL.viewToggleBtn('team', 'renderTeamManager') : ''}
+        </div>
+        ${typeof OL.getViewMode === 'function' && OL.getViewMode('team') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px;">
+                ${members.map(m => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openTeamMemberModal('${m.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);
+                                    color:#000;display:flex;align-items:center;justify-content:center;
+                                    font-weight:900;font-size:11px;flex-shrink:0;">
+                            ${m.name.split(' ').map(n=>n[0]).join('').toUpperCase().substring(0,2)}
+                        </div>
+                        <div style="flex:1; min-width:0;">
+                            <span style="font-weight:600;font-size:13px;display:block;">${esc(m.name)}</span>
+                            <span class="tiny muted">${esc(m.email || 'No email')} ${m.phone ? `• ${esc(m.phone)}` : ''}</span>
+                        </div>
+                        <div class="pills-row" style="margin:0;gap:4px;">
+                            ${(m.roles||[]).map(r=>`<span class="pill tiny soft" style="font-size:9px;">${esc(r)}</span>`).join('')}
+                        </div>
+                        <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.removeTeamMember('${m.id}')">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `
+        <div class="cards-grid" style="margin-top: 20px; display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+            ${memberCardsHtml}
+            ${members.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No team members added yet.</div>' : ""}
+        </div>
+        `}
+    `;
+
+    if (window.lucide) {
+        window.lucide.createIcons();
     }
+}
 
-    const team = state.master.sphynxTeam;
+export function promptAddTeamMember() {
+    const draftId = 'draft-tm-' + Date.now();
+    const draftMember = {
+        id: draftId,
+        name: "",
+        email: "",
+        phone: "",
+        roles: [],
+        isDraft: true
+    };
 
-    main.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2><i data-lucide="shield-check" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Sphynx Team & Access Manager</h2>
-                <div class="small muted">Internal agency roster, signatures, role permissions, and system access</div>
-            </div>
-            <div class="header-actions">
-                <button class="btn small primary" onclick="OL.openSphynxMemberModal()" style="display:flex; align-items:center; gap:6px; font-weight:bold;">
-                    <i data-lucide="user-plus" style="width:14px;height:14px;"></i> Add Team Member
-                </button>
-            </div>
-        </div>
+    openTeamMemberModal(draftId, draftMember);
+}
 
-        <!-- TEAM MEMBER CARDS GRID -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
-            ${team.map(m => `
-                <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
-                    <div>
-                        <!-- Header: Initials + Name + Role Badge -->
-                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
-                            <div style="width:44px; height:44px; border-radius:50%; background:var(--accent); color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;">
-                                ${esc(m.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase())}
-                            </div>
-                            <div style="flex:1; min-width:0;">
-                                <strong style="font-size:16px; color:var(--text); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(m.name)}</strong>
-                                <span class="pill tiny accent" style="font-size:10px; font-weight:bold; margin-top:2px;">${esc(m.role || 'Team Member')}</span>
-                            </div>
-                        </div>
+export function handleTeamMemberSave(id, name) {
+    const cleanName = name.trim();
+    if (!cleanName) return;
 
-                        <!-- Contact & Signature Info -->
-                        <div style="display:grid; gap:8px; font-size:12px;" class="muted">
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <i data-lucide="mail" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i>
-                                <a href="mailto:${esc(m.email)}" style="color:inherit; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(m.email || 'No email set')}</a>
-                            </div>
-                            ${m.phone ? `
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <i data-lucide="phone" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i>
-                                <span>${esc(m.phone)}</span>
-                            </div>` : ''}
-                            <div style="display:flex; align-items:flex-start; gap:8px; background:rgba(0,0,0,0.15); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
-                                <i data-lucide="pen-tool" style="width:14px;height:14px;color:var(--accent); flex-shrink:0; margin-top:2px;"></i>
-                                <div>
-                                    <strong class="tiny uppercase bold" style="display:block; font-size:9px; color:var(--muted);">Email Signature</strong>
-                                    <span style="font-size:11px; font-style:italic;">${esc(m.signature || 'No email signature set')}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+    const client = getActiveClient();
+    const isDraft = id.startsWith('draft-tm-');
 
-                    <!-- Footer: Rate & Action Buttons -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-                        <span class="pill tiny soft monospace" style="font-size:11px;">
-                            $${m.rate || 150}/hr
-                        </span>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            ${window.FORCE_ADMIN && m.authUserId === state.currentUser?.id ? `
-                                <span class="tiny" style="color:#48bb78;" title="Your admin login is linked to this card">✅ This is you</span>
-                            ` : window.FORCE_ADMIN ? `
-                                <button class="btn tiny soft" onclick="OL.linkMyAdminLoginToTeamMember('${m.id}')" title="Link your admin login to this card so comments etc. show your name">
-                                    Set as My Profile
-                                </button>
-                            ` : ''}
-                            ${m.authUserId
-                                ? `<span class="tiny" style="color:#48bb78;" title="Has logged in">✅ Logged in</span>`
-                                : (m.setupToken
-                                    ? `<span class="tiny" style="color:#fbbf24;" title="Setup link sent, not claimed yet">⏳ Link sent</span>`
-                                    : `<span class="tiny muted" title="No login set up">— No login</span>`)}
-                            <button class="btn tiny soft" onclick="OL.openTeamAccessModal('${m.id}')" title="Login & Permissions">
-                                <i data-lucide="key-round" style="width:12px;height:12px;"></i> Access
-                            </button>
-                            <button class="btn tiny soft" onclick="OL.openSphynxMemberModal('${m.id}')" title="Edit Member">
-                                <i data-lucide="pencil" style="width:12px;height:12px;"></i>
-                            </button>
-                            <button class="btn tiny soft danger" onclick="OL.removeSphynxTeamMember('${m.id}')" title="Remove Member">
-                                <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    if (isDraft) {
+        const newId = 'tm-' + Date.now();
 
-    requestAnimationFrame(() => {
-        if (window.lucide) lucide.createIcons();
-    });
-};
+        const newMember = {
+            id: newId,
+            name: cleanName,
+            email: document.getElementById(`tm-email-${id}`)?.value || "",
+            phone: document.getElementById(`tm-phone-${id}`)?.value || "",
+            roles: [],
+            createdDate: new Date().toISOString()
+        };
 
-// ➕ / ✏️ Member Add & Edit Modal
-OL.openSphynxMemberModal = function(memberId = null) {
-    const member = memberId ? state.master?.sphynxTeam?.find(m => m.id === memberId) : null;
+        if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
+        client.projectData.teamMembers.push(newMember);
 
-    const content = `
-        <div style="padding: 24px; max-width: 500px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-                    <i data-lucide="${member ? 'pencil' : 'user-plus'}" style="width:20px;height:20px;color:var(--accent);"></i>
-                    ${member ? 'Edit Sphynx Team Member' : 'Add Sphynx Team Member'}
-                </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
-            </div>
-            <form onsubmit="event.preventDefault(); OL.saveSphynxTeamMember('${memberId || ''}');">
-                <div style="display:grid; gap:12px; margin-bottom:20px;">
-                    <div>
-                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Full Name</label>
-                        <input type="text" id="tm-name" class="modal-input tiny" value="${esc(member?.name || '')}" placeholder="e.g. Micah Porter" required style="width:100%;">
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div>
-                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Email Address</label>
-                            <input type="email" id="tm-email" class="modal-input tiny" value="${esc(member?.email || '')}" placeholder="micah@sphynx.agency" required style="width:100%;">
-                        </div>
-                        <div>
-                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Phone Number</label>
-                            <input type="text" id="tm-phone" class="modal-input tiny" value="${esc(member?.phone || '')}" placeholder="(555) 000-0000" style="width:100%;">
-                        </div>
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div>
-                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">System Role</label>
-                            <select id="tm-role" class="modal-input tiny" style="width:100%;">
-                                <option value="Master Admin" ${member?.role === 'Master Admin' ? 'selected' : ''}>Master Admin</option>
-                                <option value="Senior Strategist" ${member?.role === 'Senior Strategist' ? 'selected' : ''}>Senior Strategist</option>
-                                <option value="Developer" ${member?.role === 'Developer' ? 'selected' : ''}>Developer</option>
-                                <option value="Account Manager" ${member?.role === 'Account Manager' ? 'selected' : ''}>Account Manager</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Billing Rate ($/h)</label>
-                            <input type="number" id="tm-rate" class="modal-input tiny" value="${member?.rate || 150}" style="width:100%;">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Email Signature Text</label>
-                        <textarea id="tm-signature" class="modal-input tiny" placeholder="Micah Porter | Senior Strategist at Sphynx Agency" style="width:100%; height:60px;">${esc(member?.signature || '')}</textarea>
-                    </div>
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button type="button" class="btn tiny soft" onclick="OL.closeModal()">Cancel</button>
-                    <button type="submit" class="btn tiny primary" style="font-weight:bold;">Save Team Member</button>
-                </div>
-            </form>
-        </div>
-    `;
-    OL.showOverlayModal(content);
-};
+        persist();
+        renderTeamManager();
 
-OL.saveSphynxTeamMember = function(memberId) {
-    const name = document.getElementById('tm-name')?.value;
-    const email = document.getElementById('tm-email')?.value;
-    const phone = document.getElementById('tm-phone')?.value || '';
-    const role = document.getElementById('tm-role')?.value || 'Senior Strategist';
-    const rate = parseFloat(document.getElementById('tm-rate')?.value) || 150;
-    const signature = document.getElementById('tm-signature')?.value || '';
+        openTeamMemberModal(newId);
 
-    if (!name || !email) return;
-
-    updateAndSync(() => {
-        if (!state.master) state.master = {};
-        if (!state.master.sphynxTeam) state.master.sphynxTeam = [];
-
-        if (memberId) {
-            const m = state.master.sphynxTeam.find(item => item.id === memberId);
-            if (m) {
-                m.name = name;
-                m.email = email;
-                m.phone = phone;
-                m.role = role;
-                m.rate = rate;
-                m.signature = signature;
-            }
-        } else {
-            state.master.sphynxTeam.push({
-                id: uid(),
-                name: name,
-                email: email,
-                phone: phone,
-                role: role,
-                rate: rate,
-                signature: signature,
-                active: true,
-                createdAt: new Date().toISOString()
-            });
+    } else {
+        const member = client?.projectData?.teamMembers.find(m => m.id === id);
+        if (member) {
+            member.name = cleanName;
+            persist();
         }
-    });
+    }
+}
 
-    OL.closeModal();
-    OL.renderSphynxTeamPage();
-};
+export function updateTeamMember(memberId, field, value) {
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(
+        (m) => m.id === memberId,
+    );
 
-OL.removeSphynxTeamMember = function(memberId) {
-    if (!confirm("Are you sure you want to remove this team member?")) return;
+    if (member) {
+        member[field] = value.trim();
+        persist();
+        renderTeamManager();
+    }
+}
 
-    updateAndSync(() => {
-        if (state.master?.sphynxTeam) {
-            state.master.sphynxTeam = state.master.sphynxTeam.filter(m => m.id !== memberId);
-        }
-    });
+export function removeTeamMember(memberId) {
+    if (!confirm("Remove this team member?")) return;
+    const client = getActiveClient();
+    client.projectData.teamMembers = client.projectData.teamMembers.filter(
+        (m) => m.id !== memberId,
+    );
+    persist();
+    renderTeamManager();
+}
 
-    OL.renderSphynxTeamPage();
-};
+export function openTeamMemberModal(memberId, draftObj = null) {
+    const client = getActiveClient();
+    let member = draftObj || client?.projectData?.teamMembers.find(m => m.id === memberId);
 
-// -------------------------------------------------------------
-// LOGIN & PERMISSIONS PROVISIONING — this is what actually decides what a
-// team member can reach once logged in. See core/auth.js hasTeamPermission
-// (checked in app.js for the Business Manager nav + #/business/* routes)
-// and TEAM_PERMISSION_TABS for the exact list of grantable tabs. A real
-// admin login (the admins table) always has full access regardless of
-// this — this panel only governs the Sphynx-team-member login path.
-// -------------------------------------------------------------
-OL.openTeamAccessModal = function(memberId) {
-    const member = state.master?.sphynxTeam?.find(m => m.id === memberId);
     if (!member) return;
 
-    const tabs = OL.TEAM_PERMISSION_TABS || [];
-    const perms = member.permissions || {};
+    if (!Array.isArray(member.roles)) {
+        member.roles = member.role ? [member.role] : [];
+    }
 
-    const loginStatusHTML = member.authUserId
-        ? `<span style="color:#48bb78;">✅ ${esc(member.name)} has already logged in.</span>`
-        : member.setupToken
-            ? `<span style="color:#fbbf24;">⏳ Setup link generated, not claimed yet.</span>`
-            : `<span class="muted">No login set up yet.</span>`;
-
-    const content = `
-        <div style="padding: 24px; max-width: 480px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
-                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-                    <i data-lucide="key-round" style="width:20px;height:20px;color:var(--accent);"></i>
-                    Login & Access — ${esc(member.name)}
-                </h3>
-                <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+    const html = `
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px; border-bottom:1px solid var(--panel-border);">
+            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                <i data-lucide="user" style="width:20px; height:20px; color:var(--accent);"></i>
+                <input type="text" class="header-editable-input" 
+                       value="${esc(member.name)}" 
+                       placeholder="Full Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       oninput="OL.syncTeamMemberName('${member.id}', this.value)"
+                       onblur="OL.handleTeamMemberSave('${member.id}', this.value)">
             </div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
 
-            <div style="margin-bottom:20px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
-                <div class="tiny" style="margin-bottom:8px;">${loginStatusHTML}</div>
-                ${!member.authUserId ? `
-                    <button class="btn tiny primary" onclick="OL.copyTeamSetupLink('${member.id}')" style="width:100%;">
-                        ${member.setupToken ? 'Regenerate & Copy Setup Link' : 'Generate & Copy Setup Link'}
-                    </button>
-                    <div class="tiny muted" style="margin-top:6px;">Sends them to a page where they set their own password, using the email on file (${esc(member.email || 'no email set')}).</div>
-                ` : ''}
-            </div>
+        <div class="modal-body" style="padding: 20px;">
 
-            <div style="margin-bottom:20px;">
-                <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">Business Manager Access</label>
-                <div class="tiny muted" style="margin-bottom:10px;">Which tabs this person can see and use once logged in. The Template Vault (master config) is always admin-only, regardless of these.</div>
-                <div style="display:grid; gap:6px;">
-                    ${tabs.map(t => `
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                            <input type="checkbox" id="tm-perm-${t.key}" ${perms[t.key] ? 'checked' : ''}>
-                            <span class="tiny">${esc(t.label)}</span>
+            <!-- 📧 📱 NEW: CONTACT INFORMATION CARD SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
+                    <i data-lucide="contact" style="width:14px; height:14px;"></i> Contact Information
+                </label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px; font-size:10px;">
+                            <i data-lucide="mail" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;"></i> Email Address
                         </label>
-                    `).join('')}
+                        <input type="email" 
+                               id="tm-email-${member.id}" 
+                               class="modal-input tiny" 
+                               value="${esc(member.email || '')}" 
+                               placeholder="garret@sphynxfinancial.com" 
+                               style="width:100%;" 
+                               onblur="OL.updateTeamMember('${member.id}', 'email', this.value)">
+                    </div>
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px; font-size:10px;">
+                            <i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;"></i> Phone Number
+                        </label>
+                        <input type="text" 
+                               id="tm-phone-${member.id}" 
+                               class="modal-input tiny" 
+                               value="${esc(member.phone || '')}" 
+                               placeholder="(555) 000-0000" 
+                               style="width:100%;" 
+                               onblur="OL.updateTeamMember('${member.id}', 'phone', this.value)">
+                    </div>
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                <button class="btn tiny soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn tiny primary" style="font-weight:bold;" onclick="OL.saveTeamMemberPermissions('${member.id}')">Save Access</button>
+            <!-- ASSIGNED ROLES SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
+                    <i data-lucide="shield" style="width:14px; height:14px;"></i> Assigned Roles
+                </label>
+                <div class="pills-row" style="margin-bottom: 12px; min-height: 32px; display:flex; flex-wrap:wrap; gap:6px;">
+                    ${member.roles.map(role => `
+                        <span class="pill tiny accent" style="display:flex; align-items:center; gap:4px;">
+                            ${esc(role)}
+                            <i data-lucide="x" style="width:10px; height:10px; cursor:pointer;" onclick="OL.removeRoleFromMember('${memberId}', '${esc(role)}')"></i>
+                        </span>
+                    `).join("") || '<span class="tiny muted">No roles assigned</span>'}
+                </div>
+
+                <div class="search-map-container">
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+                        <input type="text" class="modal-input tiny" 
+                            style="padding-left:30px;"
+                            placeholder="Search roles or type to add new..." 
+                            onfocus="OL.filterRoleSearch('${memberId}', '')" 
+                            oninput="OL.filterRoleSearch('${memberId}', this.value)">
+                    </div>
+                    <div id="role-search-results" class="search-results-overlay"></div>
+                </div>
             </div>
+
+            <!-- EMAIL SIGNATURE SECTION -->
+            <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
+                    <i data-lucide="pen-tool" style="width:14px; height:14px;"></i> Email Signature
+                </label>
+                <textarea class="modal-textarea" 
+                        style="min-height: 80px; font-family: monospace; font-size: 11px; line-height:1.4; width:100%;" 
+                        placeholder="Best regards,\n{{name}}\nSphynx Financial" 
+                        onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
+                <div class="tiny muted" style="margin-top:5px; display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="info" style="width:10px; height:10px;"></i>
+                    Used for automated email templates sent by this member.
+                </div>
+            </div>
+
+            <!-- SYSTEM ACCESS & CREDENTIALS SECTION -->
+            ${typeof OL.renderAccessSection === 'function' ? OL.renderAccessSection(memberId, "member") : ''} 
         </div>
     `;
-    OL.showOverlayModal(content);
-};
 
-OL.saveTeamMemberPermissions = function(memberId) {
-    const tabs = OL.TEAM_PERMISSION_TABS || [];
-    const permissions = {};
-    tabs.forEach(t => {
-        permissions[t.key] = !!document.getElementById(`tm-perm-${t.key}`)?.checked;
+    if (typeof openModal === 'function') openModal(html);
+    else if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(html);
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+}
+
+export function syncTeamMemberName(memberId, newName) {
+    const cardTitles = document.querySelectorAll(`.tm-card-title-${memberId}`);
+    cardTitles.forEach(el => {
+        el.innerText = newName;
     });
+}
 
-    updateAndSync(() => {
-        const m = state.master?.sphynxTeam?.find(item => item.id === memberId);
-        if (m) m.permissions = permissions;
-    });
+export function filterRoleSearch(memberId, query) {
+    const listEl = document.getElementById("role-search-results");
+    if (!listEl) return;
 
-    OL.closeModal();
-    OL.renderSphynxTeamPage();
-};
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+    if (!member) return;
 
-// -------------------------------------------------------------
-// LINK ADMIN LOGIN TO A TEAM CARD — explicit alternative to the automatic
-// email-match in core/auth.js (which only works if the admin's login
-// email is byte-for-byte identical to the email on their card). Stores
-// the same authUserId field the team-member claim flow uses, so
-// initializeSecurityContext() picks it up first (it checks authUserId
-// before falling back to email) on the next login — and updates the
-// current session immediately so comments/attribution reflect it without
-// requiring a reload.
-// -------------------------------------------------------------
-OL.linkMyAdminLoginToTeamMember = async function(memberId) {
-    if (!window.FORCE_ADMIN) return;
+    const allProjectRoles = [...new Set((client.projectData.teamMembers || []).flatMap(m => m.roles || []))];
+    const memberRoles = member.roles || [];
+    const matches = allProjectRoles.filter(role =>
+        role.toLowerCase().includes(q) && !memberRoles.includes(role)
+    ).sort();
 
-    const { data: { session } } = await db.auth.getSession();
-    if (!session) { alert('Your session could not be verified — try signing in again.'); return; }
+    let html = matches.map(role => `
+        <div class="search-result-item" style="display:flex; align-items:center; gap:10px;" onmousedown="OL.addRoleToMember('${memberId}', '${esc(role)}')">
+            <i data-lucide="tag" style="width:12px; height:12px; opacity:0.6;"></i>
+            <span style="flex:1;">${esc(role)}</span>
+            <span class="tiny muted">Assign</span>
+        </div>
+    `).join("");
 
-    // Clear the link from any other card first — one admin login should
-    // only ever map to one team card.
-    updateAndSync(() => {
-        (state.master?.sphynxTeam || []).forEach(m => {
-            if (m.authUserId === session.user.id) delete m.authUserId;
-        });
-        const target = state.master?.sphynxTeam?.find(m => m.id === memberId);
-        if (target) target.authUserId = session.user.id;
-    });
-
-    const target = state.master?.sphynxTeam?.find(m => m.id === memberId);
-    if (target && state.currentUser) {
-        state.currentUser.name = target.name;
-        state.currentUser.role = target.role || state.currentUser.role;
+    if (q.length > 0 && !allProjectRoles.some(r => r.toLowerCase() === q)) {
+        html += `
+            <div class="search-result-item create-action" style="display:flex; align-items:center; gap:10px;" onmousedown="OL.addRoleToMember('${memberId}', '${esc(query)}')">
+                <i data-lucide="plus-circle" style="width:14px; height:14px; color:var(--accent);"></i>
+                <span>Create Role "<strong>${esc(query)}</strong>"</span>
+            </div>`;
     }
 
-    OL.renderSphynxTeamPage();
-    if (typeof window.buildLayout === 'function') window.buildLayout();
-};
+    listEl.innerHTML = html || `<div class="search-result-item muted">No other roles found.</div>`;
 
-window.OL.renderSphynxTeamPage = OL.renderSphynxTeamPage;
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export function addRoleToMember(memberId, roleName) {
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+
+    if (member) {
+        if (!member.roles) member.roles = [];
+        if (!member.roles.includes(roleName)) {
+            member.roles.push(roleName);
+            persist();
+
+            const results = document.getElementById("role-search-results");
+            if (results) results.innerHTML = "";
+
+            openTeamMemberModal(memberId);
+            renderTeamManager();
+        }
+    }
+}
+
+export function removeRoleFromMember(memberId, roleName) {
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(
+        (m) => m.id === memberId,
+    );
+
+    if (member && member.roles) {
+        member.roles = member.roles.filter((r) => r !== roleName);
+        persist();
+        openTeamMemberModal(memberId);
+        renderTeamManager();
+    }
+}
+
+export function toggleTeamAssignment(itemId, memberId) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(
+        (i) => i.id === itemId,
+    );
+
+    if (item) {
+        if (!item.teamIds) item.teamIds = [];
+        const idx = item.teamIds.indexOf(memberId);
+
+        if (idx === -1) item.teamIds.push(memberId);
+        else item.teamIds.splice(idx, 1);
+
+        if (item.teamIds.length > 0) {
+            item.teamMode = 'individual';
+        } else {
+            item.teamMode = 'everyone';
+        }
+
+        persist();
+
+        if (typeof OL.openTeamAssignmentModal === 'function') OL.openTeamAssignmentModal(itemId);
+        if (typeof OL.renderScopingSheet === 'function') OL.renderScopingSheet();
+
+        const searchResults = document.getElementById("team-search-results");
+        if (searchResults) searchResults.innerHTML = "";
+    }
+}
+
+export function filterTeamMapList(itemId, query) {
+    const listEl = document.getElementById("team-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const team = client?.projectData?.teamMembers || [];
+
+    const matches = team.filter((m) => m.name.toLowerCase().includes(q));
+    const exactMatch = team.find((m) => m.name.toLowerCase() === q);
+
+    let html = matches
+        .map(
+            (m) => `
+        <div class="search-result-item" onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
+            👨‍💼 ${esc(m.name)} <span class="tiny muted">(Existing Member)</span>
+        </div>
+    `,
+        )
+        .join("");
+
+    if (!exactMatch) {
+        html += `
+            <div class="search-result-item create-action" onclick="OL.executeCreateTeamAndMap('${itemId}', '${esc(query)}')">
+                <span class="pill tiny accent" style="margin-right:8px;">+ New</span> 
+                Add "${esc(query)}" to Project Team
+            </div>
+        `;
+    }
+
+    listEl.innerHTML = html;
+}
+
+export function executeCreateTeamAndMap(itemId, name) {
+    const client = getActiveClient();
+    if (!client) return;
+
+    if (!client.projectData.teamMembers) {
+        client.projectData.teamMembers = [];
+    }
+
+    const newMember = {
+        id: uid(),
+        name: name.trim(),
+        role: "Contributor",
+    };
+
+    client.projectData.teamMembers.push(newMember);
+
+    toggleTeamAssignment(itemId, newMember.id);
+
+    persist();
+}
+
+// Bridge global exports
+window.OL = window.OL || {};
+Object.assign(window.OL, {
+    renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
+    openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
+    removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap
+});
+
+window.renderTeamManager = renderTeamManager;
