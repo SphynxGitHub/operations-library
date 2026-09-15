@@ -26,12 +26,33 @@ export async function initializeSecurityContext() {
             .maybeSingle();
 
         if (adminRow) {
+            // Try to attach a real name for attribution (task comments, etc.)
+            // by matching this admin's session against the team roster —
+            // first by authUserId (if they were also provisioned as a team
+            // member), then by email. Falls back to a generic label if
+            // neither the roster nor their own account has a name.
+            const { data: masterRowForAdmin } = await db
+                .from('workspace_masters')
+                .select('sphynx_team')
+                .eq('id', 'main_state')
+                .maybeSingle();
+
+            const roster = masterRowForAdmin?.sphynx_team || [];
+            const matchedMember =
+                roster.find(m => m.authUserId === session.user.id) ||
+                roster.find(m => (m.email || '').toLowerCase() === (session.user.email || '').toLowerCase());
+
             state.adminMode = true;
             window.FORCE_ADMIN = true;
             window.IS_GUEST = false;
             state.teamMemberMode = false;
-            state.currentUser = { id: session.user.id, name: 'Admin', role: 'Master Admin', authType: 'admin' };
-            console.log("🛠️ Admin Mode Active (real login)");
+            state.currentUser = {
+                id: session.user.id,
+                name: matchedMember?.name || 'Admin',
+                role: matchedMember?.role || 'Master Admin',
+                authType: 'admin'
+            };
+            console.log(`🛠️ Admin Mode Active (real login)${matchedMember ? ` — ${matchedMember.name}` : ''}`);
             return true;
         }
 
