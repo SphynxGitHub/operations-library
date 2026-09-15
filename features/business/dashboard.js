@@ -1,13 +1,15 @@
 import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
 // -------------------------------------------------------------
-// TASK STREAM FILTER STATE — due-date presets + grouping, mirroring the
-// filter/group pattern used on the Workspace Task Manager
-// (see features/tasks.js OL.clientTaskFilterState) so the UX is familiar.
+// TASK STREAM FILTER STATE — due-date presets + grouping (mirroring the
+// Workspace Task Manager's filter pattern) plus assignee/status filters,
+// matching what the master Task Manager already offers.
 // -------------------------------------------------------------
 OL.dashboardTaskState = {
     dueRange: 'all',     // 'all' | 'today' | 'week' | 'next2weeks' | 'overdue'
-    groupBy: 'none'      // 'none' | 'client' | 'date' | 'status' | 'assignee'
+    groupBy: 'none',     // 'none' | 'client' | 'date' | 'status' | 'assignee'
+    assignee: 'all',
+    status: 'all'
 };
 
 // Builds the task list with the exact same normalization the master Task
@@ -51,6 +53,9 @@ OL.renderDailyDashboard = function() {
     const openTasks = allTasks.filter(t => t.status !== 'Done');
     const dueTodayOrOverdue = OL.filterTasksByDueRange(openTasks, 'overdue').length + OL.filterTasksByDueRange(openTasks, 'today').length;
 
+    const assigneeOptions = OL.getDistinctAssignees(openTasks);
+    const statusOptions = OL.getDistinctStatuses(openTasks);
+
     main.innerHTML = `
         <div class="section-header">
             <div>
@@ -79,6 +84,25 @@ OL.renderDailyDashboard = function() {
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
                     <h3 style="margin:0;">📋 High-Priority Task Stream</h3>
                     <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn tiny soft" onclick="OL.toggleShowTaskComments()" style="display:flex; align-items:center; gap:6px;">
+                            <i data-lucide="${OL.showTaskComments ? 'eye-off' : 'eye'}" style="width:12px;height:12px;"></i> ${OL.showTaskComments ? 'Hide' : 'Show'} Comments
+                        </button>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <i data-lucide="user" style="width:14px;height:14px;color:var(--muted);"></i>
+                            <span class="tiny muted bold uppercase">Assignee:</span>
+                            <select class="modal-input tiny" style="width:auto;" onchange="OL.setDashboardTaskFilter('assignee', this.value)">
+                                <option value="all" ${OL.dashboardTaskState.assignee === 'all' ? 'selected' : ''}>All</option>
+                                ${assigneeOptions.map(a => `<option value="${esc(a)}" ${OL.dashboardTaskState.assignee === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <i data-lucide="flag" style="width:14px;height:14px;color:var(--muted);"></i>
+                            <span class="tiny muted bold uppercase">Status:</span>
+                            <select class="modal-input tiny" style="width:auto;" onchange="OL.setDashboardTaskFilter('status', this.value)">
+                                <option value="all" ${OL.dashboardTaskState.status === 'all' ? 'selected' : ''}>All</option>
+                                ${statusOptions.map(s => `<option value="${esc(s)}" ${OL.dashboardTaskState.status === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+                            </select>
+                        </div>
                         <div style="display:flex; gap:6px; align-items:center;">
                             <i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--muted);"></i>
                             <span class="tiny muted bold uppercase">Due:</span>
@@ -122,11 +146,10 @@ OL.setDashboardTaskFilter = function(key, value) {
     OL.dashboardTaskState[key] = value;
     const openTasks = OL.getDashboardMasterTasks().filter(t => t.status !== 'Done');
 
-    const container = document.getElementById('dashboard-task-stream');
-    if (container) {
-        container.innerHTML = OL.renderDashboardTaskStream(openTasks);
-        if (window.lucide) lucide.createIcons();
-    }
+    // Assignee/status option lists can change what's available, and the
+    // header itself needs to reflect the new selection, so re-render the
+    // whole dashboard rather than just the list container.
+    OL.renderDailyDashboard();
 };
 
 // today/week/next-2-weeks/overdue are computed off local midnight so an
@@ -150,22 +173,26 @@ OL.filterTasksByDueRange = function(tasks, range) {
     });
 };
 
-// Renders rows with OL.renderTaskRowHTML — the exact same row component
-// the master Task Engine uses — so status dot, assignee avatar, inline
-// due date, time logging, workspace link, and bulk-select all behave
-// identically here.
+// Renders rows with OL.renderTaskRowWithMentions — the same row the
+// master Task Engine uses (status dot, assignee avatar, inline due date,
+// time logging, workspace link, bulk-select), plus an @mention sub-row
+// under any task where you were tagged, and mention-first ordering so
+// those tasks float to the top of whichever filtered/grouped view is
+// showing.
 OL.renderDashboardTaskStream = function(openTasks) {
-    const { dueRange, groupBy } = OL.dashboardTaskState;
+    const { dueRange, groupBy, assignee, status } = OL.dashboardTaskState;
     const todayStr = new Date().toISOString().slice(0, 10);
-    const filtered = OL.filterTasksByDueRange(openTasks, dueRange)
-        .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+    const filtered = OL.sortTasksMentionsFirst(
+        OL.filterTasksByAssigneeStatus(OL.filterTasksByDueRange(openTasks, dueRange), assignee, status)
+            .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
+    );
 
     if (!filtered.length) {
         return `<div class="tiny muted">No tasks match this filter.</div>`;
     }
 
     if (groupBy === 'none') {
-        return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
+        return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}</div>`;
     }
 
     const groups = {};
@@ -187,7 +214,7 @@ OL.renderDashboardTaskStream = function(openTasks) {
                 <span class="pill tiny soft" style="font-size:10px;">${groupTasks.length}</span>
             </div>
             <div style="display:flex; flex-direction:column; gap:6px;">
-                ${groupTasks.map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                ${groupTasks.map(t => OL.renderTaskRowWithMentions(t, todayStr)).join('')}
             </div>
         </div>
     `).join('');
