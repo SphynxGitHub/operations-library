@@ -102,11 +102,11 @@ OL.renderTaskRowWithMentions = function(t, todayStr) {
         <div style="margin: -2px 0 6px ${t.parentTaskId ? '48px' : '20px'}; padding:8px 12px; border-left:2px solid var(--accent); background:rgba(var(--accent-rgb),0.05); border-radius:0 6px 6px 0; cursor:pointer;"
              onclick="OL.openTaskInContext('${t.clientId}', '${t.id}')">
             ${sorted.map(c => `
-                <div class="tiny" style="display:flex; gap:6px; align-items:baseline; margin-bottom:2px;">
-                    <i data-lucide="${isExpanded ? 'message-square' : 'at-sign'}" style="width:10px;height:10px; color:var(--accent); flex-shrink:0;"></i>
-                    <strong>${esc(c.author || 'Someone')}</strong>
-                    <span class="muted" style="font-size:10px;">${c.date ? esc(new Date(c.date).toLocaleDateString([], { dateStyle: 'medium' })) : ''}</span>
-                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</span>
+                <div class="tiny" style="display:flex; gap:6px; align-items:flex-start; margin-bottom:6px;">
+                    <i data-lucide="${isExpanded ? 'message-square' : 'at-sign'}" style="width:10px;height:10px; color:var(--accent); flex-shrink:0; margin-top:3px;"></i>
+                    <strong style="flex-shrink:0; width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.author || 'Someone')}</strong>
+                    <span class="muted" style="font-size:10px; flex-shrink:0; width:70px;">${c.date ? esc(new Date(c.date).toLocaleDateString([], { dateStyle: 'medium' })) : ''}</span>
+                    <span style="flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; line-height:1.4;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</span>
                 </div>
             `).join('')}
         </div>
