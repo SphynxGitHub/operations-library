@@ -21,29 +21,6 @@ export function renderHowToLibrary() {
     const isAdmin = window.FORCE_ADMIN === true;
     const isVaultView = hash.startsWith('#/vault');
 
-    // 1. Data Selection (Mast//======================= FEATURES / HOW-TO =======================//
-// Extracted from app.js "HOW TO SECTION" + "HOW-TO RESOURCES OVERLAP" +
-// "HOW-TO TASKS OVERLAP" + "HOW TO SCOPING OVERLAP" (all combined, no
-// clean boundaries between them — same pattern as analysis.js/scoping.js).
-// Owns: the How-To/SOP library grid, the block-based guide editor (text,
-// checklist, image, and resource-link blocks), and How-To's overlap
-// points with apps, resources, tasks, and scoping requirements.
-
-import { state, esc, getActiveClient, persist } from '../core/data.js';
-
-export function renderHowToLibrary() {
-    OL.registerView(renderHowToLibrary);
-    const container = document.getElementById("mainContent");
-    const client = getActiveClient();
-    const hash = window.location.hash;
-
-    if (!container) return;
-    container.style.cssText = '';
-    document.body.classList.remove('is-visualizer');
-
-    const isAdmin = window.FORCE_ADMIN === true;
-    const isVaultView = hash.startsWith('#/vault');
-
     // 1. Data Selection (Master + Project Local)
     const masterLibrary = state.master.howToLibrary || [];
     const localLibrary = (client && client.projectData.localHowTo) || [];
