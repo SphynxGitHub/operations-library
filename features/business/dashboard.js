@@ -433,7 +433,7 @@ OL.renderDashboardTaskStream = function(allItems) {
     });
 
     return Object.entries(groups).map(([groupTitle, groupItems]) => `
-        <div style="margin-bottom: 16px;">
+        <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display:flex; align-items:center; gap:8px;">
                 <span>${esc(groupTitle)}</span>
                 <span class="pill tiny soft" style="font-size:10px;">${groupItems.length}</span>
