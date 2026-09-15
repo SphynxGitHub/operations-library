@@ -33,6 +33,13 @@ function extractPlainTextBody(payload: any): string {
   if (payload.mimeType === "text/plain" && payload.body?.data) {
     return decodeBase64Url(payload.body.data);
   }
+  // 🚀 THE FIX: a single-part text/html message (no multipart "parts" array
+  // at all — Calendly notifications and a lot of other automated senders
+  // send exactly this) used to fall straight through every branch below and
+  // return the raw, undecoded HTML source as the "body".
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
   if (Array.isArray(payload.parts)) {
     for (const part of payload.parts) {
       if (part.mimeType === "text/plain" && part.body?.data) return decodeBase64Url(part.body.data);
@@ -49,6 +56,7 @@ function extractPlainTextBody(payload: any): string {
   }
   if (payload.body?.data) return decodeBase64Url(payload.body.data);
   return "";
+}
 }
 
 function extractEmails(text: string): string[] {
@@ -228,7 +236,9 @@ serve(async (req) => {
 
         const matchedRules = matchProjectRules(projectRules, participantEmails);
         const matchedClientIds = matchedRules.map((r) => r.clientId);
-        const matchedLabelNames = matchedRules.map((r) => r.labelName);
+        // Only clients with the Gmail-label toggle on get an actual label
+        // applied — everyone else in matchedRules still gets linked_client_id.
+        const matchedLabelNames = matchedRules.filter((r) => r.labelingEnabled).map((r) => r.labelName);
 
         rows.push({
           id,
