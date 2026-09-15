@@ -276,8 +276,8 @@ OL.renderBusinessTaskManager = function() {
                 
                 <div style="position:relative; display:flex; align-items:center;">
                     <i data-lucide="building" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
-                    <select id="quick-task-client" class="modal-input tiny" style="padding-left:26px; width:100%;" required onchange="OL.updateQuickTaskTeamDropdown(this.value)">
-                        <option value="" disabled selected>Select Client...</option>
+                    <select id="quick-task-client" class="modal-input tiny" style="padding-left:26px; width:100%;" onchange="OL.updateQuickTaskTeamDropdown(this.value)">
+                        <option value="" selected>General / Business (no client)</option>
                         ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
                     </select>
                 </div>
@@ -371,6 +371,7 @@ OL.renderBusinessTaskManager = function() {
                         <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                         <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
                         <option value="date" ${OL.globalTaskFilterState.groupBy === 'date' ? 'selected' : ''}>Due Date</option>
+                        <option value="type" ${OL.globalTaskFilterState.groupBy === 'type' ? 'selected' : ''}>Task Type</option>
                     </select>
 
                     <span class="tiny muted bold uppercase">Sub-Group:</span>
@@ -481,6 +482,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         else if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
         else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
         else if (groupBy === 'date') groupKey = taskDateBucket(task);
+        else if (groupBy === 'type') groupKey = task.taskType || 'Sphynx Task';
 
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
@@ -504,11 +506,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         }
 
         return `
-        <div style="margin-bottom: 36px; padding-bottom: 22px; border-bottom: 1px solid var(--line);">
+        <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
             <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     ${OL.renderGroupSelectCheckbox(tasks)}
-                    <i data-lucide="${groupBy === 'date' ? 'calendar' : (groupBy === 'status' ? 'flag' : (groupBy === 'assignee' ? 'user' : 'folder'))}" style="width:14px;height:14px;"></i>
+                    <i data-lucide="${groupBy === 'date' ? 'calendar' : (groupBy === 'status' ? 'flag' : (groupBy === 'assignee' ? 'user' : (groupBy === 'type' ? 'tag' : 'folder')))}" style="width:14px;height:14px;"></i>
                     <span>${esc(groupTitle)}</span>
                     <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} tasks</span>
                 </div>
@@ -2030,17 +2032,55 @@ OL.saveTaskTimeEdit = function(clientId, taskId) {
     OL.refreshTaskView();
 };
 
+// A stable, always-findable "no specific client" home for tasks that
+// don't belong to one project — created lazily on first use, then reused
+// (never duplicated) since it's keyed by a fixed id rather than name match.
+OL.GENERAL_PROJECT_ID = 'general-business-ops';
+
+OL.ensureGeneralProject = function() {
+    if (state.clients[OL.GENERAL_PROJECT_ID]) return state.clients[OL.GENERAL_PROJECT_ID];
+
+    state.clients[OL.GENERAL_PROJECT_ID] = {
+        id: OL.GENERAL_PROJECT_ID,
+        publicToken: "access_" + Math.random().toString(36).slice(2, 12),
+        meta: {
+            name: "General / Business Ops",
+            onboarded: new Date().toLocaleDateString(),
+            status: "Active"
+        },
+        modules: {
+            checklist: true, apps: false, functions: false, resources: false,
+            scoping: false, analysis: false, "how-to": false, team: false, errors: true
+        },
+        permissions: {
+            apps: "full", functions: "full", resources: "full", scoping: "full",
+            checklist: "full", team: "full", "how-to": "full", analysis: "full"
+        },
+        projectData: {
+            localApps: [], localFunctions: [], localAnalyses: [], localResources: [],
+            localHowTo: [], scopingSheets: [{ id: "initial", lineItems: [] }],
+            clientTasks: [], teamMembers: [], stages: [], workflows: []
+        },
+        sharedMasterIds: []
+    };
+    return state.clients[OL.GENERAL_PROJECT_ID];
+};
+
 OL.createGlobalQuickTask = function() {
-    const clientId = document.getElementById('quick-task-client')?.value;
+    let clientId = document.getElementById('quick-task-client')?.value;
     const title = document.getElementById('quick-task-title')?.value;
     const assignee = document.getElementById('quick-task-assignee')?.value || 'Sphynx Task';
     const status = document.getElementById('quick-task-status')?.value || 'Pending Sphynx Action';
     const dueDate = document.getElementById('quick-task-duedate')?.value || '';
 
-    if (!clientId || !title) {
-        alert("Please select a client and provide a task title.");
+    if (!title) {
+        alert("Please provide a task title.");
         return;
     }
+
+    // No client picked — home it in the General / Business project instead
+    // of forcing a pick. Created on first use, reused every time after.
+    if (!clientId) clientId = OL.ensureGeneralProject().id;
 
     updateAndSync(() => {
         const client = state.clients[clientId];
