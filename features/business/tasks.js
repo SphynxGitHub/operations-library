@@ -1580,7 +1580,10 @@ OL.renderInContextTaskModal = function(client, task) {
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
-                        <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
+                        <textarea class="modal-input tiny" rows="4"
+                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical;"
+                                  placeholder="Add deliverable details / notes for this task..."
+                                  onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
                     </div>
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
@@ -2009,6 +2012,37 @@ OL.updateTaskTitle = function(clientId, taskId, newTitle) {
     }, clientId);
 
     OL.refreshTaskView();
+};
+
+OL.updateTaskDescription = function(clientId, taskId, newDescription) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+        if (task) task.description = newDescription;
+    }, clientId);
+};
+
+// Appends a structured entry to a task's activity log rather than into its
+// description — anything that used to narrate itself into the description
+// (guide links, etc.) should call this instead. Not yet wired into status/
+// assignee/due-date changes; just the how-to guide linking for now.
+OL.logTaskActivity = function(clientId, taskId, text) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t =>
+            String(t.id) === String(taskId) || String(t.key) === String(taskId)
+        );
+        if (task) {
+            if (!task.activityLog) task.activityLog = [];
+            task.activityLog.push({
+                text,
+                user: OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team',
+                ts: Date.now()
+            });
+        }
+    }, clientId);
 };
 
 // -------------------------------------------------------------
