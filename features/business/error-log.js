@@ -431,7 +431,6 @@ OL.openErrorDetailModal = function(id) {
 
     const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
-    const dateInputVal = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
     const isResolved = r.status === 'resolved';
     const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
     const statusColor = isResolved ? '#22c55e' : '#f59e0b';
@@ -475,6 +474,8 @@ OL.openErrorDetailModal = function(id) {
                 ` : ''}
             </div>
 
+            <div id="error-recurring-suggestion-${r.id}"></div>
+
             <div style="border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:14px;">
                 <div style="display:flex; gap:10px; align-items:flex-start;">
                     <div style="width:8px; height:8px; border-radius:50%; background:#f59e0b; margin-top:8px; flex-shrink:0;"></div>
@@ -504,15 +505,12 @@ OL.openErrorDetailModal = function(id) {
                 </div>
                 <div style="display:flex; gap:10px; align-items:flex-start;">
                     <div style="width:8px; height:8px; border-radius:50%; background:var(--accent); margin-top:8px; flex-shrink:0;"></div>
-                    <div style="flex:1; min-width:0; display:flex; gap:14px; flex-wrap:wrap;">
-                        <div style="flex:0 0 160px;">
-                            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resolution Date</label>
-                            <input type="date" class="modal-input tiny" style="width:100%; box-sizing:border-box;" value="${dateInputVal(r.resolution_date)}" onchange="OL.saveErrorDateField('${r.id}', 'resolution_date', this.value)">
-                        </div>
-                        <div style="flex:1; min-width:180px;">
-                            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
-                            <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
-                        </div>
+                    <div style="flex:1; min-width:0;">
+                        ${isResolved && r.resolution_date ? `
+                            <div class="tiny muted" style="margin-bottom:8px;">${ic('calendar-check')}Resolved ${esc(new Date(r.resolution_date).toLocaleDateString([], { dateStyle: 'medium' }))}</div>
+                        ` : ''}
+                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Additional Notes</label>
+                        <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="Anything else worth noting" onblur="OL.saveErrorField('${r.id}', 'notes', this.value)">${esc(r.notes || '')}</textarea>
                     </div>
                 </div>
             </div>
@@ -522,8 +520,82 @@ OL.openErrorDetailModal = function(id) {
     if (window.lucide) lucide.createIcons();
     OL._resourcePickerOpen = false;
     OL.renderResourceTag(id);
+
+    // Only worth checking when there's nothing filled in yet — an error
+    // that already has its own cause/resolution shouldn't get overwritten
+    // by a suggestion from a different occurrence.
+    if (!r.cause && !r.resolution) OL.loadRecurringErrorSuggestion(r);
 };
 window.OL.openErrorDetailModal = OL.openErrorDetailModal;
+
+// -------------------------------------------------------------
+// RECURRING-ERROR PREFILL — "recurring" is defined as same service + same
+// title (the Zap/step name, which stays constant across runs even though
+// the exact message details vary run to run) on a past RESOLVED error that
+// actually has a cause and/or resolution written down. Suggested, never
+// applied automatically — a banner offers it, the user decides.
+// -------------------------------------------------------------
+OL.findRecurringErrorMatch = async function(r) {
+    if (!r.service && !r.title) return null; // nothing distinctive enough to match on
+
+    let query = db.from('error_log')
+        .select('id, cause, resolution, occurred_at')
+        .eq('status', 'resolved')
+        .neq('id', r.id)
+        .order('occurred_at', { ascending: false })
+        .limit(1);
+
+    if (r.service) query = query.eq('service', r.service);
+    if (r.title) query = query.eq('title', r.title);
+
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) return null;
+    if (!data.cause && !data.resolution) return null; // no point suggesting an empty match
+    return data;
+};
+
+OL.loadRecurringErrorSuggestion = async function(r) {
+    const match = await OL.findRecurringErrorMatch(r);
+    const container = document.getElementById(`error-recurring-suggestion-${r.id}`);
+    if (!container) return; // modal closed before the lookup finished
+
+    if (!match) { container.innerHTML = ''; return; }
+
+    OL._recurringSuggestions = OL._recurringSuggestions || {};
+    OL._recurringSuggestions[r.id] = match;
+
+    container.innerHTML = `
+        <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:14px; background:rgba(var(--accent-rgb),0.08); border:1px solid var(--accent); border-radius:8px;">
+            <i data-lucide="repeat" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+            <div class="tiny" style="flex:1; min-width:0;">This looks like a recurring error — a past occurrence has a cause/resolution on file.</div>
+            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyRecurringErrorSuggestion('${r.id}')">Use It</button>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.applyRecurringErrorSuggestion = async function(id) {
+    const match = OL._recurringSuggestions?.[id];
+    if (!match) return;
+
+    const causeEl = document.getElementById(`error-cause-${id}`);
+    const resolutionEl = document.getElementById(`error-resolution-${id}`);
+    if (causeEl && match.cause) causeEl.value = match.cause;
+    if (resolutionEl && match.resolution) resolutionEl.value = match.resolution;
+
+    const updates = {};
+    if (match.cause) updates.cause = match.cause;
+    if (match.resolution) updates.resolution = match.resolution;
+
+    const { error } = await db.from('error_log').update(updates).eq('id', id);
+    if (error) { alert('Failed to apply suggestion: ' + error.message); return; }
+
+    const row = OL.errorLogState.rows.find(r => r.id === id);
+    if (row) Object.assign(row, updates);
+
+    const container = document.getElementById(`error-recurring-suggestion-${id}`);
+    if (container) container.innerHTML = '';
+};
 
 // -------------------------------------------------------------
 // SEARCHABLE RESOURCE PICKER — renders into #error-resource-tag,
