@@ -370,6 +370,7 @@ OL.renderBusinessTaskManager = function() {
                         <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
                         <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                         <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
+                        <option value="date" ${OL.globalTaskFilterState.groupBy === 'date' ? 'selected' : ''}>Due Date</option>
                     </select>
 
                     <span class="tiny muted bold uppercase">Sub-Group:</span>
@@ -460,18 +461,32 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         return `<div class="p-20 muted text-center">No matching tasks found across projects.</div>`;
     }
 
+    const DATE_BUCKETS = ['Overdue', 'Today', 'This Week', 'Later', 'No Due Date'];
+    const taskDateBucket = (task) => {
+        if (!task.dueDate) return 'No Due Date';
+        if (task.dueDate === todayStr) return 'Today';
+        const due = new Date(task.dueDate);
+        const today = new Date(todayStr);
+        if (due < today) return 'Overdue';
+        const weekOut = new Date(today);
+        weekOut.setDate(weekOut.getDate() + 7);
+        return due <= weekOut ? 'This Week' : 'Later';
+    };
+
     const groups = {};
+    if (groupBy === 'date') DATE_BUCKETS.forEach(b => { groups[b] = []; }); // fixed order, even if a bucket ends up empty
     filtered.forEach(task => {
         let groupKey = 'Other';
         if (groupBy === 'client') groupKey = task.clientName;
         else if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
         else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
+        else if (groupBy === 'date') groupKey = taskDateBucket(task);
 
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
     });
 
-    return Object.entries(groups).map(([groupTitle, tasks]) => {
+    return Object.entries(groups).filter(([, tasks]) => tasks.length > 0).map(([groupTitle, tasks]) => {
         const groupHours = tasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
         const sampleClientId = tasks[0]?.clientId;
         const metrics = groupBy === 'client' ? OL.getClientReconciliationMetrics(sampleClientId) : null;
@@ -489,11 +504,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         }
 
         return `
-        <div style="margin-bottom: 24px;">
-            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="margin-bottom: 36px; padding-bottom: 22px; border-bottom: 1px solid var(--line);">
+            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     ${OL.renderGroupSelectCheckbox(tasks)}
-                    <i data-lucide="folder" style="width:14px;height:14px;"></i>
+                    <i data-lucide="${groupBy === 'date' ? 'calendar' : (groupBy === 'status' ? 'flag' : (groupBy === 'assignee' ? 'user' : 'folder'))}" style="width:14px;height:14px;"></i>
                     <span>${esc(groupTitle)}</span>
                     <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} tasks</span>
                 </div>
@@ -1500,6 +1515,33 @@ OL.renderInContextTaskModal = function(client, task) {
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
                         <div style="font-size:13px; line-height:1.5; color:var(--text);">${esc(task.description || 'No additional notes provided for this task.')}</div>
+                    </div>
+
+                    <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
+                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+                            <i data-lucide="book-open" style="width:12px;height:12px;vertical-align:sub;"></i> Linked How-To Guides
+                        </label>
+                        ${(task.howToIds && task.howToIds.length) ? `
+                            <div style="display:grid; gap:8px; margin-bottom:10px;">
+                                ${task.howToIds.map(htId => {
+                                    const guide = (state.master.howToLibrary || []).find(g => g.id === htId);
+                                    if (!guide) return '';
+                                    const textBlock = (guide.blocks || []).find(b => b.type === 'text');
+                                    const preview = textBlock?.data?.html ? textBlock.data.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+                                    return `
+                                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:8px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.openGuideEditor('${guide.id}')">
+                                            <div style="min-width:0; overflow:hidden;">
+                                                <strong class="tiny">${esc(guide.name)}</strong>
+                                                ${preview ? `<div class="tiny muted" style="margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(preview.slice(0, 140))}</div>` : ''}
+                                            </div>
+                                            <button class="btn tiny soft" style="flex-shrink:0;" title="Unlink" onclick="event.stopPropagation(); OL.toggleTaskHowTo(event, '${task.id}', '${guide.id}', false);">✕</button>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : ''}
+                        <input type="text" class="modal-input tiny" placeholder="Search guides to link..." oninput="OL.filterTaskHowToSearch('${task.id}', this.value, false)">
+                        <div id="task-howto-results" style="max-height:140px; overflow:auto; margin-top:4px;"></div>
                     </div>
 
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
