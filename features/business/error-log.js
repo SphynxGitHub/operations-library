@@ -18,6 +18,15 @@ const RESOLUTION_TEMPLATES = [
     'One-off failure — no fix needed, working as expected on retry'
 ];
 
+const CAUSE_TEMPLATES = [
+    "API Rate Limit",
+    "Database Timeout",
+    "Invalid Auth Token",
+    "Missing Required Field",
+    "Network Interruption",
+    "Third-Party Service Down"
+];
+
 OL.insertResolutionTemplate = function(id, template) {
     if (!template) return;
     const ta = document.getElementById(`error-resolution-${id}`);
@@ -26,6 +35,16 @@ OL.insertResolutionTemplate = function(id, template) {
     ta.focus();
     OL.saveErrorField(id, 'resolution', ta.value);
 };
+
+OL.insertCauseTemplate = function(id, template) {
+    if (!template) return;
+    const ta = document.getElementById(`error-cause-${id}`);
+    if (!ta) return;
+    ta.value = ta.value ? `${ta.value}\n${template}` : template;
+    ta.focus();
+    OL.saveErrorField(id, 'cause', ta.value);
+};
+
 
 OL.errorLogState = {
     statusFilter: 'open',   // 'open' | 'resolved' | 'all'
@@ -456,7 +475,13 @@ OL.openErrorDetailModal = function(id) {
                 <div style="display:flex; gap:10px; align-items:flex-start;">
                     <div style="width:8px; height:8px; border-radius:50%; background:#f59e0b; margin-top:8px; flex-shrink:0;"></div>
                     <div style="flex:1; min-width:0;">
-                        <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Cause</label>
+                            <select class="tiny" style="border:none; background:transparent; color:var(--accent); cursor:pointer;" onchange="OL.insertCauseTemplate('${r.id}', this.value); this.selectedIndex=0;">
+                                <option value="">+ Insert template...</option>
+                                ${CAUSE_TEMPLATES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+                            </select>
+                        </div>
                         <textarea class="modal-input tiny" rows="2" style="width:100%; box-sizing:border-box; text-align:left;" placeholder="What caused this?" onblur="OL.saveErrorField('${r.id}', 'cause', this.value)">${esc(r.cause || '')}</textarea>
                     </div>
                 </div>
