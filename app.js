@@ -475,7 +475,7 @@ window.buildLayout = function () {
                             <span>${homeLabel.toUpperCase()}</span>
                         </a>
                     </nav>
-                    ${state.teamMemberMode ? `<div class="tiny muted" style="padding:6px 10px 0;">Logged in as ${esc(state.currentUser?.name || 'Team Member')}</div>` : ''}
+                    ${(isAdmin || state.teamMemberMode) && state.currentUser?.name ? `<div class="tiny muted" style="padding:6px 10px 0;">Logged in as ${esc(state.currentUser.name)}</div>` : ''}
                 </div>
                 <div class="divider" style="margin: 10px 0;"></div>
                 ` : ''}
