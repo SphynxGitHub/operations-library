@@ -9,6 +9,7 @@
 // about the circular renderResourceManager <-> renderResourceCard calls).
 
 import { state, esc, num, uid, getActiveClient, persist } from '../core/data.js';
+import { evaluateCondition, renderFieldInput } from '../core/field-schema.js';
 
 export function renderResourceCard(res) {
     if (!res) return "";
@@ -1408,6 +1409,8 @@ const dependencyHtml = `
                 ` : ''}
             </aside>
         </div>
+
+        ${OL._renderResourceCustomFieldsSection(res, typeDef)}
     `;
     
     openModal(html);
@@ -1432,6 +1435,105 @@ const dependencyHtml = `
     if (window.lucide) {
         window.lucide.createIcons();
     }
+};
+
+// -------------------------------------------------------------
+// CUSTOM FIELDS — additive section, driven by typeDef.customFields (see
+// features/field-type-manager.js for how those get defined). Rendered as
+// its own block below the existing hardcoded sections rather than woven
+// into them, so nothing already working here is touched by this.
+// -------------------------------------------------------------
+OL._renderResourceCustomFieldsSection = function(res, typeDef) {
+    const fields = typeDef?.customFields || [];
+    if (!fields.length) return '';
+
+    if (!res.fieldValues) res.fieldValues = {};
+    const values = res.fieldValues;
+
+    return `
+        <div style="margin-top:20px; padding:16px; border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,0.01);">
+            <label class="modal-section-label" style="margin-top:0; display:flex; align-items:center; gap:6px;">
+                <i data-lucide="sliders-horizontal" style="width:13px;height:13px;"></i> Custom Fields
+            </label>
+            <div style="display:flex; flex-direction:column; gap:14px; margin-top:10px;">
+                ${fields
+                    .filter(f => evaluateCondition(f.condition, values))
+                    .map(f => `
+                        <div>
+                            <label class="tiny muted bold" style="display:block; margin-bottom:5px;">${esc(f.label || f.id)}</label>
+                            ${renderFieldInput(f, values[f.id], `OL.saveResourceFieldValue('${res.id}', '${f.id}', __VALUE__)`)}
+                            ${OL._isLinkedFieldType(f.type) ? OL._renderCustomFieldLinker(res, f) : ''}
+                        </div>
+                    `).join('')}
+            </div>
+        </div>
+    `;
+};
+
+OL._isLinkedFieldType = function(type) {
+    return type === 'linked_resources' || type === 'linked_howto' || type === 'linked_tasks';
+};
+
+OL._renderCustomFieldLinker = function(res, field) {
+    return `
+        <input type="text" class="modal-input tiny" style="margin-top:6px;" placeholder="Search to link..."
+               oninput="OL.filterCustomFieldLinkSearch('${res.id}', '${field.id}', '${field.type}', this.value)">
+        <div id="custom-field-link-results-${res.id}-${field.id}" style="max-height:120px; overflow:auto; margin-top:4px;"></div>
+    `;
+};
+
+// Pools mirror what the app's own built-in linkers already search —
+// state.master.resources/howToLibrary for the vault-scoped ones, the
+// active client's clientTasks for tasks (custom fields live on a resource,
+// which always belongs to one client, so tasks don't need cross-client
+// search the way the Gmail linker's did).
+OL._customFieldLinkPool = function(fieldType) {
+    if (fieldType === 'linked_resources') return (state.master.resources || []).map(r => ({ id: r.id, label: r.name }));
+    if (fieldType === 'linked_howto') return (state.master.howToLibrary || []).map(h => ({ id: h.id, label: h.name }));
+    if (fieldType === 'linked_tasks') {
+        const client = getActiveClient();
+        return (client?.projectData?.clientTasks || []).map(t => ({ id: t.id, label: t.title || t.name }));
+    }
+    return [];
+};
+
+OL.filterCustomFieldLinkSearch = function(resId, fieldId, fieldType, query) {
+    const listEl = document.getElementById(`custom-field-link-results-${resId}-${fieldId}`);
+    if (!listEl) return;
+
+    const res = OL.getResourceById(resId);
+    const existing = new Set((res?.fieldValues?.[fieldId]) || []);
+    const q = (query || '').toLowerCase().trim();
+
+    const matches = OL._customFieldLinkPool(fieldType).filter(item =>
+        (item.label || '').toLowerCase().includes(q) && !existing.has(item.id)
+    );
+
+    listEl.innerHTML = matches.map(item => `
+        <div class="search-result-item" onmousedown="OL.toggleCustomFieldLink('${resId}', '${fieldId}', '${item.id}')">${esc(item.label || 'Untitled')}</div>
+    `).join('') || `<div class="search-result-item muted">No matches.</div>`;
+};
+
+OL.toggleCustomFieldLink = function(resId, fieldId, targetId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+    if (!res.fieldValues) res.fieldValues = {};
+    if (!res.fieldValues[fieldId]) res.fieldValues[fieldId] = [];
+
+    const arr = res.fieldValues[fieldId];
+    const idx = arr.indexOf(targetId);
+    if (idx === -1) arr.push(targetId); else arr.splice(idx, 1);
+
+    OL.handleResourceSave(resId, 'fieldValues', res.fieldValues);
+    OL.openResourceModal(resId);
+};
+
+OL.saveResourceFieldValue = function(resId, fieldId, value) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+    if (!res.fieldValues) res.fieldValues = {};
+    res.fieldValues[fieldId] = value;
+    OL.handleResourceSave(resId, 'fieldValues', res.fieldValues);
 };
 
 export function _geRenderEmailPreview(value, datapoints, client) {
