@@ -56,6 +56,37 @@ export const state = {
     clients: {}
 };
 
+// ---- visible save-failure notice ----
+// persist() previously only logged failures to console — invisible unless
+// you happened to have DevTools open. This surfaces the same failures as
+// an on-screen toast so a broken save is never silent again.
+function showSyncErrorToast(message) {
+    if (typeof document === 'undefined') return;
+    let el = document.getElementById('ol-sync-error-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'ol-sync-error-toast';
+        el.style.cssText = `
+            position:fixed; bottom:20px; right:20px; z-index:99999;
+            background:#7f1d1d; color:#fecaca; border:1px solid #ef4444;
+            padding:12px 16px; border-radius:8px; max-width:360px;
+            font-size:12px; line-height:1.5; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);
+            display:flex; align-items:flex-start; gap:10px;
+        `;
+        document.body.appendChild(el);
+    }
+    el.innerHTML = `
+        <div style="flex:1;">
+            <strong style="display:block; margin-bottom:2px;">⚠️ Save failed</strong>
+            <span>${message}</span>
+        </div>
+        <button onclick="document.getElementById('ol-sync-error-toast')?.remove()"
+                style="background:none;border:none;color:#fecaca;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+    `;
+    clearTimeout(window._olSyncErrorToastTimer);
+    window._olSyncErrorToastTimer = setTimeout(() => { el.remove(); }, 12000);
+}
+
 // ---- persist: debounced write of master + active client to Supabase ----
 export function persist() {
     if (window.IS_GUEST) {
@@ -95,6 +126,7 @@ export function persist() {
 
             if (masterErr) {
                 console.error("❌ Master Persist Error:", masterErr.message);
+                showSyncErrorToast(`Some changes couldn't be saved (${masterErr.message}). Your latest edits may not have synced.`);
             }
 
             const idsToSave = new Set(state.dirtyClientIds || []);
@@ -112,6 +144,7 @@ export function persist() {
 
                 if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
                     console.error(`🛑 PERSIST SKIPPED for ${activeId}: Incomplete client object`);
+                    showSyncErrorToast(`A project's data looked incomplete, so its save was skipped to avoid overwriting anything. Refresh and try again.`);
                     continue;
                 }
 
@@ -131,6 +164,7 @@ export function persist() {
 
                 if (clientErr) {
                     console.error(`❌ Client Persist Error [${activeId}]:`, clientErr.message);
+                    showSyncErrorToast(`Couldn't save changes for a client project (${clientErr.message}). Will retry automatically.`);
                     // Keep it marked dirty so the next debounced cycle retries it.
                     if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
                     state.dirtyClientIds.add(activeId);
@@ -141,6 +175,7 @@ export function persist() {
             console.log("✅ Background Sync Complete.");
         } catch (error) {
             console.error("💀 Persistence Error:", error);
+            showSyncErrorToast(`Save failed unexpectedly (${error?.message || error}). Check your connection and try again.`);
         }
     }, 1500);
 }
