@@ -1,4 +1,5 @@
 import * as OLData from './core/data.js';
+import * as OLFieldSchema from './core/field-schema.js';
 import * as OLAuth from './core/auth.js';
 import { esc, val, num, uid } from './core/data.js';
 import * as OLClientDashboard from './features/client-dashboard.js';
@@ -7,6 +8,7 @@ import * as OLFunctions from './features/functions.js';
 import * as OLTasks from './features/tasks.js';
 import * as OLResourcesGrid from './features/resources-grid.js';
 import * as OLResourcesModal from './features/resources-modal.js';
+import * as OLFieldTypeManager from './features/field-type-manager.js';
 import * as OLWorkflows from './features/flow-visualizer/workflows.js';
 import * as OLTeam from './features/team.js';
 import * as OLCredentials from './features/credentials.js';
