@@ -479,6 +479,24 @@ OL.unarchiveGmailMessage = async function(id) {
 // READ AN EMAIL — always pulled fresh from Supabase (works from the
 // feed list or from a task's "Linked Emails" section either way).
 // -------------------------------------------------------------
+// Defensive cleanup for already-imported rows: extractPlainTextBody() in
+// get-gmail-messages used to let raw HTML source through for single-part
+// text/html messages (Calendly notifications and similar). That's fixed
+// server-side for anything synced going forward, but emails already sitting
+// in the table still have raw HTML baked into their stored body — this
+// strips tags/entities client-side as a fallback so old rows render
+// correctly too, without needing a full resync.
+OL._looksLikeHtml = function(text) {
+    return /<[a-z][\s\S]*>/i.test(text || '');
+};
+
+OL._stripHtmlForPreview = function(text) {
+    if (!OL._looksLikeHtml(text)) return text || '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = text;
+    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
 OL.openGmailMessageModal = async function(id) {
     const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
@@ -488,9 +506,19 @@ OL.openGmailMessageModal = async function(id) {
         clientId: m.linked_client_id || '',
         resourceId: m.linked_resource_id || '',
         taskId: m.linked_task_id || '',
+        eventId: m.linked_event_id || '',
         clientQuery: '',
         resourceQuery: '',
         taskQuery: '',
+        eventQuery: '',
+        // 🚀 THE FIX: lists stay hidden until the search box is actually
+        // focused, instead of dumping every project/resource/task/event on
+        // screen immediately.
+        clientFocused: false,
+        resourceFocused: false,
+        taskFocused: false,
+        eventFocused: false,
+        eventResults: [], // live Supabase search results (events aren't all loaded client-side)
         creatingTask: false,
         newTaskTitle: ''
     };
@@ -516,20 +544,30 @@ OL.openGmailMessageModal = async function(id) {
 
             <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:24px; align-items:start;">
                 <div style="white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:460px; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
-                    ${esc(m.body || m.snippet || 'No preview available for this message.')}
+                    ${esc(OL._stripHtmlForPreview(m.body) || m.snippet || 'No preview available for this message.')}
                 </div>
 
                 <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
                     <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-                        <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task
+                        <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event
                     </label>
                     <div id="gmail-link-body"></div>
                 </div>
             </div>
         </div>
     `;
+    OL._gmailLinkSelectedEvent = null; // resolved just below if this email already has a linked event
+
     openModal(html);
     OL.renderGmailLinkStep();
+
+    if (m.linked_event_id) {
+        const { data: evt } = await db.from('calendar_events').select('id, title, start, description').eq('id', m.linked_event_id).maybeSingle();
+        if (evt && OL._gmailLinkState?.emailId === id) {
+            OL._gmailLinkSelectedEvent = evt;
+            OL.renderGmailLinkStep();
+        }
+    }
 };
 window.OL.openGmailMessageModal = OL.openGmailMessageModal;
 
@@ -606,7 +644,11 @@ OL.renderGmailLinkStep = function() {
             || OL._allClientTasksFlat().find(t => t.id === st.taskId)
         : null;
 
-    const canLink = !!(st.clientId || st.resourceId || st.taskId);
+    // ---- Event (not all loaded client-side — searched live against Supabase
+    // by OL.setGmailLinkEventQuery below; st.eventResults holds the latest hits) ----
+    const selectedEvent = st.eventId ? OL._gmailLinkSelectedEvent : null;
+
+    const canLink = !!(st.clientId || st.resourceId || st.taskId || st.eventId);
 
     container.innerHTML = `
         <div style="margin-bottom:14px;">
@@ -617,12 +659,15 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" onclick="OL.setGmailLinkClient('')">Change</button>
                 </div>
             ` : `
-                <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search projects..." value="${esc(st.clientQuery || '')}" oninput="OL.setGmailLinkClientQuery(this.value)">
-                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
-                    ${filteredClients.length ? filteredClients.map(c => `
-                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.setGmailLinkClient('${c.id}')">${esc(c.meta?.name || 'Unnamed')}</div>
-                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching projects.</div>`}
-                </div>
+                <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search projects..." value="${esc(st.clientQuery || '')}"
+                       onfocus="OL.setGmailLinkFocus('clientFocused', true)" oninput="OL.setGmailLinkClientQuery(this.value)">
+                ${st.clientFocused ? `
+                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                        ${filteredClients.length ? filteredClients.map(c => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkClient('${c.id}')">${esc(c.meta?.name || 'Unnamed')}</div>
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">No matching projects.</div>`}
+                    </div>
+                ` : ''}
             `}
         </div>
 
@@ -634,19 +679,22 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" onclick="OL.setGmailLinkResource('')">Change</button>
                 </div>
             ` : `
-                <input type="text" id="gmail-link-resource-search" class="modal-input tiny" placeholder="Search resources...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.resourceQuery || '')}" oninput="OL.setGmailLinkResourceQuery(this.value)">
-                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
-                    ${filteredResources.length ? filteredResources.map(r => `
-                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onclick="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
-                            <span>${esc(r.name)}</span>
-                            ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
-                        </div>
-                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
-                </div>
+                <input type="text" id="gmail-link-resource-search" class="modal-input tiny" placeholder="Search resources...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.resourceQuery || '')}"
+                       onfocus="OL.setGmailLinkFocus('resourceFocused', true)" oninput="OL.setGmailLinkResourceQuery(this.value)">
+                ${st.resourceFocused ? `
+                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                        ${filteredResources.length ? filteredResources.map(r => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
+                                <span>${esc(r.name)}</span>
+                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                            </div>
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
+                    </div>
+                ` : ''}
             `}
         </div>
 
-        <div style="margin-bottom:16px;">
+        <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task</label>
             ${selectedTask ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
@@ -654,43 +702,78 @@ OL.renderGmailLinkStep = function() {
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
-                <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.taskQuery || '')}" oninput="OL.setGmailLinkTaskQuery(this.value)">
-                <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
-                    ${filteredTasks.length ? filteredTasks.map(t => `
-                        <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onclick="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
-                            <span>${esc(t.title || t.name)}</span>
-                            ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
-                        </div>
-                    `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
-                </div>
-
-                ${selectedClient ? (st.creatingTask ? `
-                    <div style="margin-top:10px; padding:10px; border:1px dashed var(--accent); border-radius:6px;">
-                        <input type="text" id="gmail-new-task-title" class="modal-input tiny" placeholder="New task title..." value="${esc(st.newTaskTitle || '')}" oninput="OL._gmailLinkState.newTaskTitle = this.value">
-                        <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-                            <button class="btn tiny soft" onclick="OL.cancelGmailCreateTask()">Cancel</button>
-                            <button class="btn tiny primary" onclick="OL.createAndLinkGmailTask()" style="font-weight:bold;">Create &amp; Link</button>
-                        </div>
+                <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.taskQuery || '')}"
+                       onfocus="OL.setGmailLinkFocus('taskFocused', true)" oninput="OL.setGmailLinkTaskQuery(this.value)">
+                ${st.taskFocused ? `
+                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                        ${filteredTasks.length ? filteredTasks.map(t => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
+                                <span>${esc(t.title || t.name)}</span>
+                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
+                            </div>
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
                     </div>
-                ` : `
-                    <button class="btn tiny soft" style="margin-top:8px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="OL.startGmailCreateTask()">
-                        <i data-lucide="plus" style="width:11px;height:11px;"></i> Create New Task
-                    </button>
-                `) : `<div class="tiny muted" style="margin-top:6px;">Pick a project first to create a new task.</div>`}
+
+                    ${selectedClient ? (st.creatingTask ? `
+                        <div style="margin-top:10px; padding:10px; border:1px dashed var(--accent); border-radius:6px;">
+                            <input type="text" id="gmail-new-task-title" class="modal-input tiny" placeholder="New task title..." value="${esc(st.newTaskTitle || '')}" oninput="OL._gmailLinkState.newTaskTitle = this.value">
+                            <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+                                <button class="btn tiny soft" onclick="OL.cancelGmailCreateTask()">Cancel</button>
+                                <button class="btn tiny primary" onclick="OL.createAndLinkGmailTask()" style="font-weight:bold;">Create &amp; Link</button>
+                            </div>
+                        </div>
+                    ` : `
+                        <button class="btn tiny soft" style="margin-top:8px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="OL.startGmailCreateTask()">
+                            <i data-lucide="plus" style="width:11px;height:11px;"></i> Create New Task
+                        </button>
+                    `) : `<div class="tiny muted" style="margin-top:6px;">Pick a project first to create a new task.</div>`}
+                ` : ''}
+            `}
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Event</label>
+            ${selectedEvent ? `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
+                    <span class="tiny bold">${esc(selectedEvent.title)}${selectedEvent.start ? ` <span class="tiny muted">· ${esc(new Date(selectedEvent.start).toLocaleDateString())}</span>` : ''}</span>
+                    <button class="btn tiny soft" onclick="OL.setGmailLinkEvent('')">Change</button>
+                </div>
+            ` : `
+                <input type="text" id="gmail-link-event-search" class="modal-input tiny" placeholder="Search calendar events..." value="${esc(st.eventQuery || '')}"
+                       onfocus="OL.setGmailLinkFocus('eventFocused', true)" oninput="OL.setGmailLinkEventQuery(this.value)">
+                ${st.eventFocused ? `
+                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                        ${st.eventResults.length ? st.eventResults.map(e => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkEvent('${esc(e.id).replace(/'/g, "\\'")}')">
+                                <div>${esc(e.title)}</div>
+                                ${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
+                            </div>
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events.' : 'Type to search events...'}</div>`}
+                    </div>
+                ` : ''}
             `}
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            ${(st.clientId || st.resourceId || st.taskId) ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
+            ${(st.clientId || st.resourceId || st.taskId || st.eventId) ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
             <button class="btn small primary" onclick="OL.saveGmailLink()" style="font-weight:bold;" ${!canLink ? 'disabled' : ''}>Save Link</button>
         </div>
     `;
     if (window.lucide) lucide.createIcons();
 };
 
+// Shared by all four search boxes — flips the corresponding *Focused flag
+// so its results list appears, without touching the query itself.
+OL.setGmailLinkFocus = function(flagName, value) {
+    if (OL._gmailLinkState[flagName] === value) return; // already showing — don't re-render mid-keystroke
+    OL._gmailLinkState[flagName] = value;
+    OL.renderGmailLinkStep();
+};
+
 OL.setGmailLinkClientQuery = function(value) {
     OL.reRenderPreservingFocus(() => {
         OL._gmailLinkState.clientQuery = value;
+        OL._gmailLinkState.clientFocused = true;
         OL.renderGmailLinkStep();
     });
 };
@@ -698,6 +781,7 @@ OL.setGmailLinkClientQuery = function(value) {
 OL.setGmailLinkResourceQuery = function(value) {
     OL.reRenderPreservingFocus(() => {
         OL._gmailLinkState.resourceQuery = value;
+        OL._gmailLinkState.resourceFocused = true;
         OL.renderGmailLinkStep();
     });
 };
@@ -705,18 +789,52 @@ OL.setGmailLinkResourceQuery = function(value) {
 OL.setGmailLinkTaskQuery = function(value) {
     OL.reRenderPreservingFocus(() => {
         OL._gmailLinkState.taskQuery = value;
+        OL._gmailLinkState.taskFocused = true;
         OL.renderGmailLinkStep();
     });
+};
+
+// Events aren't all loaded client-side (see OL.loadCalendarEvents — it's
+// paginated/filtered), so this searches Supabase directly rather than
+// filtering an in-memory pool like the other three. Debounced since it's
+// a live query per keystroke otherwise.
+OL.setGmailLinkEventQuery = function(value) {
+    OL.reRenderPreservingFocus(() => {
+        OL._gmailLinkState.eventQuery = value;
+        OL._gmailLinkState.eventFocused = true;
+        OL.renderGmailLinkStep();
+    });
+
+    clearTimeout(OL._gmailLinkEventSearchTimer);
+    const q = (value || '').trim();
+    if (!q) { OL._gmailLinkState.eventResults = []; OL.renderGmailLinkStep(); return; }
+
+    OL._gmailLinkEventSearchTimer = setTimeout(async () => {
+        const { data, error } = await db.from('calendar_events')
+            .select('id, title, start, description')
+            .ilike('title', `%${q}%`)
+            .order('start', { ascending: false })
+            .limit(20);
+        if (error) { console.error('Event search failed:', error.message); return; }
+        // Query may have moved on while this was in flight — only apply if still current.
+        if ((OL._gmailLinkState.eventQuery || '').trim() === q) {
+            OL._gmailLinkState.eventResults = data || [];
+            OL.renderGmailLinkStep();
+        }
+    }, 300);
 };
 
 // Changing the project invalidates any resource/task picked under the
 // previous one, so both get cleared.
 OL.setGmailLinkClient = function(id) {
     OL._gmailLinkState.clientId = id;
+    OL._gmailLinkState.clientFocused = false;
     OL._gmailLinkState.resourceId = '';
     OL._gmailLinkState.resourceQuery = '';
+    OL._gmailLinkState.resourceFocused = false;
     OL._gmailLinkState.taskId = '';
     OL._gmailLinkState.taskQuery = '';
+    OL._gmailLinkState.taskFocused = false;
     OL._gmailLinkState.creatingTask = false;
     OL.renderGmailLinkStep();
 };
@@ -725,6 +843,7 @@ OL.setGmailLinkClient = function(id) {
 // Task is left alone (a resource doesn't imply one specific task).
 OL.setGmailLinkResource = function(id, clientId) {
     OL._gmailLinkState.resourceId = id;
+    OL._gmailLinkState.resourceFocused = false;
     if (id && clientId && !OL._gmailLinkState.clientId) {
         OL._gmailLinkState.clientId = clientId;
     }
@@ -735,6 +854,7 @@ OL.setGmailLinkResource = function(id, clientId) {
 // the task's resourceName against that project's resource list.
 OL.setGmailLinkTask = function(id, clientId) {
     OL._gmailLinkState.taskId = id;
+    OL._gmailLinkState.taskFocused = false;
     if (!id) { OL.renderGmailLinkStep(); return; }
 
     const resolvedClientId = OL._gmailLinkState.clientId || clientId;
@@ -748,6 +868,21 @@ OL.setGmailLinkTask = function(id, clientId) {
     const matchedResource = resolvedClientId && task ? OL._findResourceForTask(resolvedClientId, task) : null;
     if (matchedResource) OL._gmailLinkState.resourceId = matchedResource.id;
 
+    OL.renderGmailLinkStep();
+};
+
+// Event is independent of Project/Resource/Task — an email can be tied to
+// a specific calendar event without implying a client (e.g. a scheduling
+// notification before there's even a project). Looks the event up from the
+// last search results rather than round-tripping it through an HTML
+// attribute (event titles can contain quotes/apostrophes, which would
+// break out of an inline onmousedown string).
+OL.setGmailLinkEvent = function(id) {
+    OL._gmailLinkState.eventId = id;
+    OL._gmailLinkState.eventFocused = false;
+    OL._gmailLinkSelectedEvent = id
+        ? (OL._gmailLinkState.eventResults || []).find(e => e.id === id) || OL._gmailLinkSelectedEvent
+        : null;
     OL.renderGmailLinkStep();
 };
 
@@ -797,17 +932,12 @@ OL.saveGmailLink = async function() {
         linked_client_id: st.clientId || null,
         linked_resource_id: st.resourceId || null,
         linked_task_id: st.taskId || null,
-        archived: true // linking means you're done triaging it — out of the inbox feed
+        linked_event_id: st.eventId || null
+        // 🚀 THE FIX: linking no longer auto-archives. Archiving and
+        // linking are separate decisions — use the Archive button for that.
     }).eq('id', st.emailId);
 
     if (error) { alert('Failed to save link: ' + error.message); return; }
-
-    // Best-effort: also archive in real Gmail, since you're fine with that once linked
-    fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/archive-gmail-message", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: st.emailId })
-    }).catch(err => console.warn('Could not archive in Gmail (still linked + archived in-app):', err));
 
     OL.closeModal();
     await OL.loadGmailFeed();
@@ -818,7 +948,7 @@ OL.unlinkGmailMessage = async function() {
     const st = OL._gmailLinkState;
     if (!st) return;
 
-    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_resource_id: null, linked_task_id: null }).eq('id', st.emailId);
+    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_resource_id: null, linked_task_id: null, linked_event_id: null }).eq('id', st.emailId);
     if (error) { alert('Failed to unlink: ' + error.message); return; }
 
     OL.closeModal();
