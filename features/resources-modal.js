@@ -728,9 +728,10 @@ const dependencyHtml = `
           </div>
 
           <div class="comment-input-zone" style="padding: 15px; border-top: 1px solid var(--line);">
+              ${commentToolbarHtml(res.id)}
               <textarea id="new-comment-input-${res.id}" class="modal-textarea" 
                         placeholder="Type a ${activeTab === 'client' ? 'message to the team' : 'private note'}..." 
-                        style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
+                        style="min-height: 60px; margin-bottom: 8px; font-size: 11px; text-align:left;"></textarea>
               <button class="btn tiny full-width ${activeTab === 'client' ? 'primary' : 'soft'}" 
                       style="${activeTab === 'client' ? 'background:#10b981; color:white;' : ''}"
                       onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">
@@ -1394,9 +1395,10 @@ const dependencyHtml = `
     
                 ${activeTab !== 'history' ? `
                     <div style="padding:12px;border-top:1px solid var(--line);">
+                        ${commentToolbarHtml(res.id)}
                         <textarea id="new-comment-input-${res.id}" class="modal-textarea"
                                   placeholder="Type a ${activeTab === 'client' ? 'message to client' : 'private note'}..."
-                                  style="min-height:60px;margin-bottom:8px;font-size:11px;"></textarea>
+                                  style="min-height:60px;margin-bottom:8px;font-size:11px;text-align:left;"></textarea>
                         <button class="btn tiny full-width"
                                 style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'};"
                                 onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">
@@ -1908,6 +1910,73 @@ export function simulateUpload(resId, idx) {
     }
 };
 
+// Minimal markdown-ish formatting for comments: **bold**, *italic*, "- " bullets, line breaks.
+function formatCommentText(text) {
+    let html = esc(text || '');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/^- (.+)$/gm, '&bull; $1');
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+// Renders comments left-aligned with fixed-width author/date columns and a
+// wrapping body column, for both the desktop sidebar and mobile-tab variants
+// of the resource modal.
+function renderCommentsList(res, activeTab) {
+    const comments = (res.comments || []).filter(c => activeTab === 'client' ? c.isClientFacing : !c.isClientFacing);
+    if (!comments.length) {
+        return `<div class="tiny muted" style="text-align:center; padding:20px;">No comments yet.</div>`;
+    }
+    return comments.map(c => `
+        <div style="display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); align-items:flex-start; text-align:left;">
+            <div style="flex-shrink:0; width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <div class="tiny bold">${esc(c.author || 'Unknown')}</div>
+            </div>
+            <div style="flex-shrink:0; width:80px;">
+                <div class="tiny muted">${c.timestamp ? new Date(c.timestamp).toLocaleDateString([], { dateStyle: 'short' }) : ''}</div>
+            </div>
+            <div style="flex:1; min-width:0;">
+                <div class="tiny" style="white-space:normal; overflow-wrap:break-word; line-height:1.5; text-align:left;">${formatCommentText(c.text)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Wraps the current textarea selection in a markdown-style marker (or
+// prefixes each selected line, for bullets) — used by the formatting toolbar.
+export function wrapCommentSelection(resId, marker) {
+    const ta = document.getElementById(`new-comment-input-${resId}`);
+    if (!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = ta.value.slice(start, end);
+
+    if (marker === '- ') {
+        const lines = (selected || 'list item').split('\n').map(l => `- ${l}`).join('\n');
+        ta.value = ta.value.slice(0, start) + lines + ta.value.slice(end);
+        ta.focus();
+        ta.selectionStart = start;
+        ta.selectionEnd = start + lines.length;
+        return;
+    }
+
+    const text = selected || 'text';
+    ta.value = ta.value.slice(0, start) + marker + text + marker + ta.value.slice(end);
+    ta.focus();
+    ta.selectionStart = start + marker.length;
+    ta.selectionEnd = start + marker.length + text.length;
+}
+
+function commentToolbarHtml(resId) {
+    return `
+        <div style="display:flex; gap:4px; margin-bottom:6px;">
+            <button type="button" class="btn tiny soft" style="font-weight:bold; padding:2px 8px;" title="Bold" onclick="OL.wrapCommentSelection('${resId}', '**')">B</button>
+            <button type="button" class="btn tiny soft" style="font-style:italic; padding:2px 8px;" title="Italic" onclick="OL.wrapCommentSelection('${resId}', '*')">i</button>
+            <button type="button" class="btn tiny soft" style="padding:2px 8px;" title="Bullet list" onclick="OL.wrapCommentSelection('${resId}', '- ')">&bull; List</button>
+        </div>
+    `;
+}
+
 export async function addResourceComment(resId, isClientFacing = false) {
     const input = document.getElementById(`new-comment-input-${resId}`);
     const text = input.value.trim();
@@ -1917,12 +1986,12 @@ export async function addResourceComment(resId, isClientFacing = false) {
     const client = getActiveClient();
     if (!res) return;
 
-    // Author resolution now uses the real logged-in identity (admin or
-    // Sphynx team member — see core/auth.js) instead of a generic
-    // "Sphynx Team"/"Team Member" label, same as task comments.
-    let authorName = OL.getCurrentUserName ? OL.getCurrentUserName() : 'Team Member';
-    if (window.IS_GUEST && client) {
-        authorName = client.meta.name; // client-side guest posting client feedback
+    // 🕵️ AUTHOR RESOLUTION
+    let authorName = "Team Member";
+    if (window.FORCE_ADMIN) {
+        authorName = "Sphynx Team";
+    } else if (window.IS_GUEST && client) {
+        authorName = client.meta.name; // Uses the Company Name from Registry
     }
 
     if (!res.comments) res.comments = [];
@@ -1939,44 +2008,6 @@ export async function addResourceComment(resId, isClientFacing = false) {
     // Save current tab preference to state so it doesn't flip back on refresh
     state.v2.activeCommentTab = isClientFacing ? 'client' : 'internal';
     OL.openResourceModal(resId);
-}
-
-// -------------------------------------------------------------
-// COMMENT THREAD — internal notes + client feedback on this resource.
-// The 'internal' tab also rolls up comments from any task whose
-// parentResourceId points at this resource (read-only here — reply from
-// the task itself so there's one source of truth), tagged with which
-// task each came from and sorted in with the resource's own notes.
-// -------------------------------------------------------------
-export function getRolledUpResourceComments(resId) {
-    const client = getActiveClient();
-    if (!client) return [];
-    const childTasks = (client.projectData?.clientTasks || []).filter(t => t.parentResourceId === resId);
-    return childTasks.flatMap(t =>
-        (t.comments || []).map(c => ({ ...c, _fromTask: t.title || t.name, _taskId: t.id }))
-    );
-}
-
-function renderCommentsList(res, activeTab) {
-    if (activeTab === 'history') return ''; // handled separately by OL.renderEditHistory at both call sites
-
-    const ownComments = (res.comments || []).filter(c => !!c.isClientFacing === (activeTab === 'client'));
-    const rolledUp = activeTab === 'internal' ? getRolledUpResourceComments(res.id) : [];
-    const all = [...ownComments, ...rolledUp].sort((a, b) => new Date(a.timestamp || a.date || 0) - new Date(b.timestamp || b.date || 0));
-
-    if (!all.length) {
-        return `<div class="tiny muted" style="text-align:center; padding:20px;">${activeTab === 'client' ? 'No client feedback yet.' : 'No internal notes yet.'}</div>`;
-    }
-
-    return all.map(c => `
-        <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line); margin-bottom:8px;">
-            <div class="tiny muted bold" style="margin-bottom:4px; display:flex; justify-content:space-between; gap:8px;">
-                <span>${esc(c.author || 'Unknown')}${c._fromTask ? ` <span class="pill tiny soft" style="font-size:9px; margin-left:4px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${getActiveClient()?.id}', '${c._taskId}')" title="From task: ${esc(c._fromTask)}"><i data-lucide="check-square" style="width:9px;height:9px;"></i> ${esc(c._fromTask)}</span>` : ''}</span>
-                <span>${(c.timestamp || c.date) ? esc(new Date(c.timestamp || c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
-            </div>
-            <div class="tiny" style="line-height:1.5; white-space:pre-wrap;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text) : esc(c.text)}</div>
-        </div>
-    `).join('');
 };
 
 export function renderResourceMiniMaps(targetResId) {
@@ -2720,7 +2751,7 @@ Object.assign(window.OL, {
     removeTreeNode, handleTreeDragStart, handleTreeDrop, handleTreeDragOver,
     handleTreeDragLeave, handleConventionUpdate, updateContainerFile,
     addFileToContainer, removeFileFromContainer, simulateUpload,
-    addResourceComment, renderResourceMiniMaps, goToResourceInMap,
+    addResourceComment, wrapCommentSelection, renderResourceMiniMaps, goToResourceInMap,
     navigateBack, trackNav, clearNavHistory, filterSignatureSearch,
     linkSignature, previewEmailTemplate, copyToClipboard, logResourceEdit,
     handleResourceSave, renderEditHistory, addRegistryType,
