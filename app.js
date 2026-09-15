@@ -62,15 +62,6 @@ window.addEventListener("load", async () => {
     }
 
     OL.sync();
-
-    // Background auto-refresh: keeps the Gmail feed and calendar current
-    // without a manual "Sync" click while this tab is open. Each timer
-    // no-ops on ticks where Google isn't connected yet, so it's safe to
-    // start immediately rather than waiting on OL.sync() to resolve.
-    // Server-side coverage (syncing even with no tab open) comes from the
-    // pg_cron job in supabase/migrations/auto_sync_cron.sql.
-    if (typeof OL.startGmailAutoSync === 'function') OL.startGmailAutoSync();
-    if (typeof OL.startCalendarAutoSync === 'function') OL.startCalendarAutoSync();
 });
 
 OL.goToDashboard = function(hash) {
@@ -364,11 +355,8 @@ window.buildLayout = function () {
     let showHome = true;
 
     if (isAdmin) {
-        homeLabel = "Daily Snapshot";
-        homeAction = `OL.goToDashboard('#/business/dashboard')`;
-    } else if (state.teamMemberMode) {
-        homeLabel = "Daily Snapshot";
-        homeAction = `OL.goToDashboard('#/business/dashboard')`;
+        homeLabel = "Global Registry";
+        homeAction = `OL.goToDashboard('#/business/clients')`;
     } else if (client && client.meta?.status === "Partner") {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
@@ -380,7 +368,7 @@ window.buildLayout = function () {
     }
 
     // 1. Dashboard/Non-Context Shell View
-    if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin && !state.teamMemberMode) {
+    if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
                 <aside class="sidebar">
@@ -475,17 +463,16 @@ window.buildLayout = function () {
                             <span>${homeLabel.toUpperCase()}</span>
                         </a>
                     </nav>
-                    ${(isAdmin || state.teamMemberMode) && state.currentUser?.name ? `<div class="tiny muted" style="padding:6px 10px 0;">Logged in as ${esc(state.currentUser.name)}</div>` : ''}
                 </div>
                 <div class="divider" style="margin: 10px 0;"></div>
                 ` : ''}
 
-                ${(isAdmin || effectiveAdminMode || state.teamMemberMode) && !client ? `
+                ${(isAdmin || effectiveAdminMode) && !client ? `
                     <!-- 🏢 BUSINESS MANAGER MENU -->
                     <div class="client-nav-zone admin-workspace">
                         <div class="menu-category-label">Business Manager</div>
                         <nav class="menu">
-                            ${businessTabs.filter(item => isAdmin || effectiveAdminMode || OL.hasTeamPermission(item.key)).map(item => `
+                            ${businessTabs.map(item => `
                                 <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
                                     <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
                                     <span class="menu-item">${item.label}</span>
@@ -493,10 +480,9 @@ window.buildLayout = function () {
                             `).join('')}
                         </nav>
                         
-                        ${(isAdmin || effectiveAdminMode) ? `
                         <div class="divider" style="margin: 15px 0;"></div>
                         
-                        <!-- 🏛️ TEMPLATE VAULT / BUILDER MENU (admin-only — not provisionable for team members) -->
+                        <!-- 🏛️ TEMPLATE VAULT / BUILDER MENU -->
                         <div class="menu-category-label">Template Vault</div>
                         <nav class="menu">
                             ${masterTabs.map(item => `
@@ -506,7 +492,6 @@ window.buildLayout = function () {
                                 </a>
                             `).join('')}
                         </nav>
-                        ` : ''}
                     </div>
                 ` : client ? `
                     <!-- 📁 CLIENT PROJECT WORKSPACE MENU -->
@@ -716,10 +701,6 @@ window.handleRoute = function () {
 
     // 2. Global Client Registry / Partner Dashboard Route
     if (hash === "#/clients" || hash.includes("partner-dashboard")) {
-        if (hash === "#/clients" && state.teamMemberMode && !OL.hasTeamPermission('clients')) {
-            window.location.hash = '#/business/dashboard';
-            return;
-        }
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
         renderClientDashboard();
         return;
@@ -728,25 +709,7 @@ window.handleRoute = function () {
     // 3. Global Business Suite Routes
     if (hash.startsWith('#/business')) {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
-
-        // Team members only get the tabs their record has been granted
-        // (see core/auth.js hasTeamPermission + the Team page's
-        // Provisioning section). Real admins always pass.
-        const businessRouteTab =
-            hash.includes('/communications') ? 'communications' :
-            hash.includes('/calendar') ? 'calendar' :
-            hash.includes('/errors') ? 'errors' :
-            hash.includes('/tasks') ? 'tasks' :
-            hash.includes('/time-reports') ? 'time-reports' :
-            hash.includes('/financials') ? 'financials' :
-            hash.includes('/team') ? 'team' :
-            hash.includes('/clients') ? 'clients' : null;
-
-        if (businessRouteTab && state.teamMemberMode && !OL.hasTeamPermission(businessRouteTab)) {
-            window.location.hash = '#/business/dashboard';
-            return;
-        }
-
+        
         if (hash.includes('/communications') && typeof OL.renderBusinessCommunications === 'function') OL.renderBusinessCommunications();
         else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
         else if (hash.includes('/errors') && typeof OL.renderBusinessErrorLog === 'function') OL.renderBusinessErrorLog();
@@ -763,7 +726,7 @@ window.handleRoute = function () {
 
     // 4. Vault / Master Routes
     if (isVault) {
-        if (window.IS_GUEST || state.teamMemberMode) {
+        if (window.IS_GUEST) {
             window.location.hash = '#/';
             return;
         }
