@@ -321,37 +321,69 @@ OL.openApplyBlueprintModal = function(blueprintId) {
     const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
     if (!blueprint) return;
 
+    OL._applyBpFilter = 'all'; // 'all' | 'applied' | 'not-applied'
+    window._applyBpBlueprintId = blueprintId;
+    openModal(OL._renderApplyBlueprintModalHTML(blueprintId));
+};
+
+// Rebuildable body — the search box and filter buttons call this to
+// re-render just the client list without tearing down the whole modal.
+OL._renderApplyBlueprintModalHTML = function(blueprintId, query) {
+    const blueprint = (state.master.taskBlueprints || []).find(b => b.id === blueprintId);
+    if (!blueprint) return '';
+
     const clients = Object.values(state.clients || {}).sort((a, b) =>
         (a.meta?.name || '').localeCompare(b.meta?.name || '')
     );
     const applications = OL.getBlueprintApplications(blueprintId);
     const appliedClientIds = new Set(applications.map(a => a.clientId));
 
-    const html = `
+    const q = (query || '').toLowerCase().trim();
+    const filter = OL._applyBpFilter || 'all';
+    const visibleClients = clients.filter(c => {
+        const matchesQuery = !q || (c.meta?.name || c.id).toLowerCase().includes(q);
+        const isApplied = appliedClientIds.has(c.id);
+        const matchesFilter = filter === 'all' || (filter === 'applied' ? isApplied : !isApplied);
+        return matchesQuery && matchesFilter;
+    });
+
+    return `
         <div class="modal-head">
             <div class="modal-title-text">Apply "${esc(blueprint.title)}"</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:480px; width:100%;">
-            <label class="modal-section-label">Apply to Clients</label>
-            <p class="tiny muted" style="margin-bottom:8px;">Check any number of clients — applying creates a fresh copy of this task for each one.</p>
-            <div style="display:grid; gap:6px; max-height:220px; overflow:auto; margin-bottom:14px;">
-                ${clients.map(c => `
+        <div class="modal-body" style="max-width:560px; width:100%;">
+            <label class="modal-section-label">Apply to Clients (${clients.length})</label>
+            <p class="tiny muted" style="margin-top:-4px; margin-bottom:10px;">Check any number of clients — applying creates a fresh copy of this task for each one.</p>
+
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Search clients..."
+                       value="${esc(query || '')}"
+                       oninput="OL._refreshApplyBlueprintList('${blueprintId}', this.value)">
+                <div style="display:flex; gap:4px; flex-shrink:0;">
+                    <button class="btn tiny ${filter === 'all' ? 'primary' : 'soft'}" onclick="OL._setApplyBlueprintFilter('${blueprintId}', 'all')">All</button>
+                    <button class="btn tiny ${filter === 'not-applied' ? 'primary' : 'soft'}" onclick="OL._setApplyBlueprintFilter('${blueprintId}', 'not-applied')">Not Applied</button>
+                    <button class="btn tiny ${filter === 'applied' ? 'primary' : 'soft'}" onclick="OL._setApplyBlueprintFilter('${blueprintId}', 'applied')">Applied</button>
+                </div>
+            </div>
+
+            <div id="apply-bp-client-list" style="display:grid; gap:6px; max-height:260px; overflow:auto; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; padding:8px;">
+                ${visibleClients.length ? visibleClients.map(c => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
                         <input type="checkbox" class="apply-bp-client-cb" value="${c.id}">
-                        ${esc(c.meta?.name || c.id)}
-                        ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="margin-left:auto; font-size:9px;">Already applied</span>` : ''}
+                        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.meta?.name || c.id)}</span>
+                        ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="flex-shrink:0; font-size:9px;">Already applied</span>` : ''}
                     </label>
-                `).join('')}
+                `).join('') : `<div class="tiny muted" style="padding:8px;">No clients match.</div>`}
             </div>
 
             ${applications.length ? `
                 <label class="modal-section-label">Applied To (${applications.length})</label>
                 <div style="display:grid; gap:6px; max-height:160px; overflow:auto; margin-bottom:14px;">
                     ${applications.map(a => `
-                        <div class="tiny" style="display:flex; justify-content:space-between; gap:8px; padding:6px 8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${a.clientId}', '${a.taskId}')">
-                            <span>${esc(a.clientName)} — ${esc(a.taskTitle)}</span>
+                        <div class="tiny" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${a.clientId}', '${a.taskId}')">
+                            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(a.clientName)} — ${esc(a.taskTitle)}</span>
                             <span class="pill tiny soft" style="flex-shrink:0;">${esc(a.status)}</span>
                         </div>
                     `).join('')}
@@ -364,7 +396,43 @@ OL.openApplyBlueprintModal = function(blueprintId) {
             </div>
         </div>
     `;
-    openModal(html);
+};
+
+// Re-render just the client list (used by the search box) — keeps the
+// currently-checked boxes checked instead of wiping the whole modal.
+OL._refreshApplyBlueprintList = function(blueprintId, query) {
+    const checked = new Set([...document.querySelectorAll('.apply-bp-client-cb:checked')].map(el => el.value));
+    const listEl = document.getElementById('apply-bp-client-list');
+    if (!listEl) return;
+
+    const clients = Object.values(state.clients || {}).sort((a, b) =>
+        (a.meta?.name || '').localeCompare(b.meta?.name || '')
+    );
+    const applications = OL.getBlueprintApplications(blueprintId);
+    const appliedClientIds = new Set(applications.map(a => a.clientId));
+
+    const q = (query || '').toLowerCase().trim();
+    const filter = OL._applyBpFilter || 'all';
+    const visibleClients = clients.filter(c => {
+        const matchesQuery = !q || (c.meta?.name || c.id).toLowerCase().includes(q);
+        const isApplied = appliedClientIds.has(c.id);
+        const matchesFilter = filter === 'all' || (filter === 'applied' ? isApplied : !isApplied);
+        return matchesQuery && matchesFilter;
+    });
+
+    listEl.innerHTML = visibleClients.length ? visibleClients.map(c => `
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+            <input type="checkbox" class="apply-bp-client-cb" value="${c.id}" ${checked.has(c.id) ? 'checked' : ''}>
+            <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.meta?.name || c.id)}</span>
+            ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="flex-shrink:0; font-size:9px;">Already applied</span>` : ''}
+        </label>
+    `).join('') : `<div class="tiny muted" style="padding:8px;">No clients match.</div>`;
+};
+
+OL._setApplyBlueprintFilter = function(blueprintId, filter) {
+    OL._applyBpFilter = filter;
+    const searchInput = document.querySelector('#apply-bp-client-list')?.parentElement?.querySelector('input[type="text"]');
+    openModal(OL._renderApplyBlueprintModalHTML(blueprintId, searchInput?.value || ''));
 };
 
 // ================= SOPs (grouped blueprints) =================
@@ -572,6 +640,25 @@ OL.createTasksFromSop = function(sop, client, baseCtx) {
     return createdTasks;
 };
 
+// Every task ever created from this SOP, across every client — grouped
+// per client since one SOP application creates several tasks at once
+// (mirrors OL.getBlueprintApplications' per-task shape for single blueprints).
+OL.getSopApplications = function(sopId) {
+    const results = [];
+    Object.values(state.clients || {}).forEach(client => {
+        const tasks = (client.projectData?.clientTasks || []).filter(t => t.sopId === sopId);
+        if (tasks.length) {
+            results.push({
+                clientId: client.id,
+                clientName: client.meta?.name || client.id,
+                taskCount: tasks.length,
+                firstTaskId: tasks[0].id
+            });
+        }
+    });
+    return results;
+};
+
 OL.applySopToClient = function(sopId, clientId) {
     const sop = (state.master.sops || []).find(s => s.id === sopId);
     if (!sop) return;
@@ -595,33 +682,145 @@ OL.applySopToClient = function(sopId, clientId) {
     alert(`"${sop.name}" (${items.length} task${items.length === 1 ? '' : 's'}) applied to ${state.clients[clientId]?.meta?.name || clientId}.`);
 };
 
+// Bulk variant — same shape as OL.applyTaskBlueprintToClients.
+OL.applySopToClients = function(sopId, clientIds) {
+    const sop = (state.master.sops || []).find(s => s.id === sopId);
+    if (!sop) return;
+    if (!clientIds || !clientIds.length) { alert('Pick at least one client first.'); return; }
+
+    const items = OL.resolveSopItems(sop);
+    if (items.length === 0) {
+        alert('This SOP has no blueprints in it yet — edit it and add some first.');
+        return;
+    }
+
+    clientIds.forEach(clientId => {
+        updateAndSync(() => {
+            const client = state.clients?.[clientId];
+            if (!client) return;
+            if (!client.projectData) client.projectData = {};
+            if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+            OL.createTasksFromSop(sop, client, {});
+        }, clientId);
+    });
+
+    OL.closeModal();
+    alert(`"${sop.name}" applied to ${clientIds.length} client${clientIds.length === 1 ? '' : 's'}.`);
+};
+
 OL.openApplySopModal = function(sopId) {
     const sop = (state.master.sops || []).find(s => s.id === sopId);
     if (!sop) return;
 
+    OL._applySopFilter = 'all'; // 'all' | 'applied' | 'not-applied'
+    openModal(OL._renderApplySopModalHTML(sopId));
+};
+
+// Same structure as OL._renderApplyBlueprintModalHTML — kept as a
+// separate (not shared/generalized) function so each stays easy to read
+// on its own, at the cost of some duplication between the two.
+OL._renderApplySopModalHTML = function(sopId, query) {
+    const sop = (state.master.sops || []).find(s => s.id === sopId);
+    if (!sop) return '';
+
     const clients = Object.values(state.clients || {}).sort((a, b) =>
         (a.meta?.name || '').localeCompare(b.meta?.name || '')
     );
+    const applications = OL.getSopApplications(sopId);
+    const appliedClientIds = new Set(applications.map(a => a.clientId));
+    const taskCount = (sop.blueprintIds || []).length || (sop.items || []).length;
 
-    const html = `
+    const q = (query || '').toLowerCase().trim();
+    const filter = OL._applySopFilter || 'all';
+    const visibleClients = clients.filter(c => {
+        const matchesQuery = !q || (c.meta?.name || c.id).toLowerCase().includes(q);
+        const isApplied = appliedClientIds.has(c.id);
+        const matchesFilter = filter === 'all' || (filter === 'applied' ? isApplied : !isApplied);
+        return matchesQuery && matchesFilter;
+    });
+
+    return `
         <div class="modal-head">
-            <div class="modal-title-text">Apply "${esc(sop.name)}" to a Client</div>
+            <div class="modal-title-text">Apply "${esc(sop.name)}"</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body">
-            <p class="tiny muted">This will create ${(sop.blueprintIds || []).length} task${(sop.blueprintIds || []).length === 1 ? '' : 's'} in the selected client's workspace.</p>
-            <label class="modal-section-label">Client</label>
-            <select id="apply-sop-client" class="modal-input">
-                <option value="">Select a client...</option>
-                ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || c.id)}</option>`).join('')}
-            </select>
+        <div class="modal-body" style="max-width:560px; width:100%;">
+            <label class="modal-section-label">Apply to Clients (${clients.length})</label>
+            <p class="tiny muted" style="margin-top:-4px; margin-bottom:10px;">Check any number of clients — applying creates ${taskCount} fresh task${taskCount === 1 ? '' : 's'} for each one.</p>
 
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Search clients..."
+                       value="${esc(query || '')}"
+                       oninput="OL._refreshApplySopList('${sopId}', this.value)">
+                <div style="display:flex; gap:4px; flex-shrink:0;">
+                    <button class="btn tiny ${filter === 'all' ? 'primary' : 'soft'}" onclick="OL._setApplySopFilter('${sopId}', 'all')">All</button>
+                    <button class="btn tiny ${filter === 'not-applied' ? 'primary' : 'soft'}" onclick="OL._setApplySopFilter('${sopId}', 'not-applied')">Not Applied</button>
+                    <button class="btn tiny ${filter === 'applied' ? 'primary' : 'soft'}" onclick="OL._setApplySopFilter('${sopId}', 'applied')">Applied</button>
+                </div>
+            </div>
+
+            <div id="apply-sop-client-list" style="display:grid; gap:6px; max-height:260px; overflow:auto; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; padding:8px;">
+                ${visibleClients.length ? visibleClients.map(c => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+                        <input type="checkbox" class="apply-sop-client-cb" value="${c.id}">
+                        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.meta?.name || c.id)}</span>
+                        ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="flex-shrink:0; font-size:9px;">Already applied</span>` : ''}
+                    </label>
+                `).join('') : `<div class="tiny muted" style="padding:8px;">No clients match.</div>`}
+            </div>
+
+            ${applications.length ? `
+                <label class="modal-section-label">Applied To (${applications.length})</label>
+                <div style="display:grid; gap:6px; max-height:160px; overflow:auto; margin-bottom:14px;">
+                    ${applications.map(a => `
+                        <div class="tiny" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.closeModal(); OL.openTaskInContext('${a.clientId}', '${a.firstTaskId}')">
+                            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(a.clientName)}</span>
+                            <span class="pill tiny soft" style="flex-shrink:0;">${a.taskCount} task${a.taskCount === 1 ? '' : 's'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" onclick="OL.applySopToClient('${sopId}', document.getElementById('apply-sop-client').value)">Apply</button>
+                <button class="btn primary" onclick="OL.applySopToClients('${sopId}', [...document.querySelectorAll('.apply-sop-client-cb:checked')].map(el => el.value))">Apply to Selected</button>
             </div>
         </div>
     `;
-    openModal(html);
+};
+
+OL._refreshApplySopList = function(sopId, query) {
+    const checked = new Set([...document.querySelectorAll('.apply-sop-client-cb:checked')].map(el => el.value));
+    const listEl = document.getElementById('apply-sop-client-list');
+    if (!listEl) return;
+
+    const clients = Object.values(state.clients || {}).sort((a, b) =>
+        (a.meta?.name || '').localeCompare(b.meta?.name || '')
+    );
+    const applications = OL.getSopApplications(sopId);
+    const appliedClientIds = new Set(applications.map(a => a.clientId));
+
+    const q = (query || '').toLowerCase().trim();
+    const filter = OL._applySopFilter || 'all';
+    const visibleClients = clients.filter(c => {
+        const matchesQuery = !q || (c.meta?.name || c.id).toLowerCase().includes(q);
+        const isApplied = appliedClientIds.has(c.id);
+        const matchesFilter = filter === 'all' || (filter === 'applied' ? isApplied : !isApplied);
+        return matchesQuery && matchesFilter;
+    });
+
+    listEl.innerHTML = visibleClients.length ? visibleClients.map(c => `
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+            <input type="checkbox" class="apply-sop-client-cb" value="${c.id}" ${checked.has(c.id) ? 'checked' : ''}>
+            <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.meta?.name || c.id)}</span>
+            ${appliedClientIds.has(c.id) ? `<span class="pill tiny soft" style="flex-shrink:0; font-size:9px;">Already applied</span>` : ''}
+        </label>
+    `).join('') : `<div class="tiny muted" style="padding:8px;">No clients match.</div>`;
+};
+
+OL._setApplySopFilter = function(sopId, filter) {
+    OL._applySopFilter = filter;
+    const searchInput = document.querySelector('#apply-sop-client-list')?.parentElement?.querySelector('input[type="text"]');
+    openModal(OL._renderApplySopModalHTML(sopId, searchInput?.value || ''));
 };
