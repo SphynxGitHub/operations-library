@@ -1683,11 +1683,11 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
             <div class="tiny muted">Posting as <strong>${esc(OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team')}</strong></div>
             
             <div style="display:flex; align-items:center; gap:2px; background:rgba(0,0,0,0.2); padding:4px 6px; border:1px solid var(--line); border-bottom:none; border-radius:6px 6px 0 0;">
-                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-weight:bold;" title="Bold" onclick="OL.execCommentCommand('bold')">B</button>
-                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-style:italic;" title="Italic" onclick="OL.execCommentCommand('italic')">I</button>
-                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Bullet List" onclick="OL.execCommentCommand('insertUnorderedList')">• List</button>
-                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Numbered List" onclick="OL.execCommentCommand('insertOrderedList')">1. List</button>
-                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Insert Link" onclick="OL.execCommentCommand('createLink')">🔗</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-weight:bold;" title="Bold" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('bold')">B</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; font-style:italic;" title="Italic" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('italic')">I</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Bullet List" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('insertUnorderedList')">• List</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Numbered List" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('insertOrderedList')">1. List</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Insert Link" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('createLink')">🔗</button>
             </div>
 
             <div id="task-comment-editor-${task.id}" 
@@ -1742,11 +1742,48 @@ OL._findMentionQuery = function(text, caretPos) {
     return { start: at, query: between.toLowerCase() };
 };
 
-OL.handleCommentMentionInput = function(textarea, taskId) {
+// The comment box is a contenteditable div, not a <textarea> — it has no
+// .value/.selectionStart. These two helpers do the equivalent character-
+// offset math against element.textContent using the Selection/Range APIs.
+OL._getCaretOffset = function(element) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0);
+    if (!element.contains(range.startContainer)) return 0;
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(element);
+    preRange.setEnd(range.endContainer, range.endOffset);
+    return preRange.toString().length;
+};
+
+OL._setCaretOffset = function(element, offset) {
+    const range = document.createRange();
+    const sel = window.getSelection();
+    let remaining = offset;
+    let node = null;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+    while (walker.nextNode()) {
+        const len = walker.currentNode.length;
+        if (remaining <= len) { node = walker.currentNode; break; }
+        remaining -= len;
+    }
+    if (node) {
+        range.setStart(node, remaining);
+    } else {
+        range.selectNodeContents(element);
+        range.collapse(false);
+    }
+    if (node) range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return range;
+};
+
+OL.handleCommentMentionInput = function(editor, taskId) {
     const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
     if (!dropdown) return;
 
-    const match = OL._findMentionQuery(textarea.value, textarea.selectionStart);
+    const match = OL._findMentionQuery(editor.textContent || '', OL._getCaretOffset(editor));
     if (!match) { dropdown.innerHTML = ''; return; }
 
     const roster = OL.getMentionRoster().filter(m => m.name.toLowerCase().includes(match.query));
@@ -1783,20 +1820,50 @@ OL.handleCommentMentionKeydown = function(event, taskId) {
 };
 
 OL.insertMention = function(taskId, name, atPosition) {
-    const textarea = document.getElementById(`task-comment-input-${taskId}`);
+    const editor = document.getElementById(`task-comment-editor-${taskId}`);
     const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
-    if (!textarea) return;
+    if (!editor) return;
 
-    const caret = textarea.selectionStart;
-    const before = textarea.value.slice(0, atPosition);
-    const after = textarea.value.slice(caret);
-    const insertion = `@${name} `;
-    textarea.value = before + insertion + after;
+    editor.focus();
+    const caret = OL._getCaretOffset(editor);
 
-    const newCaret = before.length + insertion.length;
-    textarea.focus();
-    textarea.setSelectionRange(newCaret, newCaret);
+    // Build a Range spanning the typed "@partial" text (atPosition..caret)
+    // by placing the caret at each boundary and reading back where the
+    // Selection API actually put it.
+    const startRange = OL._setCaretOffset(editor, atPosition);
+    const startContainer = startRange.startContainer, startOffset = startRange.startOffset;
+    const endRange = OL._setCaretOffset(editor, caret);
+
+    const replaceRange = document.createRange();
+    replaceRange.setStart(startContainer, startOffset);
+    replaceRange.setEnd(endRange.startContainer, endRange.startOffset);
+    replaceRange.deleteContents();
+
+    const insertion = document.createTextNode(`@${name} `);
+    replaceRange.insertNode(insertion);
+
+    const caretRange = document.createRange();
+    caretRange.setStartAfter(insertion);
+    caretRange.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(caretRange);
+
     if (dropdown) dropdown.innerHTML = '';
+};
+
+// Wires the Bold/Italic/List/Link toolbar buttons to the comment editor.
+// Buttons use onmousedown="event.preventDefault()" so clicking them doesn't
+// blur the contenteditable div first (which would collapse the selection
+// execCommand needs to act on).
+OL.execCommentCommand = function(command) {
+    if (command === 'createLink') {
+        const url = prompt('Link URL:');
+        if (!url) return;
+        document.execCommand('createLink', false, url);
+        return;
+    }
+    document.execCommand(command, false, null);
 };
 
 // Scans final comment text for "@Full Name" against the roster. Longest
@@ -1980,8 +2047,8 @@ OL.saveInlineTaskTitleEdit = function(clientId, taskId) {
 };
 
 OL.addTaskComment = function(clientId, taskId) {
-    const textEl = document.getElementById(`task-comment-input-${taskId}`);
-    const text = (textEl?.value || '').trim();
+    const editor = document.getElementById(`task-comment-editor-${taskId}`);
+    const text = (editor?.innerText || '').trim();
     if (!text) return;
     const author = (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Sphynx Team';
     const mentions = OL.extractMentions(text);
@@ -1997,6 +2064,8 @@ OL.addTaskComment = function(clientId, taskId) {
         }
     }, clientId);
 
+    if (editor) editor.innerHTML = '';
+
     const client = state.clients?.[clientId];
     const task = client?.projectData?.clientTasks?.find(t =>
         String(t.id) === String(taskId) || String(t.key) === String(taskId)
@@ -2007,32 +2076,6 @@ OL.addTaskComment = function(clientId, taskId) {
         if (window.lucide) lucide.createIcons();
     }
 };
-
-// Formatting Helper Function
-function formatComment(command) {
-    document.execCommand(command, false, null);
-}
-
-// Comment Submission Helper
-async function submitFormattedComment(taskId) {
-    const editor = document.getElementById('comment-editor');
-    const content = editor.innerHTML.trim();
-    
-    if (!content) return;
-
-    try {
-        const { error } = await supabase
-            .from('task_comments')
-            .insert([{ task_id: taskId, comment: content }]);
-
-        if (error) throw error;
-        
-        editor.innerHTML = '';
-        if (typeof loadComments === 'function') loadComments(taskId);
-    } catch (err) {
-        console.error("Error adding comment:", err);
-    }
-}
 
 OL.loadLinkedEmailsForTask = async function(taskId) {
     const container = document.getElementById('linked-emails-list');
