@@ -71,7 +71,7 @@ export function renderResourceCard(res, opts = {}) {
     
     const statusColor = scopeData ? (statusColors[scopeData.status] || statusColors.Default) : 'transparent';
 
-    // 3. Family Number
+    // 3. Family Numbering
     const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
 
     const tagStyle = isMaster 
@@ -82,71 +82,71 @@ export function renderResourceCard(res, opts = {}) {
         <div class="card is-clickable ${compact ? 'small' : ''} ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
             
-            <!-- Top Section: Title & Primary Action Buttons -->
-            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-                <div class="card-title" style="flex:1; font-weight:600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(res.name || "Unnamed")}">
+            <!-- Header: Text-wrapping Title & Actions -->
+            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+                <div class="card-title" style="flex:1; font-weight:600; font-size: 12px; line-height: 1.35; word-break: break-word; white-space: normal;">
                     ${esc(res.name || "Unnamed")}
                 </div>
                 
-                <!-- Right-aligned action buttons -->
-                <div class="card-actions" style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                <!-- Action Controls -->
+                <div class="card-actions" style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                     ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
-                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client" style="position:static;">
-                            <i data-lucide="send" style="width:12px;height:12px;"></i>
+                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client" style="position:static; padding:2px;">
+                            <i data-lucide="send" style="width:11px;height:11px;"></i>
                         </button>
                     ` : ''}
                     ${!isMaster ? `
-                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openResourceRoleAssignmentModal('${res.id}')" title="${esc(OL.getResourceRoleLabel(res))}" style="position:static; ${res.roleAssignment ? 'color:var(--accent);' : ''}">
-                            <i data-lucide="percent" style="width:12px;height:12px;"></i>
+                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openResourceRoleAssignmentModal('${res.id}')" title="${esc(OL.getResourceRoleLabel(res))}" style="position:static; padding:2px; ${res.roleAssignment ? 'color:var(--accent);' : ''}">
+                            <i data-lucide="percent" style="width:11px;height:11px;"></i>
                         </button>
                     ` : ''}
                     <button class="card-delete-btn" 
                             onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                             title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                            style="position:static; color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                        <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:12px;height:12px;"></i>
+                            style="position:static; padding:2px; color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
+                        <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:11px;height:11px;"></i>
                     </button>
-                    ${res.isLocked ? '' : `<button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
+                    ${res.isLocked ? '' : `<button class="card-delete-btn" style="position:static; padding:2px;" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
                 </div>
             </div>
 
-            <!-- Middle Section: Status Tags & Pills -->
-            <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:4px;">
+            <!-- Middle: Wrapping Tags & Badges -->
+            <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top: 2px;">
                 ${numberingHtml}
                 ${OL.renderResourceStatusPill(res)}
-                <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
+                <span class="vault-tag" style="${tagStyle} padding: 1px 5px; font-size: 7.5px; border-radius: 3px; font-weight: bold;">
                     ${isMaster ? 'MASTER' : 'LOCAL'}
                 </span>
-                ${res.isArchived ? `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
+                ${res.isArchived ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
             </div>
 
-            <!-- Bottom Section: Archetype & Scoping Details -->
+            <!-- Footer: Base Meta & Scoping Info -->
             <div class="card-body" style="margin-top: auto; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:6px;">
                     <div>
-                        <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; opacity: 0.8;">
+                        <div class="tiny accent bold uppercase" style="font-size: 7.5px; letter-spacing: 0.5px; opacity: 0.8;">
                             ${esc(res.archetype || "Base")}
                         </div>
-                        <div class="tiny muted" style="font-size:10px; opacity:0.6; display:flex; align-items:center; gap:4px;">
-                            ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'currentColor')}
+                        <div class="tiny muted" style="font-size:9.5px; opacity:0.6; display:flex; align-items:center; gap:3px;">
+                            ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 10, 'currentColor')}
                             ${esc(res.type || 'General')}
                         </div>
                     </div>
 
                     ${scopeData ? `
-                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
-                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid${statusColor}44; font-size:7.5px; font-weight:bold; padding: 1px 4px;">
                             ${(scopeData.status || "PENDING").toUpperCase()}
                         </div>
-                        <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5; display:flex; align-items:center; gap:3px;">
-                            <i data-lucide="user" style="width:9px; height:9px;"></i>
+                        <div class="tiny muted bold" style="font-size: 7.5px; opacity: 0.5; display:flex; align-items:center; gap:2px;">
+                            <i data-lucide="user" style="width:8px; height:8px;"></i>
                             ${esc(scopeData.responsibleParty || 'TBD')}
                         </div>
                     </div>
                 ` : `
-                    <div class="tiny muted italic" style="font-size: 8px; opacity: 0.3;">Not Scoped</div>
+                    <div class="tiny muted italic" style="font-size: 7.5px; opacity: 0.3;">Not Scoped</div>
                 `}
                 </div>
             </div>
