@@ -1724,3 +1724,70 @@ OL.saveManageCalendarsSelection = async function() {
     OL.closeModal();
     OL.fetchLiveGoogleCalendar();
 };
+
+// -------------------------------------------------------------
+// WEEK VIEW
+// -------------------------------------------------------------
+OL.renderCalendarWeek = function() {
+    const startOfWeek = new Date(OL.calendarState.gridMonth);
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const events = OL._calendarGridEvents || [];
+
+    const eventsByDay = {};
+    events.forEach(evt => {
+        const key = new Date(evt.start).toDateString();
+        if (!eventsByDay[key]) eventsByDay[key] = [];
+        eventsByDay[key].push(evt);
+    });
+
+    return `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(-1)"><i data-lucide="chevron-left"></i> Prev Week</button>
+            <strong style="font-size:14px;">Week of ${startOfWeek.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</strong>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(1)">Next Week <i data-lucide="chevron-right"></i></button>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+            ${[0,1,2,3,4,5,6].map(i => {
+                const d = new Date(startOfWeek);
+                d.setDate(d.getDate() + i);
+                const key = d.toDateString();
+                const dayEvents = eventsByDay[key] || [];
+                return `
+                    <div style="min-height:280px; padding:6px; background:var(--panel-soft, rgba(255,255,255,0.02));">
+                        <div class="tiny bold muted" style="text-align:center; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px;">
+                            ${dayNames[d.getDay()]} <span style="color:var(--text);">${d.getDate()}</span>
+                        </div>
+                        <div style="display:grid; gap:4px;">
+                            ${dayEvents.map(evt => `
+                                <div class="tiny" style="background:rgba(var(--accent-rgb),0.15); border-left:2px solid var(--accent); border-radius:3px; padding:3px 5px; cursor:pointer;" onclick="OL.openCalendarEventModal('${evt.id}')" title="${esc(evt.title)}">
+                                    <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(evt.title)}</div>
+                                    <div style="font-size:9px; opacity:0.7;">${new Date(evt.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+};
+
+// -------------------------------------------------------------
+// DAY VIEW
+// -------------------------------------------------------------
+OL.renderCalendarDay = function() {
+    const day = OL.calendarState.gridMonth;
+    const key = day.toDateString();
+    const dayEvents = (OL._calendarGridEvents || []).filter(e => new Date(e.start).toDateString() === key);
+
+    return `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(-1)"><i data-lucide="chevron-left"></i> Prev Day</button>
+            <strong style="font-size:14px;">${day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(1)">Next Day <i data-lucide="chevron-right"></i></button>
+        </div>
+        <div style="display:grid; gap:8px;">
+            ${dayEvents.length ? dayEvents.map(evt => OL.renderCalendarEventRow(evt)).join('') : '<div class="tiny muted" style="padding:20px; text-align:center;">No events scheduled for this day.</div>'}
+        </div>
+    `;
+};
