@@ -1697,60 +1697,63 @@ export function openRequestLineModal(itemId) {
         `<option value="${esc(value)}" ${String(current) === String(value) ? 'selected' : ''}>${esc(label)}</option>`;
 
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">${isEdit ? '✏️ Edit Request' : '➕ Add Request'}</div>
-            <div class="spacer"></div>
+        <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line);">
+            <div class="modal-title-text" style="font-weight:700; font-size:16px;">${isEdit ? '✏️ Edit Request' : '➕ Add Request'}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
-        <div class="modal-body">
-            <p class="tiny muted" style="margin-bottom:12px;">
+        <div class="modal-body" style="padding-top:14px;">
+            <p class="tiny muted" style="margin-bottom:16px; font-size:11px; line-height:1.4;">
                 For work with no library resource, like a training session, an audit or a working meeting.
                 Its fee is estimated hours x your base rate.
             </p>
 
-            <label class="tiny muted">Title</label>
-            <input id="rq-title" type="text" class="modal-input" style="margin-bottom:10px;"
-                   placeholder="e.g. Calendly audit" value="${esc(item?.name || '')}" autofocus>
+            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+                <label class="tiny muted" style="font-size:10px; font-weight:600;">Title</label>
+                <input id="rq-title" type="text" class="modal-input" 
+                       placeholder="e.g. Calendly audit" value="${esc(item?.name || '')}" autofocus>
+            </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
-                <div>
-                    <label class="tiny muted">Type</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Type</label>
                     <select id="rq-type" class="modal-input">
                         ${getRequestTypes().map(t => opt(t.key, t.label, typeKey)).join('')}
                     </select>
                 </div>
-                <div>
-                    <label class="tiny muted">Estimated hours</label>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Estimated hours</label>
                     <input id="rq-hours" type="number" min="0" step="0.25" class="modal-input"
                            value="${item ? (parseFloat(item.manualHours) || 0) : ''}" placeholder="0">
                 </div>
-                <div>
-                    <label class="tiny muted">Client decision</label>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Client decision</label>
                     <select id="rq-status" class="modal-input">
                         ${['Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
                         ${status === 'Done' || status === "Don't Do" ? opt(status, status, status) : ''}
                     </select>
                 </div>
-                <div>
-                    <label class="tiny muted">Responsible party</label>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Responsible party</label>
                     <select id="rq-party" class="modal-input">
                         ${opt('Sphynx', 'Sphynx', party)}
                         ${opt(clientName, clientName, party)}
                         ${opt('Joint', 'Joint', party)}
                     </select>
                 </div>
-                <div>
-                    <label class="tiny muted">Round</label>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Round</label>
                     <input id="rq-round" type="number" min="1" step="1" class="modal-input"
                            value="${parseInt(item?.round, 10) || 1}">
                 </div>
             </div>
 
-            <label class="tiny muted">Notes (optional)</label>
-            <textarea id="rq-notes" class="modal-input" rows="3" style="margin-bottom:14px;">${esc(item?.notes || '')}</textarea>
+            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
+                <label class="tiny muted" style="font-size:10px; font-weight:600;">Notes (optional)</label>
+                <textarea id="rq-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>
+            </div>
 
             <div style="display:flex; gap:10px;">
-                <button class="btn primary flex-1" onclick="OL.saveRequestLine(${itemId ? `'${itemId}'` : 'null'})">
+                <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.saveRequestLine(${itemId ? `'${itemId}'` : 'null'})">
                     ${isEdit ? 'Save' : 'Add to sheet'}
                 </button>
             </div>
