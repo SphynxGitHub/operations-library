@@ -451,6 +451,17 @@ OL.setCalendarSubView = function(subView) {
     if (OL.calendarState.view !== 'calendar') {
         OL.calendarState.view = 'calendar';
     }
+
+    // Set anchor date to today for Week/Day view if navigating from Month view
+    if (subView === 'week' || subView === 'day') {
+        OL.calendarState.gridMonth = new Date();
+    } else if (subView === 'month') {
+        const d = new Date();
+        d.setDate(1);
+        d.setHours(0, 0, 0, 0);
+        OL.calendarState.gridMonth = d;
+    }
+
     OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
 };
 
@@ -1729,7 +1740,13 @@ OL.saveManageCalendarsSelection = async function() {
 // WEEK VIEW
 // -------------------------------------------------------------
 OL.renderCalendarWeek = function() {
-    const startOfWeek = new Date(OL.calendarState.gridMonth);
+    const anchorDate = new Date(OL.calendarState.gridMonth);
+    const dayOfWeek = anchorDate.getDay();
+    
+    // Calculate Sunday of the current week
+    const startOfWeek = new Date(anchorDate);
+    startOfWeek.setDate(anchorDate.getDate() - dayOfWeek);
+
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const events = OL._calendarGridEvents || [];
 
@@ -1740,22 +1757,25 @@ OL.renderCalendarWeek = function() {
         eventsByDay[key].push(evt);
     });
 
+    const todayStr = new Date().toDateString();
+
     return `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(-1)"><i data-lucide="chevron-left"></i> Prev Week</button>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarWeek(-1)"><i data-lucide="chevron-left"></i> Prev Week</button>
             <strong style="font-size:14px;">Week of ${startOfWeek.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</strong>
-            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(1)">Next Week <i data-lucide="chevron-right"></i></button>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarWeek(1)">Next Week <i data-lucide="chevron-right"></i></button>
         </div>
         <div style="display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden; width:100%; box-sizing:border-box;">
             ${[0,1,2,3,4,5,6].map(i => {
                 const d = new Date(startOfWeek);
                 d.setDate(d.getDate() + i);
                 const key = d.toDateString();
+                const isToday = key === todayStr;
                 const dayEvents = eventsByDay[key] || [];
                 return `
-                    <div style="min-height:280px; min-width:0; padding:4px; background:var(--panel-soft, rgba(255,255,255,0.02)); overflow:hidden;">
+                    <div style="min-height:280px; min-width:0; padding:4px; background:var(--panel-soft, rgba(255,255,255,0.02)); overflow:hidden; ${isToday ? 'border-top:2px solid var(--accent);' : ''}">
                         <div class="tiny bold muted" style="text-align:center; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px; font-size:11px;">
-                            ${dayNames[d.getDay()]} <span style="color:var(--text);">${d.getDate()}</span>
+                            ${dayNames[d.getDay()]} <span style="${isToday ? 'color:var(--accent); font-weight:bold;' : 'color:var(--text);'}">${d.getDate()}</span>
                         </div>
                         <div style="display:grid; gap:4px;">
                             ${dayEvents.map(evt => `
@@ -1779,19 +1799,33 @@ OL.renderCalendarWeek = function() {
     `;
 };
 
+OL.shiftCalendarWeek = function(deltaWeeks) {
+    const d = new Date(OL.calendarState.gridMonth);
+    d.setDate(d.getDate() + (deltaWeeks * 7));
+    OL.calendarState.gridMonth = d;
+    OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
+};
+
+OL.shiftCalendarDay = function(deltaDays) {
+    const d = new Date(OL.calendarState.gridMonth);
+    d.setDate(d.getDate() + deltaDays);
+    OL.calendarState.gridMonth = d;
+    OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
+};
+
 // -------------------------------------------------------------
 // DAY VIEW
 // -------------------------------------------------------------
 OL.renderCalendarDay = function() {
-    const day = OL.calendarState.gridMonth;
+    const day = new Date(OL.calendarState.gridMonth);
     const key = day.toDateString();
     const dayEvents = (OL._calendarGridEvents || []).filter(e => new Date(e.start).toDateString() === key);
 
     return `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(-1)"><i data-lucide="chevron-left"></i> Prev Day</button>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarDay(-1)"><i data-lucide="chevron-left"></i> Prev Day</button>
             <strong style="font-size:14px;">${day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>
-            <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(1)">Next Day <i data-lucide="chevron-right"></i></button>
+            <button class="btn tiny soft" onclick="OL.shiftCalendarDay(1)">Next Day <i data-lucide="chevron-right"></i></button>
         </div>
         <div style="display:grid; gap:8px;">
             ${dayEvents.length ? dayEvents.map(evt => OL.renderCalendarEventRow(evt)).join('') : '<div class="tiny muted" style="padding:20px; text-align:center;">No events scheduled for this day.</div>'}
