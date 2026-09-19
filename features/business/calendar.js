@@ -5,8 +5,8 @@ const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'Gen
 
 OL.calendarState = {
     loading: false,
-    view: 'list',            // 'list' | 'calendar'
-    calendarSubView: 'month', // 'month' | 'week' | 'day'
+    view: localStorage.getItem('calendar_view') || 'list',                    // Persisted 'list' | 'calendar'
+    calendarSubView: localStorage.getItem('calendar_sub_view') || 'month',   // Persisted 'month' | 'week' | 'day'
     filter: 'upcoming',
     groupBy: 'date',
     callTypeFilter: 'all',
@@ -439,6 +439,8 @@ OL.setCalendarFilter = function(filter) {
 
 OL.setCalendarView = function(view) {
     OL.calendarState.view = view;
+    localStorage.setItem('calendar_view', view); // Save state
+    
     if (view === 'calendar') {
         OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
     } else {
@@ -448,11 +450,14 @@ OL.setCalendarView = function(view) {
 
 OL.setCalendarSubView = function(subView) {
     OL.calendarState.calendarSubView = subView;
+    localStorage.setItem('calendar_sub_view', subView); // Save state
+
     if (OL.calendarState.view !== 'calendar') {
         OL.calendarState.view = 'calendar';
+        localStorage.setItem('calendar_view', 'calendar');
     }
 
-    // Set anchor date to today for Week/Day view if navigating from Month view
+    // Reset date anchor appropriately when switching sub-views
     if (subView === 'week' || subView === 'day') {
         OL.calendarState.gridMonth = new Date();
     } else if (subView === 'month') {
