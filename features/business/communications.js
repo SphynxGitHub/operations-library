@@ -1356,6 +1356,16 @@ window.OL.quickEmailContact = OL.quickEmailContact;
 // two. Changing Project clears Resource/Task (they belong to whichever
 // project was previously selected).
 // -------------------------------------------------------------
+OL._allClientRequestsFlat = function() {
+    return Object.values(state.clients || {}).flatMap(c => {
+        const sheet = c.projectData?.scopingSheets?.[0];
+        const items = sheet?.lineItems || [];
+        return items
+            .filter(i => i.isRequest || i.type === 'request' || i.requestType)
+            .map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }));
+    });
+};
+
 OL._allClientResourcesFlat = function() {
     return Object.values(state.clients || {}).flatMap(c =>
         (c.projectData?.localResources || []).map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
@@ -1393,7 +1403,7 @@ OL.renderGmailLinkStep = function() {
         ? clients.filter(c => (c.meta?.name || '').toLowerCase().includes(clientQuery))
         : clients;
 
-    // ---- Resource (scoped to project if one's picked, else global) ----
+    // ---- Resource ----
     const resourceQuery = (st.resourceQuery || '').trim().toLowerCase();
     const resourcePool = selectedClient
         ? (selectedClient.projectData?.localResources || []).map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
@@ -1406,7 +1416,7 @@ OL.renderGmailLinkStep = function() {
             || OL._allClientResourcesFlat().find(r => r.id === st.resourceId)
         : null;
 
-    // ---- Task (scoped to project if one's picked, else global) ----
+    // ---- Task ----
     const taskQuery = (st.taskQuery || '').trim().toLowerCase();
     const taskPool = selectedClient
         ? (selectedClient.projectData?.clientTasks || []).map(t => ({ ...t, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
@@ -1419,13 +1429,28 @@ OL.renderGmailLinkStep = function() {
             || OL._allClientTasksFlat().find(t => t.id === st.taskId)
         : null;
 
-    // ---- Event (not all loaded client-side — searched live against Supabase
-    // by OL.setGmailLinkEventQuery below; st.eventResults holds the latest hits) ----
+    // ---- Request ----
+    const requestQuery = (st.requestQuery || '').trim().toLowerCase();
+    const requestPool = selectedClient
+        ? (selectedClient.projectData?.scopingSheets?.[0]?.lineItems || [])
+            .filter(i => i.isRequest || i.type === 'request' || i.requestType)
+            .map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
+        : OL._allClientRequestsFlat();
+    const filteredRequests = requestQuery
+        ? requestPool.filter(r => (r.name || r.title || '').toLowerCase().includes(requestQuery))
+        : requestPool;
+    const selectedRequest = st.requestId
+        ? (selectedClient?.projectData?.scopingSheets?.[0]?.lineItems || []).find(r => String(r.id) === String(st.requestId))
+            || OL._allClientRequestsFlat().find(r => String(r.id) === String(st.requestId))
+        : null;
+
+    // ---- Event ----
     const selectedEvent = st.eventId ? OL._gmailLinkSelectedEvent : null;
 
-    const canLink = !!(st.clientId || st.resourceId || st.taskId || st.eventId);
+    const canLink = !!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId);
 
     container.innerHTML = `
+        <!-- Project -->
         <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
             ${selectedClient ? `
@@ -1446,6 +1471,7 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
+        <!-- Resource / Deliverable -->
         <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resource / Deliverable</label>
             ${selectedResource ? `
@@ -1460,8 +1486,7 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredResources.length ? filteredResources.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
-                                <span>${esc(r.name)}</span>
-                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                                <span>${esc(r.name)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
                     </div>
@@ -1469,11 +1494,12 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
+        <!-- Task -->
         <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task</label>
             ${selectedTask ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedTask.title || selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
+                    <span class="tiny bold">${esc(selectedTask.title \vert{}\vert{} selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
@@ -1483,8 +1509,7 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredTasks.length ? filteredTasks.map(t => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
-                                <span>${esc(t.title || t.name)}</span>
-                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
+                                <span>${esc(t.title \vert{}\vert{} t.name)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
                     </div>
@@ -1506,6 +1531,30 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
+        <!-- Request -->
+        <div style="margin-bottom:14px;">
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Request</label>
+            ${selectedRequest ? `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
+                    <span class="tiny bold">${esc(selectedRequest.name \vert{}\vert{} selectedRequest.title)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedRequest._clientName || '')}</span>` : ''}</span>
+                    <button class="btn tiny soft" onclick="OL.setGmailLinkRequest('')">Change</button>
+                </div>
+            ` : `
+                <input type="text" id="gmail-link-request-search" class="modal-input tiny" placeholder="Search requests...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.requestQuery || '')}"
+                       onfocus="OL.setGmailLinkFocus('requestFocused', true)" oninput="OL.setGmailLinkRequestQuery(this.value)">
+                ${st.requestFocused ? `
+                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                        ${filteredRequests.length ? filteredRequests.map(r => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkRequest('${r.id}', '${r._clientId}')">
+                                <span>${esc(r.name \vert{}\vert{} r.title)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                            </div>
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">No matching requests.</div>`}
+                    </div>
+                ` : ''}
+            `}
+        </div>
+
+        <!-- Event -->
         <div style="margin-bottom:16px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Event</label>
             ${selectedEvent ? `
@@ -1520,8 +1569,7 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${st.eventResults.length ? st.eventResults.map(e => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkEvent('${esc(e.id).replace(/'/g, "\\'")}')">
-                                <div>${esc(e.title)}</div>
-                                ${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
+                                <div>${esc(e.title)}</div>${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events.' : 'Type to search events...'}</div>`}
                     </div>
@@ -1530,7 +1578,7 @@ OL.renderGmailLinkStep = function() {
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            ${(st.clientId || st.resourceId || st.taskId || st.eventId) ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
+            ${(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId) ? `<button class="btn small danger" onclick="OL.unlinkGmailMessage()">Unlink</button>` : ''}
             <button class="btn small primary" onclick="OL.saveGmailLink()" style="font-weight:bold;" ${!canLink ? 'disabled' : ''}>Save Link</button>
         </div>
     `;
@@ -1567,6 +1615,23 @@ OL.setGmailLinkTaskQuery = function(value) {
         OL._gmailLinkState.taskFocused = true;
         OL.renderGmailLinkStep();
     });
+};
+
+OL.setGmailLinkRequestQuery = function(q) {
+    if (OL._gmailLinkState) {
+        OL._gmailLinkState.requestQuery = q;
+        OL.renderGmailLinkStep();
+    }
+};
+
+OL.setGmailLinkRequest = function(requestId, clientId) {
+    if (!OL._gmailLinkState) return;
+    OL._gmailLinkState.requestId = requestId;
+    if (clientId && !OL._gmailLinkState.clientId) {
+        OL._gmailLinkState.clientId = clientId;
+    }
+    OL._gmailLinkState.requestFocused = false;
+    OL.renderGmailLinkStep();
 };
 
 // Events aren't all loaded client-side (see OL.loadCalendarEvents — it's
