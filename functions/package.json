@@ -1,0 +1,14 @@
+{
+  "name": "portal-backend",
+  "version": "1.0.0",
+  "description": "Vercel Serverless Functions with Supabase Integrations",
+  "main": "api/index.js",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.40.0",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

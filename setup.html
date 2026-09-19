@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Set Up Your Login — Sphynx Operations</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="sphynx-theme.css">
+</head>
+<body>
+    <div id="setupShell" style="max-width:360px;margin:15vh auto;padding:32px;">
+        <h1 style="margin-bottom:8px;">Set Up Your Login</h1>
+        <p class="tiny muted" style="margin-bottom:24px;">Create a password to access your project going forward.</p>
+        <form id="setupForm" style="display:flex;flex-direction:column;gap:14px;">
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                Email
+                <input type="email" id="email" class="modal-input" required autocomplete="username">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                Password
+                <input type="password" id="password" class="modal-input" required autocomplete="new-password" minlength="6">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                Confirm Password
+                <input type="password" id="confirmPassword" class="modal-input" required autocomplete="new-password" minlength="6">
+            </label>
+            <button type="submit" class="btn primary">Create Login</button>
+            <p id="setupError" style="color:#ef4444;display:none;font-size:13px;"></p>
+        </form>
+    </div>
+    <script type="module" src="setup.js"></script>
+</body>
+</html>
