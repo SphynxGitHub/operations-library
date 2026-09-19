@@ -5,11 +5,12 @@ const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'Gen
 
 OL.calendarState = {
     loading: false,
-    view: 'list',        // 'list' | 'grid'
-    filter: 'upcoming',  // 'upcoming' | 'past' | 'all'
-    groupBy: 'date',     // 'date' | 'project' | 'type' — list view only
-    callTypeFilter: 'all', // 'all' | one of CALL_TYPES | 'uncategorized'
-    clientFilter: '',    // '' = all projects
+    view: 'list',            // 'list' | 'calendar'
+    calendarSubView: 'month', // 'month' | 'week' | 'day'
+    filter: 'upcoming',
+    groupBy: 'date',
+    callTypeFilter: 'all',
+    clientFilter: '',
     limit: CALENDAR_PAGE_SIZE,
     loadedOnce: false,
     gridMonth: (() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; })()
@@ -115,12 +116,23 @@ OL.renderBusinessCalendar = function() {
                     </div>
                     <div style="display:flex; gap:8px; align-items:center;">
                         <div class="tiny muted" style="margin-right:4px;">Account: <strong style="color:#22c55e;">● Connected</strong></div>
+                        
+                        <!-- Primary View Switcher -->
                         <button class="btn tiny ${OL.calendarState.view === 'list' ? 'primary' : 'soft'}" onclick="OL.setCalendarView('list')">
                             <i data-lucide="list" style="width:12px;height:12px;"></i> List
                         </button>
-                        <button class="btn tiny ${OL.calendarState.view === 'grid' ? 'primary' : 'soft'}" onclick="OL.setCalendarView('grid')">
+                        <button class="btn tiny ${OL.calendarState.view === 'calendar' ? 'primary' : 'soft'}" onclick="OL.setCalendarView('calendar')">
                             <i data-lucide="calendar-days" style="width:12px;height:12px;"></i> Calendar
                         </button>
+                    
+                        <!-- Sub-View Controls (Only visible when Calendar view is selected) -->
+                        ${OL.calendarState.view === 'calendar' ? `
+                            <div style="display:flex; background:rgba(255,255,255,0.05); border:1px solid var(--line); border-radius:6px; padding:2px; margin-left:6px;">
+                                <button class="btn tiny ${OL.calendarState.calendarSubView === 'month' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('month')">Month</button>
+                                <button class="btn tiny ${OL.calendarState.calendarSubView === 'week' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('week')">Week</button>
+                                <button class="btn tiny ${OL.calendarState.calendarSubView === 'day' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('day')">Day</button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -139,7 +151,13 @@ OL.renderBusinessCalendar = function() {
 
                 ${OL.calendarState.view === 'list' ? OL.renderCalendarFilterBar() : ''}
 
-                ${OL.calendarState.view === 'grid' ? OL.renderCalendarGrid(events) : OL.renderCalendarList(OL.applyCalendarFilters(events))}
+                ${OL.calendarState.view === 'list' 
+                    ? OL.renderCalendarList(OL.applyCalendarFilters(events)) 
+                    : (OL.calendarState.calendarSubView === 'week' 
+                        ? OL.renderCalendarWeek() 
+                        : OL.calendarState.calendarSubView === 'day' 
+                            ? OL.renderCalendarDay() 
+                            : OL.renderCalendarGrid())}
             </div>
         `}
     `;
@@ -421,11 +439,19 @@ OL.setCalendarFilter = function(filter) {
 
 OL.setCalendarView = function(view) {
     OL.calendarState.view = view;
-    if (view === 'grid') {
+    if (view === 'calendar') {
         OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
     } else {
         OL.renderBusinessCalendar();
     }
+};
+
+OL.setCalendarSubView = function(subView) {
+    OL.calendarState.calendarSubView = subView;
+    if (OL.calendarState.view !== 'calendar') {
+        OL.calendarState.view = 'calendar';
+    }
+    OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
 };
 
 OL.loadMoreCalendarEvents = function() {
