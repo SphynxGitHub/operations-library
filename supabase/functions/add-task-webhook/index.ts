@@ -1,3 +1,26 @@
+// ================================================================================================
+// FUNCTION: add-task-webhook
+//
+// WHAT IT DOES:   Adds a task to a client's project from another system, using the
+//                 same task shape and defaults the app uses.
+//
+// CALLED BY:      Zapier, Make or a form tool.
+//
+// WHO CAN CALL:   Another system (Zapier, Make or Zoom) sending the header
+//                 x-webhook-secret. Enforcement is switched on with
+//                 WEBHOOK_ENFORCE=true; until then a call without it still works and
+//                 is written to the log as UNAUTHENTICATED.
+//
+// READS/CHANGES:  Reads workspace_clients, then rewrites that client's whole
+//                 project_data with the new task added.
+//
+// NEEDS:          _shared/webhook-auth.ts. The WEBHOOK_SECRET function secret, and
+//                 later WEBHOOK_ENFORCE=true.
+//
+// CHANGED FROM THE ORIGINAL: Added the shared-secret check, and corrected the old
+//                            'Auth: none' note.
+// ================================================================================================
+
 // POST /functions/v1/add-task-webhook
 //
 // Adds a task/deliverable to a client's workspace from an external system
@@ -6,10 +29,8 @@
 // features/tasks.js (OL.saveClientCreateTask) and features/business/tasks.js
 // (OL.getSystemStatuses) for the in-app equivalents.
 //
-// Auth: none — deploy with `--no-verify-jwt` so Supabase doesn't require
-// its own Authorization header either. This endpoint writes data with no
-// check on who's calling it; only point trusted systems (Zapier/Make) at
-// this URL, since anyone with the link can create tasks.
+// Auth: send the header  x-webhook-secret: <your WEBHOOK_SECRET>  (see _shared/webhook-auth.ts).
+// Still deploy with `--no-verify-jwt`, since Zapier/Make/Zoom do not send a Supabase login.
 //   supabase functions deploy add-task-webhook --no-verify-jwt
 //
 // Example payload:
@@ -25,6 +46,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkWebhookSecret } from "../_shared/webhook-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +67,12 @@ serve(async (req) => {
   }
 
   try {
+    // Who is calling? Other systems prove themselves with the x-webhook-secret header (see _shared/webhook-auth.ts).
+    const hook = checkWebhookSecret(req, { secret: Deno.env.get("WEBHOOK_SECRET"), enforce: Deno.env.get("WEBHOOK_ENFORCE") }, "add-task-webhook");
+    if (!hook.ok) {
+      return new Response(JSON.stringify({ error: hook.error, message: hook.message }), { status: hook.status, headers: corsHeaders });
+    }
+
     let body: any;
     try {
       body = await req.json();

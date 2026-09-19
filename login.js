@@ -7,6 +7,12 @@ if (session) window.location.href = 'index.html';
 const form = document.getElementById('loginForm');
 const errorEl = document.getElementById('loginError');
 
+// Sent here from an old ?access=... share link, which no longer opens a workspace.
+if (new URLSearchParams(window.location.search).get('legacy')) {
+    errorEl.textContent = 'That old share link no longer works. Sign in below, or ask Sphynx for a new login link.';
+    errorEl.style.display = 'block';
+}
+
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.style.display = 'none';

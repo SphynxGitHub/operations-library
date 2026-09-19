@@ -395,6 +395,7 @@ async function doMirror(db, client, opts) {
 // Public entry point. Safe to call without awaiting.
 export function mirrorClientRequests(db, client, opts = {}) {
     if (disabled || !db || !client || !client.id) return Promise.resolve();
+    if (opts.staff === false) return Promise.resolve();   // partners and clients do not write these tables
     if (!Array.isArray(client.projectData?.scopingSheets)) return Promise.resolve();
 
     const previous = queue[client.id] || Promise.resolve();

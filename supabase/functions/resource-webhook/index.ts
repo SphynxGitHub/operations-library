@@ -1,5 +1,29 @@
+// ================================================================================================
+// FUNCTION: resource-webhook
+//
+// WHAT IT DOES:   Creates an empty resource (name plus its Zapier link) in the
+//                 matching client project, so error matching works even for Zaps you
+//                 have not opened in the app.
+//
+// CALLED BY:      A Zapier 'New Zap' trigger followed by a webhook step.
+//
+// WHO CAN CALL:   Another system (Zapier, Make or Zoom) sending the header
+//                 x-webhook-secret. Enforcement is switched on with
+//                 WEBHOOK_ENFORCE=true; until then a call without it still works and
+//                 is written to the log as UNAUTHENTICATED.
+//
+// READS/CHANGES:  Reads workspace_clients, then rewrites that client's whole
+//                 project_data with the new resource added.
+//
+// NEEDS:          _shared/webhook-auth.ts. The WEBHOOK_SECRET function secret, and
+//                 later WEBHOOK_ENFORCE=true.
+//
+// CHANGED FROM THE ORIGINAL: Added the shared-secret check.
+// ================================================================================================
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkWebhookSecret } from "../_shared/webhook-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +76,12 @@ serve(async (req) => {
   }
 
   try {
+    // Who is calling? Other systems prove themselves with the x-webhook-secret header (see _shared/webhook-auth.ts).
+    const hook = checkWebhookSecret(req, { secret: Deno.env.get("WEBHOOK_SECRET"), enforce: Deno.env.get("WEBHOOK_ENFORCE") }, "resource-webhook");
+    if (!hook.ok) {
+      return new Response(JSON.stringify({ error: hook.error, message: hook.message }), { status: hook.status, headers: corsHeaders });
+    }
+
     const body = await req.json();
     const name = pick(body, "name", "Name", "title", "Title");
     if (!name) {

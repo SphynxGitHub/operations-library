@@ -1,3 +1,25 @@
+// ================================================================================================
+// FUNCTION: add-zoom-summary-webhook
+//
+// WHAT IT DOES:   Attaches a meeting summary to a calendar event, and posts it as a
+//                 comment on the event.
+//
+// CALLED BY:      Zoom, Zapier or Make.
+//
+// WHO CAN CALL:   Another system (Zapier, Make or Zoom) sending the header
+//                 x-webhook-secret. Enforcement is switched on with
+//                 WEBHOOK_ENFORCE=true; until then a call without it still works and
+//                 is written to the log as UNAUTHENTICATED.
+//
+// READS/CHANGES:  Updates calendar_events (zoom_summary, zoom_meeting_id, comments).
+//
+// NEEDS:          _shared/webhook-auth.ts. The WEBHOOK_SECRET function secret, and
+//                 later WEBHOOK_ENFORCE=true.
+//
+// CHANGED FROM THE ORIGINAL: Added the shared-secret check, and corrected the old
+//                            'Auth: none' note.
+// ================================================================================================
+
 // POST /functions/v1/add-zoom-summary-webhook
 //
 // Attaches a Zoom meeting summary (transcript summary, AI Companion
@@ -13,10 +35,8 @@
 // this URL with the normalized body below instead. That keeps this
 // endpoint stable even if Zoom changes their payload format.
 //
-// Auth: none — deploy with `--no-verify-jwt` so Supabase doesn't require
-// its own Authorization header either. Only point trusted systems
-// (Zoom/Zapier/Make) at this URL, since anyone with the link can post a
-// summary to a calendar event.
+// Auth: send the header  x-webhook-secret: <your WEBHOOK_SECRET>  (see _shared/webhook-auth.ts).
+// Still deploy with `--no-verify-jwt`, since Zapier/Make/Zoom do not send a Supabase login.
 //   supabase functions deploy add-zoom-summary-webhook --no-verify-jwt
 //
 // Requires the add_zoom_summary_to_calendar_events.sql migration to have
@@ -32,6 +52,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkWebhookSecret } from "../_shared/webhook-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +73,12 @@ serve(async (req) => {
   }
 
   try {
+    // Who is calling? Other systems prove themselves with the x-webhook-secret header (see _shared/webhook-auth.ts).
+    const hook = checkWebhookSecret(req, { secret: Deno.env.get("WEBHOOK_SECRET"), enforce: Deno.env.get("WEBHOOK_ENFORCE") }, "add-zoom-summary-webhook");
+    if (!hook.ok) {
+      return new Response(JSON.stringify({ error: hook.error, message: hook.message }), { status: hook.status, headers: corsHeaders });
+    }
+
     let body: any;
     try {
       body = await req.json();

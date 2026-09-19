@@ -987,8 +987,7 @@ export function renderCapabilitiesList(app, isReadOnlyView) {
 
     // --- RENDER LOCAL SPECS ---
     html += localSpecs.map((cap, idx) => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const isAdmin = state.adminMode === true || urlParams.get('admin') === 'pizza123';
+        const isAdmin = state.adminMode === true;
         const isPushed = !!cap.masterRefId;
         const canEdit = (!isPushed || isAdmin);
 

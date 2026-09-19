@@ -147,9 +147,14 @@ export function persist() {
                 team_prompt_suppressions: masterCopy.teamPromptSuppressions || []
             };
 
-            const { error: masterErr } = await db
-                .from('workspace_masters')
-                .upsert(masterPayload, { onConflict: 'id' });
+            // Only staff write the master row. A partner's or client's copy of it is a limited,
+            // read-only view (see sync), and saving it back would overwrite the team roster,
+            // automation rules and SOPs with blanks.
+            const { error: masterErr } = window.IS_GUEST
+                ? { error: null }
+                : await db
+                    .from('workspace_masters')
+                    .upsert(masterPayload, { onConflict: 'id' });
 
             if (masterErr) {
                 console.error("❌ Master Persist Error:", masterErr.message);
@@ -212,6 +217,7 @@ export function persist() {
                         masterResources: masterCopy.resources || [],
                         roles: masterCopy.roles || [],
                         closedNames: (state.master?.taskStatuses || []).filter(st => st.isClosed).map(st => st.name),   // empty falls back to Done
+                        staff: state.adminMode === true || state.teamMemberMode === true,
                     });
                 }
             }
@@ -237,10 +243,26 @@ export async function sync() {
     console.log("📡 Initializing Supabase Unified Workspace Sync...");
 
     try {
-        const { data: masterData, error: masterErr } = await db
-            .from('workspace_masters')
-            .select('*')
-            .maybeSingle();
+        // Staff read the whole master row. Partners and clients only get the shared registry (apps,
+        // functions, resource types, datapoints, rates, templates), never the team roster, automation
+        // rules or SOPs. Until the database lockdown is applied that function does not exist yet, so
+        // fall back to the plain read.
+        let masterData = null;
+        let masterErr = null;
+        if (window.IS_GUEST) {
+            const viaRpc = await db.rpc('ol_master_for_clients');
+            if (!viaRpc.error && viaRpc.data) {
+                masterData = viaRpc.data;
+            } else {
+                const plain = await db.from('workspace_masters').select('*').maybeSingle();
+                masterData = plain.data;
+                masterErr = plain.error;
+            }
+        } else {
+            const staffRead = await db.from('workspace_masters').select('*').maybeSingle();
+            masterData = staffRead.data;
+            masterErr = staffRead.error;
+        }
 
         if (masterErr) {
             console.error("❌ Master Fetch Error:", masterErr.message);
@@ -309,11 +331,13 @@ export async function sync() {
         // every page load/reload even though the tokens were still valid
         // server-side. Check for a real stored token instead, so the UI
         // reflects the actual connection state.
-        const { data: googleTokenRow, error: googleTokenErr } = await db
-            .from('google_auth_tokens')
-            .select('email')
-            .limit(1)
-            .maybeSingle();
+        const { data: googleTokenRow, error: googleTokenErr } = window.IS_GUEST
+            ? { data: null, error: null }     // partners and clients do not see the company Google connection
+            : await db
+                .from('google_auth_tokens')
+                .select('email')
+                .limit(1)
+                .maybeSingle();
 
         if (googleTokenErr) {
             console.error("❌ Google Token Check Error (RLS on google_auth_tokens likely blocking anon reads — connection status will keep resetting on reload until this is fixed):", googleTokenErr.message);
@@ -324,7 +348,7 @@ export async function sync() {
             if (!state.master.communications.gmail) state.master.communications.gmail = {};
             state.master.communications.gmail.connected = true;
             state.master.communications.gmail.email = googleTokenRow.email || '';
-        } else {
+        } else if (!window.IS_GUEST) {
             console.warn("⚠️ No row found in google_auth_tokens — Google will show as disconnected until you reconnect.");
         }
     } catch (error) {

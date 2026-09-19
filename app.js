@@ -33,16 +33,11 @@ window.addEventListener("load", async () => {
     const allowed = await OL.initializeSecurityContext();
     if (!allowed) return;
 
-    // 2. Admin Verification
-    if (window.location.search.includes('admin=pizza123')) {
-        state.adminMode = true;
-    }
-
-    // 3. Recall Client
+    // 2. Recall Client
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
     if (savedClientId) state.activeClientId = savedClientId;
 
-    // 4. Recall Visualizer depth
+    // 3. Recall Visualizer depth
     state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
     state.focusedResourceId = sessionStorage.getItem('active_resource_id');
 

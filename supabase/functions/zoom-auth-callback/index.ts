@@ -1,8 +1,40 @@
+// ================================================================================================
+// FUNCTION: zoom-auth-callback
+//
+// WHAT IT DOES:   Step 2 of Connect Zoom. Zoom sends the browser back here with a
+//                 code. This exchanges it for tokens, looks up the account's email,
+//                 saves both, and returns the browser to the Calendar tab.
+//
+// CALLED BY:      Zoom, after the person approves on Zoom's screen. Never called by
+//                 the app directly.
+//
+// WHO CAN CALL:   Anyone can open the address, but it does nothing unless the request
+//                 carries a valid, unexpired signed state made by zoom-auth-login.
+//
+// READS/CHANGES:  Saves the tokens in zoom_auth_tokens (one row per email).
+//
+// NEEDS:          _shared/oauth-state.ts. The ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET and
+//                 ZOOM_REDIRECT_URI secrets.
+//
+// CHANGED FROM THE ORIGINAL: Added the signed-state check. The return address no
+//                            longer carries the old ?admin=... secret.
+// ================================================================================================
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyState } from "../_shared/oauth-state.ts";
 
 serve(async (req) => {
   const url = new URL(req.url);
+
+  // Only accept a return that carries the signed state zoom-auth-login handed out. Without this,
+  // anyone could connect their own Zoom account in place of the company's.
+  const stateCheck = await verifyState(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, url.searchParams.get("state"), "zoom");
+  if (!stateCheck.ok) {
+    console.warn("zoom-auth-callback refused a request:", stateCheck.reason);
+    return new Response("This connection request is not valid or has expired. Go back to the app and click Connect Zoom again.", { status: 400 });
+  }
+
   const code = url.searchParams.get("code");
 
   if (!code) {
@@ -70,7 +102,7 @@ serve(async (req) => {
     if (dbError) throw dbError;
 
     // 4. Redirect back to the calendar page
-    const returnUrl = "https://sphynxgithub.github.io/operations-library/?admin=pizza123#/business/calendar?zoom_connected=true";
+    const returnUrl = "https://sphynxgithub.github.io/operations-library/#/business/calendar?zoom_connected=true";
     return Response.redirect(returnUrl, 302);
 
   } catch (err) {

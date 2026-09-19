@@ -1,5 +1,29 @@
+// ================================================================================================
+// FUNCTION: error-webhook
+//
+// WHAT IT DOES:   Receives a Zap error from Zapier and saves it in the centralized
+//                 error log, matched to a client project (by project id, then email,
+//                 then tracking sheet, then name) and to a resource when it can.
+//
+// CALLED BY:      A Zap's error step (Webhooks by Zapier).
+//
+// WHO CAN CALL:   Another system (Zapier, Make or Zoom) sending the header
+//                 x-webhook-secret. Enforcement is switched on with
+//                 WEBHOOK_ENFORCE=true; until then a call without it still works and
+//                 is written to the log as UNAUTHENTICATED.
+//
+// READS/CHANGES:  Adds a row to error_log. Reads workspace_clients to match the
+//                 project.
+//
+// NEEDS:          _shared/webhook-auth.ts. The WEBHOOK_SECRET function secret, and
+//                 later WEBHOOK_ENFORCE=true. _shared/resource-match.ts.
+//
+// CHANGED FROM THE ORIGINAL: Added the shared-secret check.
+// ================================================================================================
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkWebhookSecret } from "../_shared/webhook-auth.ts";
 import { matchResourceByRootId } from "../_shared/resource-match.ts";
 
 const corsHeaders = {
@@ -68,6 +92,12 @@ serve(async (req) => {
   }
 
   try {
+    // Who is calling? Other systems prove themselves with the x-webhook-secret header (see _shared/webhook-auth.ts).
+    const hook = checkWebhookSecret(req, { secret: Deno.env.get("WEBHOOK_SECRET"), enforce: Deno.env.get("WEBHOOK_ENFORCE") }, "error-webhook");
+    if (!hook.ok) {
+      return new Response(JSON.stringify({ error: hook.error, message: hook.message }), { status: hook.status, headers: corsHeaders });
+    }
+
     let body: any;
     try {
       body = await req.json();

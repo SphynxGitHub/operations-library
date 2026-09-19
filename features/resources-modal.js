@@ -472,7 +472,7 @@ export function openResourceModal(targetId, draftObj = null) {
         
         // 🚀 THE SIMPLIFIED CHECK
     // 1. Is the user an admin? (Checks both state and URL)
-    const userIsAdmin = state.adminMode || window.location.search.includes('admin=');
+    const userIsAdmin = state.adminMode === true;
 
     // 2. Is it currently a Master item? (If so, hide button)
     const isAlreadyMaster = String(res.id).startsWith('res-vlt-') || !!res.masterRefId;

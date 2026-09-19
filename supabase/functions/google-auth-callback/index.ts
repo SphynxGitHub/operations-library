@@ -1,8 +1,47 @@
+// ================================================================================================
+// FUNCTION: google-auth-callback
+//
+// WHAT IT DOES:   Step 2 of Connect Google Account. Google sends the browser back here
+//                 with a code. This exchanges it for tokens, looks up the account's
+//                 email, saves both, and returns the browser to the app.
+//
+// CALLED BY:      Google, after the person approves on Google's screen. Never called
+//                 by the app directly.
+//
+// WHO CAN CALL:   Anyone can open the address, but it does nothing unless the request
+//                 carries a valid, unexpired signed state made by google-auth-login.
+//                 That is what stops a stranger connecting their own Google account in
+//                 place of yours.
+//
+// READS/CHANGES:  Saves the tokens in google_auth_tokens (one row per email).
+//
+// NEEDS:          _shared/oauth-state.ts. The GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+//                 and GOOGLE_REDIRECT_URI secrets.
+//
+// CHANGED FROM THE ORIGINAL: Added the signed-state check, and a friendly message if
+//                            the person cancels. The return address no longer carries
+//                            the old ?admin=... secret.
+// ================================================================================================
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyState } from "../_shared/oauth-state.ts";
 
 serve(async (req) => {
   const url = new URL(req.url);
+
+  // Only accept a return that carries the signed state google-auth-login handed out. Without this,
+  // anyone could connect their own Google account in place of the company's.
+  const stateCheck = await verifyState(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, url.searchParams.get("state"), "google");
+  if (!stateCheck.ok) {
+    console.warn("google-auth-callback refused a request:", stateCheck.reason);
+    return new Response("This connection request is not valid or has expired. Go back to the app and click Connect Google Account again.", { status: 400 });
+  }
+
+  if (url.searchParams.get("error")) {
+    return new Response("Google sign-in was cancelled or refused. Go back to the app and try again.", { status: 400 });
+  }
+
   const code = url.searchParams.get("code");
 
   if (!code) {
@@ -56,7 +95,7 @@ serve(async (req) => {
     if (dbError) throw dbError;
 
     // 4. Redirect Back to Quo Communications on GitHub Pages
-    const returnUrl = "https://sphynxgithub.github.io/operations-library/?admin=pizza123#/business/communications?connected=true";
+    const returnUrl = "https://sphynxgithub.github.io/operations-library/#/business/communications?connected=true";
     return Response.redirect(returnUrl, 302);
 
   } catch (err) {

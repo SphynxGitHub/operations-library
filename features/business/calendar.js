@@ -1425,8 +1425,25 @@ OL.fetchLiveGoogleCalendar = async function() {
 // itself — see supabase/functions/sync-zoom-meetings for the matching and
 // action-item-extraction logic.
 // -------------------------------------------------------------
-OL.initiateZoomAuth = function() {
-    window.location.href = "https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/zoom-auth-login";
+// Connect Zoom. The start function needs a signed-in admin: the app asks it for the Zoom address
+// (which carries a signed "state" that the callback checks), then goes there.
+OL.initiateZoomAuth = async function() {
+    try {
+        const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/zoom-auth-login", {
+            headers: await OL.getAuthHeaders()
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.url) {
+            alert(result.error === 'unauthorized' || result.error === 'forbidden'
+                ? OL.sendAuthErrorMessage(result)
+                : (result.message || 'Could not start the Zoom connection.'));
+            return;
+        }
+        window.location.href = result.url;
+    } catch (err) {
+        console.error('Could not start the Zoom connection:', err);
+        alert('Could not start the Zoom connection — see console for details.');
+    }
 };
 
 OL.checkZoomAuthReturn = function() {

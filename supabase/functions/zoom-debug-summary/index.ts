@@ -1,3 +1,24 @@
+// ================================================================================================
+// FUNCTION: zoom-debug-summary
+//
+// WHAT IT DOES:   Diagnostic only. Asks Zoom directly for one meeting's summary and
+//                 returns Zoom's raw answer, to tell a Zoom permission problem from a
+//                 calendar-matching problem. Safe to delete when you no longer need
+//                 it.
+//
+// CALLED BY:      You, by hand, with ?meetingId=<Zoom meeting id>.
+//
+// WHO CAN CALL:   A signed-in admin or team member (login token in the Authorization
+//                 header). It returns real meeting text, so it must not be open.
+//
+// READS/CHANGES:  Reads Zoom only. Changes nothing.
+//
+// NEEDS:          _shared/zoom-token.ts, _shared/auth.ts. Zoom's meeting:read:summary
+//                 permission.
+//
+// CHANGED FROM THE ORIGINAL: Added the login check. It used to be open to anyone.
+// ================================================================================================
+
 // GET /functions/v1/zoom-debug-summary?meetingId=83510317290
 //
 // Diagnostic only -- calls Zoom's meeting_summary endpoint directly for a
@@ -13,6 +34,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshZoomAccessToken, ZoomAuthError } from "../_shared/zoom-token.ts";
+import { authorizeTeamRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +58,13 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Who is calling? This returns the text of real meeting summaries, so it needs a signed-in admin
+    // or team member (Authorization: Bearer <login token>), see ../_shared/auth.ts.
+    const authz = await authorizeTeamRequest(req, supabase);
+    if (!authz.ok) {
+      return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
+    }
 
     const accessToken = await getFreshZoomAccessToken(supabase);
 

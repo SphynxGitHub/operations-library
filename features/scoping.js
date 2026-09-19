@@ -159,7 +159,7 @@ export function renderScopingSheet() {
                 ${showUnits ? "Hide Units" : "Show Units"}
             </button>
             
-            ${(state.adminMode || window.location.search.includes('admin=')) ? `
+            ${state.adminMode === true ? `
                 <button class="btn small soft" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="plus" style="width:14px; height:14px;"></i> New Resource
                 </button>
