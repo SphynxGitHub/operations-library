@@ -1367,6 +1367,9 @@ OL._allClientResourcesFlat = function() {
     const st = OL._gmailLinkState || {};
     return Object.values(state.clients || {}).flatMap(c =>
         (c.projectData?.localResources || [])
+            // Filter out system/admin pinned reference resources
+            .filter(r => !r.systemPinned && !r.adminPinned)
+            // Filter out archived resources unless explicitly toggled on
             .filter(r => st.showArchived || !(r.isArchived || r.archived))
             .map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
     ).sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
@@ -1420,10 +1423,11 @@ OL.renderGmailLinkStep = function() {
         ? clients.filter(c => (c.meta?.name || '').toLowerCase().includes(clientQuery))
         : clients;
 
-    // ---- Resources (Filtered + Sorted) ----
+    // ---- Resources (Filtered to exclude References + Sorted) ----
     const resourceQuery = (st.resourceQuery || '').trim().toLowerCase();
     let resourcePool = selectedClient
         ? (selectedClient.projectData?.localResources || [])
+            .filter(r => !r.systemPinned && !r.adminPinned)
             .filter(r => st.showArchived || !(r.isArchived || r.archived))
             .map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
         : OL._allClientResourcesFlat();
