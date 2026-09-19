@@ -1356,26 +1356,43 @@ window.OL.quickEmailContact = OL.quickEmailContact;
 // two. Changing Project clears Resource/Task (they belong to whichever
 // project was previously selected).
 // -------------------------------------------------------------
+// Helper to parse dates safely for sorting by recent activity
+function getRecencyTimestamp(item) {
+    const d = item.updatedAt || item.updated_at || item.createdDate || item.createdAt || item.created_at;
+    return d ? new Date(d).getTime() : 0;
+}
+
+// ---- Resources ----
+OL._allClientResourcesFlat = function() {
+    const st = OL._gmailLinkState || {};
+    return Object.values(state.clients || {}).flatMap(c =>
+        (c.projectData?.localResources || [])
+            .filter(r => st.showArchived || !(r.isArchived || r.archived))
+            .map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
+    ).sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
+};
+
+// ---- Tasks ----
+OL._allClientTasksFlat = function() {
+    const st = OL._gmailLinkState || {};
+    return Object.values(state.clients || {}).flatMap(c =>
+        (c.projectData?.clientTasks || [])
+            .filter(t => st.showCompletedTasks || (t.status !== 'Done' && t.status !== 'Completed' && !t.completed))
+            .map(t => ({ ...t, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
+    ).sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
+};
+
+// ---- Requests ----
 OL._allClientRequestsFlat = function() {
+    const st = OL._gmailLinkState || {};
     return Object.values(state.clients || {}).flatMap(c => {
         const sheet = c.projectData?.scopingSheets?.[0];
         const items = sheet?.lineItems || [];
         return items
-            .filter(i => i.isRequest || i.type === 'request' || i.requestType)
+            .filter(i => (i.isRequest || i.type === 'request' || i.requestType))
+            .filter(i => st.showClosedRequests || (i.status !== 'Done' && i.status !== "Don't Do"))
             .map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }));
-    });
-};
-
-OL._allClientResourcesFlat = function() {
-    return Object.values(state.clients || {}).flatMap(c =>
-        (c.projectData?.localResources || []).map(r => ({ ...r, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
-    );
-};
-
-OL._allClientTasksFlat = function() {
-    return Object.values(state.clients || {}).flatMap(c =>
-        (c.projectData?.clientTasks || []).map(t => ({ ...t, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
-    );
+    }).sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
 };
 
 // Best-effort match of a task's resourceName against a project's actual
@@ -1403,54 +1420,81 @@ OL.renderGmailLinkStep = function() {
         ? clients.filter(c => (c.meta?.name || '').toLowerCase().includes(clientQuery))
         : clients;
 
-    // ---- Resource ----
+    // ---- Resources (Filtered + Sorted) ----
     const resourceQuery = (st.resourceQuery || '').trim().toLowerCase();
-    const resourcePool = selectedClient
-        ? (selectedClient.projectData?.localResources || []).map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
+    let resourcePool = selectedClient
+        ? (selectedClient.projectData?.localResources || [])
+            .filter(r => st.showArchived || !(r.isArchived || r.archived))
+            .map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
         : OL._allClientResourcesFlat();
+    
+    resourcePool.sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
+
     const filteredResources = resourceQuery
         ? resourcePool.filter(r => (r.name || '').toLowerCase().includes(resourceQuery))
         : resourcePool;
+
     const selectedResource = st.resourceId
         ? (selectedClient?.projectData?.localResources || []).find(r => r.id === st.resourceId)
             || OL._allClientResourcesFlat().find(r => r.id === st.resourceId)
         : null;
 
-    // ---- Task ----
+    // ---- Tasks (Filtered + Sorted) ----
     const taskQuery = (st.taskQuery || '').trim().toLowerCase();
-    const taskPool = selectedClient
-        ? (selectedClient.projectData?.clientTasks || []).map(t => ({ ...t, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
+    let taskPool = selectedClient
+        ? (selectedClient.projectData?.clientTasks || [])
+            .filter(t => st.showCompletedTasks || (t.status !== 'Done' && t.status !== 'Completed' && !t.completed))
+            .map(t => ({ ...t, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
         : OL._allClientTasksFlat();
+
+    taskPool.sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
+
     const filteredTasks = taskQuery
         ? taskPool.filter(t => (t.title || t.name || '').toLowerCase().includes(taskQuery))
         : taskPool;
+
     const selectedTask = st.taskId
         ? (selectedClient?.projectData?.clientTasks || []).find(t => t.id === st.taskId)
             || OL._allClientTasksFlat().find(t => t.id === st.taskId)
         : null;
 
-    // ---- Request ----
+    // ---- Requests (Filtered + Sorted) ----
     const requestQuery = (st.requestQuery || '').trim().toLowerCase();
-    const requestPool = selectedClient
+    let requestPool = selectedClient
         ? (selectedClient.projectData?.scopingSheets?.[0]?.lineItems || [])
-            .filter(i => i.isRequest || i.type === 'request' || i.requestType)
+            .filter(i => (i.isRequest || i.type === 'request' || i.requestType))
+            .filter(i => st.showClosedRequests || (i.status !== 'Done' && i.status !== "Don't Do"))
             .map(r => ({ ...r, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
         : OL._allClientRequestsFlat();
+
+    requestPool.sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
+
     const filteredRequests = requestQuery
         ? requestPool.filter(r => (r.name || r.title || '').toLowerCase().includes(requestQuery))
         : requestPool;
+
     const selectedRequest = st.requestId
         ? (selectedClient?.projectData?.scopingSheets?.[0]?.lineItems || []).find(r => String(r.id) === String(st.requestId))
             || OL._allClientRequestsFlat().find(r => String(r.id) === String(st.requestId))
         : null;
 
-    // ---- Event ----
-    const selectedEvent = st.eventId ? OL._gmailLinkSelectedEvent : null;
+    // ---- Events (-7 days to +7 days filter) ----
+    const now = new Date();
+    const past7Days = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const future7Days = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
 
+    const eventQuery = (st.eventQuery || '').trim().toLowerCase();
+    const eventPool = (st.eventResults || []).filter(e => {
+        if (!e.start) return true;
+        const eDate = new Date(e.start);
+        return eDate >= past7Days && eDate <= future7Days;
+    });
+
+    const selectedEvent = st.eventId ? OL._gmailLinkSelectedEvent : null;
     const canLink = !!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId);
 
     container.innerHTML = `
-        <!-- Project -->
+        <!-- Project Section -->
         <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
             ${selectedClient ? `
@@ -1471,9 +1515,14 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
-        <!-- Resource / Deliverable -->
+        <!-- Resource Section -->
         <div style="margin-bottom:14px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Resource / Deliverable</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label class="tiny muted bold">Resource / Deliverable</label>
+                <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showArchived = !OL._gmailLinkState.showArchived; OL.renderGmailLinkStep();">
+                    ${st.showArchived ? 'Hide Archived' : 'Show Archived'}
+                </button>
+            </div>
             ${selectedResource ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
                     <span class="tiny bold">${esc(selectedResource.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedResource._clientName || '')}</span>` : ''}</span>
@@ -1486,7 +1535,8 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredResources.length ? filteredResources.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
-                                <span>${esc(r.name)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                                <span>${esc(r.name)}${(r.isArchived || r.archived) ? `<span class="pill tiny danger">Archived</span>` : ''}</span>
+                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
                     </div>
@@ -1494,12 +1544,17 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
-       <!-- Task -->
+        <!-- Task Section -->
         <div style="margin-bottom:14px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label class="tiny muted bold">Task</label>
+                <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showCompletedTasks = !OL._gmailLinkState.showCompletedTasks; OL.renderGmailLinkStep();">
+                    ${st.showCompletedTasks ? 'Hide Completed' : 'Show Completed'}
+                </button>
+            </div>
             ${selectedTask ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedTask.title || selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
+                    <span class="tiny bold">${esc(selectedTask.title \vert{}\vert{} selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
@@ -1509,35 +1564,26 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredTasks.length ? filteredTasks.map(t => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
-                                <span>${esc(t.title || t.name)}</span>
+                                <span>${esc(t.title \vert{}\vert{} t.name)}${(t.status === 'Done' || t.status === 'Completed' || t.completed) ? `<span class="pill tiny">Done</span>` : ''}</span>
                                 ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
                     </div>
-
-                    ${selectedClient ? (st.creatingTask ? `
-                        <div style="margin-top:10px; padding:10px; border:1px dashed var(--accent); border-radius:6px;">
-                            <input type="text" id="gmail-new-task-title" class="modal-input tiny" placeholder="New task title..." value="${esc(st.newTaskTitle || '')}" oninput="OL._gmailLinkState.newTaskTitle = this.value">
-                            <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-                                <button class="btn tiny soft" onclick="OL.cancelGmailCreateTask()">Cancel</button>
-                                <button class="btn tiny primary" onclick="OL.createAndLinkGmailTask()" style="font-weight:bold;">Create &amp; Link</button>
-                            </div>
-                        </div>
-                    ` : `
-                        <button class="btn tiny soft" style="margin-top:8px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="OL.startGmailCreateTask()">
-                            <i data-lucide="plus" style="width:11px;height:11px;"></i> Create New Task
-                        </button>
-                    `) : `<div class="tiny muted" style="margin-top:6px;">Pick a project first to create a new task.</div>`}
                 ` : ''}
             `}
         </div>
 
-        <!-- Request -->
+        <!-- Request Section -->
         <div style="margin-bottom:14px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Request</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label class="tiny muted bold">Request</label>
+                <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showClosedRequests = !OL._gmailLinkState.showClosedRequests; OL.renderGmailLinkStep();">
+                    ${st.showClosedRequests ? 'Hide Closed' : 'Show Closed'}
+                </button>
+            </div>
             ${selectedRequest ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedRequest.name || selectedRequest.title)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedRequest._clientName || '')}</span>` : ''}</span>
+                    <span class="tiny bold">${esc(selectedRequest.name \vert{}\vert{} selectedRequest.title)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedRequest._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkRequest('')">Change</button>
                 </div>
             ` : `
@@ -1547,7 +1593,8 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredRequests.length ? filteredRequests.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkRequest('${r.id}', '${r._clientId}')">
-                                <span>${esc(r.name || r.title)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                                <span>${esc(r.name \vert{}\vert{} r.title)}${(r.status === 'Done' || r.status === "Don't Do") ? `<span class="pill tiny">${esc(r.status)}</span>` : ''}</span>
+                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching requests.</div>`}
                     </div>
@@ -1555,9 +1602,9 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
-        <!-- Event -->
+        <!-- Events Section (Constrained to -7 to +7 days) -->
         <div style="margin-bottom:16px;">
-            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Event</label>
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Event (±7 Days)</label>
             ${selectedEvent ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
                     <span class="tiny bold">${esc(selectedEvent.title)}${selectedEvent.start ? ` <span class="tiny muted">· ${esc(new Date(selectedEvent.start).toLocaleDateString())}</span>` : ''}</span>
@@ -1568,11 +1615,11 @@ OL.renderGmailLinkStep = function() {
                        onfocus="OL.setGmailLinkFocus('eventFocused', true)" oninput="OL.setGmailLinkEventQuery(this.value)">
                 ${st.eventFocused ? `
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
-                        ${st.eventResults.length ? st.eventResults.map(e => `
+                        ${eventPool.length ? eventPool.map(e => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkEvent('${esc(e.id).replace(/'/g, "\\'")}')">
                                 <div>${esc(e.title)}</div>${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
                             </div>
-                        `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events.' : 'Type to search events...'}</div>`}
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events in 14-day window.' : 'Type to search events...'}</div>`}
                     </div>
                 ` : ''}
             `}
