@@ -464,8 +464,25 @@ OL.renderQuoWebhookView = function(commsData, endpointUrl) {
 // -------------------------------------------------------------
 // LIVE GMAIL FETCH & ACTIONS
 // -------------------------------------------------------------
-OL.initiateGoogleAuth = function() {
-    window.location.href = "https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/google-auth-login";
+// Connect Google Account. The start function needs a signed-in admin: the app asks it for the Google
+// address (which carries a signed "state" that the callback checks), then goes there.
+OL.initiateGoogleAuth = async function() {
+    try {
+        const response = await fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/google-auth-login", {
+            headers: await OL.getAuthHeaders()
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.url) {
+            alert(result.error === 'unauthorized' || result.error === 'forbidden'
+                ? OL.sendAuthErrorMessage(result)
+                : (result.message || 'Could not start the Google connection.'));
+            return;
+        }
+        window.location.href = result.url;
+    } catch (err) {
+        console.error('Could not start the Google connection:', err);
+        alert('Could not start the Google connection — see console for details.');
+    }
 };
 
 OL.checkGoogleAuthReturn = function() {
