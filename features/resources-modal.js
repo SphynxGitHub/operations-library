@@ -60,7 +60,7 @@ export function renderResourceCard(res, opts = {}) {
     const isMaster = String(res.id || "").startsWith("res-vlt-") || !!res.masterRefId;
     const isActive = state.focusedResourceId === res.id;
 
-    // 2. Map Status to Colors (Matching the Scoping Sheet)
+    // 2. Map Status to Colors
     const statusColors = { 
         'Do Now': '#38bdf8',    // Cyan
         'Done': '#22c55e',      // Green
@@ -71,7 +71,7 @@ export function renderResourceCard(res, opts = {}) {
     
     const statusColor = scopeData ? (statusColors[scopeData.status] || statusColors.Default) : 'transparent';
 
-    // 3. 👨‍👩‍👧‍👦 Family Number: Count instances specifically on the Canvas layer
+    // 3. Family Number
     const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
 
     const tagStyle = isMaster 
@@ -82,39 +82,49 @@ export function renderResourceCard(res, opts = {}) {
         <div class="card is-clickable ${compact ? 'small' : ''} ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'};">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
             
-            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start;">
-                <div class="card-title" style="flex:1; font-weight:600;">${esc(res.name || "Unnamed")}</div>
-                
-                <div class="card-controls" style="display:flex; align-items:center; gap:6px;">
-                        ${numberingHtml}
-                        ${OL.renderResourceStatusPill(res)}
-                        <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
-                            ${isMaster ? 'MASTER' : 'LOCAL'}
-                        </span>
-                        ${res.isArchived ? `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
-                        ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
-                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client">
-                                <i data-lucide="send" style="width:12px;height:12px;"></i>
-                            </button>
-                        ` : ''}
-                        ${!isMaster ? `
-                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openResourceRoleAssignmentModal('${res.id}')" title="${esc(OL.getResourceRoleLabel(res))}" style="${res.roleAssignment ? 'color:var(--accent);' : ''}">
-                                <i data-lucide="percent" style="width:12px;height:12px;"></i>
-                            </button>
-                        ` : ''}
-                        <button class="card-delete-btn" 
-                                onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
-                                title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                                style="color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                            <i data-lucide="archive" style="width:12px;height:12px;"></i>
-                        </button>
-                        ${res.isLocked ? '' : `<button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
-                    </div>            
+            <!-- Top Section: Title & Primary Action Buttons -->
+            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <div class="card-title" style="flex:1; font-weight:600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${esc(res.name || "Unnamed")}">
+                    ${esc(res.name || "Unnamed")}
                 </div>
-            <div class="card-body" style="margin-top: 6px;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                
+                <!-- Right-aligned action buttons -->
+                <div class="card-actions" style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                    ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
+                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client" style="position:static;">
+                            <i data-lucide="send" style="width:12px;height:12px;"></i>
+                        </button>
+                    ` : ''}
+                    ${!isMaster ? `
+                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openResourceRoleAssignmentModal('${res.id}')" title="${esc(OL.getResourceRoleLabel(res))}" style="position:static; ${res.roleAssignment ? 'color:var(--accent);' : ''}">
+                            <i data-lucide="percent" style="width:12px;height:12px;"></i>
+                        </button>
+                    ` : ''}
+                    <button class="card-delete-btn" 
+                            onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
+                            title="${res.isArchived ? 'Unarchive' : 'Archive'}"
+                            style="position:static; color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
+                        <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:12px;height:12px;"></i>
+                    </button>
+                    ${res.isLocked ? '' : `<button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
+                </div>
+            </div>
+
+            <!-- Middle Section: Status Tags & Pills -->
+            <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:4px;">
+                ${numberingHtml}
+                ${OL.renderResourceStatusPill(res)}
+                <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
+                    ${isMaster ? 'MASTER' : 'LOCAL'}
+                </span>
+                ${res.isArchived ? `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
+            </div>
+
+            <!-- Bottom Section: Archetype & Scoping Details -->
+            <div class="card-body" style="margin-top: auto; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:6px;">
                     <div>
                         <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; opacity: 0.8;">
                             ${esc(res.archetype || "Base")}
@@ -127,7 +137,7 @@ export function renderResourceCard(res, opts = {}) {
 
                     ${scopeData ? `
                     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
-                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
+                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
                             ${(scopeData.status || "PENDING").toUpperCase()}
                         </div>
                         <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5; display:flex; align-items:center; gap:3px;">
@@ -143,6 +153,7 @@ export function renderResourceCard(res, opts = {}) {
         </div>
     `;
 };
+
 export function selectResourceCard(resId) {
     // 1. Update Global State
     state.focusedResourceId = resId;
