@@ -337,6 +337,7 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                 <div class="col-expand">
                     <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
                     ${isCurrentRound ? '<span class="pill tiny accent" style="margin-left:8px;">Current</span>' : ''}
+                    ${typeof OL.roundStatusHtml === 'function' ? OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound) : ''}
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>

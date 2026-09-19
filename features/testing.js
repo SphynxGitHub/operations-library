@@ -12,6 +12,7 @@ import {
     updateTestRuns, recordResult, markReadyForTesting, runForItem, testRunById, runProgress,
     DEFAULT_TEST_TEMPLATES, TEST_RESULTS, TESTABLE_TYPES,
 } from '../core/testing.js';
+import { reviewDefaults } from '../core/conclusion.js';
 
 const templatesInUse = () => (Array.isArray(state.master?.testTemplates) && state.master.testTemplates.length
     ? state.master.testTemplates : DEFAULT_TEST_TEMPLATES);
@@ -206,6 +207,15 @@ export function openTestTemplates() {
                 ${usingDefaults ? '<br><strong>You are using the starter set.</strong> Save to keep your own version.' : ''}
                 ${canSave ? '' : '<br><strong style="color:#ef4444;">Templates cannot be saved yet: run 013_test_templates.sql in Supabase, then reload.</strong>'}
             </div>
+            <div style="border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:12px;">
+                <div class="bold tiny uppercase muted" style="margin-bottom:6px;">Review defaults</div>
+                <div class="tiny muted" style="margin-bottom:8px;">When a round passes testing, its client review starts on the next Monday or Wednesday and runs this long, with a check-in task this often. You can change both for a round before you send the notification.
+                    ${state.masterHasReviewDefaults === false ? '<br><strong style="color:#ef4444;">These cannot be saved yet: run 013_test_templates.sql in Supabase, then reload.</strong>' : ''}</div>
+                <div style="display:flex; gap:14px; align-items:center;">
+                    <label class="tiny">Review length (days) <input id="rv-def-days" type="number" min="1" class="modal-input tiny" style="width:80px; display:inline-block;" value="${esc(reviewDefaults(state.master).days)}"></label>
+                    <label class="tiny">Check in every (days) <input id="rv-def-every" type="number" min="1" class="modal-input tiny" style="width:80px; display:inline-block;" value="${esc(reviewDefaults(state.master).followUpEveryDays)}"></label>
+                </div>
+            </div>
             <div id="tt-list">${list.map((t, i) => templateEditorHtml(t, i)).join('')}</div>
             <div style="display:flex; gap:8px; margin-top:8px;">
                 <button class="btn tiny soft" onclick="OL.addTestTemplate()">+ Add a template</button>
@@ -258,9 +268,16 @@ export function saveTestTemplates() {
     if (state.masterHasTestTemplates === false) { alert('Run 013_test_templates.sql in Supabase first, then reload.'); return; }
     const list = readDraft().filter((t) => t.steps.length);
     state.master.testTemplates = list;
+    // review defaults: saved with the templates when the database column exists and the numbers are sensible
+    const days = Number(document.getElementById('rv-def-days')?.value), every = Number(document.getElementById('rv-def-every')?.value);
+    let reviewNote = '';
+    if (state.masterHasReviewDefaults !== false && document.getElementById('rv-def-days')) {
+        if (days >= 1 && every >= 1) state.master.reviewDefaults = { days: Math.round(days), followUpEveryDays: Math.round(every) };
+        else reviewNote = ' The review defaults were not changed (they must be at least 1 day).';
+    }
     persist();
     OL.closeModal();
-    alert(`Saved ${list.length} test template${list.length === 1 ? '' : 's'}. They apply to checklists made from now on.`);
+    alert(`Saved ${list.length} test template${list.length === 1 ? '' : 's'}. They apply to checklists made from now on.${reviewNote}`);
 }
 
 window.OL = window.OL || {};

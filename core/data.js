@@ -28,6 +28,7 @@ export const state = {
         automationRules: [],
         sops: [], // Standard Operating Procedures — named groups of taskBlueprints applied together
         testTemplates: [], // The steps a tester works through for each kind of request (see features/testing.js)
+        reviewDefaults: { days: 30, followUpEveryDays: 10 }, // Client review length and check-in spacing (see features/review.js)
         datapoints: [
             { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
             { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
@@ -148,6 +149,7 @@ export function persist() {
                 team_prompt_suppressions: masterCopy.teamPromptSuppressions || []
             };
             if (state.masterHasTestTemplates) masterPayload.test_templates = masterCopy.testTemplates || [];
+            if (state.masterHasReviewDefaults) masterPayload.review_defaults = masterCopy.reviewDefaults || { days: 30, followUpEveryDays: 10 };
 
             // Only staff write the master row. A partner's or client's copy of it is a limited,
             // read-only view (see sync), and saving it back would overwrite the team roster,
@@ -186,6 +188,10 @@ export function persist() {
                 try {
                     if (!window.IS_GUEST && window.OL && typeof window.OL.updateTestRunsFor === 'function') {
                         window.OL.updateTestRunsFor(client);
+                    }
+                    // once every request in the round has passed, the review is set up and the client notification is due
+                    if (!window.IS_GUEST && window.OL && typeof window.OL.updateRoundStatesFor === 'function') {
+                        window.OL.updateRoundStatesFor(client);
                     }
                 } catch (testingErr) {
                     console.warn('Testing checklist update failed:', testingErr);
@@ -297,6 +303,8 @@ export async function sync() {
             // (an unknown column would make every master save fail).
             state.masterHasTestTemplates = Object.prototype.hasOwnProperty.call(masterData, 'test_templates');
             if (Array.isArray(masterData.test_templates)) state.master.testTemplates = masterData.test_templates;
+            state.masterHasReviewDefaults = Object.prototype.hasOwnProperty.call(masterData, 'review_defaults');
+            if (masterData.review_defaults && typeof masterData.review_defaults === 'object' && !Array.isArray(masterData.review_defaults)) state.master.reviewDefaults = masterData.review_defaults;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
 
             // A logged-in team member's menu permissions are a snapshot

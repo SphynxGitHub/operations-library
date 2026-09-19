@@ -1932,6 +1932,11 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         }
     }
 
+    // A Notify client task opens the review notification.
+    if (task.reviewNotifyKey) {
+        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openReviewNotification('${task.reviewNotifyKey}', '${client?.id || ''}')">📨 Open the notification</button>`;
+    }
+
     // A Testing task opens its checklist.
     if (task.testRunId) {
         parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openTestRun('${task.testRunId}', '${client?.id || ''}')">🧪 Open checklist</button>`;
