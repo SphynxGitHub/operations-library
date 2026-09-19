@@ -5,15 +5,23 @@ const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'Gen
 
 OL.calendarState = {
     loading: false,
-    view: localStorage.getItem('calendar_view') || 'list',                    // Persisted 'list' | 'calendar'
-    calendarSubView: localStorage.getItem('calendar_sub_view') || 'month',   // Persisted 'month' | 'week' | 'day'
+    view: localStorage.getItem('calendar_view') || 'list',
+    calendarSubView: localStorage.getItem('calendar_sub_view') || 'month',
     filter: 'upcoming',
     groupBy: 'date',
     callTypeFilter: 'all',
     clientFilter: '',
     limit: CALENDAR_PAGE_SIZE,
     loadedOnce: false,
-    gridMonth: (() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; })()
+    gridMonth: (() => {
+        const subView = localStorage.getItem('calendar_sub_view') || 'month';
+        const d = new Date();
+        if (subView === 'month') {
+            d.setDate(1);
+            d.setHours(0, 0, 0, 0);
+        }
+        return d;
+    })()
 };
 
 // -------------------------------------------------------------
@@ -51,7 +59,13 @@ OL.renderBusinessCalendar = function() {
 
     if (isConnected && !OL.calendarState.loadedOnce && !OL.calendarState.loading) {
         OL.calendarState.loadedOnce = true;
-        OL.loadCalendarEvents().then(() => OL.renderBusinessCalendar());
+        
+        // Always load list events AND grid month events if initialized directly into Calendar view
+        const loadPromise = (OL.calendarState.view === 'calendar')
+            ? Promise.all([OL.loadCalendarEvents(), OL.loadCalendarGridMonth()])
+            : OL.loadCalendarEvents();
+
+        loadPromise.then(() => OL.renderBusinessCalendar());
     }
 
     main.innerHTML = `
@@ -439,8 +453,8 @@ OL.setCalendarFilter = function(filter) {
 
 OL.setCalendarView = function(view) {
     OL.calendarState.view = view;
-    localStorage.setItem('calendar_view', view); // Save state
-    
+    localStorage.setItem('calendar_view', view);
+
     if (view === 'calendar') {
         OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
     } else {
@@ -450,14 +464,14 @@ OL.setCalendarView = function(view) {
 
 OL.setCalendarSubView = function(subView) {
     OL.calendarState.calendarSubView = subView;
-    localStorage.setItem('calendar_sub_view', subView); // Save state
+    localStorage.setItem('calendar_sub_view', subView);
 
     if (OL.calendarState.view !== 'calendar') {
         OL.calendarState.view = 'calendar';
         localStorage.setItem('calendar_view', 'calendar');
     }
 
-    // Reset date anchor appropriately when switching sub-views
+    // Set anchor date to today for Week/Day view, or 1st of month for Month view
     if (subView === 'week' || subView === 'day') {
         OL.calendarState.gridMonth = new Date();
     } else if (subView === 'month') {
