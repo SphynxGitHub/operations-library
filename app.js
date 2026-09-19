@@ -23,6 +23,7 @@ import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
 import * as OLBusinessManager from './features/business/index.js';
 import * as OLTaskBlueprints from './features/task-blueprints.js';
+import * as OLTesting from './features/testing.js';
 
 window.isMatrixActive = false;
 

@@ -27,6 +27,7 @@ export const state = {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
         automationRules: [],
         sops: [], // Standard Operating Procedures — named groups of taskBlueprints applied together
+        testTemplates: [], // The steps a tester works through for each kind of request (see features/testing.js)
         datapoints: [
             { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
             { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
@@ -146,6 +147,7 @@ export function persist() {
                 roles: masterCopy.roles || [],
                 team_prompt_suppressions: masterCopy.teamPromptSuppressions || []
             };
+            if (state.masterHasTestTemplates) masterPayload.test_templates = masterCopy.testTemplates || [];
 
             // Only staff write the master row. A partner's or client's copy of it is a limited,
             // read-only view (see sync), and saving it back would overwrite the team roster,
@@ -177,6 +179,16 @@ export function persist() {
                     }
                 } catch (activationErr) {
                     console.warn('Request activation rules failed:', activationErr);
+                }
+
+                // A request whose steps are now done gets its testing checklist (and a fix task for any failed
+                // step) before this save captures the client, so they are saved with it.
+                try {
+                    if (!window.IS_GUEST && window.OL && typeof window.OL.updateTestRunsFor === 'function') {
+                        window.OL.updateTestRunsFor(client);
+                    }
+                } catch (testingErr) {
+                    console.warn('Testing checklist update failed:', testingErr);
                 }
 
                 const clientCopy = JSON.parse(JSON.stringify(client));
@@ -281,6 +293,10 @@ export async function sync() {
             if (Array.isArray(masterData.synced_calendar_ids)) state.master.syncedCalendarIds = masterData.synced_calendar_ids;
             if (Array.isArray(masterData.roles)) state.master.roles = masterData.roles;
             if (Array.isArray(masterData.team_prompt_suppressions)) state.master.teamPromptSuppressions = masterData.team_prompt_suppressions;
+            // The test_templates column comes from 013_test_templates.sql. Until it exists, do not try to save it
+            // (an unknown column would make every master save fail).
+            state.masterHasTestTemplates = Object.prototype.hasOwnProperty.call(masterData, 'test_templates');
+            if (Array.isArray(masterData.test_templates)) state.master.testTemplates = masterData.test_templates;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
 
             // A logged-in team member's menu permissions are a snapshot

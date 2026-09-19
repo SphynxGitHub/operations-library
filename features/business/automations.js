@@ -325,6 +325,9 @@ OL.renderAutomationBuilder = function() {
                 <div class="small muted">When something happens, automatically create a follow-up task.</div>
             </div>
             <div style="display:flex; gap:8px;">
+                <button class="btn small soft" onclick="OL.openTestTemplates()" title="The steps a tester works through for each kind of request">
+                    Test templates
+                </button>
                 <button class="btn small soft" onclick="OL.installStarterRequestSops()" title="Adds a draft set of steps for each request type">
                     Install starter SOPs
                 </button>

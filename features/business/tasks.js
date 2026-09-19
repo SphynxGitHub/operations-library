@@ -1932,6 +1932,11 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         }
     }
 
+    // A Testing task opens its checklist.
+    if (task.testRunId) {
+        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openTestRun('${task.testRunId}', '${client?.id || ''}')">🧪 Open checklist</button>`;
+    }
+
     return `
         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
             <i data-lucide="message-square" style="width:12px;height:12px;vertical-align:sub;"></i> Comments
