@@ -16,6 +16,7 @@
 // nothing about actual behavior, since it never ran anyway.
 
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { importFrom, secureEntry } from '../core/secrets.js';
 
 //======================= CLICKUP CSV IMPORT =======================//
 // One-way import of ClickUp tasks (+ comments + tracked time) from a
@@ -551,31 +552,15 @@ export function bulkImportZaps(isMaster = false) {
 
 export async function syncWealthbox(client) {
     // 1. Find Wealthbox Credentials in the Access Registry
-    const registry = client.projectData.accessRegistry || [];
-    const wbCreds = registry.find(r => {
-        const app = client.projectData.localApps.find(a => a.id === r.appId);
-        return app?.name.toLowerCase().includes('wealthbox');
-    });
-
-    if (!wbCreds || !wbCreds.secret) {
+    const wbCreds = findRegistryEntry(client, APP_NAME_HINTS.wealthbox);
+    if (!hasKey(wbCreds)) {
         throw new Error("Wealthbox API Key not found in Credentials section.");
     }
+    await secureEntry(client, wbCreds);   // a key still in plain text moves to secure storage first
 
-    const apiKey = wbCreds.secret;
-
-    // 2. Fetch Workflow Templates from Wealthbox
-    const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/syncWealthboxProxy?apiKey=${apiKey}`;
-
-    console.log("📡 Calling Firebase Middleman...");
-    
-    const response = await fetch(cloudUrl);
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Middleman Error: ${errorText}`);
-    }
-    
-    const result = await response.json();
+    // 2. The backend fetches the workflow templates using the stored key
+    console.log("📡 Asking the backend to fetch Wealthbox templates...");
+    const result = await importFrom('wealthbox', client.id, wbCreds.id);
     const templates = result.workflow_templates || [];
 
     console.log(`📥 Wealthbox: Found ${templates.length} templates.`);
@@ -855,20 +840,11 @@ export function openImportHub() {
 
 export async function importCalendly(client) {
     const creds = OL.getCredsForApp(client, 'calendly');
-    if (!creds?.secret) throw new Error("Calendly API Key missing in Credentials (Secret field).");
+    if (!hasKey(creds)) throw new Error("Calendly API Key missing in Credentials.");
+    await secureEntry(client, creds);
 
-    // 🎯 The exact URL you provided
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/calendlyProxy?apiKey=${creds.secret}`;
-
-    console.log("📡 Fetching from Calendly Proxy...");
-    const response = await fetch(url);
-
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Proxy Error: ${err}`);
-    }
-
-    const data = await response.json();
+    console.log("📡 Asking the backend to fetch Calendly event types...");
+    const data = await importFrom('calendly', client.id, creds.id);
     const events = data.collection || [];
 
     events.forEach(ev => {
@@ -894,39 +870,22 @@ export async function importCalendly(client) {
 
 export async function importYCBM(client) {
     const creds = OL.getCredsForApp(client, 'youcanbookme');
-    if (!creds?.secret) throw new Error("YCBM API Key missing in App Credentials.");
+    if (!hasKey(creds)) throw new Error("YCBM API Key missing in App Credentials.");
 
-    // 1. Get the email from the username field, or prompt the user
+    // The account email is kept in the entry's username field (it is not a secret), or asked for once.
     let email = creds.username;
     if (!email || email.trim() === "") {
         email = prompt("Please enter your YouCanBookMe account email:");
         if (!email) return 0; // User cancelled
-
-        // Optional: Save it back to the project so it's remembered
         creds.username = email.trim();
-        OL.persist(); 
+        OL.persist();
     }
+    await secureEntry(client, creds);
 
-    let authKey = creds.secret;
+    // The backend combines the email and the stored key into the login YouCanBookMe expects.
+    console.log("📡 Asking the backend to fetch YCBM profiles...");
+    const profiles = await importFrom('ycbm', client.id, creds.id, { email: email.trim() });
 
-    // 2. Encode to Base64 (email:api_key)
-    // We check if it's already encoded; if it starts with 'ak_', it definitely isn't.
-    if (authKey.startsWith('ak_')) {
-        authKey = btoa(`${email.trim()}:${authKey.trim()}`);
-    }
-
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/ycbmProxy?apiKey=${authKey}`;
-
-    console.log("📡 Fetching from YCBM Proxy...");
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`YCBM Error: ${err}`);
-    }
-
-    const profiles = await response.json();
-    
     profiles.forEach(p => {
         OL.upsertExternalResource(client, {
             externalId: p.id,
@@ -942,34 +901,23 @@ export async function importYCBM(client) {
 
 export async function importActiveCampaign(client) {
     const creds = OL.getCredsForApp(client, 'activecampaign');
-    if (!creds?.secret) throw new Error("ActiveCampaign API Key missing in Secret field.");
+    if (!hasKey(creds)) throw new Error("ActiveCampaign API Key missing in Credentials.");
 
-    // 1. Handle the Base URL (Prompt if missing)
-    let baseUrl = creds.username; // We'll store the URL in the 'username' slot
+    // 1. Handle the Base URL (Prompt if missing). It is kept in the entry's username field (not a secret).
+    let baseUrl = creds.username;
     if (!baseUrl || !baseUrl.includes('http')) {
         baseUrl = prompt("Please enter your ActiveCampaign API URL (e.g., https://accountname.api-us1.com):");
         if (!baseUrl) return 0;
-        
+
         // Sanitize: remove trailing slashes
         baseUrl = baseUrl.trim().replace(/\/$/, "");
         creds.username = baseUrl;
         OL.persist();
     }
+    await secureEntry(client, creds);
 
-    // 2. Use your Firebase v2 Proxy
-    // 🎯 REPLACE 'acproxy-xxx' with your actual Firebase URL from the console
-    const proxyUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/acProxy`; 
-    const finalUrl = `${proxyUrl}/?apiKey=${creds.secret}&baseUrl=${encodeURIComponent(baseUrl)}`;
-
-    console.log("📡 Syncing ActiveCampaign Automations...");
-    const response = await fetch(finalUrl);
-    
-    if (!response.ok) {
-        const errTxt = await response.text();
-        throw new Error(`AC Proxy Error: ${errTxt}`);
-    }
-
-    const data = await response.json();
+    console.log("📡 Asking the backend to sync ActiveCampaign automations...");
+    const data = await importFrom('activecampaign', client.id, creds.id, { baseUrl });
     const autos = data.automations || [];
 
     autos.forEach(auto => {
@@ -991,11 +939,10 @@ export async function importActiveCampaign(client) {
 
 export async function importMailerLite(client) {
     const creds = OL.getCredsForApp(client, 'mailerlite');
-    if (!creds?.secret) throw new Error("MailerLite API Key missing.");
+    if (!hasKey(creds)) throw new Error("MailerLite API Key missing.");
+    await secureEntry(client, creds);
 
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/mailerliteProxy?apiKey=${creds.secret}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const data = await importFrom('mailerlite', client.id, creds.id);
     const automations = data.data || [];
 
     automations.forEach(auto => {
@@ -1015,24 +962,11 @@ export async function importMailerLite(client) {
 
 export async function importJotform(client) {
     const creds = OL.getCredsForApp(client, 'jotform');
-    if (!creds?.secret) throw new Error("Jotform API Key missing.");
-
-    // Ensure the URL is EXACT
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/jotformProxy?apiKey=${creds.secret}`;
+    if (!hasKey(creds)) throw new Error("Jotform API Key missing.");
+    await secureEntry(client, creds);
 
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            mode: 'cors', // Explicitly ask for CORS
-            headers: { 'Accept': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const errTxt = await response.text();
-            throw new Error(`Jotform Proxy Error (${response.status}): ${errTxt}`);
-        }
-
-        const data = await response.json();
+        const data = await importFrom('jotform', client.id, creds.id);
         const forms = data.content || data.data || (Array.isArray(data) ? data : []);
 
         forms.forEach(form => {
@@ -1058,42 +992,18 @@ export async function syncProcessStreet(client) {
     
     try {
         const registry = targetClient.projectData.accessRegistry || [];
-        const psCreds = registry.find(r => {
-            const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
-            const name = app?.name || "";
-            return name.toLowerCase().includes('processstreet') || name.toLowerCase().includes('process street');
-        });
+        const psCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.processstreet);
 
-        if (!psCreds?.secret) {
+        if (!hasKey(psCreds)) {
             alert("Missing Process Street API Key in Registry.");
             return;
         }
+        await secureEntry(targetClient, psCreds);
 
-        let allWorkflows = [];
-        // The API defaults to 20 results and uses a 'links' object for the next page
-        let nextUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}`;
-
-        console.log("📡 Fetching Workflows...");
-
-        while (nextUrl) {
-            const res = await fetch(nextUrl);
-            const data = await res.json();
-            
-            // 🎯 THE FIX: v1.1 uses 'workflows' instead of 'items'
-            const pageWorkflows = data.workflows || [];
-            allWorkflows = allWorkflows.concat(pageWorkflows);
-            
-            console.log(`📥 Received ${pageWorkflows.length} workflows...`);
-
-            // Check for pagination in the 'links' section
-            const nextLink = data.links?.find(l => l.rel === 'next' || l.name === 'next');
-            if (nextLink && nextLink.href) {
-                // Construct the next proxy URL
-                nextUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}&next=${encodeURIComponent(nextLink.href)}`;
-            } else {
-                nextUrl = null;
-            }
-        }
+        // The backend pages through the workflows and returns them all (with their tasks).
+        console.log("📡 Asking the backend to fetch Process Street workflows...");
+        const psData = await importFrom('processstreet', targetClient.id, psCreds.id);
+        const allWorkflows = psData.items || psData.workflows || [];
 
         console.log(`✅ Total Collected: ${allWorkflows.length} workflows.`);
 
@@ -1145,14 +1055,11 @@ export async function syncRedtail(client) {
 
     try {
         const registry = targetClient.projectData.accessRegistry || [];
-        const rtCreds = registry.find(r => {
-            const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
-            return app?.name.toLowerCase().includes('redtail');
-        });
+        const rtCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.redtail);
 
-        if (!rtCreds || !rtCreds.secret) throw new Error("Credentials missing.");
+        if (!hasKey(rtCreds)) throw new Error("Credentials missing.");
+        await secureEntry(targetClient, rtCreds);
 
-        const authString = rtCreds.secret;
         let allTemplates = [];
         let currentPage = 1;
         let totalPages = 1;
@@ -1161,10 +1068,7 @@ export async function syncRedtail(client) {
 
         // 🎯 THE PAGINATION LOOP
         do {
-            const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}&page=${currentPage}`;
-            
-            const response = await fetch(url);
-            const result = await response.json();
+            const result = await importFrom('redtail', targetClient.id, rtCreds.id, { page: currentPage });
             
             const pageTemplates = result.workflow_templates || [];
             allTemplates = allTemplates.concat(pageTemplates);
@@ -1233,15 +1137,27 @@ export async function syncRedtail(client) {
     }
 };
 
+// Which access entry holds the key for an outside system: the entry whose app name matches, preferring
+// one that actually has a key (stored securely, or still in plain text from before secure storage).
+const APP_NAME_HINTS = {
+    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'],
+    jotform: ['jotform'], activecampaign: ['activecampaign', 'active campaign'],
+    youcanbookme: ['youcanbook', 'ycbm'], ycbm: ['youcanbook', 'ycbm'],
+    processstreet: ['processstreet', 'process street']
+};
+function findRegistryEntry(client, hints) {
+    const registry = client?.projectData?.accessRegistry || [];
+    const apps = client?.projectData?.localApps || [];
+    const matches = registry.filter((r) => {
+        const name = (apps.find((a) => a.id === r.appId)?.name || '').toLowerCase();
+        return hints.some((h) => name.includes(h));
+    });
+    return matches.find((r) => r.secretSet || String(r.secret || '').trim()) || matches[0] || null;
+}
+const hasKey = (entry) => !!(entry && (entry.secretSet || String(entry.secret || '').trim()));
+
 export function getCredsForApp(client, appSlug) {
-    // 🎯 SAFETY CHECK: If projectData is missing, the app isn't initialized
-    if (typeof projectData === 'undefined' || !projectData) {
-        console.error("❌ Database not loaded. Please wait a second and try again.");
-        return null;
-    }
-    
-    if (!client || !client.externalIntegrations) return null;
-    return client.externalIntegrations.find(i => i.appSlug === appSlug);
+    return findRegistryEntry(client, APP_NAME_HINTS[appSlug] || [String(appSlug || '').toLowerCase()]);
 };
 
 export function printFlowMap(view) {

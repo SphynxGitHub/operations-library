@@ -13,6 +13,7 @@
 // the spec ("we'll fill in the details later"). Those spots are marked.
 
 import { state, esc, uid, getActiveClient, persist, updateAndSync } from '../core/data.js';
+import { storeSecret } from '../core/secrets.js';
 
 const DEFAULT_PARTNER_PIPELINE = ['Discovery', 'Onboarding', 'Initial Client', 'Ongoing Client', 'Former Prospect', 'Former Client'];
 
@@ -595,10 +596,14 @@ function commitResourceImportsStep(client) {
             client.projectData.localApps.push(app);
         }
 
-        client.projectData.accessRegistry.push({
-            id: 'acc_' + uid(), memberId: memberId || null, appId: app.id,
-            level: 'API Key', secret: apiKey, pendingImport: true
-        });
+        // The key goes straight to secure storage; the project only records that one is stored.
+        const entry = { id: 'acc_' + uid(), memberId: memberId || null, appId: app.id, level: 'API Key', secret: '', pendingImport: true };
+        client.projectData.accessRegistry.push(entry);
+        if (apiKey) {
+            storeSecret(client.id, entry.id, apiKey)
+                .then((r) => { entry.secretSet = true; entry.secretHint = r.hint || ''; persist(); })
+                .catch((e) => alert(`Could not store the ${sysName} key: ${e.message}\nPaste it again in the project's credentials section.`));
+        }
     });
 }
 
