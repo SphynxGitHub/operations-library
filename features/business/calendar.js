@@ -537,17 +537,36 @@ OL.shiftCalendarGridMonth = function(delta) {
 };
 
 OL.loadCalendarGridMonth = async function() {
-    const start = OL.calendarState.gridMonth;
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    const anchor = new Date(OL.calendarState.gridMonth);
+    let start, end;
+
+    if (OL.calendarState.calendarSubView === 'day') {
+        // Start of day to end of day
+        start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 0, 0, 0);
+        end = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 23, 59, 59);
+    } else if (OL.calendarState.calendarSubView === 'week') {
+        // Start of Sunday to end of Saturday
+        const dayOfWeek = anchor.getDay();
+        start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - dayOfWeek, 0, 0, 0);
+        end = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + (6 - dayOfWeek), 23, 59, 59);
+    } else {
+        // Full month (plus padding for grid overhang)
+        start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+        end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+    }
 
     const { data, error } = await db
         .from('calendar_events')
         .select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, assignees, attendee_emails, billable, logged_hours, duration_hours_snapshot, comments, call_type')
         .gte('start', start.toISOString())
-        .lt('start', end.toISOString())
+        .lte('start', end.toISOString())
         .order('start', { ascending: true });
 
-    if (error) { console.error('Failed to load calendar month:', error.message); return; }
+    if (error) { 
+        console.error('Failed to load calendar events:', error.message); 
+        return; 
+    }
+    
     OL._calendarGridEvents = data || [];
     await OL.applyEventTimeRecalculation(OL._calendarGridEvents);
 };
@@ -1819,7 +1838,11 @@ OL.shiftCalendarDay = function(deltaDays) {
 OL.renderCalendarDay = function() {
     const day = new Date(OL.calendarState.gridMonth);
     const key = day.toDateString();
-    const dayEvents = (OL._calendarGridEvents || []).filter(e => new Date(e.start).toDateString() === key);
+    
+    // Match events against local date string
+    const dayEvents = (OL._calendarGridEvents || []).filter(e => {
+        return new Date(e.start).toDateString() === key;
+    });
 
     return `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
