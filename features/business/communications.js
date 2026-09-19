@@ -1494,12 +1494,12 @@ OL.renderGmailLinkStep = function() {
             `}
         </div>
 
-        <!-- Task -->
+       <!-- Task -->
         <div style="margin-bottom:14px;">
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Task</label>
             ${selectedTask ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedTask.title \vert{}\vert{} selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
+                    <span class="tiny bold">${esc(selectedTask.title || selectedTask.name)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedTask._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkTask('')">Change</button>
                 </div>
             ` : `
@@ -1509,7 +1509,8 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredTasks.length ? filteredTasks.map(t => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
-                                <span>${esc(t.title \vert{}\vert{} t.name)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
+                                <span>${esc(t.title || t.name)}</span>
+                                ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}
                     </div>
@@ -1536,7 +1537,7 @@ OL.renderGmailLinkStep = function() {
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Request</label>
             ${selectedRequest ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
-                    <span class="tiny bold">${esc(selectedRequest.name \vert{}\vert{} selectedRequest.title)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedRequest._clientName || '')}</span>` : ''}</span>
+                    <span class="tiny bold">${esc(selectedRequest.name || selectedRequest.title)}${!selectedClient ? ` <span class="pill tiny soft" style="font-size:9px;">${esc(selectedRequest._clientName || '')}</span>` : ''}</span>
                     <button class="btn tiny soft" onclick="OL.setGmailLinkRequest('')">Change</button>
                 </div>
             ` : `
@@ -1546,7 +1547,7 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredRequests.length ? filteredRequests.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkRequest('${r.id}', '${r._clientId}')">
-                                <span>${esc(r.name \vert{}\vert{} r.title)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
+                                <span>${esc(r.name || r.title)}</span>${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching requests.</div>`}
                     </div>
