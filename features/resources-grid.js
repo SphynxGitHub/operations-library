@@ -329,30 +329,7 @@ function _renderResourceGroupsImpl(container, items) {
                     </div>
                     ${OL.getViewMode('resources') === 'list' ? `
                         <div style="display:flex;flex-direction:column;gap:2px;">
-                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(res => {
-                                const scopeData = OL.getScopingDataForResource(res.id);
-                                const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
-                                const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
-                                return `
-                                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
-                                                background:var(--panel-soft);border:1px solid var(--panel-border);
-                                                border-left:3px solid ${statusColor};
-                                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
-                                         onclick="OL.selectResourceCard('${res.id}')"
-                                         onmouseover="this.style.borderColor='var(--accent)'"
-                                         onmouseout="this.style.borderColor='var(--panel-border)'">
-                                        <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
-                                        <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
-                                        <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
-                                        ${OL.renderResourceStatusPill(res)}
-                                        ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
-                                        ${!res.isLocked ? `
-                                            <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.universalDelete('${res.id}','resources')">
-                                                <i data-lucide="x" style="width:12px;height:12px;"></i>
-                                            </button>` : ''}
-                                    </div>
-                                `;
-                            }).join('')}
+                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(res => OL._renderResourceListRow(res)).join('')}
                         </div>
                     ` : `
                         <div class="cards-grid">
