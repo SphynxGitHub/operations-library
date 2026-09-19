@@ -1746,22 +1746,29 @@ OL.renderCalendarWeek = function() {
             <strong style="font-size:14px;">Week of ${startOfWeek.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</strong>
             <button class="btn tiny soft" onclick="OL.shiftCalendarGridMonth(1)">Next Week <i data-lucide="chevron-right"></i></button>
         </div>
-        <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden; width:100%; box-sizing:border-box;">
             ${[0,1,2,3,4,5,6].map(i => {
                 const d = new Date(startOfWeek);
                 d.setDate(d.getDate() + i);
                 const key = d.toDateString();
                 const dayEvents = eventsByDay[key] || [];
                 return `
-                    <div style="min-height:280px; padding:6px; background:var(--panel-soft, rgba(255,255,255,0.02));">
-                        <div class="tiny bold muted" style="text-align:center; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px;">
+                    <div style="min-height:280px; min-width:0; padding:4px; background:var(--panel-soft, rgba(255,255,255,0.02)); overflow:hidden;">
+                        <div class="tiny bold muted" style="text-align:center; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px; font-size:11px;">
                             ${dayNames[d.getDay()]} <span style="color:var(--text);">${d.getDate()}</span>
                         </div>
                         <div style="display:grid; gap:4px;">
                             ${dayEvents.map(evt => `
-                                <div class="tiny" style="background:rgba(var(--accent-rgb),0.15); border-left:2px solid var(--accent); border-radius:3px; padding:3px 5px; cursor:pointer;" onclick="OL.openCalendarEventModal('${evt.id}')" title="${esc(evt.title)}">
-                                    <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(evt.title)}</div>
-                                    <div style="font-size:9px; opacity:0.7;">${new Date(evt.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+                                <div class="tiny" 
+                                     style="background:rgba(var(--accent-rgb),0.15); border-left:2px solid var(--accent); border-radius:3px; padding:3px 4px; cursor:pointer; min-width:0; overflow:hidden;" 
+                                     onclick="OL.openCalendarEventModal('${evt.id}')" 
+                                     title="${esc(evt.title)}">
+                                    <div style="font-weight:bold; font-size:10px; line-height:1.2; word-break:break-word; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+                                        ${esc(evt.title)}
+                                    </div>
+                                    <div style="font-size:8.5px; opacity:0.75; margin-top:2px;">
+                                        ${new Date(evt.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
