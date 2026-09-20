@@ -198,7 +198,7 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                         return `
                             <tr style="border-bottom: 1px solid var(--line);">
                                 <td style="padding: 10px 12px; border-right: 1px solid var(--line); font-weight: 600;">
-                                    ${esc(t.title \vert{}\vert{} t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                    ${esc(t.title || t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
                                 </td>
                                 <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
                                     ${OL.renderProjectPill ? OL.renderProjectPill(t.clientId, t.clientName) : esc(t.clientName)}
