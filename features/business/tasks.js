@@ -1708,16 +1708,16 @@ OL.renderProjectPill = function(clientId, name, opts = {}) {
 // tag rather than silently going nowhere.
 OL.renderTeamPill = function(name, clientId, opts = {}) {
     const label = esc(name || 'Unassigned');
-    if (!name) return `<span class="pill tiny team-pill is-static">👤 ${label}</span>`;
+    if (!name) return `<span class="pill tiny team-pill is-static"> ${label}</span>`;
 
     const client = clientId ? state.clients?.[clientId] : null;
     const member = client?.projectData?.teamMembers?.find(m => m.name === name);
     if (member) {
         const stop = opts.stopPropagation !== false ? "event.stopPropagation();" : "";
-        return `<span class="pill tiny team-pill" onclick="${stop} OL.openTeamMemberModal('${member.id}')" title="Open ${label}'s card">👤 ${label}</span>`;
+        return `<span class="pill tiny team-pill" onclick="${stop} OL.openTeamMemberModal('${member.id}')" title="Open ${label}'s card"> ${label}</span>`;
     }
     // Sphynx-side assignee (or unresolved name) — no card to open yet.
-    return `<span class="pill tiny team-pill is-static">👤 ${label}</span>`;
+    return `<span class="pill tiny team-pill is-static"> ${label}</span>`;
 };
 
 // ================= HARDENED ROW CLICK HANDLER ================= //
