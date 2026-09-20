@@ -23,6 +23,8 @@ export const WORK_STATUS = {
     PENDING: 'pending_sphynx_action',
     WAITING_CLIENT: 'waiting_on_client',
     WAITING_THIRD: 'waiting_on_third_party',
+    IN_TESTING: 'in_testing',                  // Sphynx is testing it
+    CLIENT_REVIEW: 'pending_client_review',    // the client is reviewing it
     DONE: 'done',
 };
 
@@ -32,6 +34,7 @@ export const WORK_STATUS_LABELS = {
     waiting_on_third_party: 'Waiting on Third Party',
     blocked: 'Blocked',
     in_testing: 'In Testing',
+    pending_client_review: 'Pending Client Review',
     done: 'Done',
 };
 
@@ -55,6 +58,21 @@ export function tasksForItem(tasks, itemId) {
         && String(t.requestLineItemId) === String(itemId));
 }
 
+// Which testing phase a request is in, from the client project: 'review' while its round is in the client's
+// review, 'testing' once it has a testing checklist, otherwise null (still being built).
+export function testingPhaseFor(pd, sheetId, item, round) {
+    if (!pd || !item) return null;
+    const st = pd.roundStates && pd.roundStates[`${sheetId ?? ''}:${round}`];
+    if (st && st.status === 'in_review') return 'review';
+    const hasRun = (pd.testRuns || []).some((r) => r && r.itemId === String(item.id) && r.sheetId === String(sheetId ?? ''));
+    return hasRun ? 'testing' : null;
+}
+
+// Testing works the opposite way round to building. While building, a request is "Pending Sphynx Action" and
+// flips to waiting when something is asked of the client. While testing it is "In Testing" (or, in the client's
+// review, "Pending Client Review") and flips back to "Pending Sphynx Action" as soon as there is work for Sphynx
+// to do (a fix task from a failed step), then returns to testing or review when that work is done.
+// opts.phase is 'testing' or 'review' (see testingPhaseFor).
 export function deriveWorkStatus(item, tasks, opts = {}) {
     const closedNames = Array.isArray(opts.closedNames) && opts.closedNames.length ? opts.closedNames : ['Done'];
     const empty = { status: WORK_STATUS.PENDING, role: 'implementation', openAsks: 0, openBlockers: 0, waitingOn: null, stepsTotal: 0, stepsDone: 0 };
@@ -72,7 +90,13 @@ export function deriveWorkStatus(item, tasks, opts = {}) {
     const openSteps = steps.filter(t => !isTaskClosed(t, closedNames));
     const progress = { stepsTotal: steps.length, stepsDone: steps.length - openSteps.length };
 
-    if (openAsks.length === 0) return { ...empty, ...progress };
+    if (openAsks.length === 0) {
+        if (opts.phase && openSteps.length === 0) {
+            const review = opts.phase === 'review';
+            return { ...empty, status: review ? WORK_STATUS.CLIENT_REVIEW : WORK_STATUS.IN_TESTING, role: review ? 'communication' : 'testing', ...progress };
+        }
+        return { ...empty, ...progress };
+    }
     const allBlockers = openBlockers === openAsks.length;
     const nothingLeftForSphynx = steps.length > 0 && openSteps.length === 0;
 

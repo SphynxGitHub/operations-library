@@ -14,6 +14,7 @@ import {
     buildClientChecklist, reviewDefaults, reviewEndFor, roundKey,
 } from '../core/conclusion.js';
 import { buildChecklistPdf } from '../core/checklist-pdf.js';
+import { applyClientFeedback, feedbackNeedsUpdate } from '../core/review-feedback.js';
 
 const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm';
 
@@ -64,7 +65,11 @@ export function roundStatusHtml(client, sheet, round, isCurrent = true) {
     const btn = (label, onclick) => `<button class="btn tiny soft" style="margin-left:6px;" onclick="${onclick}">${label}</button>`;
     if (s.kind === 'building' || s.kind === 'testing') return `<span class="tiny muted" style="margin-left:8px;">${esc(s.text)}</span>`;
     if (s.kind === 'ready_to_notify') return pill('✅ Passed testing', '#22c55e') + (isStaff ? btn('Notify client…', `OL.openReviewNotification('${esc(key)}', '${esc(client.id)}')`) : '');
-    if (s.kind === 'in_review') return pill(`📋 ${s.text}`, '#38bdf8') + (isStaff ? btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
+    if (s.kind === 'in_review') {
+        const cr = s.state && s.state.clientReview;
+        const seen = cr && cr.total ? `<span class="tiny muted" style="margin-left:8px;">Client reviewed ${cr.reviewed}/${cr.total}${cr.failed ? `, ${cr.failed} issue${cr.failed === 1 ? '' : 's'}` : ''}</span>` : '';
+        return pill(`📋 ${s.text}`, '#38bdf8') + seen + (isStaff ? btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
+    }
     if (s.kind === 'review_ended') return pill(`⏰ ${s.text}`, '#f59e0b') + (isStaff ? btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
     if (s.kind === 'closed') return `<span class="tiny muted" style="margin-left:8px;">${esc(s.text)}</span>`;
     return '';
@@ -246,5 +251,44 @@ export async function closeReviewFor(key, clientId) {
     refreshScopingIfOpen();
 }
 
+// ---------------- the client's answers ----------------
+// The client marks each step Pass or Fail on their private page. Every few minutes (and when the app opens) this
+// reads the answers for reviews in progress, opens a task on the original request for each new Fail, and marks
+// those answers as handled. Only staff sessions do this.
+let pulling = false;
+export async function pullClientReviewFeedback() {
+    const result = { created: 0, updated: 0, projects: 0 };
+    if (pulling || !(state.adminMode === true || state.teamMemberMode === true)) return result;
+    const reviewing = Object.values(state.clients || {}).filter((c) => Object.values(c?.projectData?.roundStates || {}).some((st) => st && st.status === 'in_review' && st.checklistToken));
+    if (!reviewing.length) return result;
+    pulling = true;
+    try {
+        const tokens = reviewing.flatMap((c) => Object.values(c.projectData.roundStates).filter((st) => st.status === 'in_review' && st.checklistToken).map((st) => st.checklistToken));
+        const { data: rows, error } = await db.from('client_checklist_results').select('*').in('token', tokens);
+        if (error) { console.warn('Client review answers could not be read:', error.message); return result; }
+        for (const client of reviewing) {
+            if (!feedbackNeedsUpdate(client, rows || [])) continue;
+            let applied = null;
+            await updateAndSync(() => { applied = applyClientFeedback(client, rows || [], { ...contextFor(), now: new Date().toISOString() }); }, client.id);
+            result.projects++; result.created += applied.created.length; result.updated += applied.updated.length;
+            for (const h of applied.handled) {
+                await db.from('client_checklist_results').update({ ingested_at: new Date().toISOString(), task_id: h.task_id }).eq('token', h.token).eq('step_id', h.step_id);
+            }
+        }
+        if (result.projects) refreshScopingIfOpen();
+    } catch (err) {
+        console.warn('Client review check failed:', err);
+    } finally {
+        pulling = false;
+    }
+    return result;
+}
+
 window.OL = window.OL || {};
-Object.assign(window.OL, { updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
+Object.assign(window.OL, { pullClientReviewFeedback, updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
+
+// First check shortly after the app loads, then every few minutes while it is open.
+if (typeof window !== 'undefined' && typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) {
+    setTimeout(() => pullClientReviewFeedback(), 25 * 1000);
+    setInterval(() => pullClientReviewFeedback(), 5 * 60 * 1000);
+}

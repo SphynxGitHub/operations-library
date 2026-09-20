@@ -1,4 +1,7 @@
 import { esc, state, db, getBusinessScopedClients } from '../../core/data.js';
+import { getCurrentRound } from '../../core/requests.js';
+import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
+import { assigneeForRole } from '../../core/testing.js';
 
 // -------------------------------------------------------------
 // TASK STREAM FILTER STATE
@@ -14,7 +17,8 @@ OL.dashboardTaskState = {
     groupBy: 'none',
     assignees: [],
     status: 'all',
-    types: ['task', 'email', 'event', 'comment', 'error']
+    types: ['task', 'email', 'event', 'comment', 'error', 'request'],
+    requestsAdded: true   // saved with the filters so "Requests" is switched on once for people with an older saved selection
 };
 
 OL._dashboardAssigneeDefaulted = false;
@@ -37,6 +41,11 @@ OL._saveDashboardTaskState = function() {
         if (!raw) return;
         const saved = JSON.parse(raw);
         if (saved && typeof saved === 'object') {
+            // A selection saved before Requests existed gets Requests switched on once; after that their choice stands.
+            if (Array.isArray(saved.types) && !saved.requestsAdded) {
+                if (!saved.types.includes('request')) saved.types.push('request');
+                saved.requestsAdded = true;
+            }
             Object.assign(OL.dashboardTaskState, saved);
             // A restored state (even an empty assignees array, meaning "All")
             // represents a deliberate prior choice -- don't let the
@@ -91,11 +100,11 @@ OL.loadDashboardEvents = async function() {
     const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
 
     const { data, error } = await db.from('calendar_events')
-      .select('id, title, start, end, all_day, linked_client_id, assignee, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
-      .gte('start', windowStart.toISOString())
-      .lte('start', windowEnd.toISOString())
-      .or('hidden_from_dashboard.eq.false,hidden_from_dashboard.is.null')
-      .order('start', { ascending: true });
+        .select('id, title, start, end, all_day, linked_client_id, assignee, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
+        .gte('start', windowStart.toISOString())
+        .lte('start', windowEnd.toISOString())
+        .eq('hidden_from_dashboard', false)
+        .order('start', { ascending: true });
 
     if (error) { console.error('Failed to load dashboard events:', error.message); OL._dashboardEventsCache = []; return; }
     OL._dashboardEventsCache = data || [];
@@ -140,6 +149,53 @@ OL.getDashboardEmailItems = function() {
 };
 
 // Open (unresolved) items from the Error Tracking log.
+// Requests: every active request across the clients in view, meaning a Do Now line in the current round of an
+// approved scoping sheet. Its status is worked out the same way as on the scoping sheet (what is waiting on whom,
+// In Testing, Pending Client Review), and the assignee is whoever holds the role that has it now.
+OL.getDashboardRequestItems = function() {
+    const roles = state.master?.roles || [];
+    const closedNames = (state.master?.taskStatuses || []).filter(st => st.isClosed).map(st => st.name);
+    const roleFor = { implementation: /implement/i, communication: /communicat/i, testing: /test/i };
+    const out = [];
+
+    getBusinessScopedClients().forEach(c => {
+        const pd = c.projectData || {};
+        const tasks = pd.clientTasks || [];
+        const findResource = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+
+        (pd.scopingSheets || []).forEach(sheet => {
+            if (!sheet || sheet.status !== 'Approved') return;
+            const real = (sheet.lineItems || []).filter(i => i && typeof i === 'object' && i.id !== undefined && i.id !== null && String(i.id).trim() !== ''
+                && (String(i.name || '').trim() || findResource(i.resourceId)?.name));
+            const current = getCurrentRound({ lineItems: real });
+            if (current === null) return;
+
+            real.forEach(item => {
+                if (String(item.status || '') !== 'Do Now') return;
+                const r = parseInt(item.round, 10);
+                const round = Number.isFinite(r) && r >= 1 ? r : 1;
+                if (round !== current) return;
+
+                const phase = testingPhaseFor(pd, sheet.id, item, round);
+                const w = deriveWorkStatus(item, tasks, { closedNames: closedNames.length ? closedNames : ['Done'], phase });
+                const assignee = w.role ? assigneeForRole(c, roles, roleFor[w.role] || /implement/i, '') : '';
+                const reviewState = pd.roundStates?.[`${sheet.id ?? ''}:${round}`];
+                out.push({
+                    id: `req-${c.id}-${item.id}`, _type: 'request', itemId: String(item.id),
+                    title: String(item.name || '').trim() || findResource(item.resourceId)?.name || 'Request',
+                    requestType: String(item.requestType || 'build'), round,
+                    status: WORK_STATUS_LABELS[w.status] || w.status, workStatus: w.status,
+                    assignee: assignee || '', isUnassigned: !assignee,
+                    dueDate: phase === 'review' && reviewState?.reviewEnd ? reviewState.reviewEnd : '',
+                    stepsDone: w.stepsDone || 0, stepsTotal: w.stepsTotal || 0, openAsks: w.openAsks || 0,
+                    clientName: c.meta?.name || 'Unknown Client', clientId: c.id
+                });
+            });
+        });
+    });
+    return out;
+};
+
 OL._dashboardErrorsCache = null;
 OL.loadDashboardErrors = async function() {
     const { data, error } = await db.from('error_log')
@@ -185,14 +241,15 @@ OL.renderDailyDashboard = function() {
     const eventItems = OL.getDashboardEventItems();
     const emailItems = OL.getDashboardEmailItems();
     const errorItems = OL.getDashboardErrorItems();
-    const allItems = [...openTasks, ...eventItems, ...emailItems, ...errorItems];
+    const requestItems = OL.getDashboardRequestItems();
+    const allItems = [...openTasks, ...eventItems, ...emailItems, ...errorItems, ...requestItems];
 
     const dueTodayOrOverdue = OL.filterTasksByDueRange(openTasks.concat(eventItems), 'overdue').length
         + OL.filterTasksByDueRange(openTasks.concat(eventItems), 'today').length;
 
-    const assigneeOptions = OL.getDistinctAssignees(openTasks.concat(eventItems).filter(i => !i.isUnassigned));
-    const statusOptions = OL.getDistinctStatuses(openTasks);
-    const hasUnassigned = openTasks.concat(eventItems).some(i => i.isUnassigned);
+    const assigneeOptions = OL.getDistinctAssignees(openTasks.concat(eventItems, requestItems).filter(i => !i.isUnassigned));
+    const statusOptions = OL.getDistinctStatuses(openTasks.concat(requestItems));
+    const hasUnassigned = openTasks.concat(eventItems, requestItems).some(i => i.isUnassigned);
 
     if (!OL._dashboardAssigneeDefaulted) {
         OL._dashboardAssigneeDefaulted = true;
@@ -213,8 +270,8 @@ OL.renderDailyDashboard = function() {
             ? (OL.dashboardTaskState.assignees[0] === '__unassigned__' ? 'Unassigned' : OL.dashboardTaskState.assignees[0])
             : `${OL.dashboardTaskState.assignees.length} selected`;
 
-    const TYPE_LABELS = { task: 'Tasks', email: 'Emails', event: 'Events', comment: 'Comments', error: 'Errors' };
-    const typesSummary = OL.dashboardTaskState.types.length === 5 ? 'All' : OL.dashboardTaskState.types.map(t => TYPE_LABELS[t]).join(', ') || 'None';
+    const TYPE_LABELS = { task: 'Tasks', request: 'Requests', email: 'Emails', event: 'Events', comment: 'Comments', error: 'Errors' };
+    const typesSummary = OL.dashboardTaskState.types.length === Object.keys(TYPE_LABELS).length ? 'All' : OL.dashboardTaskState.types.map(t => TYPE_LABELS[t]).join(', ') || 'None';
 
     main.innerHTML = `
         <div class="section-header" id="daily-dashboard-shell">
@@ -228,6 +285,10 @@ OL.renderDailyDashboard = function() {
             <div class="card" style="padding: 15px;">
                 <div class="tiny muted uppercase bold">Active Clients</div>
                 <div style="font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 5px;">${clients.length}</div>
+            </div>
+            <div class="card" style="padding: 15px;">
+                <div class="tiny muted uppercase bold">Active Requests</div>
+                <div style="font-size: 24px; font-weight: 900; color: #64c6a2; margin-top: 5px;">${requestItems.length}</div>
             </div>
             <div class="card" style="padding: 15px;">
                 <div class="tiny muted uppercase bold">Open Action Items</div>
@@ -358,7 +419,7 @@ OL.clearDashboardAssignees = function(event) {
 OL.openDashboardTypesPopover = function(event) {
     const popover = OL.createPopoverContainer(event);
     const selected = OL.dashboardTaskState.types;
-    const TYPE_LABELS = { task: 'Tasks', email: 'Emails', event: 'Events', comment: 'Comments', error: 'Errors' };
+    const TYPE_LABELS = { task: 'Tasks', request: 'Requests', email: 'Emails', event: 'Events', comment: 'Comments', error: 'Errors' };
 
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Show in Dashboard</div>
@@ -412,12 +473,12 @@ OL.filterDashboardItems = function(items, assignees, status, types) {
     return items.filter(item => {
         if (!types.includes(item._type)) return false;
 
-        const isTaskOrEvent = item._type === 'task' || item._type === 'event';
+        const isTaskOrEvent = item._type === 'task' || item._type === 'event' || item._type === 'request';
         const assigneeMatch = !isTaskOrEvent || assignees.length === 0
             || (assignees.includes('__unassigned__') && item.isUnassigned)
             || assignees.includes(item.assignee);
 
-        const statusMatch = item._type !== 'task' || status === 'all' || (item.status || 'Pending Sphynx Action') === status;
+        const statusMatch = (item._type !== 'task' && item._type !== 'request') || status === 'all' || (item.status || 'Pending Sphynx Action') === status;
 
         return assigneeMatch && statusMatch;
     });
@@ -448,6 +509,7 @@ OL.renderDashboardTaskStream = function(allItems) {
         if (item._type === 'event') return OL.renderEventRowHTML(item);
         if (item._type === 'email') return OL.renderDashboardEmailRowHTML(item);
         if (item._type === 'error') return OL.renderErrorLogRow(item, false);
+        if (item._type === 'request') return OL.renderDashboardRequestRowHTML(item);
         return OL.renderTaskRowWithMentions(item, todayStr, false);
     };
 
@@ -459,8 +521,8 @@ OL.renderDashboardTaskStream = function(allItems) {
     filtered.forEach(item => {
         let key = 'Other';
         if (groupBy === 'client') key = item.clientName || 'Client';
-        else if (groupBy === 'status') key = item._type === 'task' ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors');
-        else if (groupBy === 'assignee') key = item.assignee || (item._type === 'task' || item._type === 'event' ? 'Sphynx Task' : 'N/A');
+        else if (groupBy === 'status') key = (item._type === 'task' || item._type === 'request') ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors');
+        else if (groupBy === 'assignee') key = item.assignee || (item._type === 'task' || item._type === 'event' ? 'Sphynx Task' : item._type === 'request' ? 'Unassigned' : 'N/A');
         else if (groupBy === 'date') key = item.dueDate ? new Date(item.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : 'Unscheduled';
 
         if (!groups[key]) groups[key] = [];
@@ -478,6 +540,24 @@ OL.renderDashboardTaskStream = function(allItems) {
             </div>
         </div>
     `).join('');
+};
+
+// Compact card for an active request, in the same style as the other rows in the stream.
+OL.renderDashboardRequestRowHTML = function(r) {
+    const color = r.workStatus === 'in_testing' ? '#38bdf8' : r.workStatus === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b';
+    const sub = [r.requestType ? r.requestType.charAt(0).toUpperCase() + r.requestType.slice(1) : '', `Round ${r.round}`, r.assignee || 'Unassigned',
+                 r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : '', r.openAsks ? `${r.openAsks} open ask${r.openAsks === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+    return `
+    <div class="task-row-card" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(100,198,162,0.04); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
+         onclick="OL.navigateToClientProject('${esc(r.clientId)}')">
+        <div style="display:flex; align-items:center;" title="Request"><i data-lucide="git-pull-request" style="width:14px;height:14px; color:#64c6a2;"></i></div>
+        <div style="flex:1; min-width:0; overflow:hidden;">
+            <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title)}</strong>
+            <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(sub)}</div>
+        </div>
+        <span class="pill tiny" style="flex-shrink:0; border:1px solid ${color}; color:${color};">${esc(r.status)}</span>
+        ${r.clientName && r.clientId ? `<div style="flex-shrink:0;" onclick="event.stopPropagation();">${OL.renderProjectPill(r.clientId, r.clientName)}</div>` : ''}
+    </div>`;
 };
 
 // Compact card for an unarchived email — matches the task/event row

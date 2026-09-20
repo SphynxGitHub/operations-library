@@ -16,16 +16,28 @@
   .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin: 16px 0; }
   .card h2 { font-size: 18px; margin: 0 0 2px; }
   ul { list-style: none; padding: 0; margin: 12px 0 0; }
-  li { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(148,163,184,0.3); }
+  li { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(148,163,184,0.3); }
   li:first-child { border-top: none; }
-  input[type=checkbox] { width: 20px; height: 20px; margin-top: 3px; flex: 0 0 auto; }
   .step-title { font-weight: 600; }
   .step-detail { font-size: 14px; }
-  .done .step-title { text-decoration: line-through; opacity: .6; }
+  .done .step-title { opacity: .65; }
+  .step-body { flex: 1; min-width: 0; }
+  .controls { display: flex; gap: 8px; margin-top: 8px; }
+  button.choice { font: inherit; padding: 6px 16px; border-radius: 8px; border: 1px solid #94a3b8; background: transparent; color: inherit; cursor: pointer; }
+  button.choice.pass.on { background: #16a34a; border-color: #16a34a; color: #fff; }
+  button.choice.fail.on { background: #dc2626; border-color: #dc2626; color: #fff; }
+  button.choice:disabled, button.send:disabled { opacity: .5; cursor: default; }
+  .note-box { display: none; margin-top: 8px; }
+  .note-box label { display: block; font-size: 14px; margin-bottom: 4px; }
+  .note-box textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid #94a3b8; background: transparent; color: inherit; }
+  button.send { margin-top: 6px; font: inherit; padding: 6px 16px; border-radius: 8px; border: none; background: #2563eb; color: #fff; cursor: pointer; }
+  .status { font-size: 14px; margin-top: 6px; min-height: 1em; }
+  .status.problem { color: #dc2626; }
+  li.failed .step-title { color: #dc2626; }
   .notice { border-left: 4px solid #38bdf8; }
   .error { border-left: 4px solid #ef4444; }
   a.button { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 8px; background: #2563eb; color: #fff; text-decoration: none; font-size: 15px; }
-  @media print { body { background: #fff; color: #000; } .card { border-color: #999; } a.button, #progress { display: none; } }
+  @media print { body { background: #fff; color: #000; } .card { border-color: #999; } a.button, #progress, .controls, .note-box, .status { display: none; } }
 </style>
 </head>
 <body>

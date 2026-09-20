@@ -87,7 +87,8 @@ export function roundProgress(client, sheet, round, ctx) {
 }
 
 // What the client's copy of the checklist holds: every tested request in the round, steps only,
-// with no results, notes or internal names. Kept separate from Sphynx's tested copy.
+// with no results, notes or internal names. Each step keeps its id (an opaque code) so the client's Pass or Fail
+// can be matched back to the step. Kept separate from Sphynx's tested copy.
 export function buildClientChecklist(client, sheet, round, ctx) {
     const pd = client?.projectData || {};
     const sections = [];
@@ -96,7 +97,7 @@ export function buildClientChecklist(client, sheet, round, ctx) {
         if (!run) return;
         sections.push({
             title: run.title, requestType: run.requestType, resourceName: run.resourceName || '',
-            steps: (run.steps || []).map((s) => ({ title: s.title, how: s.how || '', expected: s.expected || '' })),
+            steps: (run.steps || []).map((s) => ({ id: s.id, title: s.title, how: s.how || '', expected: s.expected || '' })),
         });
     });
     return { clientName: client?.meta?.name || '', round: Number(round), sections };

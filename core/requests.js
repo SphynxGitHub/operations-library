@@ -10,7 +10,7 @@
 //
 // Called from persist() in core/data.js, after a client saves successfully.
 
-import { deriveWorkStatus, WORK_STATUS } from './work-status.js';
+import { deriveWorkStatus, testingPhaseFor, WORK_STATUS } from './work-status.js';
 
 // Shown until the editable list loads from the request_types table.
 export const DEFAULT_REQUEST_TYPES = [
@@ -168,7 +168,7 @@ export function listNewActivations(client, masterResources) {
 
 // Role ids by name, for the role that currently holds a request.
 function roleIdFor(roles, kind) {
-    const pattern = kind === 'communication' ? /communicat/i : /implement/i;
+    const pattern = kind === 'communication' ? /communicat/i : kind === 'testing' ? /test/i : /implement/i;
     return (roles || []).find(r => pattern.test(String(r?.name || '')))?.id || null;
 }
 
@@ -201,7 +201,8 @@ function buildDesired(client, masterResources, opts = {}) {
 
             const isActive = currentRound !== null && status === 'Do Now' && roundNumber === currentRound;
             // Work status only means something once a request is active.
-            const derived = isActive ? deriveWorkStatus(item, tasks, { closedNames: opts.closedNames }) : null;
+            const phase = isActive ? testingPhaseFor(client.projectData, sheet.id, item, roundNumber) : null;
+            const derived = isActive ? deriveWorkStatus(item, tasks, { closedNames: opts.closedNames, phase }) : null;
 
             desired.push({
                 legacy: String(item.id),
