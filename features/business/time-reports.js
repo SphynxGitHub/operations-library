@@ -175,18 +175,18 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
     }
 
     // Single container table with sticky header pinned to table top
-    const renderTableMarkup = (taskList) => `
+   const renderTableMarkup = (taskList) => `
         <div class="table-scroll-container" style="position: relative; max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
-            <table class="matrix-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
-                <thead style="position: sticky; top: 0; z-index: 10; background: var(--panel-dark, #111); border-bottom: 2px solid var(--line);">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-size: 12px;">
+                <thead>
                     <tr>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 32%;">DELIVERABLE / TASK</th>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 22%; text-align: center;">WORKSPACE</th>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 18%; text-align: center;">ASSIGNEE</th>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 12%; text-align: center;">STATUS</th>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 8%; text-align: right;">LOGGED</th>
-                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 8%; text-align: right;">VALUE ($)</th>
-                        <th style="padding: 10px 12px; width: 4%; text-align: center;">ACTION</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 32%;">DELIVERABLE / TASK</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 22%; text-align: center;">WORKSPACE</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 18%; text-align: center;">ASSIGNEE</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 12%; text-align: center;">STATUS</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 8%; text-align: right;">LOGGED</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 8%; text-align: right;">VALUE ($)</th>
+                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); width: 4%; text-align: center;">ACTION</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -197,24 +197,22 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
 
                         return `
                             <tr style="border-bottom: 1px solid var(--line);">
-                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); font-weight: 600;">
-                                    ${esc(t.title || t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); font-weight: 600;">
+                                    ${esc(t.title \vert{}\vert{} t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
                                 </td>
-                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
                                     ${OL.renderProjectPill ? OL.renderProjectPill(t.clientId, t.clientName) : esc(t.clientName)}
                                 </td>
-                                <!-- Removed Assignee Emoji -->
-                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
                                     <span class="pill tiny soft" style="font-weight: 500;">${esc(assigneeName)}</span>
                                 </td>
-                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
                                     <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
                                 </td>
-                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: right; font-weight: bold;">
-                                    ${hours.toFixed(2)}h                                 </td>                                 <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold;">
+                                    ${hours.toFixed(2)}h                                 </td>                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
                                 </td>
-                                <!-- Clean pencil button with no 'Edit Log' text -->
-                                <td style="padding: 10px 12px; text-align: center;">
+                                <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: center;">
                                     <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
                                         <i data-lucide="pencil" style="width:12px; height:12px;"></i>
                                     </button>
