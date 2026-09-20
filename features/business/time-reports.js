@@ -226,7 +226,7 @@ OL.renderClientReportView = function(clientId) {
                             <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
                             <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                             <td style="text-align:center;">
-                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">✏️ Edit Log</button>
+                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')"><i data-lucide="pencil"></button>
                             </td>
                         </tr>
                     `;
