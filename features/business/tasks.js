@@ -983,8 +983,9 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 <!-- Linked Resource -->
                 <span class="pill tiny soft" style="font-size:10px; color:var(--accent); background:rgba(var(--accent-rgb), 0.06); border:1px solid rgba(var(--accent-rgb), 0.15); display:inline-flex; align-items:center; gap:4px;">
                     <i data-lucide="database" style="width:11px;height:11px; pointer-events:none;"></i>
-                    ${esc(t.resourceName || t.category || 'General Resource')}
+                    ${esc(typeof OL.taskResourceLabel === 'function' ? OL.taskResourceLabel(t) : (t.resourceName || t.category || 'General Resource'))}
                 </span>
+                ${typeof OL.renderRequestTagHTML === 'function' ? OL.renderRequestTagHTML(t) : ''}
 
                 ${(t.clickupComments && t.clickupComments.length) ? `
                 <span class="pill tiny soft" title="Imported from ClickUp" style="font-size:10px; display:inline-flex; align-items:center; gap:4px;">
@@ -1930,6 +1931,11 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         if (task.meetingSummaryEventId) {
             parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openMeetingSummaryEmail('${task.meetingSummaryEventId}')">✉️ Prepare summary email</button>`;
         }
+    }
+
+    // The request this task belongs to, as a tag that opens it on the scoping sheet.
+    if (task.requestLineItemId && typeof OL.renderRequestTagHTML === 'function') {
+        parentLinkHTML += `<div style="margin-bottom:8px;">${OL.renderRequestTagHTML({ ...task, clientId: client?.id || task.clientId })}</div>`;
     }
 
     // A Notify client task opens the review notification.

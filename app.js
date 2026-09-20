@@ -25,6 +25,7 @@ import * as OLBusinessManager from './features/business/index.js';
 import * as OLTaskBlueprints from './features/task-blueprints.js';
 import * as OLTesting from './features/testing.js';
 import * as OLReview from './features/review.js';
+import * as OLRequestTag from './features/request-tag.js';
 
 window.isMatrixActive = false;
 
