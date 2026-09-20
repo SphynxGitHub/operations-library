@@ -4,7 +4,9 @@ OL.financialsFilterState = OL.financialsFilterState || {
     query: '',
     statusFilter: 'all',      // 'all' | 'Do Now' | 'In Progress' | 'Done' | "Don't Do"
     partyFilter: 'all',       // 'all' | 'Sphynx' | 'Client'
-    groupBy: 'none'           // 'none' | 'workspace' | 'status' | 'party'
+    groupBy: 'none',          // 'none' | 'workspace' | 'status' | 'party'
+    startDate: '',
+    endDate: ''
 };
 
 OL.renderBusinessFinancials = function() {
@@ -34,11 +36,29 @@ OL.renderBusinessFinancials = function() {
                 <div class="small muted">Track total gross, scoped deliverables, and approved revenue across all projects</div>
             </div>
             
-            <!-- GRAND TOTAL BAR -->
-            <div class="pill accent" style="padding: 8px 14px; display: flex; gap: 16px; align-items: center; font-size: 13px; font-weight: bold;">
-                <span>Total Items: <span style="color:var(--text);">${allScopedItems.length}</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span>Grand Total: <span style="color:var(--accent); font-size: 15px;">$${grandTotalNetValue.toLocaleString()}</span></span>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <!-- DATE RANGE FILTER -->
+                <div style="display:flex; align-items:center; gap:6px; background:var(--panel-soft); padding:4px 8px; border:1px solid var(--line); border-radius:6px;">
+                    <i data-lucide="calendar" style="width:14px; height:14px; color:var(--muted);"></i>
+                    <span class="tiny bold muted">From:</span>
+                    <input type="date" class="modal-input tiny" style="width:auto; padding:2px 4px;" 
+                           value="${esc(OL.financialsFilterState.startDate || '')}"
+                           onchange="OL.financialsFilterState.startDate = this.value; OL.renderBusinessFinancials();">
+                    <span class="tiny bold muted">To:</span>
+                    <input type="date" class="modal-input tiny" style="width:auto; padding:2px 4px;" 
+                           value="${esc(OL.financialsFilterState.endDate || '')}"
+                           onchange="OL.financialsFilterState.endDate = this.value; OL.renderBusinessFinancials();">
+                    ${(OL.financialsFilterState.startDate || OL.financialsFilterState.endDate) ? `
+                        <button class="btn tiny ghost" style="padding:2px 4px;" title="Clear date filter" onclick="OL.clearFinancialsDateFilter()">✕</button>
+                    ` : ''}
+                </div>
+
+                <!-- GRAND TOTAL BAR -->
+                <div class="pill accent" style="padding: 8px 14px; display: flex; gap: 12px; align-items: center; font-size: 13px; font-weight: bold;">
+                    <span>Total Items: <span style="color:var(--text);">${allScopedItems.length}</span></span>
+                    <span style="opacity: 0.3;">|</span>
+                    <span>Grand Total: <span style="color:var(--accent); font-size: 15px;">$${grandTotalNetValue.toLocaleString()}</span></span>
+                </div>
             </div>
         </div>
 
@@ -84,6 +104,12 @@ OL.renderBusinessFinancials = function() {
     if (window.lucide) lucide.createIcons();
 };
 
+OL.clearFinancialsDateFilter = function() {
+    OL.financialsFilterState.startDate = '';
+    OL.financialsFilterState.endDate = '';
+    OL.renderBusinessFinancials();
+};
+
 OL.setFinancialsPartyFilter = function(party) {
     OL.financialsFilterState.partyFilter = party;
     OL.renderBusinessFinancials();
@@ -98,11 +124,14 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
     const query = (OL.financialsFilterState.query || '').toLowerCase();
     const partyFilter = OL.financialsFilterState.partyFilter;
     const groupBy = OL.financialsFilterState.groupBy;
+    const startDate = OL.financialsFilterState.startDate ? new Date(OL.financialsFilterState.startDate).getTime() : 0;
+    const endDate = OL.financialsFilterState.endDate ? new Date(OL.financialsFilterState.endDate).getTime() + 86400000 : Infinity;
 
     let filtered = allScopedItems.filter(item => {
         const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
         const deliverableName = res?.name || item.name || 'Scoped Item';
 
+        // Search match
         const matchesQuery = !query || 
             deliverableName.toLowerCase().includes(query) || 
             (item.clientName || '').toLowerCase().includes(query) ||
@@ -111,10 +140,17 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
 
         if (!matchesQuery) return false;
 
+        // Party filter
         if (partyFilter !== 'all') {
             const party = (item.responsibleParty || 'Sphynx').toLowerCase();
             if (partyFilter === 'Sphynx' && !party.includes('sphynx')) return false;
             if (partyFilter === 'Client' && !party.includes('client')) return false;
+        }
+
+        // Date range filter
+        if (item.createdAt || item.createdDate || item.date) {
+            const itemTime = new Date(item.createdAt || item.createdDate || item.date).getTime();
+            if (itemTime < startDate || itemTime > endDate) return false;
         }
 
         return true;
@@ -149,7 +185,7 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
                                     <span class="pill tiny soft">${esc(item.status || 'Do Now')}</span>
                                 </td>
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
-                                    ${esc(item.responsibleParty || 'Sphynx')}                                 </td>                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">$${netValue.toLocaleString()}</td>
+                                    ${esc(item.responsibleParty \vert{}\vert{} 'Sphynx')}                                 </td>                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">$${netValue.toLocaleString()}</td>
                             </tr>
                         `;
                     }).join('')}
