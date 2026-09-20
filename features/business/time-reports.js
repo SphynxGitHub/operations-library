@@ -1,5 +1,12 @@
 import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
+// Global state for filtering and grouping time report entries
+OL.timeReportFilterState = OL.timeReportFilterState || {
+    filter: 'all',      // 'all' | 'billable' | 'non-billable'
+    groupBy: 'none',    // 'none' | 'workspace' | 'assignee' | 'date'
+    query: ''
+};
+
 //============= RECONCILIATION HELPERS =============//
 
 OL.getClientReconciliationMetrics = function(clientId) {
@@ -93,15 +100,34 @@ OL.renderBusinessTimeReports = function() {
 
         <!-- FULL TABLE BREAKDOWN -->
         <div class="card" style="padding: 20px;">
-            <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
-                <div style="display: flex; gap: 8px; flex: 1; min-width: 240px; align-items:center;">
+            
+            <!-- SEARCH & FILTER / GROUPING TOOLBAR -->
+            <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line); flex-wrap: wrap;">
+                
+                <div style="display: flex; gap: 8px; flex: 1; min-width: 220px; align-items:center;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
                     <input type="text" 
                            class="modal-input tiny" 
                            placeholder="Filter time entries or deliverables..." 
                            id="time-report-search"
-                           value="${esc(OL.globalTaskFilterState?.query || '')}"
-                           oninput="OL.setGlobalTaskFilter('query', this.value); OL.renderBusinessTimeReports();">
+                           value="${esc(OL.timeReportFilterState.query || '')}"
+                           oninput="OL.timeReportFilterState.query = this.value; OL.renderBusinessTimeReports();">
+                </div>
+
+                <!-- Billable Filters -->
+                <div style="display:flex; gap:4px; align-items:center;">
+                    <span class="tiny muted uppercase bold" style="margin-right:4px;">Filter:</span>
+                    <button class="btn tiny ${OL.timeReportFilterState.filter === 'all' ? 'primary' : 'soft'}" onclick="OL.setTimeReportFilter('all')">All</button>
+                    <button class="btn tiny ${OL.timeReportFilterState.filter === 'billable' ? 'primary' : 'soft'}" onclick="OL.setTimeReportFilter('billable')">Billable</button>
+                    <button class="btn tiny ${OL.timeReportFilterState.filter === 'non-billable' ? 'primary' : 'soft'}" onclick="OL.setTimeReportFilter('non-billable')">Non-Billable</button>
+                </div>
+
+                <!-- Grouping Controls -->
+                <div style="display:flex; gap:4px; align-items:center;">
+                    <span class="tiny muted uppercase bold" style="margin-right:4px;">Group By:</span>
+                    <button class="btn tiny ${OL.timeReportFilterState.groupBy === 'none' ? 'primary' : 'soft'}" onclick="OL.setTimeReportGrouping('none')">None</button>
+                    <button class="btn tiny ${OL.timeReportFilterState.groupBy === 'workspace' ? 'primary' : 'soft'}" onclick="OL.setTimeReportGrouping('workspace')">Workspace</button>
+                    <button class="btn tiny ${OL.timeReportFilterState.groupBy === 'assignee' ? 'primary' : 'soft'}" onclick="OL.setTimeReportGrouping('assignee')">Assignee</button>
                 </div>
             </div>
 
@@ -116,56 +142,112 @@ OL.renderBusinessTimeReports = function() {
     });
 };
 
+OL.setTimeReportFilter = function(filterVal) {
+    OL.timeReportFilterState.filter = filterVal;
+    OL.renderBusinessTimeReports();
+};
+
+OL.setTimeReportGrouping = function(groupVal) {
+    OL.timeReportFilterState.groupBy = groupVal;
+    OL.renderBusinessTimeReports();
+};
+
 OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
-    const query = (OL.globalTaskFilterState?.query || '').toLowerCase();
-    let filtered = allTasks.filter(t => 
-        (t.title || t.name || '').toLowerCase().includes(query) || 
-        (t.clientName || '').toLowerCase().includes(query) ||
-        (t.assignee || '').toLowerCase().includes(query)
-    );
+    const query = (OL.timeReportFilterState.query || '').toLowerCase();
+    const filter = OL.timeReportFilterState.filter;
+    const groupBy = OL.timeReportFilterState.groupBy;
+
+    let filtered = allTasks.filter(t => {
+        const matchesQuery = !query || 
+            (t.title || t.name || '').toLowerCase().includes(query) || 
+            (t.clientName || '').toLowerCase().includes(query) ||
+            (t.assignee || '').toLowerCase().includes(query);
+
+        if (!matchesQuery) return false;
+
+        if (filter === 'billable') return t.billable !== false;
+        if (filter === 'non-billable') return t.billable === false;
+        return true;
+    });
 
     if (filtered.length === 0) {
         return `<div class="p-20 muted text-center">No time entries found matching filter.</div>`;
     }
 
-    return `
-        <table class="matrix-table" style="width:100%;">
-            <thead>
-                <tr>
-                    <th style="text-align:left;">Deliverable / Task</th>
-                    <th style="text-align:center;">Workspace</th>
-                    <th style="text-align:center;">Assignee</th>
-                    <th style="text-align:center;">Status</th>
-                    <th style="text-align:right;">Logged Hours</th>
-                    <th style="text-align:right;">Calculated Value ($)</th>
-                    <th style="text-align:center;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${filtered.map(t => {
-                    const hours = Number(t.loggedHours || t.hoursLogged || 0);
-                    const val = hours * hourlyRate;
-                    return `
-                        <tr>
-                            <td>
-                                <strong>${esc(t.title || t.name)}</strong>
-                                ${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
-                            </td>
-                            <td style="text-align:center;">${OL.renderProjectPill(t.clientId, t.clientName)}</td>
-                            <td style="text-align:center;">${OL.renderTeamPill(t.assignee, t.clientId)}</td>
-                            <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
-                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
-                            <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
-                            <td style="text-align:center;">
-                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
-                                    <i data-lucide="pencil" style="width:11px;height:11px;"></i></button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
+    // Single container table with sticky header pinned to table top
+    const renderTableMarkup = (taskList) => `
+        <div class="table-scroll-container" style="position: relative; max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
+            <table class="matrix-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
+                <thead style="position: sticky; top: 0; z-index: 10; background: var(--panel-dark, #111); border-bottom: 2px solid var(--line);">
+                    <tr>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 32%;">DELIVERABLE / TASK</th>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 22%; text-align: center;">WORKSPACE</th>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 18%; text-align: center;">ASSIGNEE</th>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 12%; text-align: center;">STATUS</th>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 8%; text-align: right;">LOGGED</th>
+                        <th style="padding: 10px 12px; border-right: 1px solid var(--line); width: 8%; text-align: right;">VALUE ($)</th>
+                        <th style="padding: 10px 12px; width: 4%; text-align: center;">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${taskList.map(t => {
+                        const hours = Number(t.loggedHours || t.hoursLogged || 0);
+                        const val = hours * hourlyRate;
+                        const assigneeName = String(t.assignee || 'Sphynx Task').replace(/^[👤👥💻]\s*/, '');
+
+                        return `
+                            <tr style="border-bottom: 1px solid var(--line);">
+                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); font-weight: 600;">
+                                    ${esc(t.title \vert{}\vert{} t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                </td>
+                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                    ${OL.renderProjectPill ? OL.renderProjectPill(t.clientId, t.clientName) : esc(t.clientName)}
+                                </td>
+                                <!-- Removed Assignee Emoji -->
+                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                    <span class="pill tiny soft" style="font-weight: 500;">${esc(assigneeName)}</span>
+                                </td>
+                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: center;">
+                                    <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
+                                </td>
+                                <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: right; font-weight: bold;">
+                                    ${hours.toFixed(2)}h                                 </td>                                 <td style="padding: 10px 12px; border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
+                                </td>
+                                <!-- Clean pencil button with no 'Edit Log' text -->
+                                <td style="padding: 10px 12px; text-align: center;">
+                                    <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
+                                        <i data-lucide="pencil" style="width:12px; height:12px;"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
     `;
+
+    if (groupBy === 'none') {
+        return renderTableMarkup(filtered);
+    }
+
+    // Handle Grouping
+    const groups = {};
+    filtered.forEach(t => {
+        const key = groupBy === 'workspace' ? (t.clientName || 'Other') : (t.assignee || 'Unassigned');
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(t);
+    });
+
+    return Object.entries(groups).map(([groupTitle, groupTasks]) => `
+        <div style="margin-bottom: 24px;">
+            <div class="tiny bold uppercase muted" style="margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); display:flex; align-items:center; gap:8px;">
+                <span>${esc(groupTitle)}</span>
+                <span class="pill tiny soft">${groupTasks.length} entries</span>
+            </div>
+            ${renderTableMarkup(groupTasks)}
+        </div>
+    `).join('');
 };
 
 //============= POP-UP MODAL (For Quick Audits in Task Manager) =============//
@@ -202,36 +284,44 @@ OL.renderClientReportView = function(clientId) {
         </div>
 
         <h4>📋 Task Itemization & Time Audit</h4>
-        <table class="matrix-table" style="width:100%; margin-top: 10px;">
-            <thead>
-                <tr>
-                    <th style="text-align:left;">Deliverable / Task</th>
-                    <th style="text-align:center;">Assignee</th>
-                    <th style="text-align:center;">Status</th>
-                    <th style="text-align:right;">Logged Hours</th>
-                    <th style="text-align:right;">Calculated Value ($)</th>
-                    <th style="text-align:center;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${tasks.map(t => {
-                    const hours = Number(t.loggedHours || t.hoursLogged || 0);
-                    const val = hours * metrics.hourlyRate;
-                    return `
-                        <tr>
-                            <td><strong>${esc(t.title || t.name)}</strong></td>
-                            <td style="text-align:center;">${OL.renderTeamPill(t.assignee || 'Sphynx', clientId)}</td>
-                            <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
-                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
-                            <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
-                            <td style="text-align:center;">
-                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')"><i data-lucide="pencil"></button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('') || '<tr><td colspan="6" class="muted text-center p-20">No tasks logged for this client yet.</td></tr>'}
-            </tbody>
-        </table>
+        <div class="table-scroll-container" style="position: relative; max-height: 400px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px;">
+            <table class="matrix-table" style="width:100%; border-collapse: collapse; font-size:12px;">
+                <thead style="position: sticky; top: 0; z-index: 10; background: var(--panel-dark, #111); border-bottom: 2px solid var(--line);">
+                    <tr>
+                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:left;">DELIVERABLE / TASK</th>
+                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">ASSIGNEE</th>
+                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">STATUS</th>
+                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:right;">LOGGED</th>
+                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:right;">VALUE ($)</th>
+                        <th style="padding:10px 12px; text-align:center;">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tasks.map(t => {
+                        const hours = Number(t.loggedHours || t.hoursLogged || 0);
+                        const val = hours * metrics.hourlyRate;
+                        const assigneeName = String(t.assignee || 'Sphynx Task').replace(/^[👤👥💻]\s*/, '');
+                        return `
+                            <tr style="border-bottom:1px solid var(--line);">
+                                <td style="padding:10px 12px; border-right:1px solid var(--line);"><strong>${esc(t.title || t.name)}</strong></td>
+                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">
+                                    <span class="pill tiny soft">${esc(assigneeName)}</span>
+                                </td>
+                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">
+                                    <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
+                                </td>
+                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
+                                <td style="padding:10px 12px; text-align:center;">
+                                    <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">
+                                        <i data-lucide="pencil" style="width:12px; height:12px;"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('') || '<tr><td colspan="6" class="muted text-center p-20">No tasks logged for this client yet.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
     `;
 };
 
