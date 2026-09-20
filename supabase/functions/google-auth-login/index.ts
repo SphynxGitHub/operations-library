@@ -66,7 +66,8 @@ serve(async (req) => {
       // answers "insufficient authentication scopes" for those. Connecting again is what grants it.
       "https://www.googleapis.com/auth/gmail.modify",
       "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/userinfo.email"
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/drive.file"
     ];
 
     const state = await signState(serviceKey, "google", authz.userId);
