@@ -5,6 +5,7 @@ OL.financialsFilterState = OL.financialsFilterState || {
     statusFilter: 'all',      // 'all' | 'Do Now' | 'In Progress' | 'Done' | "Don't Do"
     partyFilter: 'all',       // 'all' | 'Sphynx' | 'Client'
     groupBy: 'none',          // 'none' | 'workspace' | 'status' | 'party'
+    datePreset: 'all_time',   // 'all_time' | 'current_month' | 'last_month' | 'current_year' | 'last_year' | 'custom'
     startDate: '',
     endDate: ''
 };
@@ -23,42 +24,50 @@ OL.renderBusinessFinancials = function() {
         }));
     });
 
-    // Calculate Grand Total across all items
-    const grandTotalNetValue = allScopedItems.reduce((sum, item) => {
-        const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
-        return sum + (res && typeof OL.calculateRowFee === 'function' ? (OL.calculateRowFee(item, res) || 0) : 0);
-    }, 0);
+    // Apply active date filter parameters to derive grand total & list items accurately
+    const { filteredItems, totalValue } = OL.getFilteredFinancialsData(allScopedItems);
 
     main.innerHTML = `
-        <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <!-- HEADER TITLE ON ITS OWN LINE -->
+        <div class="section-header" style="margin-bottom:12px;">
             <div>
-                <h2>💰 Agency Financials & Scoped Work</h2>
-                <div class="small muted">Track total gross, scoped deliverables, and approved revenue across all projects</div>
+                <h2 style="margin:0;"><i data-lucide="dollar-sign" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Agency Financials & Scoped Work</h2>
+                <div class="small muted" style="margin-top:2px;">Track total gross, scoped deliverables, and approved revenue across all projects</div>
             </div>
-            
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                <!-- DATE RANGE FILTER -->
-                <div style="display:flex; align-items:center; gap:6px; background:var(--panel-soft); padding:4px 8px; border:1px solid var(--line); border-radius:6px;">
-                    <i data-lucide="calendar" style="width:14px; height:14px; color:var(--muted);"></i>
-                    <span class="tiny bold muted">From:</span>
-                    <input type="date" class="modal-input tiny" style="width:auto; padding:2px 4px;" 
-                           value="${esc(OL.financialsFilterState.startDate || '')}"
-                           onchange="OL.financialsFilterState.startDate = this.value; OL.renderBusinessFinancials();">
-                    <span class="tiny bold muted">To:</span>
-                    <input type="date" class="modal-input tiny" style="width:auto; padding:2px 4px;" 
-                           value="${esc(OL.financialsFilterState.endDate || '')}"
-                           onchange="OL.financialsFilterState.endDate = this.value; OL.renderBusinessFinancials();">
-                    ${(OL.financialsFilterState.startDate || OL.financialsFilterState.endDate) ? `
-                        <button class="btn tiny ghost" style="padding:2px 4px;" title="Clear date filter" onclick="OL.clearFinancialsDateFilter()">✕</button>
-                    ` : ''}
-                </div>
+        </div>
 
-                <!-- GRAND TOTAL BAR -->
-                <div class="pill accent" style="padding: 8px 14px; display: flex; gap: 12px; align-items: center; font-size: 13px; font-weight: bold;">
-                    <span>Total Items: <span style="color:var(--text);">${allScopedItems.length}</span></span>
-                    <span style="opacity: 0.3;">|</span>
-                    <span>Grand Total: <span style="color:var(--accent); font-size: 15px;">$${grandTotalNetValue.toLocaleString()}</span></span>
-                </div>
+        <!-- TOTALS & DATE PRESETS BAR (ROW BELOW TITLE) -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; background:var(--panel-soft); padding:10px 14px; border:1px solid var(--line); border-radius:8px;">
+            
+            <!-- DATE PRESETS & CUSTOM RANGE -->
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span class="tiny bold muted uppercase" style="margin-right:4px;">Period:</span>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'all_time' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('all_time')">All Time</button>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'current_month' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('current_month')">Current Month</button>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'last_month' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('last_month')">Last Month</button>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'current_year' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('current_year')">Current Year</button>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'last_year' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('last_year')">Last Year</button>
+                <button class="btn tiny ${OL.financialsFilterState.datePreset === 'custom' ? 'primary' : 'soft'}" onclick="OL.setFinancialsDatePreset('custom')">Custom</button>
+
+                ${OL.financialsFilterState.datePreset === 'custom' ? `
+                    <div style="display:inline-flex; align-items:center; gap:4px; margin-left:6px; background:var(--panel-dark, #111); padding:2px 6px; border:1px solid var(--line); border-radius:4px;">
+                        <span class="tiny muted">From:</span>
+                        <input type="date" class="modal-input tiny" style="width:auto; padding:1px 3px;" 
+                               value="${esc(OL.financialsFilterState.startDate || '')}"
+                               onchange="OL.financialsFilterState.startDate = this.value; OL.renderBusinessFinancials();">
+                        <span class="tiny muted">To:</span>
+                        <input type="date" class="modal-input tiny" style="width:auto; padding:1px 3px;" 
+                               value="${esc(OL.financialsFilterState.endDate || '')}"
+                               onchange="OL.financialsFilterState.endDate = this.value; OL.renderBusinessFinancials();">
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- GRAND TOTAL BAR -->
+            <div class="pill accent" style="padding: 6px 12px; display: flex; gap: 12px; align-items: center; font-size: 12px; font-weight: bold; flex-shrink:0;">
+                <span>Scoped Items: <span style="color:var(--text);">${filteredItems.length}</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span>Grand Total: <span style="color:var(--accent); font-size: 14px;">$${totalValue.toLocaleString()}</span></span>
             </div>
         </div>
 
@@ -97,16 +106,42 @@ OL.renderBusinessFinancials = function() {
             </div>
 
             <div id="financials-table-container">
-                ${OL.renderFinancialsTableGroups(allScopedItems)}
+                ${OL.renderFinancialsTableGroups(filteredItems)}
             </div>
         </div>
     `;
     if (window.lucide) lucide.createIcons();
 };
 
-OL.clearFinancialsDateFilter = function() {
-    OL.financialsFilterState.startDate = '';
-    OL.financialsFilterState.endDate = '';
+OL.setFinancialsDatePreset = function(preset) {
+    OL.financialsFilterState.datePreset = preset;
+    const now = new Date();
+
+    if (preset === 'current_month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        OL.financialsFilterState.startDate = start.toISOString().split('T')[0];
+        OL.financialsFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'last_month') {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        OL.financialsFilterState.startDate = start.toISOString().split('T')[0];
+        OL.financialsFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'current_year') {
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end = new Date(now.getFullYear(), 11, 31);
+        OL.financialsFilterState.startDate = start.toISOString().split('T')[0];
+        OL.financialsFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'last_year') {
+        const start = new Date(now.getFullYear() - 1, 0, 1);
+        const end = new Date(now.getFullYear() - 1, 11, 31);
+        OL.financialsFilterState.startDate = start.toISOString().split('T')[0];
+        OL.financialsFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'all_time') {
+        OL.financialsFilterState.startDate = '';
+        OL.financialsFilterState.endDate = '';
+    }
+
     OL.renderBusinessFinancials();
 };
 
@@ -120,14 +155,13 @@ OL.setFinancialsGrouping = function(groupVal) {
     OL.renderBusinessFinancials();
 };
 
-OL.renderFinancialsTableGroups = function(allScopedItems) {
+OL.getFilteredFinancialsData = function(allScopedItems) {
     const query = (OL.financialsFilterState.query || '').toLowerCase();
     const partyFilter = OL.financialsFilterState.partyFilter;
-    const groupBy = OL.financialsFilterState.groupBy;
     const startDate = OL.financialsFilterState.startDate ? new Date(OL.financialsFilterState.startDate).getTime() : 0;
     const endDate = OL.financialsFilterState.endDate ? new Date(OL.financialsFilterState.endDate).getTime() + 86400000 : Infinity;
 
-    let filtered = allScopedItems.filter(item => {
+    const filteredItems = allScopedItems.filter(item => {
         const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
         const deliverableName = res?.name || item.name || 'Scoped Item';
 
@@ -148,7 +182,7 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
         }
 
         // Date range filter
-        if (item.createdAt || item.createdDate || item.date) {
+        if (OL.financialsFilterState.datePreset !== 'all_time' && (item.createdAt || item.createdDate || item.date)) {
             const itemTime = new Date(item.createdAt || item.createdDate || item.date).getTime();
             if (itemTime < startDate || itemTime > endDate) return false;
         }
@@ -156,7 +190,18 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
         return true;
     });
 
-    if (filtered.length === 0) {
+    const totalValue = filteredItems.reduce((sum, item) => {
+        const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
+        return sum + (res && typeof OL.calculateRowFee === 'function' ? (OL.calculateRowFee(item, res) || 0) : 0);
+    }, 0);
+
+    return { filteredItems, totalValue };
+};
+
+OL.renderFinancialsTableGroups = function(filteredItems) {
+    const groupBy = OL.financialsFilterState.groupBy;
+
+    if (filteredItems.length === 0) {
         return `<div class="p-20 muted text-center">No scoped items found matching filter.</div>`;
     }
 
@@ -186,7 +231,7 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
                                 </td>
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
                                     ${esc(item.responsibleParty || 'Sphynx')}                                 
-                                </td>                                
+                                </td>                                 
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">$${netValue.toLocaleString()}</td>
                             </tr>
                         `;
@@ -197,12 +242,12 @@ OL.renderFinancialsTableGroups = function(allScopedItems) {
     `;
 
     if (groupBy === 'none') {
-        return renderTableMarkup(filtered);
+        return renderTableMarkup(filteredItems);
     }
 
     // Handle Grouping & Calculate Per-Group Subtotals
     const groups = {};
-    filtered.forEach(item => {
+    filteredItems.forEach(item => {
         let key = 'Other';
         if (groupBy === 'workspace') key = item.clientName || 'Other Workspace';
         if (groupBy === 'status') key = item.status || 'Unspecified Status';
