@@ -625,10 +625,29 @@ export function _geChecklistBlockLabel(block) {
 export function _geRenderBlock(block, idx, total, ht, values) {
     const { canEdit } = OL._ge || {};
     const isHiddenForViewers = block.condition && !evaluateCondition(block.condition, values || {});
+
+    // Only checklist blocks other than this one are valid condition sources
+    const possibleSources = canEdit
+        ? (ht?.blocks || []).filter(b => b.type === 'checklist' && b.id !== block.id).map(b => ({ id: b.id, label: OL._geChecklistBlockLabel(b) }))
+        : [];
+    const hasConditionSetup = !!block.condition?.fieldId;
+
     const controls = canEdit ? `
         <div class="ge-block-controls" style="
             position:absolute;top:10px;right:10px;
             display:none;align-items:center;gap:4px;z-index:10;">
+            
+            ${possibleSources.length ? `
+            <!-- Gear Icon: Opens block condition modal -->
+            <button onclick="OL.openHowToBlockConditionModal('${block.id}')"
+                    title="${hasConditionSetup ? 'Edit visibility condition (Active)' : 'Configure visibility condition'}"
+                    style="width:24px;height:24px;border:1px solid ${hasConditionSetup ? 'var(--accent)' : 'var(--panel-border)'};
+                           background:${hasConditionSetup ? 'rgba(var(--accent-rgb),0.12)' : 'var(--panel-soft)'};border-radius:5px;cursor:pointer;
+                           color:${hasConditionSetup ? 'var(--accent)' : 'var(--text-dim)'};display:flex;align-items:center;justify-content:center;">
+                <i data-lucide="settings" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+            ` : ''}
+
             <button onclick="OL._geMoveBlock('${block.id}', -1)"
                     title="Move up" ${idx === 0 ? 'disabled' : ''}
                     style="width:24px;height:24px;border:1px solid var(--panel-border);
@@ -657,18 +676,6 @@ export function _geRenderBlock(block, idx, total, ht, values) {
 
     const inner = OL._geRenderBlockInner(block, canEdit);
 
-    // Only checklist blocks other than this one are meaningful condition
-    // sources right now (see _geGuideChecklistValues above).
-    const possibleSources = canEdit
-        ? (ht?.blocks || []).filter(b => b.type === 'checklist' && b.id !== block.id).map(b => ({ id: b.id, label: OL._geChecklistBlockLabel(b) }))
-        : [];
-
-    const conditionPanel = (canEdit && possibleSources.length) ? `
-        <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--panel-border);">
-            ${renderConditionEditor(block.condition, possibleSources, `OL._geUpdateBlockCondition('${block.id}', __PART__)`)}
-        </div>
-    ` : '';
-
     return `
         <div id="ge-blk-${block.id}"
              class="ge-block"
@@ -679,10 +686,47 @@ export function _geRenderBlock(block, idx, total, ht, values) {
             ${controls}
             ${isHiddenForViewers ? `<div class="tiny" style="color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><i data-lucide="eye-off" style="width:11px;height:11px;"></i> Hidden from viewers right now (condition not met)</div>` : ''}
             ${inner}
-            ${conditionPanel}
         </div>
     `;
 };
+
+// ── BLOCK CONDITION SETTINGS MODAL ────────────────
+export function openHowToBlockConditionModal(blockId) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+
+    const possibleSources = (ht?.blocks || [])
+        .filter(b => b.type === 'checklist' && b.id !== block.id)
+        .map(b => ({ id: b.id, label: OL._geChecklistBlockLabel(b) }));
+
+    if (!possibleSources.length) {
+        alert("Add a checklist block to this guide first to set up conditional rules.");
+        return;
+    }
+
+    const html = `
+        <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line);">
+            <div class="modal-title-text" style="font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px;">
+                <i data-lucide="settings" style="width:16px;height:16px;color:var(--accent);"></i>
+                Block Visibility Conditions
+            </div>
+            <button class="btn tiny soft" onclick="OL.closeModal()">Done</button>
+        </div>
+        <div class="modal-body" style="padding-top:16px; min-width:320px;">
+            <p class="tiny muted" style="margin-bottom:14px; line-height:1.4;">
+                Show or hide this block based on whether specific checklist items in this guide are checked.
+            </p>
+            
+            <div style="background:var(--panel-soft); padding:14px; border-radius:8px; border:1px solid var(--panel-border);">
+                ${renderConditionEditor(block.condition, possibleSources, `OL._geUpdateBlockCondition('${block.id}', __PART__)`)}
+            </div>
+        </div>
+    `;
+
+    openModal(html);
+    if (window.lucide) lucide.createIcons();
+}
 
 // ── RENDER BLOCK INNER BY TYPE ─────────────────────
 export function _geRenderBlockInner(block, canEdit) {
@@ -2014,7 +2058,7 @@ Object.assign(window.OL, {
     _geUpdateBlockData, _geUpdateBlockCondition, _geGuideChecklistValues, _geChecklistBlockLabel,
     _geRefreshImageBlock, _geRefreshVideoPreview,
     _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock,
-    _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide
+    _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide, openHowToBlockConditionModal
 });
 // Called bare from sections still living in app.js — bridge onto window.
 window.renderHowToLibrary = renderHowToLibrary;
