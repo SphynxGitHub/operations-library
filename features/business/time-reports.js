@@ -108,27 +108,6 @@ OL.renderBusinessTimeReports = function() {
             </div>
         </div>
 
-        <!-- GLOBAL RECONCILIATION CARDS -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px;">
-            ${clients.map(c => {
-                const m = OL.getClientReconciliationMetrics(c.id);
-                return `
-                    <div class="card" style="padding: 14px; cursor:pointer;" onclick="OL.openTimeReportModal('${c.id}')" title="Click for Itemized Client Audit">
-                        <div style="font-weight:bold; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between;">
-                            <span>📁 ${esc(c.meta?.name || c.id)}</span>
-                            <span class="tiny muted">${m.burnRate}% Scoped</span>
-                        </div>
-                        <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
-                            ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
-                        </div>
-                        <div class="tiny muted" style="margin-top:2px;">
-                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">$${m.remainingValue.toLocaleString()}</strong>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-
         <!-- FULL TABLE BREAKDOWN -->
         <div class="card" style="padding: 20px;">
             
@@ -167,6 +146,27 @@ OL.renderBusinessTimeReports = function() {
             <div id="time-report-table-container">
                 ${OL.renderTimeReportTableGroups(filteredTasks, hourlyRate)}
             </div>
+        </div>
+
+        <!-- GLOBAL RECONCILIATION CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px;">
+            ${clients.map(c => {
+                const m = OL.getClientReconciliationMetrics(c.id);
+                return `
+                    <div class="card" style="padding: 14px; cursor:pointer;" onclick="OL.openTimeReportModal('${c.id}')" title="Click for Itemized Client Audit">
+                        <div style="font-weight:bold; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                            <span>📁 ${esc(c.meta?.name || c.id)}</span>
+                            <span class="tiny muted">${m.burnRate}% Scoped</span>
+                        </div>
+                        <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
+                            ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
+                        </div>
+                        <div class="tiny muted" style="margin-top:2px;">
+                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">$${m.remainingValue.toLocaleString()}</strong>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
 
