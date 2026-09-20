@@ -438,26 +438,37 @@ OL.resolveClientDriveFolder = async function(clientId) {
 
     const clientName = client.meta?.name || 'Unnamed Client';
 
-    const res = await db.functions.invoke('google-drive-sync', {
-        body: { action: 'get_or_create_client_folder', clientName, clientId }
-    });
+    try {
+        const res = await db.functions.invoke('google-drive-sync', {
+            body: { action: 'get_or_create_client_folder', clientName, clientId }
+        });
 
-    if (res.data?.folderId) {
-        client.googleDriveFolderId = res.data.folderId;
-        client.driveSubfolders = res.data.subfolders;
-
-        // Persist to workspace_clients table in Supabase
-        const { error } = await db
-            .from('workspace_clients')
-            .update({ google_drive_folder_id: res.data.folderId })
-            .eq('id', clientId);
-
-        if (error) {
-            console.error('Failed to update workspace_clients folder ID:', error.message);
+        if (res.error) {
+            console.error('Drive Sync Edge Function Error:', res.error);
+            alert(`Drive Sync Failed: ${res.error.message || 'Check Supabase Edge Function logs.'}`);
+            return;
         }
 
-        OL.persist();
-        return res.data;
+        if (res.data?.folderId) {
+            client.googleDriveFolderId = res.data.folderId;
+            client.driveSubfolders = res.data.subfolders;
+
+            // Persist to workspace_clients table
+            const { error } = await db
+                .from('workspace_clients')
+                .update({ google_drive_folder_id: res.data.folderId })
+                .eq('id', clientId);
+
+            if (error) {
+                console.error('Failed to update workspace_clients folder ID:', error.message);
+            }
+
+            OL.persist();
+            return res.data;
+        }
+    } catch (err) {
+        console.error('Network / Request Error during Drive lookup:', err);
+        alert('Failed to connect to Google Drive sync service.');
     }
 };
 
