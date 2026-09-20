@@ -461,6 +461,49 @@ OL.resolveClientDriveFolder = async function(clientId) {
     }
 };
 
+// Define and attach directly to the OL namespace
+OL.renderClientDriveCard = function(clientId) {
+    const client = state.clients?.[clientId];
+    if (!client) return '';
+
+    const folderId = client.googleDriveFolderId || client.meta?.googleDriveFolderId;
+
+    return `
+        <div class="card-section" style="margin-top: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i data-lucide="folder-git-2" style="width: 16px; height: 16px; color: var(--accent);"></i>
+                    <div>
+                        <strong style="font-size: 12px; display: block;">Google Drive Folder</strong>
+                        <span class="tiny muted">Sync recordings, task attachments, and snapshots</span>
+                    </div>
+                </div>
+                <div>
+                    ${folderId ? `
+                        <a href="https://drive.google.com/drive/folders/${folderId}" target="_blank" class="btn tiny soft" style="display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
+                            <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Open Drive
+                        </a>
+                    ` : `
+                        <button class="btn tiny primary" onclick="OL.resolveClientDriveFolder('${clientId}').then(() => OL.openClientProfileModal('${clientId}'))">
+                            <i data-lucide="folder-plus" style="width: 11px; height: 11px;"></i> Link Drive Folder
+                        </button>
+                    `}
+                </div>
+            </div>
+
+            ${folderId ? `
+                <div class="tiny muted monospace" style="margin-top: 8px; background: rgba(0,0,0,0.15); padding: 4px 6px; border-radius: 4px; word-break: break-all;">
+                    Folder ID: ${esc(folderId)}
+                </div>
+            ` : ''}
+        </div>
+    `;
+};
+
+// Expose explicitly to window to prevent ReferenceErrors in template string evaluation
+window.renderClientDriveCard = OL.renderClientDriveCard;
+window.OL.renderClientDriveCard = OL.renderClientDriveCard;
+
 export function openClientProfileModal(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
