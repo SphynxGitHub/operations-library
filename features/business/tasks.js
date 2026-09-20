@@ -1107,9 +1107,6 @@ OL.renderBulkTaskToolbar = function() {
 
     const masterStatuses = OL.getSystemStatuses();
 
-    // Build one deduped assignee list spanning every client involved in the
-    // current selection, so the bulk dropdown mirrors the per-task one
-    // instead of asking for free-text (which invites typos/duplicates).
     const clientIds = [...new Set(Object.values(OL.bulkTaskSelection))];
     const seenNames = new Set();
     const clientTeamOptions = [];
@@ -1150,9 +1147,18 @@ OL.renderBulkTaskToolbar = function() {
                 </optgroup>
             </select>
 
+            <select id="bulk-set-billable" class="modal-input tiny" style="width:auto;">
+                <option value="">Billable...</option>
+                <option value="true">Billable ($)</option>
+                <option value="false">Non-Billable (⊘)</option>
+            </select>
+
             <input type="date" id="bulk-set-duedate" class="modal-input tiny" style="width:auto;">
 
             <button class="btn tiny primary" onclick="OL.applyBulkTaskEdit()">Apply to Selected</button>
+            <button class="btn tiny danger soft" onclick="OL.bulkDeleteTasks()" style="display:flex; align-items:center; gap:4px;">
+                <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete
+            </button>
             <button class="btn tiny soft" onclick="OL.clearBulkTaskSelection()">Clear Selection</button>
         </div>
     `;
@@ -1161,15 +1167,14 @@ OL.renderBulkTaskToolbar = function() {
 OL.applyBulkTaskEdit = function() {
     const newStatus = document.getElementById('bulk-set-status')?.value || '';
     const newAssignee = document.getElementById('bulk-set-assignee')?.value?.trim() || '';
+    const newBillableVal = document.getElementById('bulk-set-billable')?.value || '';
     const newDueDate = document.getElementById('bulk-set-duedate')?.value || '';
 
-    if (!newStatus && !newAssignee && !newDueDate) {
-        alert('Set at least one field (status, assignee, or due date) before applying.');
+    if (!newStatus && !newAssignee && !newDueDate && newBillableVal === '') {
+        alert('Set at least one field (status, assignee, billable, or due date) before applying.');
         return;
     }
 
-    // Group selected task ids by client so we do one updateAndSync per
-    // client (and correctly mark each of those clients dirty for persist()).
     const byClient = {};
     Object.entries(OL.bulkTaskSelection).forEach(([taskId, clientId]) => {
         if (!byClient[clientId]) byClient[clientId] = [];
@@ -1212,6 +1217,9 @@ OL.applyBulkTaskEdit = function() {
                         });
                     }
                 }
+                if (newBillableVal !== '') {
+                    task.billable = newBillableVal === 'true';
+                }
                 if (newDueDate) {
                     task.dueDate = newDueDate;
                 }
@@ -1222,8 +1230,6 @@ OL.applyBulkTaskEdit = function() {
     OL.bulkTaskSelection = {};
     OL.refreshTaskView();
 };
-
-
 
 OL.closePopoverDropdown = function(e) {
     const existing = document.getElementById('task-popover-dropdown');
