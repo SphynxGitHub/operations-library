@@ -504,9 +504,12 @@ OL.checkGoogleAuthReturn = function() {
             if (!state.master) state.master = {};
             if (!state.master.communications) state.master.communications = {};
             if (!state.master.communications.gmail) state.master.communications.gmail = {};
+            if (!state.master.communications.drive) state.master.communications.drive = {};
 
             state.master.communications.gmail.connected = true;
+            state.master.communications.drive.connected = true;
             state.master.googleConnected = true;
+            state.master.googleDriveConnected = true;
         });
 
         // Clean the address bar without reloading. The redirect puts
@@ -517,9 +520,14 @@ OL.checkGoogleAuthReturn = function() {
         const hashPath = window.location.hash.split('?')[0];
         window.history.replaceState({}, document.title, window.location.pathname + hashPath);
 
-        // Auto-fetch both Live Feeds
+        // Auto-fetch Live Feeds including Drive sync
         if (typeof OL.fetchLiveGmailMessages === 'function') OL.fetchLiveGmailMessages();
         if (typeof OL.fetchLiveGoogleCalendar === 'function') OL.fetchLiveGoogleCalendar();
+        
+        // Trigger Drive workspace folder sync for active project if set
+        if (state.activeClientId && typeof OL.resolveClientDriveFolder === 'function') {
+            OL.resolveClientDriveFolder(state.activeClientId);
+        }
     }
 };
 
