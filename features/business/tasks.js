@@ -1936,6 +1936,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
     // The request this task belongs to, as a tag that opens it on the scoping sheet.
     if (task.requestLineItemId && typeof OL.renderRequestTagHTML === 'function') {
         parentLinkHTML += `<div style="margin-bottom:8px;">${OL.renderRequestTagHTML({ ...task, clientId: client?.id || task.clientId })}</div>`;
+        if (typeof OL.taskPhaseSelectHtml === 'function') parentLinkHTML += OL.taskPhaseSelectHtml(client, task);
     }
 
     // A Notify client task opens the review notification.

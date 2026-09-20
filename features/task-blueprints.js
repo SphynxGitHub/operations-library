@@ -43,6 +43,7 @@ OL.renderMasterTaskBlueprints = function() {
                         ${bp.defaultAssignee ? `<span class="pill tiny soft" style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="user" style="width:10px;height:10px;"></i>${esc(bp.defaultAssignee)}</span>` : ''}
                         ${bp.defaultStatus ? `<span class="pill tiny soft">${esc(bp.defaultStatus)}</span>` : ''}
                         ${bp.dueInDays !== undefined && bp.dueInDays !== null && bp.dueInDays !== '' ? `<span class="pill tiny soft">Due +${esc(bp.dueInDays)}d</span>` : ''}
+                        ${bp.phase ? `<span class="pill tiny soft">${bp.phase === 'before' ? 'Before' : bp.phase === 'after' ? 'After' : 'Implementation'}</span>` : ''}
                         ${(bp.howToIds || []).length ? `<span class="pill tiny soft" style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="book-open" style="width:10px;height:10px;"></i>${bp.howToIds.length} guide${bp.howToIds.length === 1 ? '' : 's'}</span>` : ''}
                     </div>
                 </div>
@@ -136,6 +137,15 @@ OL.openTaskBlueprintModal = function(blueprintId) {
                         <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Due In (days)</label>
                         <input type="number" id="bp-due" class="modal-input tiny" value="${esc(bp?.dueInDays ?? '')}" placeholder="optional">
                     </div>
+                    <div>
+                        <label class="tiny muted uppercase bold" style="display:block; margin-bottom:4px;">Phase</label>
+                        <select id="bp-phase" class="modal-input tiny">
+                            <option value="" ${!bp?.phase ? 'selected' : ''}>Automatic</option>
+                            <option value="before" ${bp?.phase === 'before' ? 'selected' : ''}>Before (pre-meeting or pre-implementation)</option>
+                            <option value="implementation" ${bp?.phase === 'implementation' ? 'selected' : ''}>Implementation</option>
+                            <option value="after" ${bp?.phase === 'after' ? 'selected' : ''}>After (post-meeting action item)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -184,16 +194,19 @@ OL.saveTaskBlueprint = function(blueprintId) {
     const defaultStatus = document.getElementById('bp-status')?.value || 'Pending Sphynx Action';
     const dueRaw = document.getElementById('bp-due')?.value;
     const dueInDays = dueRaw === '' || dueRaw === undefined ? null : Number(dueRaw);
+    const phaseRaw = document.getElementById('bp-phase')?.value;
+    const phase = ['before', 'implementation', 'after'].includes(phaseRaw) ? phaseRaw : '';
 
     updateAndSync(() => {
         if (!state.master.taskBlueprints) state.master.taskBlueprints = [];
         if (blueprintId) {
             const existing = state.master.taskBlueprints.find(b => b.id === blueprintId);
-            if (existing) Object.assign(existing, { title, description, defaultAssignee, defaultStatus, dueInDays });
+            if (existing) { Object.assign(existing, { title, description, defaultAssignee, defaultStatus, dueInDays }); if (phase) existing.phase = phase; else delete existing.phase; }
         } else {
             state.master.taskBlueprints.push({
                 id: uid(),
                 title, description, defaultAssignee, defaultStatus, dueInDays,
+                ...(phase ? { phase } : {}),
                 howToIds: [],
                 createdAt: new Date().toISOString()
             });
@@ -253,6 +266,7 @@ OL.buildTaskFromBlueprint = function(blueprint, client, ctx) {
         howToIds: [...(blueprint.howToIds || [])],
         blueprintId: blueprint.id,
         requestLineItemId: ctx.requestLineItemId || undefined,
+        phase: ['before', 'implementation', 'after'].includes(blueprint.phase) ? blueprint.phase : undefined,
         createdBy: ctx.automationRuleId ? 'automation' : 'blueprint',
         automationRuleId: ctx.automationRuleId || undefined,
         createdAt: new Date().toISOString()

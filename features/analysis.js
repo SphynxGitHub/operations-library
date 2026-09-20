@@ -1154,6 +1154,9 @@ export function printScopingSheet() {
         </div>`;
     });
 
+    // The last page: what the client has to do (nothing is added when there is nothing).
+    const clientPage = typeof OL.clientTasksPrintPage === 'function' ? OL.clientTasksPrintPage(client) : { css: '', html: '' };
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>${esc(clientName)} — Scoping Sheet</title>
 <style>
@@ -1213,6 +1216,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .gt-val { font-size: 16px; font-weight: 800; color: #64748b; }
 .gt-val.net { color: #0f172a; }
 .gt-val.approved { font-size: 22px; color: #15803d; }
+${clientPage.css}
 </style></head><body>
 <div class="print-header">
   <div><div class="ph-title">${esc(clientName)}</div><div class="ph-sub">Scoping Sheet</div></div>
@@ -1224,6 +1228,7 @@ ${rowsHtml}
   <div><span class="gt-label">Net</span><span class="gt-val net">$${totalNet.toLocaleString()}</span></div>
   <div><span class="gt-label">Approved</span><span class="gt-val approved">$${totalApproved.toLocaleString()}</span></div>
 </div>
+${clientPage.html}
 </body></html>`;
 
     const win = window.open('', '_blank', 'width=1100,height=850');
