@@ -158,8 +158,7 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                             <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                             <td style="text-align:center;">
                                 <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
-                                    <i data-lucide="pencil" style="width:11px;height:11px;"></i> Edit Log
-                                </button>
+                                    <i data-lucide="pencil" style="width:11px;height:11px;"></i></button>
                             </td>
                         </tr>
                     `;
