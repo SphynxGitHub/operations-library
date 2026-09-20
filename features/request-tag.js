@@ -35,6 +35,15 @@ export async function openRequestFromTask(clientId, itemId) {
     try { if (typeof OL.closeModal === 'function') OL.closeModal(); } catch (e) { /* nothing open */ }
     if (clientId) await loadFullClient(clientId).catch(() => null);
     if (typeof OL.navigateToClientProject === 'function') OL.navigateToClientProject(clientId);
+    const client0 = state.clients?.[clientId];
+    const onMaintenanceSheet = (client0?.projectData?.scopingSheets || []).some((sh) => (sh?.kind === 'maintenance' || sh?.id === 'maintenance') && (sh.lineItems || []).some((it) => String(it.id) === String(itemId)));
+    if (onMaintenanceSheet) {                          // a client request: it lives on the Client Requests page
+        if (typeof window !== 'undefined') window.location.hash = '#/client-requests';
+        const waitReq = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (let i = 0; i < 20; i++) { await waitReq(150); if (document.getElementById('mainContent')?.textContent?.includes('Client Requests')) break; }
+        if (typeof OL.openMaintenanceRequestModal === 'function') OL.openMaintenanceRequestModal(itemId);
+        return;
+    }
     if (typeof window !== 'undefined') window.location.hash = '#/scoping-sheet';
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     for (let i = 0; i < 20; i++) {                    // wait up to about 3 seconds for the scoping sheet to draw

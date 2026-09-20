@@ -28,6 +28,7 @@ import * as OLReview from './features/review.js';
 import * as OLRequestTag from './features/request-tag.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
+import * as OLMaintenance from './features/maintenance.js';
 
 window.isMatrixActive = false;
 
@@ -548,6 +549,8 @@ window.buildLayout = function () {
 
     const clientTabs = [
         { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
+        { key: "client-requests", label: "Client Requests", icon: "inbox", href: "#/client-requests" },
+        { key: "maintenance", label: "Maintenance & Hours", icon: "hourglass", href: "#/maintenance" },
         { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
         { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
         { key: "resources", label: "Project Resources", icon: "database", href: "#/resources" },
@@ -661,6 +664,7 @@ window.buildLayout = function () {
                                     `;
                                 }).join('')}
                                 ${clientTabs.filter(item => !partnerCoreTabs.some(core => core.key === item.key) && item.key !== 'checklist').map(item => {
+                                    if (typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';   // maintenance tabs only for maintenance clients
                                     const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
                                     if (!isModuleEnabled) return '';
                                     const isActive = hash.startsWith(item.href);
@@ -692,6 +696,8 @@ window.buildLayout = function () {
                         ${!isPartnerProject ? `
                         <nav class="menu" style="margin-top:10px;">
                             ${clientTabs.map(item => {
+                                // 0. Maintenance & Hours, Client Requests and Error Tracking only show for clients in maintenance
+                                if (typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';
                                 // 1. Check if the module is turned on for this client project (or if user is admin / team member)
                                 const isModuleEnabled = effectiveAdminMode || state.teamMemberMode || (client.modules && client.modules[item.key] === true);
                                 if (!isModuleEnabled) return '';
@@ -951,7 +957,9 @@ window.handleRoute = function () {
 
     // 5. Client Project Workspace Routes
     if (client) {
-        if (hash.includes("client-tasks")) renderClientTaskManager();
+        if (hash.includes("client-requests") && typeof OL.renderClientRequests === 'function') OL.renderClientRequests();
+        else if (hash.includes("#/maintenance") && typeof OL.renderMaintenancePage === 'function') OL.renderMaintenancePage();
+        else if (hash.includes("client-tasks")) renderClientTaskManager();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();

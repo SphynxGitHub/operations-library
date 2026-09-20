@@ -92,7 +92,7 @@ export function resourceDates(client, resourceId, ctx = {}) {
 // What the client has to do, request by request, for the printed sheet: open client-facing tasks on Do Now requests.
 export function clientTasksByRequest(client, ctx = {}) {
     const out = [];
-    (client?.projectData?.scopingSheets || []).forEach((sheet) => (sheet?.lineItems || []).forEach((item) => {
+    (client?.projectData?.scopingSheets || []).forEach((sheet) => (sheet?.kind === 'maintenance' ? [] : (sheet?.lineItems || [])).forEach((item) => {
         if (!item || isBlank(item.id) || String(item.status || '') !== 'Do Now') return;
         const title = !isBlank(item.name) ? String(item.name).trim() : (ctx.resourceNameFor ? ctx.resourceNameFor(item) : '') || 'Request';
         const g = groupRequestTasks(client, item, ctx);

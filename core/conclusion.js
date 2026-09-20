@@ -116,6 +116,7 @@ export function updateRoundStates(client, ctx) {
 
     (pd.scopingSheets || []).forEach((sheet) => {
         if (!sheet || sheet.status !== 'Approved') return;
+        if (sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;   // client requests are plain: no testing checklist, no round review
         const real = (sheet.lineItems || []).filter((i) => i && typeof i === 'object' && !isBlank(i.id) && titleOf(i, ctx.resourceFor(i)));
         const current = getCurrentRound({ lineItems: real });
         if (current === null) return;

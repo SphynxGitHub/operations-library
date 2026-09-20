@@ -1402,6 +1402,17 @@ const dependencyHtml = `
                     <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:11px;height:11px;"></i>
                     ${res.isArchived ? 'Unarchive' : 'Archive'}
                 </button>
+                ${!isVaultMode ? `
+                <button onclick="OL.setResourceBuildState('${res.id}', '${res.isShell ? 'built' : 'planned'}')"
+                        title="${res.isShell ? 'Planned: not built yet. Click to mark it built.' : 'Built. Click to mark it planned again.'}"
+                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                               display:flex;align-items:center;gap:4px;
+                               border:1px solid ${res.isShell ? '#f59e0b' : 'var(--panel-border)'};
+                               background:${res.isShell ? 'rgba(245,158,11,0.1)' : 'var(--panel-soft)'};
+                               color:${res.isShell ? '#f59e0b' : 'var(--text-muted)'};">
+                    <i data-lucide="${res.isShell ? 'hammer' : 'check-circle'}" style="width:11px;height:11px;"></i>
+                    ${res.isShell ? 'Planned' : 'Built'}
+                </button>` : ''}
                 <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openResourceModal('${res.id}');"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
                                display:flex;align-items:center;gap:4px;

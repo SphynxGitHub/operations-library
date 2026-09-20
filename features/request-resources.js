@@ -42,7 +42,10 @@ export function requestResourcesSectionHtml(client, item) {
                 </div>
                 <strong style="font-size:12px; flex-shrink:0;">${money(l.fee)}</strong>
                 <button type="button" class="btn tiny soft" onclick="OL.rqSetUnits('${esc(itemIdOf(item))}', '${esc(l.resourceId)}')">Set units</button>
-                ${l.isShell && res ? `<button type="button" class="btn tiny soft" title="It has been built" onclick="OL.rqMarkBuilt('${esc(itemIdOf(item))}', '${esc(l.resourceId)}')">Mark built</button>` : ''}
+                ${res ? `<select class="modal-input tiny" style="width:auto; flex-shrink:0;" title="Planned: not built yet. Built: it exists." onchange="OL.rqSetBuildState('${esc(itemIdOf(item))}', '${esc(l.resourceId)}', this.value)">
+                    <option value="planned" ${l.isShell ? 'selected' : ''}>Planned</option>
+                    <option value="built" ${l.isShell ? '' : 'selected'}>Built</option>
+                </select>` : ''}
                 ${removable(l.resourceId) ? `<button type="button" class="btn tiny soft" title="Take it off this request" onclick="OL.rqRemoveResource('${esc(itemIdOf(item))}', '${esc(l.resourceId)}')">✕</button>` : ''}
             </div>`;
     }).join('');
@@ -136,13 +139,86 @@ export async function rqRemoveResource(itemId, resourceId) {
     });
 }
 
-export async function rqMarkBuilt(itemId, resourceId) {
+// Planned or built, by hand, in either direction. A planned resource is one that is being scoped but does not exist yet
+// (its units still price the request); built means it exists. The record and its units never change.
+function applyBuildState(res, buildState) {
+    if (!res) return false;
+    const planned = buildState === 'planned';
+    if (planned) { res.isShell = true; delete res.builtAt; res.plannedAt = new Date().toISOString(); }
+    else { delete res.isShell; res.builtAt = new Date().toISOString(); }
+    return true;
+}
+
+export async function rqSetBuildState(itemId, resourceId, buildState) {
+    if (buildState !== 'planned' && buildState !== 'built') return false;
     return changeResources(itemId, (client) => {
         const res = resourceIn(client, resourceId);
-        if (!res) return false;
-        delete res.isShell;
-        res.builtAt = new Date().toISOString();
+        if (!res || Boolean(res.isShell) === (buildState === 'planned')) return false;   // unknown, or already that
+        return applyBuildState(res, buildState);
     });
+}
+
+export const rqMarkBuilt = (itemId, resourceId) => rqSetBuildState(itemId, resourceId, 'built');
+
+// The same choice from anywhere a resource shows its status: the "Update Status" menu on resource cards and lists.
+export async function setResourceBuildState(resourceId, buildState) {
+    if (buildState !== 'planned' && buildState !== 'built') return false;
+    const data = typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null;
+    const res = (data?.resources || []).find((r) => String(r.id) === String(resourceId)) || resourceIn(getActiveClient(), resourceId);
+    if (!res || Boolean(res.isShell) === (buildState === 'planned')) return false;
+    const before = res.isShell ? 'planned' : 'built';
+    applyBuildState(res, buildState);
+    if (typeof OL.logResourceEdit === 'function') OL.logResourceEdit(res.id, 'buildState', before, buildState);
+    if (typeof OL.closePopoverDropdown === 'function') OL.closePopoverDropdown();
+    if (typeof OL.persist === 'function') await OL.persist();
+    // If this resource's window is open, draw it again so its button shows the new state; otherwise redraw the list.
+    const box = typeof document !== 'undefined' ? document.getElementById('active-modal-box') : null;
+    if (box && String(box.dataset?.activeResId) === String(resourceId) && typeof OL.openResourceModal === 'function') OL.openResourceModal(resourceId);
+    else if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager();
+    else if (typeof window.handleRoute === 'function') window.handleRoute();
+    return true;
+}
+
+// ---- the status menu and the status pill get a Planned / Built choice (wrapped once all modules have loaded) ----
+function buildStateSectionHtml(res) {
+    const planned = !!res?.isShell;
+    const btn = (value, label) => `
+            <button class="btn tiny soft" style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; justify-content:flex-start; padding:6px 8px; ${(planned ? 'planned' : 'built') === value ? 'border:1px solid var(--accent);' : ''}"
+                    onclick="OL.setResourceBuildState('${esc(res.id)}', '${value}')">
+                <span style="width:8px; height:8px; border-radius:50%; background:${value === 'planned' ? '#f59e0b' : '#22c55e'}; flex-shrink:0;"></span>
+                <span style="flex:1;">${label}</span>
+                ${(planned ? 'planned' : 'built') === value ? '<span class="tiny muted">current</span>' : ''}
+            </button>`;
+    return `
+        <div class="tiny bold uppercase muted" style="margin:10px 0 6px; padding:2px 4px; border-top:1px solid var(--line); padding-top:8px;">Planned or built</div>
+        <div style="display:grid; gap:4px;">${btn('planned', 'Planned (not built yet)')}${btn('built', 'Built')}</div>`;
+}
+
+export function installBuildStateControls() {
+    if (typeof OL === 'undefined') return false;
+    if (typeof OL.openEditResourceStatusDropdown === 'function' && !OL.openEditResourceStatusDropdown.__buildState) {
+        const original = OL.openEditResourceStatusDropdown;
+        const wrapped = function (event, resourceId) {
+            original.call(this, event, resourceId);
+            const pop = document.getElementById('task-popover-dropdown');
+            const data = typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null;
+            const res = (data?.resources || []).find((r) => String(r.id) === String(resourceId));
+            if (pop && res) pop.innerHTML += buildStateSectionHtml(res);
+        };
+        wrapped.__buildState = true;
+        OL.openEditResourceStatusDropdown = wrapped;
+    }
+    if (typeof OL.renderResourceStatusPill === 'function' && !OL.renderResourceStatusPill.__buildState) {
+        const original = OL.renderResourceStatusPill;
+        const wrapped = function (res) {
+            const base = original.call(this, res);
+            if (!res || !res.isShell) return base;
+            return base + `<span class="pill tiny" style="font-size:8px; font-weight:bold; padding:2px 6px; border:1px solid #f59e0b; color:#f59e0b; cursor:pointer; white-space:nowrap;" title="Planned: not built yet. Click to change." onclick="event.stopPropagation(); OL.openEditResourceStatusDropdown(event, '${esc(res.id)}')">PLANNED</span>`;
+        };
+        wrapped.__buildState = true;
+        OL.renderResourceStatusPill = wrapped;
+    }
+    return true;
 }
 
 // Units live on the resource, so this opens the resource itself (after keeping what was typed here).
@@ -155,4 +231,7 @@ export async function rqSetUnits(itemId, resourceId) {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { renderRequestResourcesHtml, requestResourcesPrintCss: REQUEST_RESOURCES_CSS, requestResourcesSectionHtml, rqAddExistingResource, rqAddShell, rqRemoveResource, rqMarkBuilt, rqSetUnits });
+Object.assign(window.OL, { renderRequestResourcesHtml, requestResourcesPrintCss: REQUEST_RESOURCES_CSS, requestResourcesSectionHtml, rqAddExistingResource, rqAddShell, rqRemoveResource, rqMarkBuilt, rqSetBuildState, setResourceBuildState, installBuildStateControls, rqSetUnits });
+
+// The resource files register the status menu and pill; wrap them once everything has loaded.
+if (typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) setTimeout(() => installBuildStateControls(), 0);

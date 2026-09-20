@@ -83,7 +83,7 @@ function meetingLinkHtml(client, item) {
 // The slim bar under a request on the scoping sheet, and the panel when it is open. Every request gets one, with
 // an Edit request button (the request window is where its resources and their fees are), how many resources it
 // covers when it covers more than one, and, when it has tasks, a toggle that opens them.
-export function requestTasksRowHtml(client, item) {
+export function requestTasksRowHtml(client, item, opts = {}) {
     if (!client || !item) return '';
     const ctx = ctxFor();
     const g = groupRequestTasks(client, item, ctx);
@@ -109,7 +109,7 @@ export function requestTasksRowHtml(client, item) {
                 : ''}
             <span style="flex:1;"></span>
             ${covers}
-            <button type="button" class="btn tiny soft" style="font-size:10px; padding:1px 8px;" onclick="event.stopPropagation(); OL.openRequestLineModal('${esc(item.id)}')">Edit request</button>
+            <button type="button" class="btn tiny soft" style="font-size:10px; padding:1px 8px;" onclick="event.stopPropagation(); ${opts.editAction ? esc(opts.editAction) : 'OL.openRequestLineModal'}('${esc(item.id)}')">Edit request</button>
         </div>
         ${open ? requestTasksPanelHtml(client, item) : ''}`;
 }

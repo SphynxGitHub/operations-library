@@ -12,6 +12,7 @@
 
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS } from './work-status.js';
 import { requestResourceIds } from './request-pricing.js';
+import { isMaintenanceSheet, MAINTENANCE_SHEET_ID } from './maintenance.js';
 
 // Shown until the editable list loads from the request_types table.
 export const DEFAULT_REQUEST_TYPES = [
@@ -167,6 +168,10 @@ export function listNewActivations(client, masterResources) {
     return out;
 }
 
+// Where a client request came from, as the requests table allows it.
+const REQUEST_SOURCES = ['meeting', 'email', 'portal', 'manual'];
+function mapSource(v) { return REQUEST_SOURCES.includes(String(v || '')) ? String(v) : 'manual'; }
+
 // Role ids by name, for the role that currently holds a request.
 function roleIdFor(roles, kind) {
     const pattern = kind === 'communication' ? /communicat/i : kind === 'testing' ? /test/i : /implement/i;
@@ -200,6 +205,7 @@ function buildDesired(client, masterResources, opts = {}) {
             const round = parseInt(item.round, 10);
             const roundNumber = Number.isFinite(round) && round >= 1 ? round : 1;
 
+            const isMaint = isMaintenanceSheet(sheet);         // client requests in maintenance: no round, not from scoping
             const isActive = currentRound !== null && status === 'Do Now' && roundNumber === currentRound;
             // Work status only means something once a request is active.
             const phase = isActive ? testingPhaseFor(client.projectData, sheet.id, item, roundNumber) : null;
@@ -211,6 +217,7 @@ function buildDesired(client, masterResources, opts = {}) {
                 // every real resource the request covers (the main one and any others), for the request's targets
                 targetResourceIds: requestResourceIds(item).filter(id => findResource(client, masterResources, id)),
                 explicitType: isBlank(item.requestType) ? null : String(item.requestType),
+                sourceType: isMaint ? mapSource(item.source) : 'scoping_import',
                 isActive,
                 workStatus: derived ? derived.status : null,
                 roleId: derived && derived.role ? roleIdFor(opts.roles, derived.role) : null,
@@ -219,7 +226,7 @@ function buildDesired(client, masterResources, opts = {}) {
                     client_decision: mapDecision(status),
                     responsible_party: mapParty(item.responsibleParty),
                     sheet_id: isBlank(sheet.id) ? null : String(sheet.id),
-                    round_number: roundNumber,
+                    round_number: isMaint ? null : roundNumber,
                     position: idx + 1,
                     estimated_hours: toNum(item.manualHours),
                     rate: toNum(item.rate),
@@ -298,7 +305,7 @@ async function doMirror(db, client, opts) {
     if (disabled) return;
 
     const desired = buildDesired(client, opts.masterResources, opts);
-    const signature = JSON.stringify(desired.map(d => [d.legacy, d.row, d.explicitType, d.status, d.isActive, d.workStatus, d.roleId, d.targetResourceId, d.targetResourceIds]));
+    const signature = JSON.stringify(desired.map(d => [d.legacy, d.row, d.explicitType, d.sourceType, d.status, d.isActive, d.workStatus, d.roleId, d.targetResourceId, d.targetResourceIds]));
     if (lastSignature[client.id] === signature) return;
 
     // 1. What exists already for this client (line-item requests only)
@@ -323,7 +330,7 @@ async function doMirror(db, client, opts) {
             toInsert.push({
                 client_id: client.id,
                 legacy_line_item_id: d.legacy,
-                source_type: 'scoping_import',
+                source_type: d.sourceType || 'scoping_import',
                 ...row,
             });
         } else {
@@ -341,7 +348,7 @@ async function doMirror(db, client, opts) {
     // Removed from the sheet. Guard: an empty sheet never wipes existing requests,
     // in case the client loaded incompletely.
     const toDelete = desired.length === 0 ? [] : (existingRows || [])
-        .filter(r => r.source_type === 'scoping_import' && !desiredLegacy.has(r.legacy_line_item_id))
+        .filter(r => (r.source_type === 'scoping_import' || r.sheet_id === MAINTENANCE_SHEET_ID) && !desiredLegacy.has(r.legacy_line_item_id))
         .map(r => r.id);
 
     // 3. Apply
