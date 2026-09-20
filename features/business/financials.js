@@ -47,7 +47,7 @@ OL.renderBusinessFinancials = function() {
                                         <span class="pill tiny soft">${esc(item.status || 'Do Now')}</span>
                                     </td>
                                     <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
-                                        ${esc(item.responsibleParty \vert{}\vert{} 'Sphynx')}                                     </td>                                     <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">$${netValue.toLocaleString()}</td>
+                                        ${esc(item.responsibleParty || 'Sphynx')}                                     </td>                                     <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">$${netValue.toLocaleString()}</td>
                                 </tr>
                             `;
                         }).join('') || '<tr><td colspan="5" class="p-20 text-center muted">No scoped items found across projects.</td></tr>'}
