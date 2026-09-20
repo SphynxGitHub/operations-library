@@ -2,8 +2,11 @@ import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
 // Global state for filtering and grouping time report entries
 OL.timeReportFilterState = OL.timeReportFilterState || {
-    filter: 'all',      // 'all' | 'billable' | 'non-billable'
-    groupBy: 'none',    // 'none' | 'workspace' | 'assignee' | 'date'
+    filter: 'all',          // 'all' | 'billable' | 'non-billable'
+    groupBy: 'none',        // 'none' | 'workspace' | 'assignee'
+    datePreset: 'all_time', // 'all_time' | 'current_month' | 'last_month' | 'current_year' | 'last_year' | 'custom'
+    startDate: '',
+    endDate: '',
     query: ''
 };
 
@@ -57,23 +60,51 @@ OL.renderBusinessTimeReports = function() {
         }))
     );
 
-    const totalLoggedHours = masterTasks.reduce((acc, t) => acc + t.loggedHours, 0);
     const hourlyRate = state.master?.rates?.baseHourlyRate || 300;
-    const totalValue = totalLoggedHours * hourlyRate;
+    const { filteredTasks, totalLoggedHours, totalValue } = OL.getFilteredTimeReportData(masterTasks, hourlyRate);
 
     main.innerHTML = `
-        <div class="section-header">
+        <!-- HEADER TITLE ON ITS OWN LINE -->
+        <div class="section-header" style="margin-bottom:12px;">
             <div>
-                <h2><i data-lucide="bar-chart-2" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time & Reconciliation Audit</h2>
-                <div class="small muted">Itemized client time logs, scoping burn rates, and billable value tracking</div>
+                <h2 style="margin:0;"><i data-lucide="bar-chart-2" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time & Reconciliation Audit</h2>
+                <div class="small muted" style="margin-top:2px;">Itemized client time logs, scoping burn rates, and billable value tracking</div>
             </div>
-            <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
-                <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h ($${totalValue.toLocaleString()})
-                </div>
-                <button class="btn small soft" onclick="OL.renderBusinessTimeReports()" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
-                </button>
+        </div>
+
+        <!-- TOTALS & DATE PRESETS BAR (ROW BELOW TITLE) -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; background:var(--panel-soft); padding:10px 14px; border:1px solid var(--line); border-radius:8px;">
+            
+            <!-- DATE PRESETS & CUSTOM RANGE -->
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span class="tiny bold muted uppercase" style="margin-right:4px;">Period:</span>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'all_time' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('all_time')">All Time</button>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'current_month' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('current_month')">Current Month</button>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'last_month' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('last_month')">Last Month</button>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'current_year' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('current_year')">Current Year</button>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'last_year' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('last_year')">Last Year</button>
+                <button class="btn tiny ${OL.timeReportFilterState.datePreset === 'custom' ? 'primary' : 'soft'}" onclick="OL.setTimeReportDatePreset('custom')">Custom</button>
+
+                ${OL.timeReportFilterState.datePreset === 'custom' ? `
+                    <div style="display:inline-flex; align-items:center; gap:4px; margin-left:6px; background:var(--panel-dark, #111); padding:2px 6px; border:1px solid var(--line); border-radius:4px;">
+                        <span class="tiny muted">From:</span>
+                        <input type="date" class="modal-input tiny" style="width:auto; padding:1px 3px;" 
+                               value="${esc(OL.timeReportFilterState.startDate || '')}"
+                               onchange="OL.timeReportFilterState.startDate = this.value; OL.renderBusinessTimeReports();">
+                        <span class="tiny muted">To:</span>
+                        <input type="date" class="modal-input tiny" style="width:auto; padding:1px 3px;" 
+                               value="${esc(OL.timeReportFilterState.endDate || '')}"
+                               onchange="OL.timeReportFilterState.endDate = this.value; OL.renderBusinessTimeReports();">
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- GRAND TOTAL BAR -->
+            <div class="pill accent" style="padding: 6px 12px; display: flex; gap: 12px; align-items: center; font-size: 12px; font-weight: bold; flex-shrink:0;">
+                <i data-lucide="clock" style="width:14px;height:14px;"></i>
+                <span>Logged: <span style="color:var(--text);">${totalLoggedHours.toFixed(1)}h</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span>Grand Value: <span style="color:var(--accent); font-size: 14px;">$${totalValue.toLocaleString()}</span></span>
             </div>
         </div>
 
@@ -101,21 +132,23 @@ OL.renderBusinessTimeReports = function() {
         <!-- FULL TABLE BREAKDOWN -->
         <div class="card" style="padding: 20px;">
             
-            <!-- SEARCH & FILTER / GROUPING TOOLBAR -->
-            <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line); flex-wrap: wrap;">
+            <!-- SEARCH, FILTER & GROUPING TOOLBAR -->
+            <div style="display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line); width: 100%; box-sizing: border-box;">
                 
-                <div style="display: flex; gap: 8px; flex: 1; min-width: 220px; align-items:center;">
-                    <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
+                <!-- Search Input - EXPANDS TO FILL AVAILABLE SPACE -->
+                <div style="display: flex; gap: 8px; flex: 1; align-items: center;">
+                    <i data-lucide="search" style="width:16px; height:16px; color:var(--muted); flex-shrink: 0;"></i>
                     <input type="text" 
                            class="modal-input tiny" 
                            placeholder="Filter time entries or deliverables..." 
                            id="time-report-search"
+                           style="width: 100%; box-sizing: border-box;"
                            value="${esc(OL.timeReportFilterState.query || '')}"
                            oninput="OL.timeReportFilterState.query = this.value; OL.renderBusinessTimeReports();">
                 </div>
 
                 <!-- Billable Filters -->
-                <div style="display:flex; gap:4px; align-items:center;">
+                <div style="display:flex; gap:4px; align-items:center; flex-shrink:0;">
                     <span class="tiny muted uppercase bold" style="margin-right:4px;">Filter:</span>
                     <button class="btn tiny ${OL.timeReportFilterState.filter === 'all' ? 'primary' : 'soft'}" onclick="OL.setTimeReportFilter('all')">All</button>
                     <button class="btn tiny ${OL.timeReportFilterState.filter === 'billable' ? 'primary' : 'soft'}" onclick="OL.setTimeReportFilter('billable')">Billable</button>
@@ -123,7 +156,7 @@ OL.renderBusinessTimeReports = function() {
                 </div>
 
                 <!-- Grouping Controls -->
-                <div style="display:flex; gap:4px; align-items:center;">
+                <div style="display:flex; gap:4px; align-items:center; flex-shrink:0;">
                     <span class="tiny muted uppercase bold" style="margin-right:4px;">Group By:</span>
                     <button class="btn tiny ${OL.timeReportFilterState.groupBy === 'none' ? 'primary' : 'soft'}" onclick="OL.setTimeReportGrouping('none')">None</button>
                     <button class="btn tiny ${OL.timeReportFilterState.groupBy === 'workspace' ? 'primary' : 'soft'}" onclick="OL.setTimeReportGrouping('workspace')">Workspace</button>
@@ -132,7 +165,7 @@ OL.renderBusinessTimeReports = function() {
             </div>
 
             <div id="time-report-table-container">
-                ${OL.renderTimeReportTableGroups(masterTasks, hourlyRate)}
+                ${OL.renderTimeReportTableGroups(filteredTasks, hourlyRate)}
             </div>
         </div>
     `;
@@ -140,6 +173,38 @@ OL.renderBusinessTimeReports = function() {
     requestAnimationFrame(() => {
         if (window.lucide) lucide.createIcons();
     });
+};
+
+OL.setTimeReportDatePreset = function(preset) {
+    OL.timeReportFilterState.datePreset = preset;
+    const now = new Date();
+
+    if (preset === 'current_month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        OL.timeReportFilterState.startDate = start.toISOString().split('T')[0];
+        OL.timeReportFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'last_month') {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        OL.timeReportFilterState.startDate = start.toISOString().split('T')[0];
+        OL.timeReportFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'current_year') {
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end = new Date(now.getFullYear(), 11, 31);
+        OL.timeReportFilterState.startDate = start.toISOString().split('T')[0];
+        OL.timeReportFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'last_year') {
+        const start = new Date(now.getFullYear() - 1, 0, 1);
+        const end = new Date(now.getFullYear() - 1, 11, 31);
+        OL.timeReportFilterState.startDate = start.toISOString().split('T')[0];
+        OL.timeReportFilterState.endDate = end.toISOString().split('T')[0];
+    } else if (preset === 'all_time') {
+        OL.timeReportFilterState.startDate = '';
+        OL.timeReportFilterState.endDate = '';
+    }
+
+    OL.renderBusinessTimeReports();
 };
 
 OL.setTimeReportFilter = function(filterVal) {
@@ -152,12 +217,13 @@ OL.setTimeReportGrouping = function(groupVal) {
     OL.renderBusinessTimeReports();
 };
 
-OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
+OL.getFilteredTimeReportData = function(masterTasks, hourlyRate) {
     const query = (OL.timeReportFilterState.query || '').toLowerCase();
     const filter = OL.timeReportFilterState.filter;
-    const groupBy = OL.timeReportFilterState.groupBy;
+    const startDate = OL.timeReportFilterState.startDate ? new Date(OL.timeReportFilterState.startDate).getTime() : 0;
+    const endDate = OL.timeReportFilterState.endDate ? new Date(OL.timeReportFilterState.endDate).getTime() + 86400000 : Infinity;
 
-    let filtered = allTasks.filter(t => {
+    const filteredTasks = masterTasks.filter(t => {
         const matchesQuery = !query || 
             (t.title || t.name || '').toLowerCase().includes(query) || 
             (t.clientName || '').toLowerCase().includes(query) ||
@@ -165,18 +231,34 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
 
         if (!matchesQuery) return false;
 
-        if (filter === 'billable') return t.billable !== false;
-        if (filter === 'non-billable') return t.billable === false;
+        // Billable filter
+        if (filter === 'billable' && t.billable === false) return false;
+        if (filter === 'non-billable' && t.billable !== false) return false;
+
+        // Date range filter
+        if (OL.timeReportFilterState.datePreset !== 'all_time' && (t.createdAt || t.createdDate || t.date || t.completedDate)) {
+            const itemTime = new Date(t.createdAt || t.createdDate || t.date || t.completedDate).getTime();
+            if (itemTime < startDate || itemTime > endDate) return false;
+        }
+
         return true;
     });
 
-    if (filtered.length === 0) {
+    const totalLoggedHours = filteredTasks.reduce((acc, t) => acc + t.loggedHours, 0);
+    const totalValue = totalLoggedHours * hourlyRate;
+
+    return { filteredTasks, totalLoggedHours, totalValue };
+};
+
+OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
+    const groupBy = OL.timeReportFilterState.groupBy;
+
+    if (filteredTasks.length === 0) {
         return `<div class="p-20 muted text-center">No time entries found matching filter.</div>`;
     }
 
-    // Single container table with sticky header pinned to table top
-   const renderTableMarkup = (taskList) => `
-        <div class="table-scroll-container" style="position: relative; max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
+    const renderTableMarkup = (taskList) => `
+        <div class="table-scroll-container" style="position: relative; max-height: 550px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;">
             <table style="width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-size: 12px;">
                 <thead>
                     <tr>
@@ -226,26 +308,38 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
     `;
 
     if (groupBy === 'none') {
-        return renderTableMarkup(filtered);
+        return renderTableMarkup(filteredTasks);
     }
 
-    // Handle Grouping
+    // Handle Grouping & Calculate Per-Group Subtotals
     const groups = {};
-    filtered.forEach(t => {
+    filteredTasks.forEach(t => {
         const key = groupBy === 'workspace' ? (t.clientName || 'Other') : (t.assignee || 'Unassigned');
         if (!groups[key]) groups[key] = [];
         groups[key].push(t);
     });
 
-    return Object.entries(groups).map(([groupTitle, groupTasks]) => `
-        <div style="margin-bottom: 24px;">
-            <div class="tiny bold uppercase muted" style="margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); display:flex; align-items:center; gap:8px;">
-                <span>${esc(groupTitle)}</span>
-                <span class="pill tiny soft">${groupTasks.length} entries</span>
+    return Object.entries(groups).map(([groupTitle, groupTasks]) => {
+        const groupHours = groupTasks.reduce((acc, t) => acc + t.loggedHours, 0);
+        const groupSubtotal = groupHours * hourlyRate;
+
+        return `
+            <div style="margin-bottom: 24px;">
+                <!-- PER-GROUP HEADER & SUBTOTAL BAR -->
+                <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="tiny bold uppercase muted">${esc(groupTitle)}</span>
+                        <span class="pill tiny soft">${groupTasks.length} entries</span>
+                    </div>
+                    <div class="tiny bold" style="color:var(--accent); display:flex; gap:12px;">
+                        <span>Hours: ${groupHours.toFixed(1)}h</span>
+                        <span>Value: $${groupSubtotal.toLocaleString()}</span>
+                    </div>
+                </div>
+                ${renderTableMarkup(groupTasks)}
             </div>
-            ${renderTableMarkup(groupTasks)}
-        </div>
-    `).join('');
+        `;
+    }).join('');
 };
 
 //============= POP-UP MODAL (For Quick Audits in Task Manager) =============//
