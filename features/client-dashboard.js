@@ -432,6 +432,35 @@ export function getDynamicPartners() {
         }));
 };
 
+OL.resolveClientDriveFolder = async function(clientId) {
+    const client = state.clients?.[clientId];
+    if (!client) return;
+
+    const clientName = client.meta?.name || 'Unnamed Client';
+
+    const res = await db.functions.invoke('google-drive-sync', {
+        body: { action: 'get_or_create_client_folder', clientName, clientId }
+    });
+
+    if (res.data?.folderId) {
+        client.googleDriveFolderId = res.data.folderId;
+        client.driveSubfolders = res.data.subfolders;
+
+        // Persist to workspace_clients table in Supabase
+        const { error } = await db
+            .from('workspace_clients')
+            .update({ google_drive_folder_id: res.data.folderId })
+            .eq('id', clientId);
+
+        if (error) {
+            console.error('Failed to update workspace_clients folder ID:', error.message);
+        }
+
+        OL.persist();
+        return res.data;
+    }
+};
+
 export function openClientProfileModal(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
@@ -449,7 +478,7 @@ export function openClientProfileModal(clientId) {
                     <option value="">-- No Partner (Direct Sphynx Client) --</option>
                     ${dynamicPartners.map(p => `
                         <option value="${p.id}" ${currentPartnerId === p.id ? 'selected' : ''}>
-                            ${p.logo} ${esc(p.name)}
+                            ${p.logo}${esc(p.name)}
                         </option>
                     `).join('')}
                 </select>
@@ -459,6 +488,8 @@ export function openClientProfileModal(clientId) {
             </div>
         </div>
     `;
+
+    const folderId = client.googleDriveFolderId || client.meta?.googleDriveFolderId;
 
     const html = `
         <div class="modal-head" style="display:flex; align-items:center; gap:8px;">
@@ -531,7 +562,7 @@ export function openClientProfileModal(clientId) {
                                 `).join('')}
                             </select>
                         </div>
-                        <div class="small">Onboarded: ${client.meta.onboarded}</div>
+                        <div class="small" style="margin-top:6px;">Onboarded: ${client.meta.onboarded}</div>
                     </div>
                 </div>
 
@@ -553,9 +584,29 @@ export function openClientProfileModal(clientId) {
                     <label class="modal-section-label">Partner / Client Login</label>
                     <div class="card-section">
                         <p class="tiny muted" style="margin:0;">Generate a one-time setup link so they can create their own login.</p>
-                        <input type="email" id="setupEmail-${clientId}" class="modal-input small"
+                        <input type="email" id="setupEmail-${clientId}" class="modal-input small" style="margin-top:8px;"
                                placeholder="their@email.com" value="${client.meta.setupEmail || ''}">
-                        <button class="btn tiny primary" onclick="OL.copySetupLink('${clientId}')">Generate & Copy Setup Link</button>
+                        <button class="btn tiny primary" style="margin-top:8px; width:100%;" onclick="OL.copySetupLink('${clientId}')">Generate & Copy Setup Link</button>
+                    </div>
+                </div>
+
+                <!-- GOOGLE DRIVE WORKSPACE FOLDER INTEGRATION -->
+                <div>
+                    <label class="modal-section-label">Google Drive Folder</label>
+                    <div class="card-section">
+                        <p class="tiny muted" style="margin:0 0 8px 0;">Root folder for Zoom recordings, task attachments, and app snapshots.</p>
+                        ${folderId ? `
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                <input type="text" class="modal-input small monospace" value="${esc(folderId)}" readonly style="flex:1;">
+                                <a href="https://drive.google.com/drive/folders/${esc(folderId)}" target="_blank" class="btn tiny soft" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;">
+                                    <i data-lucide="external-link" style="width:12px;height:12px;"></i> Drive
+                                </a>
+                            </div>
+                        ` : `
+                            <button class="btn tiny primary" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="OL.resolveClientDriveFolder('${clientId}').then(() => OL.openClientProfileModal('${clientId}'))">
+                                <i data-lucide="folder-plus" style="width:12px;height:12px;"></i> Find / Create Drive Folder
+                            </button>
+                        `}
                     </div>
                 </div>
             </div>
@@ -568,7 +619,7 @@ export function openClientProfileModal(clientId) {
                             <input type="checkbox" ${client.meta.gmailLabelEnabled ? 'checked' : ''} onchange="OL.toggleGmailLabelForClient('${clientId}', this.checked)">
                             Auto-label incoming emails for this project
                         </label>
-                        <p class="tiny muted" style="margin:0;">
+                        <p class="tiny muted" style="margin:4px 0 8px 0;">
                             Matches each synced email's sender/recipients against this project's Team tab addresses.
                         </p>
                         <input type="text" id="gmail-label-input-${clientId}" class="modal-input small"
@@ -582,10 +633,10 @@ export function openClientProfileModal(clientId) {
                 <div>
                     <label class="modal-section-label">Error Tracking</label>
                     <div class="card-section">
-                        <p class="tiny muted" style="margin:0;">
+                        <p class="tiny muted" style="margin:0 0 6px 0;">
                             Send this project's ID as <code>client_id</code> in the Zap payload for direct matching.
                         </p>
-                        <div style="display:flex; gap:8px;">
+                        <div style="display:flex; gap:8px; margin-bottom:8px;">
                             <input type="text" class="modal-input small monospace" value="${esc(clientId)}" readonly style="flex:1;">
                             <button class="btn tiny soft" onclick="navigator.clipboard.writeText('${esc(clientId)}'); alert('Project ID copied!');">Copy</button>
                         </div>
@@ -609,6 +660,7 @@ export function openClientProfileModal(clientId) {
         </div>
     `;
     openModal(html);
+    if (window.lucide) lucide.createIcons();
 };
 
 // Partner-facing version of the Client Profile modal for one of THEIR OWN
@@ -1074,3 +1126,5 @@ Object.assign(window.OL, {
     editPipelineStatuses
 });
 window.renderClientDashboard = renderClientDashboard;
+window.OL.resolveClientDriveFolder = OL.resolveClientDriveFolder;
+window.OL.renderClientDriveCard = renderClientDriveCard;
