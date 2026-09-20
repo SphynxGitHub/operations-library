@@ -30,7 +30,7 @@ OL.renderSphynxTeamPage = function() {
         </div>
 
         <!-- TEAM MEMBER CARDS GRID -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
             ${team.map(m => `
                 <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
                     <div>
@@ -60,38 +60,32 @@ OL.renderSphynxTeamPage = function() {
                                 <i data-lucide="pen-tool" style="width:14px;height:14px;color:var(--accent); flex-shrink:0; margin-top:2px;"></i>
                                 <div>
                                     <strong class="tiny uppercase bold" style="display:block; font-size:9px; color:var(--muted);">Email Signature</strong>
-                                    <span style="font-size:11px; font-style:italic;">${esc(m.signature || 'No email signature set')}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Footer: Rate & Action Buttons -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-                        <span class="pill tiny soft monospace" style="font-size:11px;">
-                            $${m.rate || 150}/hr
+                                    <span style="font-size:11px; font-style:italic;">${esc(m.signature \vert{}\vert{} 'No email signature set')}</span>                                 </div>                             </div>                         </div>                     </div>                      <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
                         </span>
-                        <div style="display:flex; gap:6px; align-items:center;">
+                        
+                        <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
                             ${window.FORCE_ADMIN && m.authUserId === state.currentUser?.id ? `
-                                <span class="tiny" style="color:#48bb78;" title="Your admin login is linked to this card">✅ This is you</span>
+                                <span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Your admin login is linked to this card">✅ This is you</span>
                             ` : window.FORCE_ADMIN ? `
-                                <button class="btn tiny soft" onclick="OL.linkMyAdminLoginToTeamMember('${m.id}')" title="Link your admin login to this card so comments etc. show your name">
-                                    Set as My Profile
+                                <button class="btn tiny soft" style="white-space:nowrap; font-size:10px; padding:3px 8px;" onclick="OL.linkMyAdminLoginToTeamMember('${m.id}')" title="Link your admin login to this card">
+                                    Set Profile
                                 </button>
                             ` : ''}
+                            
                             ${m.authUserId
-                                ? `<span class="tiny" style="color:#48bb78;" title="Has logged in">✅ Logged in</span>`
+                                ? `<span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Has logged in">✅ Logged in</span>`
                                 : (m.setupToken
-                                    ? `<span class="tiny" style="color:#fbbf24;" title="Setup link sent, not claimed yet">⏳ Link sent</span>`
-                                    : `<span class="tiny muted" title="No login set up">— No login</span>`)}
-                            <button class="btn tiny soft" onclick="OL.openTeamAccessModal('${m.id}')" title="Login & Permissions">
-                                <i data-lucide="key-round" style="width:12px;height:12px;"></i> Access
+                                    ? `<span class="tiny bold" style="color:#fbbf24; white-space:nowrap;" title="Setup link sent">⏳ Link sent</span>`
+                                    : `<span class="tiny muted" style="white-space:nowrap;" title="No login set up">— No login</span>`)}
+                            
+                            <button class="btn tiny soft" onclick="OL.openTeamAccessModal('${m.id}')" title="Login & Permissions" style="padding:3px 8px; font-size:10px; display:inline-flex; align-items:center; gap:4px;">
+                                <i data-lucide="key-round" style="width:11px;height:11px;"></i> Access
                             </button>
-                            <button class="btn tiny soft" onclick="OL.openSphynxMemberModal('${m.id}')" title="Edit Member">
-                                <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+                            <button class="btn tiny soft icon-only" onclick="OL.openSphynxMemberModal('${m.id}')" title="Edit Member" style="padding:3px 6px;">
+                                <i data-lucide="pencil" style="width:11px;height:11px;"></i>
                             </button>
-                            <button class="btn tiny soft danger" onclick="OL.removeSphynxTeamMember('${m.id}')" title="Remove Member">
-                                <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+                            <button class="btn tiny soft danger icon-only" onclick="OL.removeSphynxTeamMember('${m.id}')" title="Remove Member" style="padding:3px 6px;">
+                                <i data-lucide="trash-2" style="width:11px;height:11px;"></i>
                             </button>
                         </div>
                     </div>
@@ -219,14 +213,6 @@ OL.removeSphynxTeamMember = function(memberId) {
     OL.renderSphynxTeamPage();
 };
 
-// -------------------------------------------------------------
-// LOGIN & PERMISSIONS PROVISIONING — this is what actually decides what a
-// team member can reach once logged in. See core/auth.js hasTeamPermission
-// (checked in app.js for the Business Manager nav + #/business/* routes)
-// and TEAM_PERMISSION_TABS for the exact list of grantable tabs. A real
-// admin login (the admins table) always has full access regardless of
-// this — this panel only governs the Sphynx-team-member login path.
-// -------------------------------------------------------------
 OL.openTeamAccessModal = function(memberId) {
     const member = state.master?.sphynxTeam?.find(m => m.id === memberId);
     if (!member) return;
@@ -298,24 +284,12 @@ OL.saveTeamMemberPermissions = function(memberId) {
     OL.renderSphynxTeamPage();
 };
 
-// -------------------------------------------------------------
-// LINK ADMIN LOGIN TO A TEAM CARD — explicit alternative to the automatic
-// email-match in core/auth.js (which only works if the admin's login
-// email is byte-for-byte identical to the email on their card). Stores
-// the same authUserId field the team-member claim flow uses, so
-// initializeSecurityContext() picks it up first (it checks authUserId
-// before falling back to email) on the next login — and updates the
-// current session immediately so comments/attribution reflect it without
-// requiring a reload.
-// -------------------------------------------------------------
 OL.linkMyAdminLoginToTeamMember = async function(memberId) {
     if (!window.FORCE_ADMIN) return;
 
     const { data: { session } } = await db.auth.getSession();
     if (!session) { alert('Your session could not be verified — try signing in again.'); return; }
 
-    // Clear the link from any other card first — one admin login should
-    // only ever map to one team card.
     updateAndSync(() => {
         (state.master?.sphynxTeam || []).forEach(m => {
             if (m.authUserId === session.user.id) delete m.authUserId;
