@@ -9,6 +9,7 @@
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
 import { getRequestTypes, getCurrentRound, isActiveItem, SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
+import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 
 // Names of task statuses that count as finished (falls back to Done).
 function closedStatusNames() {
@@ -365,8 +366,31 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
 };
 
 // Function to calculate the "Sticker Price" before line-item discounts
+// The resource a request line stands on, for a resource that is not its main one. Looked up in the project that owns
+// the line (so reports across projects price it correctly), then the master list.
+function resolveResourceForItem(item, id) {
+    const owner = Object.values(state.clients || {}).find(c => (c?.projectData?.scopingSheets || []).some(sh => (sh?.lineItems || []).includes(item))) || getActiveClient();
+    return (owner?.projectData?.localResources || []).find(r => String(r.id) === String(id))
+        || (state.master?.resources || []).find(r => String(r.id) === String(id))
+        || OL.getResourceById(id) || null;
+}
+
+// The request's fee, line by line: each resource priced by its own type and units, plus estimated hours when nothing
+// has priced units. The team multiplier applies to every line. (Same arithmetic as a single resource has always had.)
+export function getRequestPriceBreakdown(item, primary) {
+    const client = getActiveClient();
+    const rates = state.master.rates || {};
+    const resources = requestResourceIds(item).map((id, i) => (i === 0 ? (primary || OL.getResourceById(id)) : resolveResourceForItem(item, id)));
+    return priceRequest(item, resources, {
+        vars: rates.variables || {},
+        baseRate: client?.projectData?.customBaseRate || rates.baseHourlyRate || 300,
+        multiplier: teamMultiplier(item, { rate: rates.teamMultiplier, teamCount: (client?.projectData?.teamMembers || []).length || 1 }),
+    });
+}
+
 export function calculateBaseFeeWithMultiplier(item, resource) {
     if (!item) return 0;
+    if (requestResourceIds(item).length > 1) return getRequestPriceBreakdown(item, resource).gross;
     const vars = state.master.rates.variables || {};
     
     // Merge template data and local overrides
@@ -1700,7 +1724,10 @@ export function openRequestLineModal(itemId) {
     const isEdit = !!item;
     const clientName = client.meta?.name || 'Client';
 
-    const typeKey = item?.requestType || 'meeting';
+    // A line on a real resource is a build unless it says otherwise; a line with no resource is a meeting.
+    const isReqLine = !item || String(item.resourceId || '').startsWith('reqline-');
+    const typeKey = item?.requestType || (isReqLine ? 'meeting' : 'build');
+    const shownTitle = item?.name || (!isReqLine ? (OL.getResourceById(item.resourceId)?.name || '') : '');
     const status = item?.status || 'Do Now';
     const party = item?.responsibleParty || 'Sphynx';
 
@@ -1714,14 +1741,15 @@ export function openRequestLineModal(itemId) {
         </div>
         <div class="modal-body" style="padding-top:14px;">
             <p class="tiny muted" style="margin-bottom:16px; font-size:11px; line-height:1.4;">
-                For work with no library resource, like a training session, an audit or a working meeting.
-                Its fee is estimated hours x your base rate.
+                ${isEdit && requestResourceIds(item).filter(id => !String(id).startsWith('reqline-')).length
+                    ? 'A request can cover one or more resources. Its fee is the total of what it covers; set the units on each resource.'
+                    : 'For work with no library resource, like a training session, an audit or a working meeting. Its fee is estimated hours x your base rate, or plan the resources it will cover once it is saved.'}
             </p>
 
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
                 <label class="tiny muted" style="font-size:10px; font-weight:600;">Title</label>
                 <input id="rq-title" type="text" class="modal-input" 
-                       placeholder="e.g. Calendly audit" value="${esc(item?.name || '')}" autofocus>
+                       placeholder="e.g. Calendly audit" value="${esc(shownTitle)}" autofocus>
             </div>
 
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
@@ -1758,6 +1786,8 @@ export function openRequestLineModal(itemId) {
                 </div>
             </div>
 
+            ${isEdit && typeof OL.requestResourcesSectionHtml === 'function' ? OL.requestResourcesSectionHtml(client, item) : ''}
+
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
                 <label class="tiny muted" style="font-size:10px; font-weight:600;">Notes (optional)</label>
                 <textarea id="rq-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>
@@ -1779,6 +1809,24 @@ export function openRequestLineModal(itemId) {
     openModal(html);
 }
 
+// Copies what is typed in the request window onto the line. A blank title leaves the existing one alone, so the
+// resource buttons in the window can keep other edits without complaining.
+export function applyRequestFormToItem(item) {
+    if (!document.getElementById('rq-title')) return item;          // the window is not open: nothing to copy
+    const read = (id) => document.getElementById(id)?.value ?? '';
+    const title = read('rq-title').trim();
+    Object.assign(item, {
+        ...(title ? { name: title } : {}),
+        requestType: read('rq-type') || item.requestType || 'meeting',
+        notes: read('rq-notes').trim(),
+        status: read('rq-status') || item.status || 'Do Now',
+        responsibleParty: read('rq-party') || item.responsibleParty || 'Sphynx',
+        round: Math.max(1, parseInt(read('rq-round'), 10) || 1),
+        manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
+    });
+    return item;
+}
+
 export async function saveRequestLine(itemId) {
     const client = getActiveClient();
     if (!client) return;
@@ -1789,8 +1837,7 @@ export async function saveRequestLine(itemId) {
     const sheet = client.projectData.scopingSheets[0];
     if (!sheet.lineItems) sheet.lineItems = [];
 
-    const read = (id) => document.getElementById(id)?.value ?? '';
-    const title = read('rq-title').trim();
+    const title = (document.getElementById('rq-title')?.value ?? '').trim();
     if (!title) {
         alert('Give the request a title.');
         return;
@@ -1809,15 +1856,7 @@ export async function saveRequestLine(itemId) {
         sheet.lineItems.push(item);
     }
 
-    Object.assign(item, {
-        name: title,
-        requestType: read('rq-type') || 'meeting',
-        notes: read('rq-notes').trim(),
-        status: read('rq-status') || 'Do Now',
-        responsibleParty: read('rq-party') || 'Sphynx',
-        round: Math.max(1, parseInt(read('rq-round'), 10) || 1),
-        manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
-    });
+    applyRequestFormToItem(item);
 
     await OL.persist();
     OL.closeModal();
@@ -2039,7 +2078,7 @@ Object.assign(window.OL, {
     openTypeDetailModal, createNewVarForType, updateVarRate, removeScopingVariable,
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
-    openRequestLineModal, saveRequestLine, setSheetStatus,
+    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks
 });
 // Called bare from sections still living in app.js — bridge onto window.

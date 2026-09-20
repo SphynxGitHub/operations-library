@@ -27,6 +27,7 @@ import * as OLTesting from './features/testing.js';
 import * as OLReview from './features/review.js';
 import * as OLRequestTag from './features/request-tag.js';
 import * as OLRequestTasks from './features/request-tasks.js';
+import * as OLRequestResources from './features/request-resources.js';
 
 window.isMatrixActive = false;
 

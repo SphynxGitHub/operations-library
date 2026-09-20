@@ -80,23 +80,36 @@ function meetingLinkHtml(client, item) {
         </div>`;
 }
 
-// The slim bar under a request on the scoping sheet, and the panel when it is open.
+// The slim bar under a request on the scoping sheet, and the panel when it is open. Every request gets one, with
+// an Edit request button (the request window is where its resources and their fees are), how many resources it
+// covers when it covers more than one, and, when it has tasks, a toggle that opens them.
 export function requestTasksRowHtml(client, item) {
     if (!client || !item) return '';
     const ctx = ctxFor();
     const g = groupRequestTasks(client, item, ctx);
     const canLink = MEETING_TYPES.includes(String(item.requestType || 'build'));
-    if (!g.total && !canLink) return '';
-    const open = !!(OL._requestTasksOpen || {})[item.id];
+    const showTasks = g.total > 0 || canLink;
+    const open = showTasks && !!(OL._requestTasksOpen || {})[item.id];
     const bits = [
         g.total ? `Tasks ${g.done}/${g.total}` : 'Tasks',
         g.dates.start && g.dates.end ? (g.dates.start === g.dates.end ? day(g.dates.start) : `${day(g.dates.start)} → ${day(g.dates.end)}`) : '',
         g.clientOpen.length ? `${g.clientOpen.length} for the client` : '',
     ].filter(Boolean).join(' · ');
     const color = g.clientOpen.length ? '#f59e0b' : 'var(--muted)';
+
+    let covers = '';
+    if (typeof OL.getRequestPriceBreakdown === 'function') {
+        const lines = OL.getRequestPriceBreakdown(item).lines.filter((l) => !String(l.resourceId).startsWith('reqline-'));
+        if (lines.length > 1) covers = `<span class="pill tiny soft" style="font-size:10px;" title="${esc(lines.map((l) => l.name).join(', '))}">${lines.length} resources</span>`;
+    }
     return `
-        <div class="request-tasks-bar" style="padding:2px 12px 2px 24px; font-size:11px; color:${color}; cursor:pointer;" onclick="OL.toggleRequestTasks('${esc(item.id)}')">
-            ${open ? '▾' : '▸'} ${esc(bits)}
+        <div class="request-tasks-bar" style="display:flex; align-items:center; gap:10px; padding:2px 12px 2px 24px; font-size:11px;">
+            ${showTasks
+                ? `<span style="color:${color}; cursor:pointer;" onclick="OL.toggleRequestTasks('${esc(item.id)}')">${open ? '▾' : '▸'} ${esc(bits)}</span>`
+                : ''}
+            <span style="flex:1;"></span>
+            ${covers}
+            <button type="button" class="btn tiny soft" style="font-size:10px; padding:1px 8px;" onclick="event.stopPropagation(); OL.openRequestLineModal('${esc(item.id)}')">Edit request</button>
         </div>
         ${open ? requestTasksPanelHtml(client, item) : ''}`;
 }

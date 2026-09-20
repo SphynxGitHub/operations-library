@@ -1128,12 +1128,19 @@ export function printScopingSheet() {
                 return `<div class="item-pricing">${s}</div>`;
             })();
 
+            // A request that covers several resources lists each one with its own price (its fees add up to the request's).
+            const breakdown = typeof OL.getRequestPriceBreakdown === 'function' ? OL.getRequestPriceBreakdown(item, res) : null;
+            const multi = !!(breakdown && breakdown.lines.length > 1);
+            const requestTitle = multi ? (String(item.name || '').trim() || res.name) : res.name;
+            const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml(breakdown, esc) : '';
+
             roundRows += `<div class="item-row">
                 <div class="item-body">
                     <div class="item-main">
-                        <div class="item-name">${esc(res.name)}</div>
-                        ${res.description ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
-                        ${unitBadgesHtml(item)}
+                        <div class="item-name">${esc(requestTitle)}</div>
+                        ${res.description && !multi ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
+                        ${multi ? '' : unitBadgesHtml(item)}
+                        ${resourcesHtml}
                         ${pricingHtml}
                     </div>
                     <div class="item-meta">
@@ -1216,6 +1223,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .gt-val { font-size: 16px; font-weight: 800; color: #64748b; }
 .gt-val.net { color: #0f172a; }
 .gt-val.approved { font-size: 22px; color: #15803d; }
+${typeof OL.requestResourcesPrintCss === 'string' ? OL.requestResourcesPrintCss : ''}
 ${clientPage.css}
 </style></head><body>
 <div class="print-header">

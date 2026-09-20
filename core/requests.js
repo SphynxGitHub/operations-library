@@ -11,6 +11,7 @@
 // Called from persist() in core/data.js, after a client saves successfully.
 
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS } from './work-status.js';
+import { requestResourceIds } from './request-pricing.js';
 
 // Shown until the editable list loads from the request_types table.
 export const DEFAULT_REQUEST_TYPES = [
@@ -207,6 +208,8 @@ function buildDesired(client, masterResources, opts = {}) {
             desired.push({
                 legacy: String(item.id),
                 targetResourceId: resource ? String(item.resourceId) : null,
+                // every real resource the request covers (the main one and any others), for the request's targets
+                targetResourceIds: requestResourceIds(item).filter(id => findResource(client, masterResources, id)),
                 explicitType: isBlank(item.requestType) ? null : String(item.requestType),
                 isActive,
                 workStatus: derived ? derived.status : null,
@@ -295,7 +298,7 @@ async function doMirror(db, client, opts) {
     if (disabled) return;
 
     const desired = buildDesired(client, opts.masterResources, opts);
-    const signature = JSON.stringify(desired.map(d => [d.legacy, d.row, d.explicitType, d.status, d.isActive, d.workStatus, d.roleId, d.targetResourceId]));
+    const signature = JSON.stringify(desired.map(d => [d.legacy, d.row, d.explicitType, d.status, d.isActive, d.workStatus, d.roleId, d.targetResourceId, d.targetResourceIds]));
     if (lastSignature[client.id] === signature) return;
 
     // 1. What exists already for this client (line-item requests only)
@@ -366,8 +369,9 @@ async function doMirror(db, client, opts) {
     // 4. Make sure each request points at its resource (adds only; never removes,
     //    so extra targets added elsewhere are safe)
     const wanted = desired
-        .filter(d => d.targetResourceId && idByLegacy.get(d.legacy))
-        .map(d => ({ request_id: idByLegacy.get(d.legacy), target_type: 'resource', target_id: d.targetResourceId }));
+        .filter(d => idByLegacy.get(d.legacy))
+        .flatMap(d => [...new Set([...(d.targetResourceId ? [d.targetResourceId] : []), ...(d.targetResourceIds || [])])]
+            .map(id => ({ request_id: idByLegacy.get(d.legacy), target_type: 'resource', target_id: id })));
 
     if (wanted.length) {
         const have = new Set();
