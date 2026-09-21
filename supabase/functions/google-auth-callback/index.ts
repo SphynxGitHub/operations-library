@@ -1,60 +1,21 @@
-// ================================================================================================
-// FUNCTION: google-auth-callback
-//
-// WHAT IT DOES:   Step 2 of Connect Google Account. Google sends the browser back here
-//                 with a code. This exchanges it for tokens, looks up the account's
-//                 email, saves both, and returns the browser to the app.
-//
-// CALLED BY:      Google, after the person approves on Google's screen. Never called
-//                 by the app directly.
-//
-// WHO CAN CALL:   Anyone can open the address, but it does nothing unless the request
-//                 carries a valid, unexpired signed state made by google-auth-login.
-//                 That is what stops a stranger connecting their own Google account in
-//                 place of yours.
-//
-// READS/CHANGES:  Saves the tokens in google_auth_tokens (one row per email).
-//
-// NEEDS:          _shared/oauth-state.ts. The GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-//                 and GOOGLE_REDIRECT_URI secrets.
-//
-// CHANGED FROM THE ORIGINAL: Added the signed-state check, and a friendly message if
-//                            the person cancels. The return address no longer carries
-//                            the old ?admin=... secret.
-// ================================================================================================
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyState } from "../_shared/oauth-state.ts";
 
 serve(async (req) => {
   const url = new URL(req.url);
-
-  // Only accept a return that carries the signed state google-auth-login handed out. Without this,
-  // anyone could connect their own Google account in place of the company's.
-  const stateCheck = await verifyState(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, url.searchParams.get("state"), "google");
-  if (!stateCheck.ok) {
-    console.warn("google-auth-callback refused a request:", stateCheck.reason);
-    return new Response("This connection request is not valid or has expired. Go back to the app and click Connect Google Account again.", { status: 400 });
-  }
-
-  if (url.searchParams.get("error")) {
-    return new Response("Google sign-in was cancelled or refused. Go back to the app and try again.", { status: 400 });
-  }
-
   const code = url.searchParams.get("code");
 
   if (!code) {
-    return new Response("Missing authorization code", { status: 400 });
+    return new Response("Missing code parameter", { status: 400 });
   }
 
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
-  const redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI")!;
-
   try {
-    // 1. Exchange authorization code for tokens
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
+    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
+    const redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI")!;
+
+    // 1. Exchange code for Google Access & Refresh Tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -66,40 +27,43 @@ serve(async (req) => {
       }),
     });
 
-    const tokens = await tokenResponse.json();
+    const tokenData = await tokenRes.json();
 
-    if (tokens.error) {
-      throw new Error(tokens.error_description || tokens.error);
+    if (!tokenData.refresh_token && !tokenData.access_token) {
+      throw new Error(`Token exchange failed: ${JSON.stringify(tokenData)}`);
     }
 
-    // 2. Fetch User Email from Google
-    const userResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    // 2. Fetch Google User Email
+    const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-    const userData = await userResponse.json();
+    const userData = await userRes.json();
 
-    // 3. Store or Upsert Tokens in Supabase Database using Service Role Key
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // 3. Save Refresh Token into workspace_masters in Supabase
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { error: dbError } = await supabase.from("google_auth_tokens").upsert({
-      email: userData.email,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'email' });
+    const updatePayload: Record<string, any> = {
+      google_connected: true,
+      google_account_email: userData.email,
+    };
 
-    if (dbError) throw dbError;
+    // Only overwrite refresh_token if Google sent a new one
+    if (tokenData.refresh_token) {
+      updatePayload.google_refresh_token = tokenData.refresh_token;
+    }
 
-    // 4. Redirect Back to Quo Communications on GitHub Pages
-    const returnUrl = "https://sphynxgithub.github.io/operations-library/#/business/communications?connected=true";
-    return Response.redirect(returnUrl, 302);
+    await supabase
+      .from("workspace_masters")
+      .update(updatePayload)
+      .eq("id", "main_state");
 
-  } catch (err) {
-    console.error("OAuth Error:", err);
-    return new Response(`Authentication failed: ${err.message}`, { status: 500 });
+    // 4. Redirect back to the web app
+    return Response.redirect(`${redirectUri.split("#")[0]}#/business/communications?connected=true`, 302);
+
+  } catch (err: any) {
+    console.error("google-auth-callback failed:", err.message);
+    return new Response(`Authentication error: ${err.message}`, { status: 500 });
   }
 });
