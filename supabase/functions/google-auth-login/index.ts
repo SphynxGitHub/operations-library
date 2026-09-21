@@ -1,29 +1,3 @@
-// ================================================================================================
-// FUNCTION: google-auth-login
-//
-// WHAT IT DOES:   Step 1 of Connect Google Account. Checks the caller, then returns
-//                 the Google permission-screen address as JSON (it no longer
-//                 redirects). The address asks for: read mail, send mail, change mail
-//                 (archive, restore, Trash, labels), Google Calendar, and the account
-//                 email, and carries a signed state that google-auth-callback checks.
-//
-// CALLED BY:      The Connect Google Account button in Gmail Settings.
-//
-// WHO CAN CALL:   A signed-in ADMIN only, because the connection is the company's
-//                 single Google account. Everyone else gets 401 or 403.
-//
-// READS/CHANGES:  Nothing in the database. It only builds the address.
-//
-// NEEDS:          _shared/auth.ts, _shared/oauth-state.ts. The GOOGLE_CLIENT_ID and
-//                 GOOGLE_REDIRECT_URI secrets. Any permission added here only takes
-//                 effect after the Google account is reconnected, and must also be
-//                 listed on the consent screen in Google Cloud Console.
-//
-// CHANGED FROM THE ORIGINAL: It used to redirect anyone straight to Google. Now it
-//                            needs an admin login and adds the signed state. Also
-//                            added the gmail.modify permission.
-// ================================================================================================
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authorizeTeamRequest } from "../_shared/auth.ts";
@@ -35,10 +9,6 @@ const corsHeaders = {
   "Content-Type": "application/json"
 };
 
-// Step 1 of Connect Google Account. The app calls this with the person's login token and gets back
-// the Google address to send the browser to. That address carries a signed "state", which
-// google-auth-callback checks before it saves anything. Only an admin can start it, because the
-// connection is the company's single Google account.
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -62,24 +32,22 @@ serve(async (req) => {
     const scopes = [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.send",
-      // Needed to archive, restore and delete (move to Trash) mail, and to add labels. Without it Gmail
-      // answers "insufficient authentication scopes" for those. Connecting again is what grants it.
       "https://www.googleapis.com/auth/gmail.modify",
       "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/drive.file"
+      "https://www.googleapis.com/auth/drive.file" // <--- Include Drive scope
     ];
 
     const state = await signState(serviceKey, "google", authz.userId);
 
-    // Scopes MUST be space-separated
+    // Forces account selection AND fresh consent prompt to guarantee a new refresh_token
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri!)}` +
       `&response_type=code` +
       `&scope=${encodeURIComponent(scopes.join(" "))}` +
       `&access_type=offline` +
-      `&prompt=consent` +
+      `&prompt=consent%20select_account` +  // <--- FORCES FRESH TOKEN & ACCOUNT CHOICE
       `&state=${encodeURIComponent(state)}`;
 
     return new Response(JSON.stringify({ url: authUrl }), { status: 200, headers: corsHeaders });
