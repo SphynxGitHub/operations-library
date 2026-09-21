@@ -76,11 +76,87 @@ serve(async (req) => {
     const body = await req.json();
     const { action, clientName, clientId: targetClientId } = body;
 
+    // =========================================================================
+    // ACTION 1 & 2: Save Summary Text Doc or Upload Zoom Video Stream
+    // =========================================================================
+    if (action === "save_text_doc" || action === "upload_zoom_recording") {
+      const { clientId, clientName, fileName, content, fileUrl } = body;
+
+      // Resolve client Drive folder ID from database
+      const { data: client } = await supabase
+        .from("workspace_clients")
+        .select("google_drive_folder_id")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      let targetFolderId = client?.google_drive_folder_id;
+
+      // Create root folder if missing
+      if (!targetFolderId) {
+        const rootName = (clientName || "Unnamed Client").trim();
+        const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: rootName, mimeType: "application/vnd.google-apps.folder" })
+        });
+        const createData = await createRes.json();
+        targetFolderId = createData.id;
+
+        if (clientId && targetFolderId) {
+          await supabase.from("workspace_clients").update({ google_drive_folder_id: targetFolderId }).eq("id", clientId);
+        }
+      }
+
+      // Resolve "Zoom Recordings" subfolder
+      const subQ = `mimeType='application/vnd.google-apps.folder' and name='Zoom Recordings' and '${targetFolderId}' in parents and trashed=false`;
+      const subSearch = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQ)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const subData = await subSearch.json();
+      let zoomFolderId = subData.files?.[0]?.id;
+
+      if (!zoomFolderId) {
+        const subCreate = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Zoom Recordings", mimeType: "application/vnd.google-apps.folder", parents: [targetFolderId] })
+        });
+        const subCreateData = await subCreate.json();
+        zoomFolderId = subCreateData.id;
+      }
+
+      // Upload file payload
+      let blob: Blob;
+      if (action === "save_text_doc") {
+        blob = new Blob([content || ""], { type: "text/plain" });
+      } else {
+        const videoFetch = await fetch(fileUrl);
+        blob = await videoFetch.blob();
+      }
+
+      const metadata = { name: fileName, parents: [zoomFolderId] };
+      const formData = new FormData();
+      formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+      formData.append("file", blob);
+
+      const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      return new Response(JSON.stringify({ success: true, fileId: uploadData.id }), { status: 200, headers: corsHeaders });
+    }
+
+    // =========================================================================
+    // ACTION 3: Get or Create Client Folder Structure
+    // =========================================================================
     if (action === "get_or_create_client_folder") {
       const folderName = (clientName || "Unnamed Client").trim();
       const safeName = folderName.replace(/'/g, "\\'");
 
-      // A. Search for existing root client folder
+      // Search for existing root client folder
       const query = `mimeType='application/vnd.google-apps.folder' and name='${safeName}' and trashed=false`;
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -98,7 +174,7 @@ serve(async (req) => {
 
       let targetFolderId = searchData.files?.[0]?.id;
 
-      // B. Create root folder if missing
+      // Create root folder if missing
       if (!targetFolderId) {
         const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
           method: "POST",
@@ -119,7 +195,7 @@ serve(async (req) => {
         targetFolderId = createData.id;
       }
 
-      // C. Ensure standard subfolders exist
+      // Ensure standard subfolders exist
       const subfolders = ["Zoom Recordings", "Task Attachments", "App Snapshots"];
       const subfolderIds: Record<string, string> = {};
 
@@ -143,7 +219,7 @@ serve(async (req) => {
         }
       }
 
-      // D. Save folder ID directly to workspace_clients DB table if clientId provided
+      // Save folder ID directly to workspace_clients DB table if clientId provided
       if (targetClientId) {
         await supabase
           .from("workspace_clients")
@@ -154,7 +230,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ folderId: targetFolderId, subfolders: subfolderIds }), { status: 200, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify({ error: "invalid_action", message: "Action must be get_or_create_client_folder" }), { status: 400, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "invalid_action", message: "Action must be get_or_create_client_folder, save_text_doc, or upload_zoom_recording" }), { status: 400, headers: corsHeaders });
 
   } catch (err: any) {
     return new Response(JSON.stringify({ error: "server_crash", message: err.message }), { status: 500, headers: corsHeaders });
