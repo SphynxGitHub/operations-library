@@ -1198,5 +1198,6 @@ Object.assign(window.OL, {
     getCurrentUserName,
     markClientDirty,
     state, persist, sync, loadFullClient, switchClient, updateAndSync,
-    exportMasterBackup, importMasterBackup
+    exportMasterBackup, importMasterBackup, convertTaskToResource: OL.convertTaskToResource,
+  convertTaskToRequirement: OL.convertTaskToRequirement
 });
