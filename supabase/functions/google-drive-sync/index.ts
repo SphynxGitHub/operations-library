@@ -148,7 +148,81 @@ serve(async (req) => {
       const uploadData = await uploadRes.json();
       return new Response(JSON.stringify({ success: true, fileId: uploadData.id }), { status: 200, headers: corsHeaders });
     }
+    // ACTION 2B: SYNC UPLOADS
 
+    // Inside google-drive-sync index.ts serve handler...
+    if (action === "upload_client_file") {
+      const { clientId, clientName, fileName, fileData, fileType, subfolderName } = body;
+
+      // 1. Resolve client Drive folder ID from database
+      const { data: client } = await supabase
+        .from("workspace_clients")
+        .select("google_drive_folder_id")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      let targetFolderId = client?.google_drive_folder_id;
+
+      // Create root folder if missing
+      if (!targetFolderId) {
+        const rootName = (clientName || "Unnamed Client").trim();
+        const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: rootName, mimeType: "application/vnd.google-apps.folder" })
+        });
+        const createData = await createRes.json();
+        targetFolderId = createData.id;
+
+        if (clientId && targetFolderId) {
+          await supabase.from("workspace_clients").update({ google_drive_folder_id: targetFolderId }).eq("id", clientId);
+        }
+      }
+
+      // 2. Resolve target subfolder (e.g., "App Snapshots" or "Task Attachments")
+      const targetSubfolder = subfolderName || "Task Attachments";
+      const subQ = `mimeType='application/vnd.google-apps.folder' and name='${targetSubfolder}' and '${targetFolderId}' in parents and trashed=false`;
+      const subSearch = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQ)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const subData = await subSearch.json();
+      let parentFolderId = subData.files?.[0]?.id;
+
+      if (!parentFolderId) {
+        const subCreate = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: targetSubfolder, mimeType: "application/vnd.google-apps.folder", parents: [targetFolderId] })
+        });
+        const subCreateData = await subCreate.json();
+        parentFolderId = subCreateData.id;
+      }
+
+      // 3. Convert base64 data back to Blob
+      const base64Data = fileData.split(",")[1] || fileData;
+      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      const blob = new Blob([binaryData], { type: fileType || "application/octet-stream" });
+
+      // 4. Upload file to Google Drive multipart endpoint
+      const metadata = { name: fileName, parents: [parentFolderId] };
+      const formData = new FormData();
+      formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+      formData.append("file", blob);
+
+      const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      return new Response(JSON.stringify({ 
+        success: true, 
+        fileId: uploadData.id, 
+        webViewLink: uploadData.webViewLink 
+      }), { status: 200, headers: corsHeaders });
+    }
+    
     // =========================================================================
     // ACTION 3: Get or Create Client Folder Structure
     // =========================================================================
