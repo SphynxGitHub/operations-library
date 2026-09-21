@@ -870,6 +870,48 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
   if (typeof window.handleRoute === "function") window.handleRoute();
 };
 
+OL.convertRequirementToTask = function(clientId, reqId) {
+  const client = state.clients?.[clientId];
+  const sheet = client?.projectData?.scopingSheets?.[0];
+  const item = sheet?.lineItems?.find(i => String(i.id) === String(reqId));
+
+  if (!item) return alert("Item not found on scoping sheet.");
+  if (!confirm(`Move "${item.actionName || item.name}" back into active Tasks?`)) return;
+
+  const res = OL.getResourceById(item.resourceId);
+
+  const recoveredTask = {
+    id: item.originalTaskId || "tk-" + Date.now(),
+    name: item.actionName || item.name || res?.name || "Converted Task",
+    title: item.actionName || item.name || res?.name || "Converted Task",
+    description: item.description || res?.description || "",
+    status: "Pending",
+    assignee: "Sphynx Task",
+    comments: item.comments || [],
+    clickupComments: item.clickupComments || [],
+    driveFiles: item.driveFiles || [],
+    howToIds: item.howToIds || [],
+    createdDate: item.createdDate || new Date().toISOString()
+  };
+
+  OL.updateAndSync(() => {
+    // 1. Add back to task list
+    if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+    client.projectData.clientTasks.unshift(recoveredTask);
+
+    // 2. Remove line item & local resource from scoping sheet
+    sheet.lineItems = sheet.lineItems.filter(i => String(i.id) !== String(reqId));
+    if (item.resourceId) {
+      client.projectData.localResources = (client.projectData.localResources || [])
+        .filter(r => r.id !== item.resourceId);
+    }
+  }, clientId);
+
+  if (typeof OL.showToast === "function") OL.showToast(`Moved back to tasks!`);
+  if (typeof OL.closeModal === "function") OL.closeModal();
+  OL.openTaskInContext(clientId, recoveredTask.id);
+};
+
 // Interactive modal prompt when clicking '+' on an unrecognized email
 OL.promptCreateClientFromUnrecognizedEmail = function(email) {
     const cleanEmail = (email || '').toLowerCase().trim();
