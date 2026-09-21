@@ -300,41 +300,6 @@ export function renderClientDashboard() {
     }, 100);
 };
 
-// 2. CREATE CLIENT INCLUDING PROFILE ID FOR PUBLIC LINK
-async function onboardNewClient(clientData) {
-    try {
-        // 1. Insert new client into Supabase workspace_clients
-        const { data: newClient, error } = await db
-            .from('workspace_clients')
-            .insert([{
-                name: clientData.name,
-                meta: { name: clientData.name, email: clientData.email },
-                status: 'active'
-            }])
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // 2. Automatically trigger Drive folder creation
-        if (newClient?.id && typeof OL.resolveClientDriveFolder === 'function') {
-            console.log(`📁 Auto-creating Drive folders for ${clientData.name}...`);
-            await OL.resolveClientDriveFolder(newClient.id);
-        }
-
-        // 3. Update local state and UI
-        state.clients[newClient.id] = newClient;
-        OL.persist();
-        
-        alert(`Client "${clientData.name}" onboarded and Google Drive folders created!`);
-        return newClient;
-
-    } catch (err) {
-        console.error('Error during client onboarding:', err);
-        alert(`Onboarding failed: ${err.message}`);
-    }
-}
-
 // 2. CREATE CLIENT INCLUDING PROFILE ID & AUTO-CREATE DRIVE WORKSPACE
 export async function onboardNewClient() {
   const name = prompt("Enter Client Name:");
