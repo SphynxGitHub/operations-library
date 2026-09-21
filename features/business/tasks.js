@@ -1838,33 +1838,51 @@ OL.renderInContextTaskModal = function(client, task) {
                         </span>
                     </div>
 
-                    <!-- DELIVERABLE DETAILS, DESCRIPTION & DRIVE ATTACHMENTS -->
+                    <!-- DELIVERABLE DETAILS, DESCRIPTION & DRIVE FILE ACTIONS -->
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                             <label class="bold tiny uppercase muted" style="margin:0;">Deliverable Details & Description:</label>
                             
                             <!-- GOOGLE DRIVE ATTACHMENT UPLOAD BUTTON -->
                             <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;">
-                                <i data-lucide="paperclip" style="width:11px;height:11px;color:var(--accent);"></i> Attach File to Drive
+                                <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> ${task.driveFileUrl ? 'Replace Drive File' : 'Upload File to Drive'}
                                 <input type="file" style="display:none;" onchange="
                                     const file = this.files[0];
                                     if (file) {
                                         OL.uploadFileToDrive('${client?.id}', file, 'Task Attachments').then(res => {
                                             if (res?.webViewLink) {
-                                                const txt = document.getElementById('task-desc-${task.id}');
-                                                const appendText = '\\n\\n📁 Attachment: [' + file.name + '](' + res.webViewLink + ')';
-                                                txt.value = (txt.value + appendText).trim();
-                                                OL.updateTaskDescription('${client?.id}', '${task.id}', txt.value);
+                                                OL.updateAndSync(() => {
+                                                    const targetTask = state.clients['${client?.id}']?.projectData?.clientTasks?.find(t => t.id === '${task.id}');
+                                                    if (targetTask) {
+                                                        targetTask.driveFileUrl = res.webViewLink;
+                                                        targetTask.driveFileName = file.name;
+                                                    }
+                                                }, '${client?.id}');
+                                                OL.openTaskInContext('${client?.id}', '${task.id}');
                                             }
                                         });
                                     }
                                 ">
                             </label>
                         </div>
+                        
                         <textarea class="modal-input tiny" id="task-desc-${task.id}" rows="4"
                                   style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical;"
                                   placeholder="Add deliverable details / notes for this task..."
                                   onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
+
+                        <!-- DEDICATED DRIVE FILE ACTION BUTTON -->
+                        ${task.driveFileUrl ? `
+                            <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+                                    <i data-lucide="file-text" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i>
+                                    <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(task.driveFileName || 'Attached Drive File')}</span>
+                                </div>
+                                <a href="${esc(task.driveFileUrl)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; flex-shrink:0; font-weight:bold;">
+                                    <i data-lucide="external-link" style="width:11px;height:11px;"></i> Open in Drive
+                                </a>
+                            </div>
+                        ` : ''}
                     </div>
 
                     <!-- TASK CONVERSION ACTIONS -->
@@ -1926,11 +1944,12 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>
                     ` : ''}
 
-                    <div style="margin-bottom: 20px;">
+                    <!-- LINKED EMAILS SECTION WITH ENFORCED CONSTRAINTS -->
+                    <div style="margin-bottom: 20px; min-width: 0; width: 100%; overflow-x: hidden;">
                         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
                             <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
                         </label>
-                        <div id="linked-emails-list" class="tiny muted">Loading…</div>
+                        <div id="linked-emails-list" class="tiny muted" style="min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">Loading…</div>
                     </div>
 
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
