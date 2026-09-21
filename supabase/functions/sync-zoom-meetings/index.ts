@@ -75,37 +75,18 @@ function generateTaskId() {
   return "task_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-// Pulls a Zoom meeting id out of a join URL like
-// https://us02web.zoom.us/j/1234567890?pwd=... -- this is how Google
-// Calendar events created via the Zoom add-on carry the meeting id, in
-// either the event's location or its description.
 function extractZoomMeetingId(text: string | null | undefined): string | null {
   if (!text) return null;
   const m = text.match(/zoom\.us\/j\/(\d+)/i);
   return m ? m[1] : null;
 }
 
-// Zoom requires the UUID to be double-URL-encoded when used as a path
-// segment, but ONLY when it starts with "/" or contains "//" (their docs
-// call this out explicitly) -- for an ordinary UUID like
-// "ORqZo6HLQHqkNQw7EtDDIQ==", a normal single encodeURIComponent is
-// correct, and double-encoding it instead turns the %3D's into %253D's,
-// which Zoom no longer recognizes as the same meeting (looks like a
-// generic failure, not an obviously-wrong-uuid error).
 function encodeZoomUuid(uuid: string): string {
   const needsDoubleEncode = uuid.startsWith("/") || uuid.includes("//");
   const encodedOnce = encodeURIComponent(uuid);
   return needsDoubleEncode ? encodeURIComponent(encodedOnce) : encodedOnce;
 }
 
-// A numeric Zoom meeting id stops being usable for per-meeting lookups
-// (meeting_summary included) once the meeting has ended -- Zoom returns
-// {"code":300,"message":"Invalid meeting id."} for it. The fix is to
-// resolve it to that specific occurrence's UUID first via the past-meeting
-// instances list, then use the UUID everywhere instead. For a recurring or
-// personal meeting ID reused across many calls, this list can have several
-// entries, so pick whichever instance's start_time is closest to the
-// calendar event's own start time.
 async function resolvePastMeetingUuid(meetingId: string, accessToken: string, approxStartIso: string | null): Promise<string | null> {
   const res = await fetch(`https://api.zoom.us/v2/past_meetings/${meetingId}/instances`, {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -117,7 +98,7 @@ async function resolvePastMeetingUuid(meetingId: string, accessToken: string, ap
   if (instances.length === 0) return null;
   if (instances.length === 1) return instances[0].uuid;
 
-  if (!approxStartIso) return instances[0].uuid; // best guess without a time to compare against
+  if (!approxStartIso) return instances[0].uuid;
 
   const target = new Date(approxStartIso).getTime();
   let best = instances[0];
@@ -129,11 +110,6 @@ async function resolvePastMeetingUuid(meetingId: string, accessToken: string, ap
   return best.uuid;
 }
 
-// Zoom's meeting_summary response includes a "next_steps" array when its AI
-// picks out clear action items on its own. When that's empty/absent (short
-// calls, or AI Companion not confident enough), fall back to scanning the
-// summary text for lines that look like bullets/numbered items -- good
-// enough to be useful, not meant to be perfect.
 function extractActionItems(summaryPayload: any): string[] {
   const nextSteps = (summaryPayload?.next_steps || []).filter((s: any) => typeof s === "string" && s.trim());
   if (nextSteps.length > 0) return nextSteps.map((s: string) => s.trim());
@@ -162,15 +138,15 @@ function formatSummaryText(summaryPayload: any): string {
   return parts.join("\n\n").trim();
 }
 
-// Uploads meeting recording or summary document to Google Drive
-async function saveToClientDriveFolder(
+// Helper to push text summaries & MP4 streams to google-drive-sync
+async function uploadToGoogleDrive(
   supabaseUrl: string, 
   serviceKey: string, 
   clientId: string, 
   clientName: string, 
   fileName: string, 
   contentOrUrl: string, 
-  isUrl: boolean = false
+  isUrl: boolean
 ) {
   try {
     await fetch(`${supabaseUrl}/functions/v1/google-drive-sync`, {
@@ -188,27 +164,22 @@ async function saveToClientDriveFolder(
       })
     });
   } catch (err: any) {
-    console.warn(`Failed to upload ${fileName} to Drive:`, err.message);
+    console.warn(`Failed to export ${fileName} to Drive:`, err.message);
   }
 }
 
-// Auth: a signed-in Sphynx admin or team member (Authorization: Bearer <login token>), or the scheduled
-// sync calling with the service role key as the bearer token or a CRON_SECRET in the x-cron-secret
-// header (see ../_shared/auth.ts). Anyone else gets 401 or 403 and nothing happens.
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Who is calling? Nothing else happens until this passes.
     const authz = await authorizeTeamRequest(req, supabase, {
-      serviceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+      serviceKey,
       cronSecret: Deno.env.get("CRON_SECRET")
     });
     if (!authz.ok) {
@@ -216,10 +187,6 @@ serve(async (req) => {
     }
 
     const accessToken = await getFreshZoomAccessToken(supabase);
-
-    // 1. Find candidate calendar events: not yet processed, within the
-    // lookback window, and either already know their Zoom meeting id or
-    // have a Zoom join link we can pull one from.
     const windowStart = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: candidates, error: candidatesErr } = await supabase
@@ -227,11 +194,6 @@ serve(async (req) => {
       .select("id, comments, linked_client_id, zoom_meeting_id, location, description, start")
       .eq("zoom_summary_processed", false)
       .gte("start", windowStart)
-      // Filter to Zoom-looking events in the query itself, not after
-      // fetching a fixed-size page of ALL recent events -- a busy calendar
-      // easily has 200+ non-Zoom events in 30 days, which could push the
-      // actual Zoom meeting off the end before the JS-side filter below
-      // ever saw it.
       .or(`zoom_meeting_id.not.is.null,location.ilike.%zoom.us/j/%,description.ilike.%zoom.us/j/%`)
       .order("start", { ascending: false })
       .limit(MAX_EVENTS);
@@ -255,42 +217,31 @@ serve(async (req) => {
 
     for (const evt of zoomEvents) {
       const zoomMeetingId = evt.resolvedMeetingId as string;
-
-      // 1b. Resolve to this specific occurrence's UUID -- see comment on
-      // resolvePastMeetingUuid above for why the numeric id alone doesn't
-      // work here.
       const meetingUuid = await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
+      
       if (!meetingUuid) {
-        // Couldn't find a past-instance record at all -- treat like "no
-        // summary yet" rather than a hard error, since this is the normal
-        // state for a meeting that's scheduled but hasn't happened, or
-        // happened too recently for Zoom to have indexed it as a past
-        // meeting instance yet.
         noSummaryYetCount++;
         continue;
       }
 
-      // 2. Fetch the AI Companion summary for this meeting, if Zoom has one.
       const summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/meeting_summary`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
 
       if (summaryRes.status === 401) throw new ZoomAuthError("Zoom rejected the token while fetching a meeting summary.");
       if (summaryRes.status === 404) {
-        // No summary yet (still generating, or AI Companion wasn't used for this call).
         noSummaryYetCount++;
         continue;
       }
       if (!summaryRes.ok) {
         const detail = await summaryRes.text();
-        console.error(`Failed to fetch summary for meeting ${zoomMeetingId} (uuid ${meetingUuid}, event ${evt.id}):`, detail);
+        console.error(`Failed to fetch summary for meeting ${zoomMeetingId}:`, detail);
         otherErrorCount++;
         if (!firstOtherError) firstOtherError = { meetingId: zoomMeetingId, meetingUuid, eventId: evt.id, status: summaryRes.status, detail };
         continue;
       }
       const summaryPayload = await summaryRes.json();
 
-      // 3. Save summary + post as a comment.
       const summaryText = formatSummaryText(summaryPayload);
       const actionItems = extractActionItems(summaryPayload);
 
@@ -309,7 +260,7 @@ serve(async (req) => {
         .from("calendar_events")
         .update({
           zoom_summary: summaryText,
-          zoom_meeting_id: zoomMeetingId, // backfilled if this event didn't have it stored yet
+          zoom_meeting_id: zoomMeetingId,
           comments: updatedComments,
           zoom_summary_processed: true
         })
@@ -321,90 +272,77 @@ serve(async (req) => {
       }
       summariesPostedCount++;
 
-      // 3b. AUTO-SYNC TO GOOGLE DRIVE: Save Summary Text Doc into Client's Drive Subfolder
+      // Create linked tasks from action items
       if (evt.linked_client_id) {
         const { data: clientRow } = await supabase
           .from("workspace_clients")
-          .select("meta")
+          .select("project_data, meta")
           .eq("id", evt.linked_client_id)
           .maybeSingle();
 
-        const clientName = clientRow?.meta?.name || "Client Workspace";
-        const dateStr = new Date(evt.start).toISOString().split("T")[0];
-        const docName = `Zoom Meeting Summary - ${dateStr}.txt`;
+        if (clientRow) {
+          const clientName = clientRow.meta?.name || "Client Project";
+          const dateStr = new Date(evt.start).toISOString().split("T")[0];
 
-        // Save Summary Doc to Drive "Zoom Recordings" Subfolder
-        await saveToClientDriveFolder(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-          evt.linked_client_id,
-          clientName,
-          docName,
-          summaryText,
-          false
-        );
+          // 1. Create Tasks in project_data
+          if (actionItems.length > 0) {
+            const projectData = clientRow.project_data || {};
+            if (!projectData.clientTasks) projectData.clientTasks = [];
 
-        // Fetch Cloud Recording MP4 Download URL from Zoom
-        const recRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/recordings`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
+            for (const item of actionItems) {
+              projectData.clientTasks.unshift({
+                id: generateTaskId(),
+                title: item,
+                name: item,
+                status: "Pending Sphynx Action",
+                assignee: "Sphynx Task",
+                dueDate: "",
+                isClientTask: false,
+                loggedHours: 0,
+                createdAt: new Date().toISOString(),
+                linkedEventId: evt.id,
+                source: "zoom_summary"
+              });
+              tasksCreatedCount++;
+            }
 
-        if (recRes.ok) {
-          const recData = await recRes.json();
-          const mp4File = (recData.recording_files || []).find((f: any) => f.file_type === "MP4");
-
-          if (mp4File?.download_url) {
-            const videoFileName = `Zoom Recording - ${dateStr}.mp4`;
-            // Stream video file straight into client Drive folder
-            await saveToClientDriveFolder(
-              Deno.env.get("SUPABASE_URL")!,
-              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-              evt.linked_client_id,
-              clientName,
-              videoFileName,
-              `${mp4File.download_url}?access_token=${accessToken}`,
-              true
-            );
-          }
-        }
-      }
-      
-      // 4. Create linked tasks from action items, if this event is tied to a project.
-      if (evt.linked_client_id && actionItems.length > 0) {
-        const { data: clientRow, error: clientErr } = await supabase
-          .from("workspace_clients")
-          .select("project_data")
-          .eq("id", evt.linked_client_id)
-          .maybeSingle();
-
-        if (!clientErr && clientRow) {
-          const projectData = clientRow.project_data || {};
-          if (!projectData.clientTasks) projectData.clientTasks = [];
-
-          for (const item of actionItems) {
-            projectData.clientTasks.unshift({
-              id: generateTaskId(),
-              title: item,
-              name: item,
-              status: "Pending Sphynx Action",
-              assignee: "Sphynx Task",
-              dueDate: "",
-              isClientTask: false,
-              loggedHours: 0,
-              createdAt: new Date().toISOString(),
-              linkedEventId: evt.id,
-              source: "zoom_summary"
-            });
-            tasksCreatedCount++;
+            await supabase
+              .from("workspace_clients")
+              .update({ project_data: projectData })
+              .eq("id", evt.linked_client_id);
           }
 
-          const { error: taskWriteErr } = await supabase
-            .from("workspace_clients")
-            .update({ project_data: projectData })
-            .eq("id", evt.linked_client_id);
+          // 2. Export Summary Document to Client Drive Subfolder
+          await uploadToGoogleDrive(
+            supabaseUrl,
+            serviceKey,
+            evt.linked_client_id,
+            clientName,
+            `Zoom Summary - ${dateStr}.txt`,
+            summaryText,
+            false
+          );
 
-          if (taskWriteErr) {
-            console.error(`Failed to write action-item tasks for client ${evt.linked_client_id}:`, taskWriteErr.message);
+          // 3. Export Video Recording to Client Drive Subfolder (If available)
+          const recRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/recordings`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+
+          if (recRes.ok) {
+            const recData = await recRes.json();
+            const mp4File = (recData.recording_files || []).find((f: any) => f.file_type === "MP4");
+
+            if (mp4File?.download_url) {
+              await uploadToGoogleDrive(
+                supabaseUrl,
+                serviceKey,
+                evt.linked_client_id,
+                clientName,
+                `Zoom Recording - ${dateStr}.mp4`,
+                `${mp4File.download_url}?access_token=${accessToken}`,
+                true
+              );
+            }
           }
         }
       }
