@@ -439,38 +439,51 @@ OL.resolveClientDriveFolder = async function(clientId) {
     const clientName = client.meta?.name || 'Unnamed Client';
 
     try {
-        const res = await db.functions.invoke('google-drive-sync', {
+        const { data, error } = await db.functions.invoke('google-drive-sync', {
             body: { action: 'get_or_create_client_folder', clientName, clientId }
         });
 
-        if (res.error) {
-            console.error('Drive Sync Edge Function Error:', res.error);
-            alert(`Drive Sync Failed: ${res.error.message || 'Check Supabase Edge Function logs.'}`);
+        if (error) {
+            console.error('Drive Sync Edge Function Error:', error);
+
+            // Extract the JSON payload returned from the Edge Function
+            let errorDetails = error.message || 'Unknown Edge Function Error';
+            try {
+                const responseBody = await error.context.json();
+                errorDetails = responseBody.message || responseBody.error || JSON.stringify(responseBody);
+            } catch (e) {
+                // Response context couldn't be parsed as JSON
+            }
+
+            alert(`Drive Sync Error (${error.name}):\n${errorDetails}`);
             return;
         }
 
-        if (res.data?.folderId) {
-            client.googleDriveFolderId = res.data.folderId;
-            client.driveSubfolders = res.data.subfolders;
+        if (data?.folderId) {
+            client.googleDriveFolderId = data.folderId;
+            client.driveSubfolders = data.subfolders;
 
-            // Persist to workspace_clients table
-            const { error } = await db
-                .from('workspace_clients')
-                .update({ google_drive_folder_id: res.data.folderId })
+            // Save folder ID to workspace_clients
+            await db.from('workspace_clients')
+                .update({ google_drive_folder_id: data.folderId })
                 .eq('id', clientId);
 
-            if (error) {
-                console.error('Failed to update workspace_clients folder ID:', error.message);
-            }
-
             OL.persist();
-            return res.data;
+            
+            // Re-render modal if open
+            if (typeof OL.openClientProfileModal === 'function') {
+                OL.openClientProfileModal(clientId);
+            }
+            return data;
         }
     } catch (err) {
-        console.error('Network / Request Error during Drive lookup:', err);
+        console.error('Network / Execution Error during Drive lookup:', err);
         alert('Failed to connect to Google Drive sync service.');
     }
 };
+
+window.OL = window.OL || {};
+window.OL.resolveClientDriveFolder = OL.resolveClientDriveFolder;
 
 // Define and attach directly to the OL namespace
 OL.renderClientDriveCard = function(clientId) {
