@@ -335,6 +335,7 @@ async function onboardNewClient(clientData) {
     }
 }
 
+// 2. CREATE CLIENT INCLUDING PROFILE ID & AUTO-CREATE DRIVE WORKSPACE
 export async function onboardNewClient() {
   const name = prompt("Enter Client Name:");
   if (!name) return;
@@ -426,17 +427,14 @@ export async function onboardNewClient() {
     driveUrl: driveUrl,
     createdByName: state.currentUser?.name || "Team Member",
     createdAt: new Date().toISOString(),
-    readBy: [state.currentUser?.id].filter(Boolean), // Marked read for creator
+    readBy: [state.currentUser?.id].filter(Boolean),
   };
 
-  // Ensure notifications array exists in global state
   state.notifications = state.notifications || [];
   state.notifications.unshift(teamNotification);
 
-  // Re-persist updated state with new notification
   await OL.persist();
 
-  // Trigger UI toast or notification badge render if helper exists
   if (typeof OL.renderNotifications === "function") {
     OL.renderNotifications();
   }
@@ -444,7 +442,7 @@ export async function onboardNewClient() {
     OL.showToast(`Notification sent to Sphynx Team for ${name}`);
   }
 
-  // 5. Navigate to client tasks
+  // 5. Navigate to client view
   location.hash = "#/client-tasks";
 }
 
