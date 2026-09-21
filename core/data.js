@@ -800,23 +800,45 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
     if (!client.projectData.scopingSheets) {
       client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
     }
+    if (!client.projectData.localResources) {
+      client.projectData.localResources = [];
+    }
 
     const activeSheet = client.projectData.scopingSheets[0];
     const newReqId = "req-" + Date.now();
+    const taskTitle = task.name || task.title || "Converted Request";
 
-    // 1. Map task Drive files (or legacy driveFileUrl)
+    // 1. Create a placeholder Local Resource so the Scoping Sheet can render the row title
+    const newResourceId = "reqline-" + Date.now().toString(36);
+    const newResource = {
+      id: newResourceId,
+      name: taskTitle,
+      type: "Admin",
+      description: task.description || "Converted from client task.",
+      createdDate: new Date().toISOString(),
+      isRequestLine: true
+    };
+    client.projectData.localResources.push(newResource);
+
+    // 2. Map task Drive files (or legacy driveFileUrl)
     const migratedDriveFiles = task.driveFiles || (task.driveFileUrl ? [{ name: task.driveFileName || 'Attached Drive File', url: task.driveFileUrl }] : []);
 
-    // 2. Transform Task into Scoping/Requirement Line Item with complete payload
+    // 3. Transform Task into Scoping/Requirement Line Item with resourceId attached
     const newRequirement = {
-      id: newReqId,
-      actionName: task.name || task.title,
+      id: "li-" + Date.now(),
+      resourceId: newResourceId,
+      actionName: taskTitle,
+      name: taskTitle,
       description: task.description || "Action required from client.",
       targetType: "function",
       targetId: "",
       clientGuideId: task.howToIds?.[0] || "",
       howToIds: task.howToIds || [],
-      status: "Pending Client Action",
+      status: "Do Now",
+      responsibleParty: "Sphynx",
+      round: 1,
+      teamMode: "everyone",
+      teamIds: [],
       comments: task.comments || [],
       clickupComments: task.clickupComments || [],
       driveFiles: migratedDriveFiles,
@@ -826,17 +848,17 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
 
     activeSheet.lineItems.push(newRequirement);
 
-    // 3. Re-link any linked Gmail messages to the new Request ID in Supabase
+    // 4. Re-link any linked Gmail messages to the new Request ID in Supabase
     try {
       await db
         .from('gmail_messages')
-        .update({ linked_request_id: newReqId })
+        .update({ linked_request_id: newRequirement.id })
         .eq('linked_task_id', taskId);
     } catch (err) {
       console.warn("Could not re-link emails to request ID:", err);
     }
 
-    // 4. Remove converted task from clientTasks
+    // 5. Remove converted task from clientTasks
     client.projectData.clientTasks = client.projectData.clientTasks.filter(t => t.id !== taskId);
   }, clientId);
 
