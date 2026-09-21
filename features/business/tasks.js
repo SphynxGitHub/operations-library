@@ -1798,6 +1798,9 @@ OL.renderInContextTaskModal = function(client, task) {
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(task.assignee);
     const isClientAssigned = task.assignee !== 'Sphynx Task' && !is3rdParty;
 
+    // Ensure driveFiles array exists (with fallback to legacy single driveFileUrl if present)
+    const attachedFiles = task.driveFiles || (task.driveFileUrl ? [{ name: task.driveFileName || 'Attached Drive File', url: task.driveFileUrl }] : []);
+
     const content = `
         <div style="padding: 24px; max-width: 920px; width: 100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;">
@@ -1822,7 +1825,6 @@ OL.renderInContextTaskModal = function(client, task) {
                     
                     <!-- REARRANGED HEADER TAGS -->
                     <div style="display:flex; flex-direction:column; gap:8px; margin-bottom: 20px;">
-                        <!-- LINE 1: Client Name & Parent Tag -->
                         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                             <span class="client-link-badge pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
                                   onclick="OL.closeModal(); OL.navigateToClientProject('${client?.id}')" title="Jump to Workspace">
@@ -1834,7 +1836,6 @@ OL.renderInContextTaskModal = function(client, task) {
                             </span>
                         </div>
 
-                        <!-- LINE 2: Status & Assignee Tags -->
                         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                             <span class="pill tiny accent" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
                                   onclick="OL.openEditTaskStatusQuickDropdown(event, '${client?.id}', '${task.id}')">
@@ -1847,7 +1848,7 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>
                     </div>
 
-                    <!-- CONVERT DELIVERABLE SECTION (POSITIONED DIRECTLY BELOW TAGS) -->
+                    <!-- CONVERT DELIVERABLE SECTION -->
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 6px; border:1px solid var(--line); display:flex; flex-direction:column; gap:10px;">
                         <div>
                             <strong class="tiny muted uppercase" style="display:block;">Convert Deliverable:</strong>
@@ -1863,14 +1864,14 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>
                     </div>
 
-                    <!-- DELIVERABLE DETAILS, DESCRIPTION & DRIVE FILE ACTIONS -->
+                    <!-- DELIVERABLE DETAILS, DESCRIPTION & MULTI-FILE DRIVE ATTACHMENTS -->
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                             <label class="bold tiny uppercase muted" style="margin:0;">Deliverable Details & Description:</label>
                             
-                            <!-- GOOGLE DRIVE ATTACHMENT UPLOAD BUTTON -->
+                            <!-- UPLOAD BUTTON (ALWAYS ACCEPTS NEW FILES) -->
                             <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;">
-                                <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> ${task.driveFileUrl ? 'Replace Drive File' : 'Upload File to Drive'}
+                                <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> Upload File to Drive
                                 <input type="file" style="display:none;" onchange="
                                     const file = this.files[0];
                                     if (file) {
@@ -1879,8 +1880,8 @@ OL.renderInContextTaskModal = function(client, task) {
                                                 OL.updateAndSync(() => {
                                                     const targetTask = state.clients['${client?.id}']?.projectData?.clientTasks?.find(t => t.id === '${task.id}');
                                                     if (targetTask) {
-                                                        targetTask.driveFileUrl = res.webViewLink;
-                                                        targetTask.driveFileName = file.name;
+                                                        if (!targetTask.driveFiles) targetTask.driveFiles = [];
+                                                        targetTask.driveFiles.push({ name: file.name, url: res.webViewLink });
                                                     }
                                                 }, '${client?.id}');
                                                 OL.openTaskInContext('${client?.id}', '${task.id}');
@@ -1896,16 +1897,20 @@ OL.renderInContextTaskModal = function(client, task) {
                                   placeholder="Add deliverable details / notes for this task..."
                                   onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
 
-                        <!-- DEDICATED DRIVE FILE ACTION BUTTON -->
-                        ${task.driveFileUrl ? `
-                            <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; justify-content:space-between; align-items:center;">
-                                <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
-                                    <i data-lucide="file-text" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i>
-                                    <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(task.driveFileName || 'Attached Drive File')}</span>
-                                </div>
-                                <a href="${esc(task.driveFileUrl)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; flex-shrink:0; font-weight:bold;">
-                                    <i data-lucide="external-link" style="width:11px;height:11px;"></i> Open in Drive
-                                </a>
+                        <!-- LIST OF ALL ATTACHED DRIVE FILES -->
+                        ${attachedFiles.length ? `
+                            <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:6px;">
+                                <label class="bold tiny uppercase muted">Attached Drive Files (${attachedFiles.length}):</label>${attachedFiles.map((fileObj, fIdx) => `
+                                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.15); padding:6px 10px; border-radius:4px;">
+                                        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+                                            <i data-lucide="file-text" style="width:13px;height:13px;color:var(--accent); flex-shrink:0;"></i>
+                                            <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(fileObj.name)}</span>
+                                        </div>
+                                        <a href="${esc(fileObj.url)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; flex-shrink:0; font-weight:bold;">
+                                            <i data-lucide="external-link" style="width:11px;height:11px;"></i> Open in Drive
+                                        </a>
+                                    </div>
+                                `).join('')}
                             </div>
                         ` : ''}
                     </div>
