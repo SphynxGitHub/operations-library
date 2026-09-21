@@ -301,27 +301,64 @@ export function renderClientDashboard() {
 };
 
 // 2. CREATE CLIENT INCLUDING PROFILE ID FOR PUBLIC LINK
-export function onboardNewClient() {
+async function onboardNewClient(clientData) {
+    try {
+        // 1. Insert new client into Supabase workspace_clients
+        const { data: newClient, error } = await db
+            .from('workspace_clients')
+            .insert([{
+                name: clientData.name,
+                meta: { name: clientData.name, email: clientData.email },
+                status: 'active'
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // 2. Automatically trigger Drive folder creation
+        if (newClient?.id && typeof OL.resolveClientDriveFolder === 'function') {
+            console.log(`📁 Auto-creating Drive folders for ${clientData.name}...`);
+            await OL.resolveClientDriveFolder(newClient.id);
+        }
+
+        // 3. Update local state and UI
+        state.clients[newClient.id] = newClient;
+        OL.persist();
+        
+        alert(`Client "${clientData.name}" onboarded and Google Drive folders created!`);
+        return newClient;
+
+    } catch (err) {
+        console.error('Error during client onboarding:', err);
+        alert(`Onboarding failed: ${err.message}`);
+    }
+}
+
+export async function onboardNewClient() {
   const name = prompt("Enter Client Name:");
   if (!name) return;
+  
   const clientId = "c-" + Date.now();
-  state.clients[clientId] = {
+  const newClientObj = {
     id: clientId,
-    publicToken: "access_" + Math.random().toString(36).slice(2, 12), // NEW: Access Token
+    publicToken: "access_" + Math.random().toString(36).slice(2, 12),
+    googleDriveFolderId: null,
+    driveSubfolders: {},
     meta: {
       name,
       onboarded: new Date().toLocaleDateString(),
       status: "Discovery",
     },
     modules: {
-        checklist: true,      // Usually on by default
-        apps: false,
-        functions: false,
-        resources: false,
-        scoping: false,
-        analysis: false,
-        "how-to": false,
-        team: false
+      checklist: true,
+      apps: false,
+      functions: false,
+      resources: false,
+      scoping: false,
+      analysis: false,
+      "how-to": false,
+      team: false
     },
     permissions: {
       apps: "full",
@@ -347,11 +384,69 @@ export function onboardNewClient() {
     },
     sharedMasterIds: [],
   };
+
+  // 1. Assign to local state & provision templates
+  state.clients[clientId] = newClientObj;
   OL.provisionSphynxTemplates(clientId);
   state.activeClientId = clientId;
-  OL.persist();
+
+  // 2. Persist initial state to Supabase
+  await OL.persist();
+
+  // 3. Auto-create Google Drive folder & subfolders
+  let driveFolderId = null;
+  if (typeof OL.resolveClientDriveFolder === "function") {
+    try {
+      console.log(`📁 Creating Google Drive workspace for ${name}...`);
+      const driveResult = await OL.resolveClientDriveFolder(clientId);
+      if (driveResult?.folderId) {
+        driveFolderId = driveResult.folderId;
+        state.clients[clientId].googleDriveFolderId = driveResult.folderId;
+        state.clients[clientId].driveSubfolders = driveResult.subfolders;
+        await OL.persist();
+      }
+    } catch (err) {
+      console.warn("Automated Drive creation skipped or failed:", err);
+    }
+  }
+
+  // 4. Create App Notification for Sphynx Team Members
+  const notificationId = "notif-" + Date.now();
+  const driveUrl = driveFolderId 
+    ? `https://drive.google.com/drive/folders/${driveFolderId}`
+    : null;
+
+  const teamNotification = {
+    id: notificationId,
+    type: "client_onboarded",
+    title: "🚀 New Client Onboarded",
+    message: `${name} has been onboarded to Operations Library.`,
+    clientId: clientId,
+    clientName: name,
+    driveUrl: driveUrl,
+    createdByName: state.currentUser?.name || "Team Member",
+    createdAt: new Date().toISOString(),
+    readBy: [state.currentUser?.id].filter(Boolean), // Marked read for creator
+  };
+
+  // Ensure notifications array exists in global state
+  state.notifications = state.notifications || [];
+  state.notifications.unshift(teamNotification);
+
+  // Re-persist updated state with new notification
+  await OL.persist();
+
+  // Trigger UI toast or notification badge render if helper exists
+  if (typeof OL.renderNotifications === "function") {
+    OL.renderNotifications();
+  }
+  if (typeof OL.showToast === "function") {
+    OL.showToast(`Notification sent to Sphynx Team for ${name}`);
+  }
+
+  // 5. Navigate to client tasks
   location.hash = "#/client-tasks";
-};
+}
 
 export function provisionSphynxTemplates(clientId) {
     const client = state.clients[clientId];
