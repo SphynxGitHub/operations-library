@@ -179,6 +179,8 @@ serve(async (req) => {
         }
       }
 
+      
+
       // 2. Resolve target subfolder (e.g., "App Snapshots" or "Task Attachments")
       const targetSubfolder = subfolderName || "Task Attachments";
       const subQ = `mimeType='application/vnd.google-apps.folder' and name='${targetSubfolder}' and '${targetFolderId}' in parents and trashed=false`;
@@ -220,6 +222,72 @@ serve(async (req) => {
         success: true, 
         fileId: uploadData.id, 
         webViewLink: uploadData.webViewLink 
+      }), { status: 200, headers: corsHeaders });
+    }
+
+    // Inside google-drive-sync index.ts serve handler...
+    if (action === "upload_global_snapshot") {
+      const { fileName, fileData, fileType } = body;
+
+      // 1. Search for Global Master Snapshots Root Folder
+      const rootQuery = `mimeType='application/vnd.google-apps.folder' and name='Global Master SOP Snapshots' and trashed=false`;
+      const rootSearch = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(rootQuery)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const rootData = await rootSearch.json();
+      let globalFolderId = rootData.files?.[0]?.id;
+
+      // 2. Create Global Folder if it doesn't exist yet
+      if (!globalFolderId) {
+        const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Global Master SOP Snapshots", mimeType: "application/vnd.google-apps.folder" })
+        });
+        const createData = await createRes.json();
+        globalFolderId = createData.id;
+      }
+
+      // 3. Convert base64 data to binary Blob
+      const base64Data = fileData.split(",")[1] || fileData;
+      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      const blob = new Blob([binaryData], { type: fileType || "image/png" });
+
+      // 4. Upload file to Google Drive
+      const metadata = { name: fileName, parents: [globalFolderId] };
+      const formData = new FormData();
+      formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+      formData.append("file", blob);
+
+      const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+
+      if (!uploadRes.ok || !uploadData.id) {
+        return new Response(JSON.stringify({ 
+          error: "upload_failed", 
+          message: uploadData.error?.message || "Failed to upload image to Google Drive." 
+        }), { status: 400, headers: corsHeaders });
+      }
+
+      // Make file publicly viewable so the image can render in img src tags
+      await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}/permissions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "reader", type: "anyone" })
+      });
+
+      // Construct direct high-res image view URL
+      const directImageUrl = `https://lh3.googleusercontent.com/d/${uploadData.id}`;
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        fileId: uploadData.id, 
+        url: directImageUrl 
       }), { status: 200, headers: corsHeaders });
     }
     
