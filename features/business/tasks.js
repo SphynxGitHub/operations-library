@@ -1819,23 +1819,48 @@ OL.renderInContextTaskModal = function(client, task) {
 
             <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
                 <div style="min-width:0;">
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
-                        <span class="client-link-badge pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
-                              onclick="OL.closeModal(); OL.navigateToClientProject('${client?.id}')" title="Jump to Workspace">
-                            <i data-lucide="folder" style="width:12px;height:12px; pointer-events:none;"></i> ${esc(client?.meta?.name || 'Workspace')}
-                        </span>
-                        <span class="pill tiny accent" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
-                              onclick="OL.openEditTaskStatusQuickDropdown(event, '${client?.id}', '${task.id}')">
-                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Status: ${esc(task.status || 'Pending Sphynx Action')}
-                        </span>
-                        <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}"
-                              onclick="OL.openEditTaskAssigneeDropdown(event, '${client?.id}', '${task.id}')">
-                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee: ${esc(task.assignee || 'Sphynx Task')}
-                        </span>
-                        <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
-                              onclick="OL.openTaskParentPicker('${client?.id}', '${task.id}')">
-                            <i data-lucide="pencil" style="width:10px;height:10px;"></i> Parent: ${OL.getTaskParentLabel(client, task)}
-                        </span>
+                    
+                    <!-- REARRANGED HEADER TAGS -->
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom: 20px;">
+                        <!-- LINE 1: Client Name & Parent Tag -->
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <span class="client-link-badge pill tiny soft" style="font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
+                                  onclick="OL.closeModal(); OL.navigateToClientProject('${client?.id}')" title="Jump to Workspace">
+                                <i data-lucide="folder" style="width:12px;height:12px; pointer-events:none;"></i> ${esc(client?.meta?.name || 'Workspace')}
+                            </span>
+                            <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+                                  onclick="OL.openTaskParentPicker('${client?.id}', '${task.id}')">
+                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Parent: ${OL.getTaskParentLabel(client, task)}
+                            </span>
+                        </div>
+
+                        <!-- LINE 2: Status & Assignee Tags -->
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <span class="pill tiny accent" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+                                  onclick="OL.openEditTaskStatusQuickDropdown(event, '${client?.id}', '${task.id}')">
+                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Status: ${esc(task.status || 'Pending Sphynx Action')}
+                            </span>
+                            <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}"
+                                  onclick="OL.openEditTaskAssigneeDropdown(event, '${client?.id}', '${task.id}')">
+                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee: ${esc(task.assignee || 'Sphynx Task')}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- CONVERT DELIVERABLE SECTION (POSITIONED DIRECTLY BELOW TAGS) -->
+                    <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 6px; border:1px solid var(--line); display:flex; flex-direction:column; gap:10px;">
+                        <div>
+                            <strong class="tiny muted uppercase" style="display:block;">Convert Deliverable:</strong>
+                            <span class="tiny dim" style="display:block; margin-top:2px;">Transform this task into an SOP asset or request client input.</span>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn tiny soft" onclick="OL.convertTaskToResource('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
+                                <i data-lucide="workflow" style="width:11px;height:11px;color:var(--accent);"></i> To Resource
+                            </button>
+                            <button class="btn tiny soft" onclick="OL.convertTaskToRequirement('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
+                                <i data-lucide="help-circle" style="width:11px;height:11px;color:var(--accent);"></i> To Client Request
+                            </button>
+                        </div>
                     </div>
 
                     <!-- DELIVERABLE DETAILS, DESCRIPTION & DRIVE FILE ACTIONS -->
@@ -1883,22 +1908,6 @@ OL.renderInContextTaskModal = function(client, task) {
                                 </a>
                             </div>
                         ` : ''}
-                    </div>
-
-                    <!-- TASK CONVERSION ACTIONS -->
-                    <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 6px; border:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                        <div>
-                            <strong class="tiny muted uppercase" style="display:block;">Convert Deliverable:</strong>
-                            <span class="tiny dim">Transform this task into an SOP asset or request client input.</span>
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <button class="btn tiny soft" onclick="OL.convertTaskToResource('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
-                                <i data-lucide="workflow" style="width:11px;height:11px;color:var(--accent);"></i> To Resource
-                            </button>
-                            <button class="btn tiny soft" onclick="OL.convertTaskToRequirement('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
-                                <i data-lucide="help-circle" style="width:11px;height:11px;color:var(--accent);"></i> To Client Request
-                            </button>
-                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
