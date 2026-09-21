@@ -675,6 +675,69 @@ export async function importMasterBackup(event) {
     }
 }
 
+// ---- Global OL namespace declaration ----
+window.OL = window.OL || {};
+const OL = window.OL;
+
+// Resolves an email address against Sphynx staff and Client Team rosters.
+// Returns an interactive, clickable pill with display name if matched,
+// or an interactive '+' prompt button if unrecognized.
+OL.renderContactPillOrPrompt = function(emailStr, options = {}) {
+    const clean = (emailStr || '').toLowerCase().trim();
+    if (!clean) return '';
+
+    const roster = state.master?.sphynxTeam || [];
+    const staff = roster.find(m => (m.email || '').toLowerCase().trim() === clean);
+    
+    // 1. Check Sphynx Team — Clickable to open Sphynx Team tab/modal
+    if (staff) {
+        return `<span class="pill tiny soft" 
+                      style="font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
+                      onclick="event.stopPropagation(); if(typeof OL.openTeamMemberModal === 'function') OL.openTeamMemberModal('${staff.id}'); else window.location.hash='#/business/team';"
+                      title="Sphynx Team Member — Click to view profile">
+            <i data-lucide="user" style="width:10px;height:10px; color:var(--accent); pointer-events:none;"></i> ${esc(staff.name)}
+        </span>`;
+    }
+
+    // 2. Check Client Team Members — Clickable to jump directly into the Project Workspace
+    let matchedClientContact = null;
+    let matchedClientId = '';
+    let matchedClientName = '';
+
+    Object.values(state.clients || {}).forEach(c => {
+        const found = (c.projectData?.teamMembers || []).find(tm => (tm.email || '').toLowerCase().trim() === clean);
+        if (found) {
+            matchedClientContact = found;
+            matchedClientId = c.id;
+            matchedClientName = c.meta?.name || 'Project';
+        }
+    });
+
+    if (matchedClientContact) {
+        return `<span class="client-link-badge pill tiny soft" 
+                      style="font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
+                      onclick="event.stopPropagation(); if(typeof OL.closeModal === 'function') OL.closeModal(); OL.switchClient('${matchedClientId}');"
+                      title="Jump to ${esc(matchedClientName)} Workspace">
+            <i data-lucide="folder" style="width:10px;height:10px; color:#38bdf8; pointer-events:none;"></i> ${esc(matchedClientContact.name || clean)} <span class="muted" style="font-size:9px;">(${esc(matchedClientName)})</span>
+        </span>`;
+    }
+
+    // 3. Unrecognized Email — Render Email with '+' Add Contact Prompt
+    const clickHandler = options.clientId 
+        ? `OL._maybePromptAddSenderToTeam('${options.clientId}', '${esc(clean)}')` 
+        : `OL.promptCreateClientFromUnrecognizedEmail('${esc(clean)}')`;
+
+    return `<span style="display:inline-flex; align-items:center; gap:4px; font-size:11px;">
+        <span class="muted">${esc(clean)}</span>
+        <button class="btn tiny soft" 
+                style="padding:1px 5px; font-size:10px; font-weight:bold; color:var(--accent);" 
+                onclick="event.stopPropagation(); ${clickHandler}" 
+                title="Unrecognized contact — click to create client or add to team">
+            <i data-lucide="user-plus" style="width:10px;height:10px; pointer-events:none;"></i> +
+        </button>
+    </span>`;
+};
+
 // 1. CONVERT TASK TO RESOURCE
 OL.convertTaskToResource = function(clientId, taskId) {
   const client = state.clients?.[clientId];
@@ -765,69 +828,6 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
   // Refresh UI / Close Modal
   if (typeof OL.closeModal === "function") OL.closeModal();
   if (typeof window.handleRoute === "function") window.handleRoute();
-};
-
-// ---- Global OL namespace declaration ----
-window.OL = window.OL || {};
-const OL = window.OL;
-
-// Resolves an email address against Sphynx staff and Client Team rosters.
-// Returns an interactive, clickable pill with display name if matched,
-// or an interactive '+' prompt button if unrecognized.
-OL.renderContactPillOrPrompt = function(emailStr, options = {}) {
-    const clean = (emailStr || '').toLowerCase().trim();
-    if (!clean) return '';
-
-    const roster = state.master?.sphynxTeam || [];
-    const staff = roster.find(m => (m.email || '').toLowerCase().trim() === clean);
-    
-    // 1. Check Sphynx Team — Clickable to open Sphynx Team tab/modal
-    if (staff) {
-        return `<span class="pill tiny soft" 
-                      style="font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
-                      onclick="event.stopPropagation(); if(typeof OL.openTeamMemberModal === 'function') OL.openTeamMemberModal('${staff.id}'); else window.location.hash='#/business/team';"
-                      title="Sphynx Team Member — Click to view profile">
-            <i data-lucide="user" style="width:10px;height:10px; color:var(--accent); pointer-events:none;"></i> ${esc(staff.name)}
-        </span>`;
-    }
-
-    // 2. Check Client Team Members — Clickable to jump directly into the Project Workspace
-    let matchedClientContact = null;
-    let matchedClientId = '';
-    let matchedClientName = '';
-
-    Object.values(state.clients || {}).forEach(c => {
-        const found = (c.projectData?.teamMembers || []).find(tm => (tm.email || '').toLowerCase().trim() === clean);
-        if (found) {
-            matchedClientContact = found;
-            matchedClientId = c.id;
-            matchedClientName = c.meta?.name || 'Project';
-        }
-    });
-
-    if (matchedClientContact) {
-        return `<span class="client-link-badge pill tiny soft" 
-                      style="font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"
-                      onclick="event.stopPropagation(); if(typeof OL.closeModal === 'function') OL.closeModal(); OL.switchClient('${matchedClientId}');"
-                      title="Jump to ${esc(matchedClientName)} Workspace">
-            <i data-lucide="folder" style="width:10px;height:10px; color:#38bdf8; pointer-events:none;"></i> ${esc(matchedClientContact.name || clean)} <span class="muted" style="font-size:9px;">(${esc(matchedClientName)})</span>
-        </span>`;
-    }
-
-    // 3. Unrecognized Email — Render Email with '+' Add Contact Prompt
-    const clickHandler = options.clientId 
-        ? `OL._maybePromptAddSenderToTeam('${options.clientId}', '${esc(clean)}')` 
-        : `OL.promptCreateClientFromUnrecognizedEmail('${esc(clean)}')`;
-
-    return `<span style="display:inline-flex; align-items:center; gap:4px; font-size:11px;">
-        <span class="muted">${esc(clean)}</span>
-        <button class="btn tiny soft" 
-                style="padding:1px 5px; font-size:10px; font-weight:bold; color:var(--accent);" 
-                onclick="event.stopPropagation(); ${clickHandler}" 
-                title="Unrecognized contact — click to create client or add to team">
-            <i data-lucide="user-plus" style="width:10px;height:10px; pointer-events:none;"></i> +
-        </button>
-    </span>`;
 };
 
 // Interactive modal prompt when clicking '+' on an unrecognized email
