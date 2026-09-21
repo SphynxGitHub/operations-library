@@ -675,6 +675,98 @@ export async function importMasterBackup(event) {
     }
 }
 
+// 1. CONVERT TASK TO RESOURCE
+OL.convertTaskToResource = function(clientId, taskId) {
+  const client = state.clients?.[clientId];
+  const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+
+  if (!task) {
+    alert("Task not found.");
+    return;
+  }
+
+  if (!confirm(`Convert task "${task.name || task.title}" into a Resource?`)) return;
+
+  OL.updateAndSync(() => {
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+
+    // Transform Task into Resource object structure
+    const newResource = {
+      id: "sys-" + uid(),
+      name: task.name || task.title,
+      type: "Admin",
+      description: task.description || "Converted from client task.",
+      createdDate: new Date().toISOString(),
+      isLocked: false,
+      steps: [],
+      data: {
+        originalTaskId: taskId,
+        source: "task_conversion"
+      }
+    };
+
+    client.projectData.localResources.push(newResource);
+
+    // Remove task from clientTasks
+    client.projectData.clientTasks = client.projectData.clientTasks.filter(t => t.id !== taskId);
+  }, clientId);
+
+  if (typeof OL.showToast === "function") {
+    OL.showToast(`Converted task to Resource: "${task.name || task.title}"`);
+  }
+
+  // Refresh UI / Close Modal
+  if (typeof OL.closeModal === "function") OL.closeModal();
+  if (typeof window.handleRoute === "function") window.handleRoute();
+};
+
+
+// 2. CONVERT TASK TO REQUEST / SCOPING REQUIREMENT
+OL.convertTaskToRequirement = function(clientId, taskId) {
+  const client = state.clients?.[clientId];
+  const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+
+  if (!task) {
+    alert("Task not found.");
+    return;
+  }
+
+  if (!confirm(`Convert task "${task.name || task.title}" into a Client Request/Requirement?`)) return;
+
+  OL.updateAndSync(() => {
+    if (!client.projectData.scopingSheets) {
+      client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
+    }
+
+    const activeSheet = client.projectData.scopingSheets[0];
+
+    // Transform Task into Scoping/Requirement Line Item
+    const newRequirement = {
+      id: "req-" + Date.now(),
+      actionName: task.name || task.title,
+      description: task.description || "Action required from client.",
+      targetType: "function",
+      targetId: "",
+      clientGuideId: task.howToIds?.[0] || "",
+      status: "Pending Client Action",
+      createdDate: new Date().toISOString()
+    };
+
+    activeSheet.lineItems.push(newRequirement);
+
+    // Remove task from clientTasks
+    client.projectData.clientTasks = client.projectData.clientTasks.filter(t => t.id !== taskId);
+  }, clientId);
+
+  if (typeof OL.showToast === "function") {
+    OL.showToast(`Converted task to Client Request: "${task.name || task.title}"`);
+  }
+
+  // Refresh UI / Close Modal
+  if (typeof OL.closeModal === "function") OL.closeModal();
+  if (typeof window.handleRoute === "function") window.handleRoute();
+};
+
 // ---- Global OL namespace declaration ----
 window.OL = window.OL || {};
 const OL = window.OL;
