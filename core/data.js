@@ -941,6 +941,51 @@ OL.renderSearchableClientPicker = function(options = {}) {
     `;
 };
 
+OL.uploadFileToDrive = async function(clientId, file, subfolderName = "Task Attachments") {
+  const client = state.clients?.[clientId];
+  if (!client) {
+    alert("No active client found for file upload.");
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onload = async () => {
+      try {
+        console.log(`📤 Uploading ${file.name} to ${subfolderName}...`);
+        
+        const { data, error } = await db.functions.invoke("google-drive-sync", {
+          body: {
+            action: "upload_client_file",
+            clientId: clientId,
+            clientName: client.meta?.name || "Client Workspace",
+            fileName: file.name,
+            fileType: file.type,
+            fileData: reader.result,
+            subfolderName: subfolderName // "App Snapshots" or "Task Attachments"
+          }
+        });
+
+        if (error || !data?.success) {
+          throw new Error(error?.message || "Drive upload failed");
+        }
+
+        if (typeof OL.showToast === "function") {
+          OL.showToast(`Uploaded ${file.name} to ${subfolderName}`);
+        }
+
+        resolve(data); // Returns { fileId, webViewLink }
+      } catch (err) {
+        console.error("Drive upload error:", err);
+        alert(`Failed to upload file to Drive: ${err.message}`);
+        reject(err);
+      }
+    };
+  });
+};
+
 // Internal Dropdown Renderer
 OL._renderPickerDropdown = function(pickerId, query, includeGeneral, onSelectFn) {
     const resultsContainer = document.getElementById(`${pickerId}-results`);
