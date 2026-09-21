@@ -986,6 +986,42 @@ OL.uploadFileToDrive = async function(clientId, file, subfolderName = "Task Atta
   });
 };
 
+OL.uploadGlobalSnapshotToDrive = async function(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onload = async () => {
+      try {
+        console.log(`📤 Uploading global snapshot "${file.name}" to Google Drive...`);
+        
+        const { data, error } = await db.functions.invoke("google-drive-sync", {
+          body: {
+            action: "upload_global_snapshot",
+            fileName: `${Date.now()}_${file.name}`,
+            fileType: file.type,
+            fileData: reader.result
+          }
+        });
+
+        if (error || !data?.success) {
+          throw new Error(error?.message || "Drive upload failed");
+        }
+
+        if (typeof OL.showToast === "function") {
+          OL.showToast(`Image uploaded to Global Drive Snapshots!`);
+        }
+
+        resolve(data.url); // Returns direct rendering Drive URL
+      } catch (err) {
+        console.error("Global Drive snapshot upload error:", err);
+        alert(`Failed to upload snapshot to Google Drive: ${err.message}`);
+        reject(err);
+      }
+    };
+  });
+};
+
 // Internal Dropdown Renderer
 OL._renderPickerDropdown = function(pickerId, query, includeGeneral, onSelectFn) {
     const resultsContainer = document.getElementById(`${pickerId}-results`);
