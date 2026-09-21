@@ -162,6 +162,36 @@ function formatSummaryText(summaryPayload: any): string {
   return parts.join("\n\n").trim();
 }
 
+// Uploads meeting recording or summary document to Google Drive
+async function saveToClientDriveFolder(
+  supabaseUrl: string, 
+  serviceKey: string, 
+  clientId: string, 
+  clientName: string, 
+  fileName: string, 
+  contentOrUrl: string, 
+  isUrl: boolean = false
+) {
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/google-drive-sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceKey}`
+      },
+      body: JSON.stringify({
+        action: isUrl ? "upload_zoom_recording" : "save_text_doc",
+        clientId,
+        clientName,
+        fileName,
+        [isUrl ? "fileUrl" : "content"]: contentOrUrl
+      })
+    });
+  } catch (err: any) {
+    console.warn(`Failed to upload ${fileName} to Drive:`, err.message);
+  }
+}
+
 // Auth: a signed-in Sphynx admin or team member (Authorization: Bearer <login token>), or the scheduled
 // sync calling with the service role key as the bearer token or a CRON_SECRET in the x-cron-secret
 // header (see ../_shared/auth.ts). Anyone else gets 401 or 403 and nothing happens.
@@ -291,6 +321,54 @@ serve(async (req) => {
       }
       summariesPostedCount++;
 
+      // 3b. AUTO-SYNC TO GOOGLE DRIVE: Save Summary Text Doc into Client's Drive Subfolder
+      if (evt.linked_client_id) {
+        const { data: clientRow } = await supabase
+          .from("workspace_clients")
+          .select("meta")
+          .eq("id", evt.linked_client_id)
+          .maybeSingle();
+
+        const clientName = clientRow?.meta?.name || "Client Workspace";
+        const dateStr = new Date(evt.start).toISOString().split("T")[0];
+        const docName = `Zoom Meeting Summary - ${dateStr}.txt`;
+
+        // Save Summary Doc to Drive "Zoom Recordings" Subfolder
+        await saveToClientDriveFolder(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          evt.linked_client_id,
+          clientName,
+          docName,
+          summaryText,
+          false
+        );
+
+        // Fetch Cloud Recording MP4 Download URL from Zoom
+        const recRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/recordings`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        if (recRes.ok) {
+          const recData = await recRes.json();
+          const mp4File = (recData.recording_files || []).find((f: any) => f.file_type === "MP4");
+
+          if (mp4File?.download_url) {
+            const videoFileName = `Zoom Recording - ${dateStr}.mp4`;
+            // Stream video file straight into client Drive folder
+            await saveToClientDriveFolder(
+              Deno.env.get("SUPABASE_URL")!,
+              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+              evt.linked_client_id,
+              clientName,
+              videoFileName,
+              `${mp4File.download_url}?access_token=${accessToken}`,
+              true
+            );
+          }
+        }
+      }
+      
       // 4. Create linked tasks from action items, if this event is tied to a project.
       if (evt.linked_client_id && actionItems.length > 0) {
         const { data: clientRow, error: clientErr } = await supabase
