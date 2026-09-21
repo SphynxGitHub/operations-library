@@ -797,11 +797,30 @@ export function _geRenderBlockInner(block, canEdit) {
         case 'image':
             return `
                 ${canEdit ? `
-                    <input type="text" class="fvi-input" style="margin-bottom:8px;"
-                           placeholder="Paste image URL..."
-                           value="${esc(block.data.url || '')}"
-                           onblur="OL._geUpdateBlockData('${block.id}', {url: this.value, caption: document.getElementById('ge-img-cap-${block.id}')?.value || ''});
-                                   OL._geRefreshImageBlock('${block.id}', this.value)">
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                        <input type="text" class="fvi-input" id="ge-img-url-input-${block.id}" style="flex:1;"
+                               placeholder="Google Drive Image URL..."
+                               value="${esc(block.data.url || '')}"
+                               onblur="OL._geUpdateBlockData('${block.id}', {url: this.value, caption: document.getElementById('ge-img-cap-${block.id}')?.value || ''});
+                                       OL._geRefreshImageBlock('${block.id}', this.value)">
+                        
+                        <label class="btn tiny primary" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;">
+                            <i data-lucide="upload-cloud" style="width:12px; height:12px;"></i> Upload to Drive
+                            <input type="file" accept="image/*" style="display:none;" onchange="
+                                const file = this.files[0];
+                                if (file) {
+                                    OL.uploadGlobalSnapshotToDrive(file).then(driveUrl => {
+                                        if (driveUrl) {
+                                            const input = document.getElementById('ge-img-url-input-${block.id}');
+                                            if (input) input.value = driveUrl;
+                                            OL._geUpdateBlockData('${block.id}', { url: driveUrl, caption: document.getElementById('ge-img-cap-${block.id}')?.value || '' });
+                                            OL._geRefreshImageBlock('${block.id}', driveUrl);
+                                        }
+                                    });
+                                }
+                            ">
+                        </label>
+                    </div>
                 ` : ''}
                 <div id="ge-img-preview-${block.id}">
                     ${block.data.url ? `
@@ -821,7 +840,7 @@ export function _geRenderBlockInner(block, canEdit) {
                        placeholder="Caption (optional)..."
                        value="${esc(block.data.caption || '')}"
                        ${!canEdit ? 'readonly' : ''}
-                       onblur="OL._geUpdateBlockData('${block.id}', {url: document.querySelector('#ge-blk-${block.id} input[type=text]')?.value || '${esc(block.data.url || '')}', caption: this.value})">
+                       onblur="OL._geUpdateBlockData('${block.id}', {url: document.getElementById('ge-img-url-input-${block.id}')?.value || '${esc(block.data.url || '')}', caption: this.value})">
                 ${block.data.caption ? `
                     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic;">
                         ${esc(block.data.caption)}
