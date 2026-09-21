@@ -2829,37 +2829,31 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
     }
 
     container.innerHTML = `
-        <div style="display:grid; gap:6px;">
+        <div style="display:grid; gap:6px; min-width:0; width:100%; box-sizing:border-box;">
             ${data.map(m => {
                 const isEditing = OL._editingLinkedEmailNoteId === m.id;
-                // If a note was never seeded (messages linked before this
-                // feature existed) or somehow came back empty, fall through
-                // to the full email body -- both the read-only preview and
-                // the edit box's first-time prefill use this same value, so
-                // clicking the pencil never opens to something blank when
-                // there's real content sitting right there in the email.
                 const displayText = m.note || m.body || m.snippet || '';
 
                 return `
-                <div style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
+                <div style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')" title="Open full email">
-                        <div style="min-width:0;">
-                            <strong>${esc(m.subject || 'No Subject')}</strong>
-                            <div class="muted">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
+                        <div style="min-width:0; flex:1; overflow-wrap:anywhere; word-break:break-word;">
+                            <strong style="display:block; overflow-wrap:anywhere; word-break:break-word;">${esc(m.subject || 'No Subject')}</strong>
+                            <div class="muted" style="overflow-wrap:anywhere; word-break:break-word;">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
                         </div>
                         <i data-lucide="external-link" style="width:12px;height:12px; flex-shrink:0; margin-top:2px; color:var(--muted);"></i>
                     </div>
                     ${isEditing ? `
-                        <div style="margin-top:6px;" onclick="event.stopPropagation();">
-                            <textarea id="linked-email-note-${m.id}" class="modal-input tiny" rows="4" style="width:100%; box-sizing:border-box;">${esc(displayText)}</textarea>
+                        <div style="margin-top:6px; min-width:0; width:100%;" onclick="event.stopPropagation();">
+                            <textarea id="linked-email-note-${m.id}" class="modal-input tiny" rows="4" style="width:100%; box-sizing:border-box; resize:vertical;">${esc(displayText)}</textarea>
                             <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
                                 <button class="btn tiny soft" onclick="OL.cancelEditLinkedEmailNote('${taskId}')">Cancel</button>
                                 <button class="btn tiny primary" onclick="OL.saveLinkedEmailNote('${taskId}', '${m.id}')">Save Note</button>
                             </div>
                         </div>
                     ` : (displayText ? `
-                        <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:flex-start; gap:8px;" onclick="event.stopPropagation();">
-                            <div class="muted" style="white-space:pre-wrap; overflow-wrap:break-word; line-height:1.4; flex:1; min-width:0;">${esc(displayText)}</div>
+                        <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:flex-start; gap:8px; min-width:0; width:100%;" onclick="event.stopPropagation();">
+                            <div class="muted" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.4; flex:1; min-width:0;">${esc(displayText)}</div>
                             <button class="btn tiny soft" style="flex-shrink:0; padding:2px 5px;" title="Edit note" onclick="OL.startEditLinkedEmailNote('${taskId}', '${m.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                         </div>
                     ` : `
