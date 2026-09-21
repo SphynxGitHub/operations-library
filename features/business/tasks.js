@@ -1838,19 +1838,56 @@ OL.renderInContextTaskModal = function(client, task) {
                         </span>
                     </div>
 
+                    <!-- DELIVERABLE DETAILS, DESCRIPTION & DRIVE ATTACHMENTS -->
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
-                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Deliverable Details & Description:</label>
-                        <textarea class="modal-input tiny" rows="4"
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <label class="bold tiny uppercase muted" style="margin:0;">Deliverable Details & Description:</label>
+                            
+                            <!-- GOOGLE DRIVE ATTACHMENT UPLOAD BUTTON -->
+                            <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;">
+                                <i data-lucide="paperclip" style="width:11px;height:11px;color:var(--accent);"></i> Attach File to Drive
+                                <input type="file" style="display:none;" onchange="
+                                    const file = this.files[0];
+                                    if (file) {
+                                        OL.uploadFileToDrive('${client?.id}', file, 'Task Attachments').then(res => {
+                                            if (res?.webViewLink) {
+                                                const txt = document.getElementById('task-desc-${task.id}');
+                                                const appendText = '\\n\\n📁 Attachment: [' + file.name + '](' + res.webViewLink + ')';
+                                                txt.value = (txt.value + appendText).trim();
+                                                OL.updateTaskDescription('${client?.id}', '${task.id}', txt.value);
+                                            }
+                                        });
+                                    }
+                                ">
+                            </label>
+                        </div>
+                        <textarea class="modal-input tiny" id="task-desc-${task.id}" rows="4"
                                   style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical;"
                                   placeholder="Add deliverable details / notes for this task..."
                                   onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
+                    </div>
+
+                    <!-- TASK CONVERSION ACTIONS -->
+                    <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 6px; border:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                        <div>
+                            <strong class="tiny muted uppercase" style="display:block;">Convert Deliverable:</strong>
+                            <span class="tiny dim">Transform this task into an SOP asset or request client input.</span>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn tiny soft" onclick="OL.convertTaskToResource('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
+                                <i data-lucide="workflow" style="width:11px;height:11px;color:var(--accent);"></i> To Resource
+                            </button>
+                            <button class="btn tiny soft" onclick="OL.convertTaskToRequirement('${client?.id}', '${task.id}')" style="display:inline-flex; align-items:center; gap:4px;">
+                                <i data-lucide="help-circle" style="width:11px;height:11px;color:var(--accent);"></i> To Client Request
+                            </button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
                             <i data-lucide="book-open" style="width:12px;height:12px;vertical-align:sub;"></i> Linked How-To Guides
                         </label>
-                        ${(task.howToIds && task.howToIds.length) ? `
+                         ${(task.howToIds && task.howToIds.length) ? `
                             <div style="display:grid; gap:8px; margin-bottom:10px;">
                                 ${task.howToIds.map(htId => {
                                     const guide = (state.master.howToLibrary || []).find(g => g.id === htId);
@@ -1913,6 +1950,7 @@ OL.renderInContextTaskModal = function(client, task) {
 
     OL.showOverlayModal(content);
     OL.loadLinkedEmailsForTask(task.id);
+    if (window.lucide) lucide.createIcons();
 };
 
 // -------------------------------------------------------------
@@ -1939,18 +1977,15 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         }
     }
 
-    // The request this task belongs to, as a tag that opens it on the scoping sheet.
     if (task.requestLineItemId && typeof OL.renderRequestTagHTML === 'function') {
         parentLinkHTML += `<div style="margin-bottom:8px;">${OL.renderRequestTagHTML({ ...task, clientId: client?.id || task.clientId })}</div>`;
         if (typeof OL.taskPhaseSelectHtml === 'function') parentLinkHTML += OL.taskPhaseSelectHtml(client, task);
     }
 
-    // A Notify client task opens the review notification.
     if (task.reviewNotifyKey) {
         parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openReviewNotification('${task.reviewNotifyKey}', '${client?.id || ''}')">📨 Open the notification</button>`;
     }
 
-    // A Testing task opens its checklist.
     if (task.testRunId) {
         parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openTestRun('${task.testRunId}', '${client?.id || ''}')">🧪 Open checklist</button>`;
     }
@@ -1975,7 +2010,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                 </button>
             </div>
 
-            <!-- Inline Link Input Popover (Hidden by default) -->
+            <!-- Inline Link Input Popover -->
             <div id="inline-link-popover-${task.id}" style="display:none; padding:6px; background:var(--bg-card-header, #0f172a); border:1px solid var(--line); border-bottom:none; gap:6px; align-items:center;">
                 <input type="url" id="inline-link-input-${task.id}" class="modal-input tiny" placeholder="Paste URL (e.g. https://...)" style="flex:1;" onkeydown="OL.handleInlineLinkKeydown(event, '${task.id}')">
                 <button type="button" class="btn tiny primary" style="padding:2px 8px;" onclick="OL.applyInlineLink('${task.id}')">Apply</button>
@@ -2000,7 +2035,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         <div style="display:grid; gap:8px; max-height:420px; overflow:auto;">
             ${all.length ? all.map(c => {
                 const isEditing = OL._editingTaskCommentId === c.id;
-                const isEditable = c._source === 'internal'; // ClickUp-imported comments are read-only here
+                const isEditable = c._source === 'internal';
 
                 if (isEditing) {
                     return `
@@ -2023,18 +2058,22 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
 
                 return `
                 <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--line);">
-                    <div class="tiny muted bold" style="margin-bottom:4px; display:flex; justify-content:space-between; gap:8px; align-items:center;">
-                        <span>${esc(c.author || 'Unknown')}${c._source === 'clickup' ? ' <span class="pill tiny soft" style="font-size:9px; margin-left:4px;">ClickUp</span>' : ''}${c.editedDate ? ' <span class="tiny muted" style="font-style:italic;">(edited)</span>' : ''}</span>
-                        <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                    <!-- COMMENT HEADER: Author on Line 1, Date & Actions on Line 2 -->
+                    <div class="tiny muted bold" style="margin-bottom:6px;">
+                        <div style="font-size:12px; color:var(--text-main, #f8fafc); font-weight:700;">
+                            ${esc(c.author || 'Unknown')}${c._source === 'clickup' ? ' <span class="pill tiny soft" style="font-size:9px; margin-left:4px;">ClickUp</span>' : ''}${c.editedDate ? ' <span class="tiny muted" style="font-style:italic; font-weight:normal;">(edited)</span>' : ''}
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px; font-weight:normal; opacity:0.8;">
                             <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
                             ${isEditable ? `
-                                <button class="btn tiny soft" style="padding:2px 4px;" title="Edit comment" onclick="OL.startEditTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
-                                <button class="btn tiny soft" style="padding:2px 4px; color:#ef4444;" title="Delete comment" onclick="OL.deleteTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button>
+                                <div style="display:flex; gap:4px; align-items:center;">
+                                    <button class="btn tiny soft" style="padding:2px 4px;" title="Edit comment" onclick="OL.startEditTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
+                                    <button class="btn tiny soft" style="padding:2px 4px; color:#ef4444;" title="Delete comment" onclick="OL.deleteTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button>
+                                </div>
                             ` : ''}
-                        </span>
+                        </div>
                     </div>
-                    <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text, c.html)}</div>
-                    ${isMentioned && !alreadyViewed ? `
+                    <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text, c.html)}</div>${isMentioned && !alreadyViewed ? `
                         <label class="tiny" style="display:flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer; color:var(--accent);">
                             <input type="checkbox" onclick="OL.markTaskCommentViewed('${client?.id}', '${task.id}', '${c.id}')" style="cursor:pointer; margin:0;">
                             You were tagged — mark as viewed
