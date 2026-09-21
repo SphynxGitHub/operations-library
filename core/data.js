@@ -796,28 +796,47 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
 
   if (!confirm(`Convert task "${task.name || task.title}" into a Client Request/Requirement?`)) return;
 
-  OL.updateAndSync(() => {
+  OL.updateAndSync(async () => {
     if (!client.projectData.scopingSheets) {
       client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
     }
 
     const activeSheet = client.projectData.scopingSheets[0];
+    const newReqId = "req-" + Date.now();
 
-    // Transform Task into Scoping/Requirement Line Item
+    // 1. Map task Drive files (or legacy driveFileUrl)
+    const migratedDriveFiles = task.driveFiles || (task.driveFileUrl ? [{ name: task.driveFileName || 'Attached Drive File', url: task.driveFileUrl }] : []);
+
+    // 2. Transform Task into Scoping/Requirement Line Item with complete payload
     const newRequirement = {
-      id: "req-" + Date.now(),
+      id: newReqId,
       actionName: task.name || task.title,
       description: task.description || "Action required from client.",
       targetType: "function",
       targetId: "",
       clientGuideId: task.howToIds?.[0] || "",
+      howToIds: task.howToIds || [],
       status: "Pending Client Action",
-      createdDate: new Date().toISOString()
+      comments: task.comments || [],
+      clickupComments: task.clickupComments || [],
+      driveFiles: migratedDriveFiles,
+      createdDate: new Date().toISOString(),
+      originalTaskId: taskId
     };
 
     activeSheet.lineItems.push(newRequirement);
 
-    // Remove task from clientTasks
+    // 3. Re-link any linked Gmail messages to the new Request ID in Supabase
+    try {
+      await db
+        .from('gmail_messages')
+        .update({ linked_request_id: newReqId })
+        .eq('linked_task_id', taskId);
+    } catch (err) {
+      console.warn("Could not re-link emails to request ID:", err);
+    }
+
+    // 4. Remove converted task from clientTasks
     client.projectData.clientTasks = client.projectData.clientTasks.filter(t => t.id !== taskId);
   }, clientId);
 
@@ -825,7 +844,6 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
     OL.showToast(`Converted task to Client Request: "${task.name || task.title}"`);
   }
 
-  // Refresh UI / Close Modal
   if (typeof OL.closeModal === "function") OL.closeModal();
   if (typeof window.handleRoute === "function") window.handleRoute();
 };
