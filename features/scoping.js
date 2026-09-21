@@ -25,11 +25,6 @@ export function getScopingDataForResource(resId) {
     return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
 }
 
-// Was called in 4 places (resources-grid.js, flow-visualizer/core.js) but
-// never actually defined anywhere — an alias of getScopingDataForResource,
-// since "in scope" just means "has a scoping line item". Returns the line
-// item itself (or null), which is what every call site actually expects —
-// some coerce it to a strict boolean themselves, others use it directly.
 export function isResourceInScope(resId) {
     return getScopingDataForResource(resId);
 }
@@ -44,7 +39,6 @@ export function getScopingWorkflowContext() {
     const stepCount = (workflow.steps || []).length;
     const assets = (workflow.steps || []).map(s => OL.getResourceById(s.resourceLinkId)).filter(Boolean);
     
-    // Count types (e.g., 3 Emails, 2 Zaps)
     const typeCounts = assets.reduce((acc, a) => {
         acc[a.type] = (acc[a.type] || 0) + 1;
         return acc;
@@ -63,12 +57,11 @@ export function getScopingWorkflowContext() {
 
 // 1. RENDER SCOPING SHEET TABLE
 export function renderScopingSheet() {
-    // 🚩 CLAIM THE ENGINE: Tell Sync that Scoping is the ONLY active view
     if (typeof OL.registerView === 'function') {
         OL.registerView(() => renderScopingSheet());
     }
 
-    OL.registerView(renderScopingSheet); // Set the legacy reference too
+    OL.registerView(renderScopingSheet);
 
     const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
     const focusId = urlParams.get('focus');
@@ -86,7 +79,6 @@ export function renderScopingSheet() {
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
 
-    // 1. INITIALIZE DATA STRUCTURES
     if (!client.projectData) client.projectData = {};
     if (!client.projectData.localResources) client.projectData.localResources = [];
     if (!client.projectData.scopingSheets) {
@@ -98,15 +90,12 @@ export function renderScopingSheet() {
     const showUnits = !!state.ui?.showScopingUnits;
     const wfContext = OL.getScopingWorkflowContext();
     
-    // 🚀 FILTER STATE INITIALIZATION
     const q = (state.scopingSearch || "").toLowerCase();
     const typeF = state.scopingTypeFilter || "All";
     const statusF = state.scopingStatusFilter || "All";
     const partyF = state.scopingPartyFilter || "All";
 
-    // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
-        // 🎯 Now this will work because focusId is pulled from the URL
         if (state.scopingFilterActive && state.scopingTargetId) {
             return String(item.resourceId) === String(state.scopingTargetId);
         }
@@ -122,12 +111,9 @@ export function renderScopingSheet() {
         return matchesSearch && matchesType;
     });
 
-
-    // 3. DATA FOR DROPDOWNS (Pulled from full list so you can always see options)
     const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
     const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
 
-    // 4. DYNAMIC ROUND GROUPING (🚀 FIXED: Now uses filteredItems)
     const roundGroups = {};
     filteredItems.forEach((item) => {
         const r = parseInt(item.round, 10) || 1;
@@ -135,12 +121,10 @@ export function renderScopingSheet() {
         roundGroups[r].push(item);
     });
 
-    // Sort the round numbers numerically
     const sortedRoundKeys = Object.keys(roundGroups)
         .map((n) => parseInt(n, 10))
         .sort((a, b) => a - b);
 
-    // 5. RENDER HTML
     container.innerHTML = `
     <div class="section-header" style="display:flex; align-items:center; gap:12px;">
         <i data-lucide="table-properties" style="width:28px; height:24px; color:var(--accent);"></i>
@@ -254,7 +238,7 @@ export function renderScopingSheet() {
             ? sortedRoundKeys.map((r) =>
                 renderRoundGroup(
                     `Round ${r}`,
-                    roundGroups[r], // 🚀 Now contains only filtered items for this round
+                    roundGroups[r],
                     baseRate,
                     showUnits,
                     client.meta.name,
@@ -268,9 +252,6 @@ export function renderScopingSheet() {
     <div id="grand-totals-area"></div>
     `;
 
-    // 💰 TRIGGER TOTALS
-    // Note: Totals usually reflect the FULL project, not just filtered results. 
-    // If you want totals to change with the filters, pass filteredItems here instead.
     renderGrandTotals(sheet.lineItems, baseRate);
     
     if (window.lucide) {
@@ -279,28 +260,23 @@ export function renderScopingSheet() {
 };
 
 // 2. RENDER ROUND GROUPS
-// CHANGE THIS:
 export function renderRoundGroup(roundName, items, baseRate, showUnits, clientName, roundNum) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    // 🚩 1. INITIALIZE ALL VARIABLES (Prevents ReferenceErrors)
-    let roundGrossValue = 0;   // Sticker Price total
-    let billableSubtotal = 0;  // Pre-discount billable total
-    let roundDeductionAmt = 0; // The discount amount for this round
-    let finalRoundNet = 0;     // The final number in the right column
-    let totalRoundSavings = 0; // The "Disc" column total
+    let roundGrossValue = 0;
+    let billableSubtotal = 0;
+    let roundDeductionAmt = 0;
+    let finalRoundNet = 0;
+    let totalRoundSavings = 0;
 
-    // 🔄 2. CALCULATION LOOP
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (!res) return;
 
-        // Calculate Gross (Always)
         const itemStickerPrice = OL.calculateBaseFeeWithMultiplier(item, res) || 0;
         roundGrossValue += itemStickerPrice;
 
-        // Calculate Net (Only if Do Now + Billable Party)
         const status = String(item.status || "").toLowerCase().trim();
         const party = String(item.responsibleParty || "").toLowerCase().trim();
         
@@ -309,7 +285,6 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
         }
     });
 
-    // 💸 3. ROUND DISCOUNT CALCULATION
     const rKey = String(roundNum);
     if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
         const rDisc = sheet.roundDiscounts[rKey];
@@ -320,18 +295,14 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
             : discVal;
     }
 
-    // 🏁 4. FINAL ROUND TOTALS
     finalRoundNet = billableSubtotal - roundDeductionAmt;
     totalRoundSavings = roundGrossValue - finalRoundNet;
 
-    // 🎨 5. RENDER ROWS
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
-    // The current round: first round with a Do Now line still open, on an approved sheet.
     const isCurrentRound = sheet.status === 'Approved'
         && getCurrentRound(sheet, i => !!OL.getResourceById(i.resourceId)) === Number(roundNum);
 
-    // 🖼️ 6. RETURN HTML
     return `
         <div class="round-section" style="margin-bottom: 25px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
@@ -365,9 +336,6 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
     }
 };
 
-// Function to calculate the "Sticker Price" before line-item discounts
-// The resource a request line stands on, for a resource that is not its main one. Looked up in the project that owns
-// the line (so reports across projects price it correctly), then the master list.
 function resolveResourceForItem(item, id) {
     const owner = Object.values(state.clients || {}).find(c => (c?.projectData?.scopingSheets || []).some(sh => (sh?.lineItems || []).includes(item))) || getActiveClient();
     return (owner?.projectData?.localResources || []).find(r => String(r.id) === String(id))
@@ -375,8 +343,6 @@ function resolveResourceForItem(item, id) {
         || OL.getResourceById(id) || null;
 }
 
-// The request's fee, line by line: each resource priced by its own type and units, plus estimated hours when nothing
-// has priced units. The team multiplier applies to every line. (Same arithmetic as a single resource has always had.)
 export function getRequestPriceBreakdown(item, primary) {
     const client = getActiveClient();
     const rates = state.master.rates || {};
@@ -393,13 +359,11 @@ export function calculateBaseFeeWithMultiplier(item, resource) {
     if (requestResourceIds(item).length > 1) return getRequestPriceBreakdown(item, resource).gross;
     const vars = state.master.rates.variables || {};
     
-    // Merge template data and local overrides
     let calcData = { ...(resource?.data || {}), ...(item.data || {}) };
     
     let baseAmount = 0;
     let hasTechnicalData = false;
 
-    // Calculate via technical variables
     Object.entries(calcData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
@@ -409,14 +373,12 @@ export function calculateBaseFeeWithMultiplier(item, resource) {
         }
     });
 
-    // Fallback to hourly if no technical units exist
     if (!hasTechnicalData) {
         const client = getActiveClient();
         const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
         baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
     }
 
-    // Apply Team Multiplier
     let multiplier = 1.0;
     const mode = (item.teamMode || 'everyone').toLowerCase();
     if (mode !== 'global') {
@@ -429,9 +391,6 @@ export function calculateBaseFeeWithMultiplier(item, resource) {
     return Math.round(baseAmount * multiplier);
 };
 
-
-// 3. RENDER SCOPING ROW / UPDATE ROW
-// A request's row, plus its tasks: a slim bar under it that opens into the tasks grouped Before, Implementation and After.
 export function renderScopingRow(item, idx, showUnits) {
     const base = renderScopingRowBase(item, idx, showUnits);
     const extra = typeof OL.requestTasksRowHtml === 'function' ? OL.requestTasksRowHtml(getActiveClient(), item) : '';
@@ -440,12 +399,9 @@ export function renderScopingRow(item, idx, showUnits) {
 
 function renderScopingRowBase(item, idx, showUnits) {
     const client = getActiveClient();
-    
-    // 1. Resolve Resource using the robust helper
     const res = OL.getResourceById(item.resourceId);
     const isAdmin = state.adminMode === true;
 
-    // 🛡️ SAFETY CHECK: Handle deleted/missing resources
     if (!res) {
         return `
             <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05); padding: 8px 10px;">
@@ -474,7 +430,6 @@ function renderScopingRowBase(item, idx, showUnits) {
 
     const typeIcon = OL.getRegistryIcon(res.type);
 
-    // 2. Financial Calculations
     const status = (item.status || "").toLowerCase();
     const party = (item.responsibleParty || "").toLowerCase();
 
@@ -490,7 +445,7 @@ function renderScopingRowBase(item, idx, showUnits) {
     const requestHoursHtml = res.isRequestLine
         ? `<div class="tiny muted">${parseFloat(item.manualHours) || 0}h estimated</div>`
         : "";
-    // Work status for active requests: what is waiting on whom, and a way to ask the client.
+
     const sheetForStatus = client?.projectData?.scopingSheets?.[0];
     const isActiveRow = isActiveItem(sheetForStatus, item, i => !!OL.getResourceById(i.resourceId));
     let workHtml = '';
@@ -521,7 +476,6 @@ function renderScopingRowBase(item, idx, showUnits) {
     const projectTeam = client?.projectData?.teamMembers || [];
     const mode = (item.teamMode || 'everyone').toLowerCase();
 
-    // 3. Team UI Logic
     let hoverText = '';
     let teamLabel = '';
     let btnIcon = `<i data-lucide="users" style="width:14px; height:14px;"></i>`;
@@ -561,7 +515,6 @@ function renderScopingRowBase(item, idx, showUnits) {
 
     const isTarget = state.scopingFilterActive && String(item.resourceId) === String(state.scopingTargetId);
 
-    // Refresh Lucide icons after DOM insertion
     setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 0);
 
     return `
@@ -573,6 +526,9 @@ function renderScopingRowBase(item, idx, showUnits) {
                     ${esc(res.name || "Manual Item")}
                 </div>
                 ${typeSelectHtml}
+                <button class="btn tiny soft" onclick="OL.openRequestDetailDrawer(getActiveClient(), OL.getScopingLineItemById('${item.id}'))" style="margin-left:auto; display:inline-flex; align-items:center; gap:4px;">
+                    <i data-lucide="sliders" style="width:11px;height:11px;"></i> Details
+                </button>
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${requestHoursHtml}
@@ -682,7 +638,6 @@ export function openTeamAssignmentModal(itemId) {
     openModal(html);
 };
 
-// Helper to quickly switch modes from the modal
 export function setTeamMode(itemId, mode) {
     const client = getActiveClient();
     const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
@@ -699,18 +654,14 @@ export function updateLineItem(itemId, field, value) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    // 1. Try to find by strict ID (the li- ID)
     let item = sheet.lineItems.find(i => String(i.id) === String(itemId));
 
-    // 2. FALLBACK: If not found, user might have passed a Resource ID
     if (!item) {
         console.warn("⚠️ li-ID not found, searching via Resource ID:", itemId);
         item = sheet.lineItems.find(i => String(i.resourceId) === String(itemId));
     }
 
     if (item) {
-        console.log(`✅ Item Resolved. Updating ${field} to:`, value);
-
         const previousValue = item[field];
 
         if (field === 'round') {
@@ -719,8 +670,6 @@ export function updateLineItem(itemId, field, value) {
             item[field] = value;
         }
 
-        // 🤖 Fire automation rules for status/responsibleParty changes only —
-        // these are the fields that matter as automation triggers ("Do Now" + "Sphynx", etc.)
         if ((field === 'status' || field === 'responsibleParty') && typeof OL.runAutomationRules === 'function') {
             const resource = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
             OL.runAutomationRules('scoping_status_change', {
@@ -734,16 +683,11 @@ export function updateLineItem(itemId, field, value) {
             });
         }
 
-        // Save and Re-render
         OL.persist(); 
         window.renderScopingSheet();
-    } else {
-        console.error("❌ CRITICAL: Item completely missing from sheet.", itemId);
-        console.log("Available Sheet Items:", sheet.lineItems);
     }
 };
 
-// 4. HANDLE UNIT BADGE SHOW/HIDE BUTTON AND TAGS
 export function toggleScopingUnits() {
   if (!state.ui) state.ui = {};
   state.ui.showScopingUnits = !state.ui.showScopingUnits;
@@ -752,7 +696,6 @@ export function toggleScopingUnits() {
   renderScopingSheet();
 };
 
-// 74. HARDENED UNIT BADGE RENDERER
 export function renderUnitBadges(dataObject, res) {
     if (!state.ui?.showScopingUnits) return "";
     if (!dataObject || Object.keys(dataObject).length === 0) return "";
@@ -775,7 +718,6 @@ export function renderUnitBadges(dataObject, res) {
     return badges ? `<div class="unit-badge-container">${badges}</div>` : "";
 };
 
-// 5. ADD ITEM TO SCOPING SHEET FROM MASTER LIBRARY
 export function addResourceToScope() {
     const html = `
         <div class="modal-head">
@@ -787,7 +729,7 @@ export function addResourceToScope() {
             <div class="search-map-container">
                 <input type="text" class="modal-input" 
                        placeholder="Click to view library or search..." 
-                       onfocus="OL.filterResourceForScope('')"  // 🚀 THE FIX: Opens list immediately
+                       onfocus="OL.filterResourceForScope('')" 
                        oninput="OL.filterResourceForScope(this.value)" 
                        autofocus>
                 <div id="scope-search-results" class="search-results-overlay" style="margin-top:15px;"></div>
@@ -806,19 +748,12 @@ export async function removeFromScope(indexStr) {
     const index = parseInt(indexStr, 10);
     const sheet = client.projectData.scopingSheets[0];
 
-    console.log(`🗑️ Attempting to remove item at index: ${index}`);
-
-    // 🚀 THE SHIELD: Use updateAndSync to ensure Firebase saves the deletion
     await OL.updateAndSync(() => {
         if (index > -1 && index < sheet.lineItems.length) {
-            const removed = sheet.lineItems.splice(index, 1);
-            console.log("✅ Successfully removed item:", removed[0]);
-        } else {
-            console.error("❌ Removal failed: Index out of bounds", index);
+            sheet.lineItems.splice(index, 1);
         }
     });
 
-    // Refresh the UI
     renderScopingSheet();
 };
 
@@ -829,22 +764,14 @@ export async function removeFromScopeByID(lineItemId) {
     if (!client || !client.projectData.scopingSheets) return;
 
     const sheet = client.projectData.scopingSheets[0];
-
-    // 🚀 THE FIX: Find the actual index of the item with this specific ID
     const actualIndex = sheet.lineItems.findIndex(i => String(i.id) === String(lineItemId));
 
     if (actualIndex > -1) {
-        console.log(`🗑️ Removing specific item ID: ${lineItemId} found at database index: ${actualIndex}`);
-        
         await OL.updateAndSync(() => {
             sheet.lineItems.splice(actualIndex, 1);
         });
 
-        // 🔄 Surgical UI Update
         renderScopingSheet();
-    } else {
-        console.error("❌ Could not find item ID in database:", lineItemId);
-        alert("Error: Item not found in database. Please refresh.");
     }
 };
 
@@ -855,49 +782,36 @@ export function filterResourceForScope(query) {
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
     
-    // 1. Get current IDs already on the scoping sheet to hide them
     const existingIds = (client?.projectData?.scopingSheets?.[0]?.lineItems || []).map(i => i.resourceId);
 
-    // 2. Identify and Tag Sources
     const masterSource = (state.master.resources || []).map(r => ({ ...r, origin: 'Master' }));
     const localSource = (client?.projectData?.localResources || []).map(r => ({ ...r, origin: 'Local' }));
     
-    // 🚀 THE DEDUPLICATION FIX:
-    // Create a list of IDs that are already "cloned" into the local project
     const localMasterRefs = localSource.map(r => r.masterRefId);
-    
-    // Filter the Master source so it only shows items NOT yet cloned locally
     const filteredMaster = masterSource.filter(m => !localMasterRefs.includes(m.id));
 
-    // Combine local items with only the "un-cloned" master items
     const combined = [...localSource, ...filteredMaster];
 
-    // 3. Filter for search term OR surgical match
     const matches = combined.filter((res) => {
-        // 🚀 SURGICAL OVERRIDE: If we are coming from a badge click
         if (state.scopingFilterActive && state.scopingTargetId) {
             return String(res.id) === String(state.scopingTargetId);
         }
 
-        // Standard behavior for normal searching
         const nameMatch = res.name.toLowerCase().includes(q);
         const alreadyInScope = existingIds.includes(res.id);
         return nameMatch && !alreadyInScope;
     });
 
-    // 4. Split into Groups for rendering
     const masterMatches = matches.filter(m => m.origin === 'Master').sort((a,b) => a.name.localeCompare(b.name));
     const localMatches = matches.filter(m => m.origin === 'Local').sort((a,b) => a.name.localeCompare(b.name));
 
     let html = "";
 
-    // 🏗️ Render Local Group (Items already in project library)
     if (localMatches.length > 0) {
         html += `<div class="search-group-header">📍 Available in Project</div>`;
         html += localMatches.map(res => renderResourceSearchResult(res, 'local')).join('');
     }
 
-    // 🏛️ Render Master Group (Standard templates not yet used in this project)
     if (masterMatches.length > 0) {
         html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
         html += masterMatches.map(res => renderResourceSearchResult(res, 'vault')).join('');
@@ -933,21 +847,18 @@ export async function executeScopeAdd(resId) {
 
     let finalResourceId = resId;
 
-    // 🚀 STEP 1: Handle Auto-Cloning to Library
     if (resId.startsWith('res-vlt-')) {
         const template = state.master.resources.find(r => r.id === resId);
         if (template) {
-            // Check if we already have this specific master item in our local project
             const existingLocal = (client.projectData.localResources || [])
                 .find(r => r.masterRefId === resId);
 
             if (existingLocal) {
                 finalResourceId = existingLocal.id;
             } else {
-                // DEEP CLONE: Make a permanent project-specific copy
                 const newRes = JSON.parse(JSON.stringify(template));
                 newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
-                newRes.masterRefId = resId; // Essential for the "Sync" logic
+                newRes.masterRefId = resId;
                 
                 if (!client.projectData.localResources) client.projectData.localResources = [];
                 client.projectData.localResources.push(newRes);
@@ -956,10 +867,6 @@ export async function executeScopeAdd(resId) {
         }
     }
 
-    // 🚀 STEP 2: Add to Scoping Sheet
-    // Events (Calendly/YCBM booking types, etc.) are scheduling utilities,
-    // not billable deliverables — default them to the client's own party
-    // instead of Sphynx so they don't silently count toward billable hours.
     const addedRes = (client.projectData.localResources || []).find(r => r.id === finalResourceId)
         || (state.master.resources || []).find(r => r.id === finalResourceId);
     const isEventType = String(addedRes?.type || '').toLowerCase() === 'event';
@@ -980,24 +887,17 @@ export async function executeScopeAdd(resId) {
     if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{id: 'initial', lineItems: []}];
     client.projectData.scopingSheets[0].lineItems.push(newItem);
 
-    // 🚀 STEP 3: PERSIST BOTH ARRAYS
     await OL.persist();
     
     OL.closeModal();
     renderScopingSheet(); 
 };
 
-// 6. ADD CUSTOM ITEM TO SCOPING SHEET
-
-// 7. STATUS AND RESPONSIBLE PARTY
-
-// 8. TEAM ASSIGNMENT FOR SCOPING ITEM
 export function cycleTeamMode(itemId) {
     const client = getActiveClient();
     const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
     if (!item) return;
 
-    // Define the cycle: everyone -> individual -> global -> back to everyone
     const modes = ['everyone', 'individual', 'global'];
     let currentIdx = modes.indexOf(item.teamMode || 'everyone');
     item.teamMode = modes[(currentIdx + 1) % modes.length];
@@ -1006,12 +906,10 @@ export function cycleTeamMode(itemId) {
     renderScopingSheet();
 };
 
-// 9. MULTIPLIER DISPLAY
 export function getMultiplierDisplay(item) {
   const client = getActiveClient();
   const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
   
-  // 🚀 HARDENING: Force lowercase and provide strict fallback
   const mode = (item.teamMode || "everyone").toLowerCase();
 
   if (mode === "global") {
@@ -1019,15 +917,12 @@ export function getMultiplierDisplay(item) {
   }
 
   let count = 0;
-  // Check for 'individual' OR if there are specific IDs present
   if (mode === "individual" || (item.teamIds && item.teamIds.length > 0)) {
     count = (item.teamIds || []).length;
   } else {
     count = (client?.projectData?.teamMembers || []).length || 1;
   }
   
-  // ✅ THE FORMULA: 1 + ((count - 1) * (rate - 1))
-  // If rate is 1.1, (rate - 1) is 0.1
   const incrementalRate = rate - 1;
   const additionalMembers = Math.max(0, count - 1);
   const displayMult = 1 + additionalMembers * incrementalRate;
@@ -1041,14 +936,11 @@ export function getMultiplierDisplay(item) {
   `;
 };
 
-// 10. FEE CALCULATION
-// Net Calculation (Line Item Level)
 export function calculateRowFee(item, resource) {
     const gross = OL.calculateBaseFeeWithMultiplier(item, resource);
     return OL.applyDiscount(gross, item.discountValue, item.discountType);
 };
 
-// 11. GRAND TOTALS SUMMARY
 export function renderGrandTotals(lineItems, baseRate) {
     const area = document.getElementById("grand-totals-area");
     const client = getActiveClient();
@@ -1057,36 +949,31 @@ export function renderGrandTotals(lineItems, baseRate) {
 
     if (!area || !client || !sheet) return;
 
-    let totalGross = 0; // 🚀 Include EVERYTHING
-    let netAfterLineItems = 0; // 💸 Only billable "Do Now"
+    let totalGross = 0;
+    let netAfterLineItems = 0;
 
     lineItems.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (!res) return;
 
-        // 1. Calculate Gross (Total potential value regardless of status/party)
         const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
         totalGross += itemGross
 
-        // 2. Calculate Net (Only "Do Now" and billable parties)
         const status = (item.status || "").toLowerCase();
         const party = (item.responsibleParty || "").toLowerCase();
         
         const isDoNow = status === 'do now';
         const isBillable = party === 'sphynx' || party === 'joint';
 
-        // 2. Calculate Net (Only items we are actually charging for)
         if (isDoNow && isBillable) {
             netAfterLineItems += OL.calculateRowFee(item, res);
         }
     });
 
-    // 3. Subtract Adjustments/Discounts from the Net
    let netAfterRounds = netAfterLineItems;
     if (sheet.roundDiscounts) {
         Object.keys(sheet.roundDiscounts).forEach(rNum => {
             const rDisc = sheet.roundDiscounts[rNum];
-            // Filter only "Do Now" items in this round to calculate the discount basis
             const roundItems = lineItems.filter(i => 
                 String(i.round) === String(rNum) && 
                 (i.status || "").toLowerCase() === 'do now'
@@ -1109,7 +996,6 @@ export function renderGrandTotals(lineItems, baseRate) {
     const globalAdjustment = gType === '%' ? Math.round(netAfterRounds * (gVal / 100)) : Math.min(netAfterRounds, gVal);
     const finalApproved = netAfterRounds - globalAdjustment;
 
-    // The "Adjustments" display shows the gap between Gross and Final Net
     const totalAdjustments = totalGross - finalApproved;
 
     area.innerHTML = `
@@ -1136,7 +1022,6 @@ export function renderGrandTotals(lineItems, baseRate) {
     </div>`;
 };
 
-// 12. DISCOUNT MANAGEMENT
 export function renderDiscountInput(level, id, value, type) {
   return `
     <div class="discount-control">
@@ -1163,7 +1048,6 @@ export function openDiscountManager() {
     ...(client.projectData.localResources || []),
   ];
 
-  // Build rounds with billable items only
   const rounds = {};
   sheet.lineItems.forEach((item) => {
     if (
@@ -1277,7 +1161,7 @@ export function updateDiscount(level, id, field, value) {
 
   if (level === "round") {
     if (!sheet.roundDiscounts) sheet.roundDiscounts = {};
-    const rKey = String(id); // Force string key
+    const rKey = String(id);
     if (!sheet.roundDiscounts[rKey]) {
         sheet.roundDiscounts[rKey] = { value: 0, type: "$" };
     }
@@ -1294,7 +1178,6 @@ export function updateDiscount(level, id, field, value) {
 
   OL.persist();
 
-  // Refresh both contexts safely
   OL.refreshDiscountManagerUI();
   renderScopingSheet();
 };
@@ -1355,7 +1238,6 @@ export function applyDiscount(amount, value, type) {
     return Math.round(amount * (1 - v / 100));
   }
 
-  // "$"
   return Math.max(0, Math.round(amount - v));
 };
 
@@ -1448,16 +1330,12 @@ export function createNewVarForType(label, typeKey) {
     state.master.rates.variables[varKey] = {
         label,
         value: 0,
-        applyTo: typeKey, // Match exactly what the folder is using
+        applyTo: typeKey,
         archetype: "Base",
     };
 
     OL.persist();
-    
-    // 1. Refresh the Modal to show the new row
     OL.openTypeDetailModal(typeKey); 
-    
-    // 2. 🚀 Refresh the Background Page to update the "X variables defined" count on the card
     renderVaultRatesPage(); 
 };
 
@@ -1466,8 +1344,6 @@ export async function updateVarRate(key, field, val) {
  
     state.master.rates.variables[key][field] = field === 'value' ? parseFloat(val) || 0 : val.trim();
  
-    // Supabase has no dot-notation partial update — write back the whole rates object,
-    // same pattern OL.persist() already uses for master data.
     const { error } = await window.db
         .from('workspace_masters')
         .update({ rates: state.master.rates })
@@ -1477,27 +1353,20 @@ export async function updateVarRate(key, field, val) {
         console.error('❌ Rate save failed:', error.message);
         return;
     }
-    console.log('✅ Variable saved:', key, field, val);
 };
 
 export function removeScopingVariable(varKey, typeKey) {
     if (!confirm("Are you sure you want to delete this pricing variable? This will remove it from all resources using this type.")) return;
 
     if (state.master.rates.variables && state.master.rates.variables[varKey]) {
-        // 1. Delete from data
         delete state.master.rates.variables[varKey];
-        
         OL.persist();
 
-        // 2. Refresh the background grid (the folder cards)
         if (window.location.hash.includes('vault/rates')) {
             renderVaultRatesPage();
         }
 
-        // 3. Refresh the modal to show the updated list
         OL.openTypeDetailModal(typeKey);
-        
-        console.log(`🗑️ Variable ${varKey} removed.`);
     }
 };
 
@@ -1507,15 +1376,12 @@ export function renderDependencyRow(dep, parentId) {
     const client = getActiveClient();
     const isTask = dep.type === 'task';
     
-    // 🎯 Resolve the object
     let obj = isTask 
         ? (client?.projectData?.clientTasks || []).find(t => t.id === dep.id)
         : OL.getResourceById(dep.id);
 
     const icon = isTask ? OL.getLucideSVG('clipboard-list', 14, 'currentColor') : OL.getLucideSVG(OL.getRegistryIcon(obj?.type), 14, 'currentColor');
     
-    // openTaskModal was never actually defined — openTaskInContext is the
-    // real, working modal launcher.
     const clickAction = isTask
         ? `OL.openTaskInContext('${client?.id}', '${dep.id}')`
         : `OL.openResourceModal('${dep.id}')`;
@@ -1600,7 +1466,6 @@ export function filterDependencySearch(currentResId, mode, query) {
     let html = "";
 
     if (mode === 'task') {
-        // --- TASK MODE ---
         matches = (client?.projectData?.clientTasks || []).filter(t => 
             !existingIds.includes(t.id) && t.name.toLowerCase().includes(q)
         );
@@ -1610,14 +1475,12 @@ export function filterDependencySearch(currentResId, mode, query) {
             </div>
         `).join('');
 
-        // Quick Create Task only
         if (q.length > 0 && !matches.some(m => m.name.toLowerCase() === q)) {
             html += `<div class="search-result-item create-action" onmousedown="OL.createAndLinkTaskDependency('${currentResId}', '${esc(query)}')">
                 <span class="pill tiny accent">+ CREATE TASK</span> "${esc(query)}"
             </div>`;
         }
     } else {
-        // --- RESOURCE MODE ---
         const data = OL.getCurrentProjectData();
         matches = (data.resources || []).filter(r => 
             String(r.id) !== String(currentResId) && !existingIds.includes(r.id) && r.name.toLowerCase().includes(q)
@@ -1640,11 +1503,11 @@ export async function createAndLinkTaskDependency(resId, taskName) {
     const client = getActiveClient();
     if (!client) return;
 
-    const taskId = 'tk-' + Date.now(); // Use your task prefix
+    const taskId = 'tk-' + Date.now();
     const newTask = {
         id: taskId,
         name: taskName,
-        status: "Pending", // 🎯 Critical for showing up in "Active" lists
+        status: "Pending",
         description: "",
         appIds: [],
         howToIds: [],
@@ -1653,11 +1516,9 @@ export async function createAndLinkTaskDependency(resId, taskName) {
     };
 
     await OL.updateAndSync(() => {
-        // 🎯 SAVE TO THE CORRECT ARRAY
         if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
         client.projectData.clientTasks.push(newTask);
 
-        // Link to the current resource
         const res = OL.getResourceById(resId);
         if (res) {
             if (!res.dependencies) res.dependencies = [];
@@ -1669,12 +1530,8 @@ export async function createAndLinkTaskDependency(resId, taskName) {
         }
     });
 
-    // 🚀 AUTO-OPEN: Open the task immediately for editing
-    // (openTaskModal was never actually defined — openTaskInContext is the
-    // real, working modal launcher.)
     OL.openTaskInContext(client.id, taskId);
     
-    // Refresh background if needed
     if (typeof renderClientTaskManager === 'function') renderClientTaskManager();
 };
 
@@ -1684,7 +1541,6 @@ export async function addDependency(resId, depId, type) {
 
     if (!res.dependencies) res.dependencies = [];
     
-    // Check for circular dependency (simple 1-level check)
     const depTarget = OL.getResourceById(depId);
     if (depTarget?.dependencies?.some(d => d.id === resId)) {
         alert("🚫 Circular Dependency detected! This item already depends on the current one.");
@@ -1693,12 +1549,12 @@ export async function addDependency(resId, depId, type) {
 
     res.dependencies.push({
         id: depId,
-        type: type, // 'resource' or 'step'
+        type: type,
         addedDate: new Date().toISOString()
     });
 
     await OL.persist();
-    OL.openResourceModal(resId); // Refresh modal
+    OL.openResourceModal(resId);
 };
 
 export async function removeDependencyById(resId, depId) {
@@ -1710,11 +1566,138 @@ export async function removeDependencyById(resId, depId) {
     }
 };
 
+export function getScopingLineItemById(itemId) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    return sheet?.lineItems?.find(i => String(i.id) === String(itemId)) || null;
+}
 
-// ---- request-only lines: meetings, training, audits and other work with no library resource ----
-// A line like this has no library resource. It carries a synthetic 'reqline-' id
-// (resolved by getResourceById) so pricing and reports treat it like any other line:
-// with no technical units, the fee is estimated hours x the base rate.
+export function openRequestDetailDrawer(client, req) {
+  if (!client || !req) return;
+  
+  const attachedFiles = req.driveFiles || [];
+
+  const html = `
+    <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:12px;">
+      <div class="modal-title-text" style="font-weight:700; font-size:16px;">📋 Request Details: ${esc(req.actionName || 'Scoping Item')}</div>
+      <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
+    </div>
+
+    <div class="modal-body" style="padding-top:16px; max-width:820px; width:100%;">
+      
+      <!-- DESCRIPTION / SCOPING NOTES -->
+      <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
+        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Scoping Details & Instructions:</label>
+        <textarea class="modal-input tiny" style="width: 100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical;" rows="3"
+                  placeholder="Add details for client request..."
+                  onblur="OL.updateRequestDescription('${client.id}', '${req.id}', this.value)">${esc(req.description || '')}</textarea>
+      </div>
+
+      <!-- DRIVE ATTACHMENTS -->
+      <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label class="bold tiny uppercase muted" style="margin:0;">Attached Drive Files (${attachedFiles.length}):</label>
+          <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;">
+            <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> Upload File to Drive
+            <input type="file" style="display:none;" onchange="
+              const file = this.files[0];
+              if (file) {
+                OL.uploadFileToDrive('${client.id}', file, 'Task Attachments').then(res => {
+                  if (res?.webViewLink) {
+                    OL.updateAndSync(() => {
+                      const sheet = state.clients['${client.id}']?.projectData?.scopingSheets?.[0];
+                      const item = sheet?.lineItems?.find(i => i.id === '${req.id}');
+                      if (item) {
+                        if (!item.driveFiles) item.driveFiles = [];
+                        item.driveFiles.push({ name: file.name, url: res.webViewLink });
+                      }
+                    }, '${client.id}');
+                    OL.openRequestDetailDrawer(state.clients['${client.id}'], OL.getScopingLineItemById('${req.id}'));
+                  }
+                });
+              }
+            ">
+          </label>
+        </div>
+
+        ${attachedFiles.length ? `
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${attachedFiles.map(fileObj => `
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.15); padding:6px 10px; border-radius:4px;">
+                <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(fileObj.name)}</span>
+                <a href="${esc(fileObj.url)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; font-weight:bold;">
+                  <i data-lucide="external-link" style="width:11px;height:11px;"></i> Open in Drive
+                </a>
+              </div>
+            `).join('')}
+          </div>
+        ` : `<div class="tiny muted">No files attached to this request yet.</div>`}
+      </div>
+
+      <!-- LINKED EMAILS FOR REQUESTS -->
+      <div style="margin-bottom: 20px; min-width: 0; width: 100%; overflow-x: hidden;">
+        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+          <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
+        </label>
+        <div id="linked-request-emails-list" class="tiny muted" style="min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">Loading linked emails…</div>
+      </div>
+
+      <!-- COMMENTS SIDEBAR / THREAD -->
+      <div id="request-comments-container">
+        ${OL.renderTaskCommentsSidebarHTML(client, req)}
+      </div>
+    </div>
+  `;
+
+  openModal(html);
+  OL.loadLinkedEmailsForRequest(req.id);
+  if (window.lucide) lucide.createIcons();
+};
+
+export function updateRequestDescription(clientId, reqId, newDesc) {
+    const client = state.clients[clientId];
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    const item = sheet?.lineItems?.find(i => String(i.id) === String(reqId));
+    if (item) {
+        OL.updateAndSync(() => {
+            item.description = newDesc.trim();
+        }, clientId);
+    }
+}
+
+export async function loadLinkedEmailsForRequest(requestId) {
+  const container = document.getElementById('linked-request-emails-list');
+  if (!container) return;
+
+  const { data, error } = await db
+    .from('gmail_messages')
+    .select('id, sender, subject, snippet, date, note, body')
+    .eq('linked_request_id', requestId)
+    .order('date', { ascending: false });
+
+  if (error || !data || !data.length) {
+    container.innerHTML = `<span class="tiny muted">No linked emails found for this request.</span>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display:grid; gap:6px; min-width:0; width:100%; box-sizing:border-box;">
+        ${data.map(m => `
+            <div style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
+                    <div style="min-width:0; flex:1; overflow-wrap:anywhere; word-break:break-word;">
+                        <strong style="display:block; overflow-wrap:anywhere; word-break:break-word;">${esc(m.subject || 'No Subject')}</strong>
+                        <div class="muted" style="overflow-wrap:anywhere; word-break:break-word;">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
+                    </div>
+                    <i data-lucide="external-link" style="width:12px;height:12px; flex-shrink:0; margin-top:2px; color:var(--muted);"></i>
+                </div>
+            </div>
+        `).join('')}
+    </div>
+  `;
+  if (window.lucide) lucide.createIcons();
+};
+
 export function openRequestLineModal(itemId) {
     const client = getActiveClient();
     if (!client) return;
@@ -1724,7 +1707,6 @@ export function openRequestLineModal(itemId) {
     const isEdit = !!item;
     const clientName = client.meta?.name || 'Client';
 
-    // A line on a real resource is a build unless it says otherwise; a line with no resource is a meeting.
     const isReqLine = !item || String(item.resourceId || '').startsWith('reqline-');
     const typeKey = item?.requestType || (isReqLine ? 'meeting' : 'build');
     const shownTitle = item?.name || (!isReqLine ? (OL.getResourceById(item.resourceId)?.name || '') : '');
@@ -1809,10 +1791,8 @@ export function openRequestLineModal(itemId) {
     openModal(html);
 }
 
-// Copies what is typed in the request window onto the line. A blank title leaves the existing one alone, so the
-// resource buttons in the window can keep other edits without complaining.
 export function applyRequestFormToItem(item) {
-    if (!document.getElementById('rq-title')) return item;          // the window is not open: nothing to copy
+    if (!document.getElementById('rq-title')) return item;
     const read = (id) => document.getElementById(id)?.value ?? '';
     const title = read('rq-title').trim();
     Object.assign(item, {
@@ -1863,11 +1843,6 @@ export async function saveRequestLine(itemId) {
     renderScopingSheet();
 }
 
-// ---- scoping sheet status ----
-// Changing the status can fire automation rules ("Scoping sheet status changes"),
-// which create the follow-up tasks for that stage. Approving the sheet makes its
-// first round with a Do Now line open the current round; the requests sync marks
-// those lines active.
 export async function setSheetStatus(newStatus) {
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
@@ -1898,10 +1873,6 @@ export async function setSheetStatus(newStatus) {
     renderScopingSheet();
 }
 
-// ---- asking the client (or a third party) for something ----
-// Each line becomes a client task linked to the request. A line marked Blocker stops
-// work on the request. When every open ask is a blocker, the request shows as waiting
-// and moves to the Communication role, and one follow-up task is created for that role.
 function communicationAssignee(client) {
     const role = (state.master?.roles || []).find(r => /communicat/i.test(String(r?.name || '')));
     const assignment = role ? (client.projectData?.roleAssignments || []).find(a => a.roleId === role.id) : null;
@@ -2066,7 +2037,6 @@ export async function saveAsks(itemId) {
     renderScopingSheet();
 }
 
-// ---- bridge: keep OL.*/window.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getScopingDataForResource, isResourceInScope, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
@@ -2079,7 +2049,8 @@ Object.assign(window.OL, {
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
     openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
-    openAskModal, addAskLine, refreshAskAssignees, saveAsks
+    openAskModal, addAskLine, refreshAskAssignees, saveAsks,
+    getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest
 });
-// Called bare from sections still living in app.js — bridge onto window.
+
 window.renderScopingSheet = renderScopingSheet;
