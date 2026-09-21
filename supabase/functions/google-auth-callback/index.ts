@@ -62,7 +62,7 @@ serve(async (req) => {
       .eq("id", "main_state");
 
     // 4. Redirect browser back to frontend Communications tab
-    const appOrigin = req.headers.get("origin") || "https://sphynx.github.io/operations-library";
+    const appOrigin = req.headers.get("origin") || "https://sphynxgithub.github.io/operations-library";
     return Response.redirect(`${appOrigin}/#/business/communications?connected=true`, 302);
 
   } catch (err: any) {
