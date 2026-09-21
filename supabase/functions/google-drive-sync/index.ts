@@ -1,38 +1,98 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeTeamRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json"
 };
 
+// Refresh Google OAuth token using stored refresh token in workspace_masters / secrets
+async function getGoogleAccessToken(supabase: any) {
+  const { data: master } = await supabase
+    .from("workspace_masters")
+    .select("google_refresh_token")
+    .eq("id", "main_state")
+    .maybeSingle();
+
+  const refreshToken = master?.google_refresh_token || Deno.env.get("GOOGLE_REFRESH_TOKEN");
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+
+  if (!refreshToken || !clientId || !clientSecret) {
+    throw new Error("reauth_required");
+  }
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error("reauth_required");
+  }
+  return data.access_token;
+}
+
 serve(async (req) => {
-  // 1. Handle CORS Preflight Request Immediately
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { action, clientName, clientId } = await req.json();
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
 
-    // Retrieve Google Access Token (ensure system or vault token fallback)
-    const accessToken = Deno.env.get("GOOGLE_ACCESS_TOKEN");
-    
-    if (!accessToken) {
-      throw new Error("Missing GOOGLE_ACCESS_TOKEN environment variable in Supabase Secrets.");
+    const authz = await authorizeTeamRequest(req, supabase);
+    if (!authz.ok) {
+      return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
     }
 
-    // 2. IDENTIFY OR CREATE CLIENT PROJECT FOLDER
+    let accessToken: string;
+    try {
+      accessToken = await getGoogleAccessToken(supabase);
+    } catch (err: any) {
+      if (err.message === "reauth_required") {
+        return new Response(JSON.stringify({ 
+          error: "reauth_required", 
+          message: "Please click 'Connect Google Account' in Gmail Settings to enable Drive permissions." 
+        }), { status: 401, headers: corsHeaders });
+      }
+      throw err;
+    }
+
+    const { action, clientName, clientId } = await req.json();
+
     if (action === "get_or_create_client_folder") {
-      const q = `mimeType='application/vnd.google-apps.folder' and name='${clientName}' and trashed=false`;
+      // 1. Search for existing root folder
+      const q = `mimeType='application/vnd.google-apps.folder' and name='${clientName.replace(/'/g, "\\'")}' and trashed=false`;
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       
       const searchData = await searchRes.json();
+      
+      if (searchData.error) {
+        if (searchData.error.code === 403 || searchData.error.status === "PERMISSION_DENIED") {
+          return new Response(JSON.stringify({ 
+            error: "insufficient_scope", 
+            message: "Google Drive scope is missing. Please reconnect your Google Account." 
+          }), { status: 403, headers: corsHeaders });
+        }
+        throw new Error(searchData.error.message);
+      }
+
       let targetFolderId = searchData.files?.[0]?.id;
 
-      // Create root client folder if missing
+      // 2. Create root folder if missing
       if (!targetFolderId) {
         const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
           method: "POST",
@@ -43,7 +103,7 @@ serve(async (req) => {
         targetFolderId = createData.id;
       }
 
-      // Create standard subfolders
+      // 3. Ensure subfolders exist
       const subfolders = ["Zoom Recordings", "Task Attachments", "App Snapshots"];
       const subfolderIds: Record<string, string> = {};
 
@@ -67,22 +127,13 @@ serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ folderId: targetFolderId, subfolders: subfolderIds }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      return new Response(JSON.stringify({ folderId: targetFolderId, subfolders: subfolderIds }), { status: 200, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
+    return new Response(JSON.stringify({ error: "invalid_action" }), { status: 400, headers: corsHeaders });
 
-  } catch (err) {
-    // Crucial: Attach corsHeaders to error responses so browser doesn't obscure the error with a CORS message
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
+  } catch (err: any) {
+    console.error("google-drive-sync failed:", err.message);
+    return new Response(JSON.stringify({ error: "server_error", message: err.message }), { status: 500, headers: corsHeaders });
   }
 });
