@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { authorizeTeamRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,91 +7,89 @@ const corsHeaders = {
   "Content-Type": "application/json"
 };
 
-// Refresh Google OAuth token using stored refresh token in workspace_masters / secrets
-async function getGoogleAccessToken(supabase: any) {
-  const { data: master } = await supabase
-    .from("workspace_masters")
-    .select("google_refresh_token")
-    .eq("id", "main_state")
-    .maybeSingle();
-
-  const refreshToken = master?.google_refresh_token || Deno.env.get("GOOGLE_REFRESH_TOKEN");
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-
-  if (!refreshToken || !clientId || !clientSecret) {
-    throw new Error("reauth_required");
-  }
-
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error("reauth_required");
-  }
-  return data.access_token;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+    const supabase = createClient(supabaseUrl, serviceKey);
 
-    const authz = await authorizeTeamRequest(req, supabase);
-    if (!authz.ok) {
-      return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
+    // 1. Fetch Google Refresh Token stored from workspace_masters
+    const { data: master, error: masterErr } = await supabase
+      .from("workspace_masters")
+      .select("google_refresh_token, communications")
+      .eq("id", "main_state")
+      .maybeSingle();
+
+    let refreshToken = master?.google_refresh_token || Deno.env.get("GOOGLE_REFRESH_TOKEN");
+
+    if (!refreshToken) {
+      return new Response(JSON.stringify({ 
+        error: "missing_refresh_token", 
+        message: "No Google refresh token found in database or secrets. Reconnect Google Account in Communications." 
+      }), { status: 400, headers: corsHeaders });
     }
 
-    let accessToken: string;
-    try {
-      accessToken = await getGoogleAccessToken(supabase);
-    } catch (err: any) {
-      if (err.message === "reauth_required") {
-        return new Response(JSON.stringify({ 
-          error: "reauth_required", 
-          message: "Please click 'Connect Google Account' in Gmail Settings to enable Drive permissions." 
-        }), { status: 401, headers: corsHeaders });
-      }
-      throw err;
+    // 2. Exchange refresh token for access token
+    const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+
+    if (!clientId || !clientSecret) {
+      return new Response(JSON.stringify({ 
+        error: "missing_credentials", 
+        message: "GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing from Supabase Secrets." 
+      }), { status: 500, headers: corsHeaders });
     }
 
-    const { action, clientName, clientId } = await req.json();
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+
+    if (!tokenData.access_token) {
+      return new Response(JSON.stringify({ 
+        error: "token_exchange_failed", 
+        details: tokenData,
+        message: "Google rejected the refresh token. Please reconnect Google Account in Communications." 
+      }), { status: 401, headers: corsHeaders });
+    }
+
+    const accessToken = tokenData.access_token;
+    const body = await req.json();
+    const { action, clientName } = body;
 
     if (action === "get_or_create_client_folder") {
-      // 1. Search for existing root folder
-      const q = `mimeType='application/vnd.google-apps.folder' and name='${clientName.replace(/'/g, "\\'")}' and trashed=false`;
+      const cleanName = (clientName || "Unnamed Client").replace(/'/g, "\\'");
+      const q = `mimeType='application/vnd.google-apps.folder' and name='${cleanName}' and trashed=false`;
+
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       
       const searchData = await searchRes.json();
-      
+
       if (searchData.error) {
-        if (searchData.error.code === 403 || searchData.error.status === "PERMISSION_DENIED") {
-          return new Response(JSON.stringify({ 
-            error: "insufficient_scope", 
-            message: "Google Drive scope is missing. Please reconnect your Google Account." 
-          }), { status: 403, headers: corsHeaders });
-        }
-        throw new Error(searchData.error.message);
+        return new Response(JSON.stringify({ 
+          error: "google_drive_api_error", 
+          details: searchData.error,
+          message: searchData.error.message || "Google Drive API rejected request." 
+        }), { status: 400, headers: corsHeaders });
       }
 
       let targetFolderId = searchData.files?.[0]?.id;
 
-      // 2. Create root folder if missing
+      // Create root folder if missing
       if (!targetFolderId) {
         const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
           method: "POST",
@@ -103,7 +100,7 @@ serve(async (req) => {
         targetFolderId = createData.id;
       }
 
-      // 3. Ensure subfolders exist
+      // Create subfolders
       const subfolders = ["Zoom Recordings", "Task Attachments", "App Snapshots"];
       const subfolderIds: Record<string, string> = {};
 
@@ -127,13 +124,15 @@ serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ folderId: targetFolderId, subfolders: subfolderIds }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ folderId: targetFolderId, subfolders: subfolderIds }), { 
+        status: 200, 
+        headers: corsHeaders 
+      });
     }
 
     return new Response(JSON.stringify({ error: "invalid_action" }), { status: 400, headers: corsHeaders });
 
   } catch (err: any) {
-    console.error("google-drive-sync failed:", err.message);
-    return new Response(JSON.stringify({ error: "server_error", message: err.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "server_crash", message: err.message }), { status: 500, headers: corsHeaders });
   }
 });
