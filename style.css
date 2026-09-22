@@ -1817,3 +1817,12 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .ob-add-more-btn { margin-top:6px; }
 .ob-chip-input-row { display:flex; gap:8px; }
 .ob-chip-input-row input { flex:1; }
+
+/* Quick-add "Task / Request" split button (Task Manager's Add button) —
+   default click submits the quick-task form as-is (unchanged one-click
+   behavior); hovering (or focusing, for keyboard use) reveals the explicit
+   Task/Request choice instead of showing two separate buttons side by
+   side. */
+.add-split-btn { position: relative; }
+.add-split-btn .add-split-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; z-index: 50; flex-direction: column; gap: 2px; background: var(--bg-card, #1e293b); border: 1px solid var(--line); border-radius: 6px; padding: 4px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); min-width: 170px; }
+.add-split-btn:hover .add-split-menu, .add-split-btn:focus-within .add-split-menu { display: flex; }

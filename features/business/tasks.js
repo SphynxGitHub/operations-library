@@ -384,14 +384,19 @@ OL.renderBusinessTaskManager = function() {
                     </select>
                 </div>
         
-                <div class="qtf-field" style="flex:0 0 auto; display:flex; gap:6px;">
-                    <button type="submit" class="btn tiny primary" style="min-width:96px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;">
-                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Task
+                <div class="qtf-field add-split-btn" style="flex:0 0 auto;">
+                    <button type="submit" class="btn tiny primary" style="min-width:96px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;" title="Add — defaults to Task, hover for the Request option">
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Add
                     </button>
-                    <button type="button" class="btn tiny soft" style="min-width:110px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;"
-                            onclick="OL.openQuickRequestPicker()" title="Create a Request (scoping line item) for the selected client instead of a Task">
-                        <i data-lucide="layers" style="width:14px;height:14px;"></i> Request
-                    </button>
+                    <div class="add-split-menu">
+                        <button type="submit" class="btn tiny soft" style="justify-content:flex-start; gap:6px; text-align:left;">
+                            <i data-lucide="check-square" style="width:12px;height:12px;"></i> Create Task
+                        </button>
+                        <button type="button" class="btn tiny soft" style="justify-content:flex-start; gap:6px; text-align:left;"
+                                onclick="OL.openQuickRequestPicker()" title="Create a Request (scoping line item) for the selected client instead of a Task">
+                            <i data-lucide="layers" style="width:12px;height:12px;"></i> Create Request
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
