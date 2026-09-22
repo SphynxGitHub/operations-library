@@ -2011,7 +2011,7 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>
                         
                         <textarea class="modal-input tiny" id="task-desc-${task.id}" rows="4"
-                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical; text-align;left;"
+                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical; text-align:left;"
                                   placeholder="Add deliverable details / notes for this task..."
                                   onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
 
