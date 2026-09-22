@@ -321,23 +321,50 @@ export function renderClientRequests() {
     const client = getActiveClient();
     if (!main) return;
     if (!client) { main.innerHTML = '<div class="card" style="padding:20px;">Pick a client first.</div>'; return; }
-    const queue = maintenanceRequests(client.projectData);
+
+    const pd = client.projectData || {};
+
+    // 1. All items across all scoping sheets
+    const scopedItems = (pd.scopingSheets || []).flatMap(s => s?.lineItems || []);
+    const scopedIds = new Set(scopedItems.map(i => String(i.id)));
+    const scopedResourceIds = new Set(scopedItems.map(i => String(i.resourceId)).filter(Boolean));
+
+    // 2. Standalone requests not on a scoping sheet
+    const standaloneRequests = (pd.clientRequests || []).filter(r => !scopedIds.has(String(r.id)));
+
+    // 3. Local resources not yet on a scoping sheet
+    const unscopedResources = (pd.localResources || [])
+        .filter(r => !scopedResourceIds.has(String(r.id)))
+        .map(r => ({
+            id: r.id,
+            resourceId: r.id,
+            name: r.name,
+            requestType: r.type || 'build',
+            status: 'Do Now'
+        }));
+
+    const allItems = [...scopedItems, ...standaloneRequests, ...unscopedResources];
+
+    const openItems = allItems.filter(i => String(i.status || '') !== 'Done');
+    const doneItems = allItems.filter(i => String(i.status || '') === 'Done');
+
     const today = todayIso();
     const showDone = !!OL._showDoneClientRequests;
+
     main.innerHTML = `
         <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
             <div><h2>📥 Client Requests</h2><div class="small muted">${esc(client.meta?.name || '')} · served first come, first served</div></div>
             <button class="btn primary" onclick="OL.openMaintenanceRequestModal()">+ Add request</button>
         </div>
         <div class="card" style="padding:0; overflow:hidden;">
-            <div class="tiny bold uppercase muted" style="padding:10px 12px; border-bottom:1px solid var(--line);">Open (${queue.open.length})</div>
-            ${queue.open.length ? queue.open.map((item, i) => requestRowHtml(client, item, i + 1, today)).join('') : '<div class="tiny muted" style="padding:16px;">Nothing waiting. New requests from email, the portal, a meeting or a call go here.</div>'}
+            <div class="tiny bold uppercase muted" style="padding:10px 12px; border-bottom:1px solid var(--line);">Open (${openItems.length})</div>
+            ${openItems.length ? openItems.map((item, i) => requestRowHtml(client, item, i + 1, today)).join('') : '<div class="tiny muted" style="padding:16px;">Nothing waiting. New requests from email, the portal, a meeting or a call go here.</div>'}
         </div>
-        ${queue.done.length ? `
+        ${doneItems.length ? `
         <div class="card" style="padding:0; overflow:hidden; margin-top:16px;">
-            <div class="tiny bold uppercase muted" style="padding:10px 12px; cursor:pointer;" onclick="OL._showDoneClientRequests = !OL._showDoneClientRequests; OL.renderClientRequests()">${showDone ? '▾' : '▸'} Finished (${queue.done.length})</div>
-            ${showDone ? queue.done.map((item) => requestRowHtml(client, item, '', today)).join('') : ''}
+            <div class="tiny bold uppercase muted" style="padding:10px 12px; cursor:pointer;" onclick="OL._showDoneClientRequests = !OL._showDoneClientRequests; OL.renderClientRequests()">${showDone ? '▾' : '▸'} Finished (${doneItems.length})</div>${showDone ? doneItems.map((item) => requestRowHtml(client, item, '', today)).join('') : ''}
         </div>` : ''}`;
+
     if (window.lucide) window.lucide.createIcons();
 }
 
