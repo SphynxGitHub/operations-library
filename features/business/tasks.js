@@ -1,4 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
+import { findRequestForTask } from '../../core/request-links.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -468,6 +469,7 @@ OL.renderBusinessTaskManager = function() {
                     <span class="tiny muted bold uppercase">Group:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('groupBy', this.value)">
                         <option value="client" ${OL.globalTaskFilterState.groupBy === 'client' ? 'selected' : ''}>Client Workspace</option>
+                        <option value="request" ${OL.globalTaskFilterState.groupBy === 'request' ? 'selected' : ''}>Request</option>
                         <option value="status" ${OL.globalTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                         <option value="assignee" ${OL.globalTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
                         <option value="date" ${OL.globalTaskFilterState.groupBy === 'date' ? 'selected' : ''}>Due Date</option>
@@ -656,6 +658,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     };
 
     const groups = {};
+    const groupRequestInfo = {}; // groupKey -> resolved request metadata, only set when groupBy === 'request'
     if (groupBy === 'date') DATE_BUCKETS.forEach(b => { groups[b] = []; }); // fixed order, even if a bucket ends up empty
     filtered.forEach(task => {
         let groupKey = 'Other';
@@ -664,15 +667,34 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
         else if (groupBy === 'date') groupKey = taskDateBucket(task);
         else if (groupBy === 'type') groupKey = task.taskType || 'Sphynx Task';
+        else if (groupBy === 'request') {
+            const client = state.clients?.[task.clientId];
+            const resourceLookup = (id) => (client?.projectData?.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+            const req = client ? findRequestForTask(client, task, resourceLookup) : null;
+            if (req) {
+                // Keyed by client + item id (not just the request title) so
+                // two different clients' requests never collide into one
+                // card, and so the card header can link straight to it.
+                groupKey = `req:${task.clientId}:${req.itemId}`;
+                groupRequestInfo[groupKey] = req;
+            } else {
+                groupKey = 'No Request';
+            }
+        }
 
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
     });
 
-    return Object.entries(groups).filter(([, tasks]) => tasks.length > 0).map(([groupTitle, tasks]) => {
+    return Object.entries(groups).filter(([, tasks]) => tasks.length > 0).map(([groupTitleKey, tasks]) => {
         const groupHours = tasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
         const sampleClientId = tasks[0]?.clientId;
         const metrics = groupBy === 'client' ? OL.getClientReconciliationMetrics(sampleClientId) : null;
+        const reqInfo = groupBy === 'request' ? groupRequestInfo[groupTitleKey] : null;
+        // For every other groupBy, the key IS the display title; for
+        // "request" it's the req:clientId:itemId key above, so the actual
+        // title comes from the resolved request (or "No Request").
+        const groupTitle = reqInfo ? reqInfo.title : groupTitleKey;
 
         const subGroups = {};
         if (subGroupBy !== 'none') {
@@ -687,12 +709,13 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         }
 
         return `
-        <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
-            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
-                <div style="display:flex; align-items:center; gap:8px;">
+        <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: ${reqInfo ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display:flex; align-items:center; gap:8px; ${reqInfo ? 'cursor:pointer;' : ''}" ${reqInfo ? `onclick="OL.openRequestFromTask('${esc(sampleClientId || '')}', '${esc(reqInfo.itemId)}')" title="Open this request on the scoping sheet"` : ''}>
                     ${OL.renderGroupSelectCheckbox(tasks)}
-                    <i data-lucide="${groupBy === 'date' ? 'calendar' : (groupBy === 'status' ? 'flag' : (groupBy === 'assignee' ? 'user' : (groupBy === 'type' ? 'tag' : 'folder')))}" style="width:14px;height:14px;"></i>
+                    <i data-lucide="${reqInfo ? 'git-pull-request' : (groupBy === 'date' ? 'calendar' : (groupBy === 'status' ? 'flag' : (groupBy === 'assignee' ? 'user' : (groupBy === 'type' ? 'tag' : 'folder'))))}" style="width:14px;height:14px;"></i>
                     <span>${esc(groupTitle)}</span>
+                    ${reqInfo ? `<span class="pill tiny soft" style="font-size:9px;">${esc(reqInfo.requestType.charAt(0).toUpperCase() + reqInfo.requestType.slice(1))} · Round ${reqInfo.round}</span>` : ''}
                     <span class="pill tiny soft" style="font-size: 10px;">${tasks.length} tasks</span>
                 </div>
                 

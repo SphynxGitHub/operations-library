@@ -2,6 +2,7 @@ import { esc, state, db, getBusinessScopedClients } from '../../core/data.js';
 import { getCurrentRound } from '../../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
 import { assigneeForRole } from '../../core/testing.js';
+import { findRequestForTask } from '../../core/request-links.js';
 
 // -------------------------------------------------------------
 // TASK STREAM FILTER STATE
@@ -342,6 +343,7 @@ OL.renderDailyDashboard = function() {
                         <select class="modal-input tiny" style="width:auto;" onchange="OL.setDashboardTaskFilter('groupBy', this.value)">
                             <option value="none" ${OL.dashboardTaskState.groupBy === 'none' ? 'selected' : ''}>Flat List</option>
                             <option value="client" ${OL.dashboardTaskState.groupBy === 'client' ? 'selected' : ''}>Client</option>
+                            <option value="request" ${OL.dashboardTaskState.groupBy === 'request' ? 'selected' : ''}>Request</option>
                             <option value="date" ${OL.dashboardTaskState.groupBy === 'date' ? 'selected' : ''}>Due Date</option>
                             <option value="status" ${OL.dashboardTaskState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                             <option value="assignee" ${OL.dashboardTaskState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
@@ -529,28 +531,53 @@ OL.renderDashboardTaskStream = function(allItems) {
     }
 
     const groups = {};
+    const groupRequestInfo = {}; // key -> {title, requestType, round, clientId}, only set for groupBy === 'request'
     filtered.forEach(item => {
         let key = 'Other';
         if (groupBy === 'client') key = item.clientName || 'Client';
         else if (groupBy === 'status') key = (item._type === 'task' || item._type === 'request') ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors');
         else if (groupBy === 'assignee') key = item.assignee || (item._type === 'task' || item._type === 'event' ? 'Sphynx Task' : item._type === 'request' ? 'Unassigned' : 'N/A');
         else if (groupBy === 'date') key = item.dueDate ? new Date(item.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : 'Unscheduled';
+        else if (groupBy === 'request') {
+            if (item._type === 'request') {
+                key = `req:${item.clientId}:${item.itemId}`;
+                groupRequestInfo[key] = { title: item.title, requestType: item.requestType, round: item.round, clientId: item.clientId };
+            } else if (item._type === 'task' && item.requestLineItemId) {
+                const client = state.clients?.[item.clientId];
+                const resourceLookup = (id) => (client?.projectData?.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+                const req = client ? findRequestForTask(client, item, resourceLookup) : null;
+                if (req) {
+                    key = `req:${item.clientId}:${req.itemId}`;
+                    if (!groupRequestInfo[key]) groupRequestInfo[key] = { title: req.title, requestType: req.requestType, round: req.round, clientId: item.clientId };
+                } else {
+                    key = 'No Request';
+                }
+            } else {
+                key = 'No Request';
+            }
+        }
 
         if (!groups[key]) groups[key] = [];
         groups[key].push(item);
     });
 
-    return Object.entries(groups).map(([groupTitle, groupItems]) => `
-        <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
-            <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display:flex; align-items:center; gap:8px;">
+    return Object.entries(groups).map(([groupKey, groupItems]) => {
+        const reqInfo = groupBy === 'request' ? groupRequestInfo[groupKey] : null;
+        const groupTitle = reqInfo ? reqInfo.title : groupKey;
+        return `
+        <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: ${reqInfo ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 6px; display:flex; align-items:center; gap:8px; ${reqInfo ? 'cursor:pointer;' : ''}" ${reqInfo ? `onclick="OL.openRequestFromTask('${esc(reqInfo.clientId || '')}', '${esc(groupKey.split(':')[2] || '')}')" title="Open this request on the scoping sheet"` : ''}>
+                ${reqInfo ? '<i data-lucide="git-pull-request" style="width:12px;height:12px;"></i>' : ''}
                 <span>${esc(groupTitle)}</span>
+                ${reqInfo ? `<span class="pill tiny soft" style="font-size:9px;">${esc((reqInfo.requestType || 'build').charAt(0).toUpperCase() + (reqInfo.requestType || 'build').slice(1))} · Round ${reqInfo.round}</span>` : ''}
                 <span class="pill tiny soft" style="font-size:10px;">${groupItems.length}</span>
             </div>
             <div style="display:flex; flex-direction:column; gap:6px;">
                 ${groupItems.map(renderItem).join('')}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 };
 
 // Compact card for an active request, in the same style as the other rows in the stream.
