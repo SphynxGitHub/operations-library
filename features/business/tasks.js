@@ -384,9 +384,15 @@ OL.renderBusinessTaskManager = function() {
                     </select>
                 </div>
         
-                <button type="submit" class="btn tiny primary qtf-field" style="flex:0 0 120px; min-width:110px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;">
-                    <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Task
-                </button>
+                <div class="qtf-field" style="flex:0 0 auto; display:flex; gap:6px;">
+                    <button type="submit" class="btn tiny primary" style="min-width:96px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Task
+                    </button>
+                    <button type="button" class="btn tiny soft" style="min-width:110px; height:36px; font-weight: bold; display:flex; align-items:center; justify-content:center; gap:4px;"
+                            onclick="OL.openQuickRequestPicker()" title="Create a Request (scoping line item) for the selected client instead of a Task">
+                        <i data-lucide="layers" style="width:14px;height:14px;"></i> Request
+                    </button>
+                </div>
             </form>
         </div>
 
@@ -1888,6 +1894,8 @@ OL.renderInContextTaskModal = function(client, task) {
                 </div>
             </div>
 
+            ${OL.renderTaskParentRequestBanner(client, task)}
+
             <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
                 <div style="min-width:0;">
                     
@@ -2633,6 +2641,59 @@ OL.renderCommentTextWithMentions = function(text, html) {
 // nothing needs to be copied or kept in sync — the task remains the
 // single source of truth for its own comments.
 // -------------------------------------------------------------
+// Prominent "Request (parent) > Task" banner at the top of the task
+// detail modal — the small request-tag pill further down (next to the
+// comment thread) still exists for that context, but on its own it read
+// as a minor tag rather than the task's actual place in the hierarchy.
+// This also lists sibling tasks under the same request, so you can see
+// where this task sits among the request's other steps without leaving
+// the modal.
+OL.renderTaskParentRequestBanner = function(client, task) {
+    const pd = client?.projectData;
+    if (!pd || !task.requestLineItemId) return '';
+
+    let item = null;
+    for (const sheet of pd.scopingSheets || []) {
+        item = (sheet?.lineItems || []).find(i => i && String(i.id) === String(task.requestLineItemId));
+        if (item) break;
+    }
+    if (!item) return '';
+
+    const resourceLookup = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+    const resource = item.resourceId ? resourceLookup(item.resourceId) : null;
+    const title = (item.name && String(item.name).trim()) || resource?.name || 'Request';
+    const requestType = item.requestType || 'build';
+    const round = Math.max(parseInt(item.round, 10) || 1, 1);
+
+    const siblingTasks = (pd.clientTasks || []).filter(t => t.requestLineItemId === task.requestLineItemId);
+    const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
+    const dotColorFor = (statusName) => (masterStatuses.find(s => s.name === statusName) || {}).color || '#94a3b8';
+
+    return `
+        <div style="margin:0 24px 0 24px; padding:12px 14px; background:rgba(100,198,162,0.06); border:1px solid rgba(100,198,162,0.25); border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(item.id)}')" title="Open this request on the scoping sheet">
+                <i data-lucide="git-pull-request" style="width:14px;height:14px;color:#64c6a2; flex-shrink:0;"></i>
+                <span class="tiny bold uppercase muted">Request (parent)</span>
+                <span style="font-weight:700; color:#64c6a2;">${esc(title)}</span>
+                <span class="pill tiny soft" style="font-size:9px;">${esc(requestType.charAt(0).toUpperCase() + requestType.slice(1))} · Round ${round}</span>
+            </div>
+            ${siblingTasks.length ? `
+                <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(100,198,162,0.2); display:grid; gap:4px;">
+                    <span class="tiny muted uppercase bold" style="margin-bottom:2px;">Tasks under this request (${siblingTasks.length})</span>
+                    ${siblingTasks.map(t => `
+                        <div style="display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; ${String(t.id) === String(task.id) ? 'background:rgba(100,198,162,0.12);' : ''}"
+                             onclick="event.stopPropagation(); ${String(t.id) === String(task.id) ? '' : `OL.openTaskInContext('${esc(client?.id || '')}', '${esc(t.id)}')`}">
+                            <span style="width:8px; height:8px; border-radius:50%; background:${dotColorFor(t.status)}; flex-shrink:0;"></span>
+                            <span class="tiny" style="${String(t.id) === String(task.id) ? 'font-weight:700;' : ''}">${esc(t.title || t.name)}</span>
+                            ${String(t.id) === String(task.id) ? '<span class="tiny muted">(this task)</span>' : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+};
+
 OL.getTaskParentLabel = function(client, task) {
     if (task.parentResourceId) {
         const res = client?.projectData?.localResources?.find(r => r.id === task.parentResourceId);
@@ -3211,5 +3272,155 @@ OL.createGlobalQuickTask = function() {
     const inputTitle = document.getElementById('quick-task-title');
     if (inputTitle) inputTitle.value = '';
 
+    OL.renderBusinessTaskManager();
+};
+
+// -------------------------------------------------------------
+// "+ Request" — the Add button's alternative to "+ Task". A Request is a
+// scoping-sheet line item (it needs a Resource, not just a title), so
+// this can't reuse the quick-task form directly — it opens a small
+// resource picker instead, scoped to whichever client is currently
+// selected in that same form. Deliberately a self-contained copy of the
+// core of features/scoping.js's addResourceToScope/executeScopeAdd rather
+// than calling those directly: those operate on getActiveClient()
+// (state.activeClientId) and finish by calling renderScopingSheet(), both
+// of which assume you're already on that client's Scoping tab — calling
+// them from here would either silently target the wrong client or blow
+// away the Task Manager view they were called from. This version takes
+// clientId explicitly and returns to the Task Manager when done.
+// -------------------------------------------------------------
+OL.openQuickRequestPicker = function() {
+    const clientId = document.getElementById('quick-task-client')?.value;
+    if (!clientId) {
+        alert("Pick a client in the field above first — a Request is a scoping-sheet line item for one client, so it needs one selected (General/Business tasks don't have a scoping sheet).");
+        return;
+    }
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔎 Add Request — ${esc(client.meta?.name || clientId)}</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input"
+                       placeholder="Click to view library or search..."
+                       onfocus="OL.filterQuickRequestResources('', '${clientId}')"
+                       oninput="OL.filterQuickRequestResources(this.value, '${clientId}')"
+                       autofocus>
+                <div id="quick-request-search-results" class="search-results-overlay" style="margin-top:15px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterQuickRequestResources = function(query, clientId) {
+    const listEl = document.getElementById("quick-request-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = state.clients[clientId];
+    const existingIds = (client?.projectData?.scopingSheets?.[0]?.lineItems || []).map(i => i.resourceId);
+
+    const masterSource = (state.master.resources || []).map(r => ({ ...r, origin: 'Master' }));
+    const localSource = (client?.projectData?.localResources || []).map(r => ({ ...r, origin: 'Local' }));
+    const localMasterRefs = localSource.map(r => r.masterRefId);
+    const filteredMaster = masterSource.filter(m => !localMasterRefs.includes(m.id));
+    const combined = [...localSource, ...filteredMaster];
+
+    const matches = combined.filter(res => res.name.toLowerCase().includes(q) && !existingIds.includes(res.id));
+    const masterMatches = matches.filter(m => m.origin === 'Master').sort((a, b) => a.name.localeCompare(b.name));
+    const localMatches = matches.filter(m => m.origin === 'Local').sort((a, b) => a.name.localeCompare(b.name));
+
+    let html = "";
+    if (localMatches.length > 0) {
+        html += `<div class="search-group-header">📍 Available in Project</div>`;
+        html += localMatches.map(res => `
+            <div class="search-result-item" onmousedown="OL.executeQuickRequestAdd('${res.id}', '${clientId}')">
+                <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span>🛠️</span>
+                        <div>
+                            <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
+                            <div class="tiny muted">${esc(res.type || "General")}</div>
+                        </div>
+                    </div>
+                    <span class="pill tiny local">LOCAL</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    if (masterMatches.length > 0) {
+        html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
+        html += masterMatches.map(res => `
+            <div class="search-result-item" onmousedown="OL.executeQuickRequestAdd('${res.id}', '${clientId}')">
+                <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span>🛠️</span>
+                        <div>
+                            <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
+                            <div class="tiny muted">${esc(res.type || "General")}</div>
+                        </div>
+                    </div>
+                    <span class="pill tiny vault">VAULT</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    if (matches.length === 0) {
+        html = `<div class="search-result-item muted">No unlinked resources match "${esc(query)}"</div>`;
+    }
+    listEl.innerHTML = html;
+};
+
+OL.executeQuickRequestAdd = async function(resId, clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    let finalResourceId = resId;
+    if (resId.startsWith('res-vlt-')) {
+        const template = state.master.resources.find(r => r.id === resId);
+        if (template) {
+            const existingLocal = (client.projectData.localResources || []).find(r => r.masterRefId === resId);
+            if (existingLocal) {
+                finalResourceId = existingLocal.id;
+            } else {
+                const newRes = JSON.parse(JSON.stringify(template));
+                newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                newRes.masterRefId = resId;
+                if (!client.projectData.localResources) client.projectData.localResources = [];
+                client.projectData.localResources.push(newRes);
+                finalResourceId = newRes.id;
+            }
+        }
+    }
+
+    const addedRes = (client.projectData.localResources || []).find(r => r.id === finalResourceId)
+        || (state.master.resources || []).find(r => r.id === finalResourceId);
+    const isEventType = String(addedRes?.type || '').toLowerCase() === 'event';
+
+    const newItem = {
+        id: 'li-' + Date.now(),
+        resourceId: finalResourceId,
+        status: "Do Now",
+        responsibleParty: isEventType ? (client.meta?.name || "Client") : "Sphynx",
+        round: 1,
+        teamMode: "everyone",
+        teamIds: [],
+        data: {},
+        manualHours: 0,
+        dependencies: [],
+    };
+
+    if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{ id: 'initial', lineItems: [] }];
+    client.projectData.scopingSheets[0].lineItems.push(newItem);
+
+    await OL.persist();
+
+    OL.closeModal();
     OL.renderBusinessTaskManager();
 };

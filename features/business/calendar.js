@@ -769,6 +769,13 @@ OL.openCalendarEventModal = async function(id) {
         </div>
     `;
     OL.showOverlayModal(html);
+    // Handles the (rare) case of reopening this modal for a different
+    // unlinked event while the shared picker singleton was already left in
+    // its "focused" state from a previous event's modal — makes sure the
+    // results list has real coordinates instead of defaulting to 0,0.
+    if (!evt.linked_client_id && OL._calendarProjectPicker.focused) {
+        OL._positionCalendarEventProjectResults(evt.id);
+    }
 
     // Only show the "Show more" toggle when the description actually
     // overflows the collapsed height -- a short one-liner shouldn't get a
@@ -1063,7 +1070,7 @@ OL.renderCalendarEventProjectPicker = function(evt) {
                    onfocus="OL.setCalendarEventProjectFocus('${evt.id}', true)"
                    oninput="OL.setCalendarEventProjectQuery('${evt.id}', this.value)">
             ${pp.focused ? `
-                <div style="max-height:160px; overflow:auto; margin-top:4px; display:grid; gap:3px; position:absolute; top:100%; left:0; right:0; z-index:20; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:6px; padding:4px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                <div id="calendar-event-project-results-${evt.id}" style="max-height:160px; overflow:auto; margin-top:4px; display:grid; gap:3px; position:fixed; z-index:2000; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:6px; padding:4px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
                     ${filtered.length ? filtered.map(c => `
                         <div class="tiny" style="padding:6px 8px; border-radius:5px; cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'" onmousedown="OL.setCalendarEventClient('${evt.id}', '${c.id}')">${esc(c.meta.name)}</div>
                     `).join('') : `<div class="tiny muted" style="padding:6px;">No matching projects.</div>`}
@@ -1071,6 +1078,24 @@ OL.renderCalendarEventProjectPicker = function(evt) {
             ` : ''}
         </div>
     `;
+};
+
+// The results list above is position:fixed (not the old position:absolute
+// anchored inside this container) because it lives inside the event
+// modal's .modal-box, which sets overflow-y:auto — an absolutely
+// positioned list there was getting silently clipped by the modal's scroll
+// box once it had more than a few matches, which looked like the list was
+// "cut off" partway through rather than actually showing all matches.
+// Called right after render (both here on open and from the focus/query
+// re-renders above) to position it from the input's live screen rect.
+OL._positionCalendarEventProjectResults = function(eventId) {
+    const input = document.getElementById(`calendar-event-project-search-${eventId}`);
+    const results = document.getElementById(`calendar-event-project-results-${eventId}`);
+    if (!input || !results) return;
+    const rect = input.getBoundingClientRect();
+    results.style.left = rect.left + 'px';
+    results.style.width = rect.width + 'px';
+    results.style.top = (rect.bottom + 4) + 'px';
 };
 
 OL._findLiveCalendarEvent = function(eventId) {
@@ -1083,8 +1108,17 @@ OL.setCalendarEventProjectFocus = function(eventId, value) {
     const evt = OL._findLiveCalendarEvent(eventId);
     const container = document.getElementById(`calendar-event-project-picker-${eventId}`);
     if (evt && container) {
-        container.outerHTML = OL.renderCalendarEventProjectPicker(evt);
-        if (window.lucide) lucide.createIcons();
+        // Was a plain outerHTML replace with no focus restoration — the
+        // input you just clicked into (which is what fired this focus
+        // handler in the first place) got destroyed and rebuilt as a new,
+        // unfocused element, so the search box never actually became
+        // typeable. Same reRenderPreservingFocus fix already used by
+        // setCalendarEventProjectQuery below.
+        OL.reRenderPreservingFocus(() => {
+            container.outerHTML = OL.renderCalendarEventProjectPicker(evt);
+            if (window.lucide) lucide.createIcons();
+        });
+        OL._positionCalendarEventProjectResults(eventId);
     }
 };
 
@@ -1103,6 +1137,7 @@ OL.setCalendarEventProjectQuery = function(eventId, value) {
             if (window.lucide) lucide.createIcons();
         }
     });
+    OL._positionCalendarEventProjectResults(eventId);
 };
 
 OL.setCalendarEventClient = async function(eventId, clientId) {

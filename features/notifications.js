@@ -168,8 +168,85 @@ export function markAllNotificationsRead() {
     openNotificationsModal();
 }
 
+// ---- New / Previously Viewed tabs + type filter (mirrors the dashboard's
+// multi-select Types popover — OL.openDashboardTypesPopover in
+// features/business/dashboard.js) ----
+OL.notificationsPanelState = OL.notificationsPanelState || { tab: 'new', types: ['newComment', 'newAssignment'] };
+const NOTIF_TYPE_LABELS = { newComment: 'Comments (mentions)', newAssignment: 'Assignments' };
+
+export function renderNotificationsModalBody() {
+    const all = getMyNotifications();
+    const st = OL.notificationsPanelState;
+    const newCount = all.filter(n => !n.read).length;
+    const viewedCount = all.filter(n => n.read).length;
+    const filtered = all.filter(n => (st.tab === 'new' ? !n.read : n.read) && st.types.includes(n.type));
+
+    return `
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; border-bottom:1px solid var(--panel-border); padding-bottom:8px;">
+            <button class="btn tiny ${st.tab === 'new' ? 'primary' : 'soft'}" onclick="OL.setNotificationsPanelTab('new')">New${newCount ? ` (${newCount})` : ''}</button>
+            <button class="btn tiny ${st.tab === 'viewed' ? 'primary' : 'soft'}" onclick="OL.setNotificationsPanelTab('viewed')">Previously Viewed${viewedCount ? ` (${viewedCount})` : ''}</button>
+            <div class="spacer"></div>
+            <button class="btn tiny soft" onclick="OL.openNotificationTypesPopover(event)">
+                <i data-lucide="filter" style="width:11px;height:11px;"></i> Type
+            </button>
+        </div>
+        ${st.tab === 'new' && filtered.length ? `
+            <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+                <button class="btn tiny soft" onclick="OL.markAllNotificationsRead()">Mark all read</button>
+            </div>
+        ` : ''}
+        ${filtered.length ? filtered.map(n => `
+            <div onclick="OL.markNotificationRead('${n.id}'); OL.closeModal(); if (typeof OL.openTaskInContext === 'function') OL.openTaskInContext('${n.clientId}', '${n.taskId}');"
+                 style="padding:10px; border-radius:8px; margin-bottom:6px; cursor:pointer; background:${n.read ? 'transparent' : 'rgba(var(--accent-rgb),0.08)'}; border:1px solid var(--panel-border);">
+                <div class="tiny" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="${n.type === 'newComment' ? 'at-sign' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>
+                    ${esc(n.text)}
+                </div>
+                <div class="tiny muted" style="margin-top:2px;">${n.date ? esc(new Date(n.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</div>
+            </div>
+        `).join('') : `<p class="tiny muted">${st.tab === 'new' ? 'Nothing new right now.' : 'Nothing viewed yet.'}</p>`}
+    `;
+}
+
+function refreshNotificationsModalBody() {
+    const body = document.getElementById('notifications-modal-body');
+    if (!body) return;
+    body.innerHTML = renderNotificationsModalBody();
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export function setNotificationsPanelTab(tab) {
+    OL.notificationsPanelState.tab = tab;
+    refreshNotificationsModalBody();
+}
+
+export function openNotificationTypesPopover(event) {
+    const popover = OL.createPopoverContainer(event);
+    const selected = OL.notificationsPanelState.types;
+
+    popover.innerHTML = `
+        <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Notification Type</div>
+        <div style="display:grid; gap:2px; min-width:180px;">
+            ${Object.entries(NOTIF_TYPE_LABELS).map(([key, label]) => `
+                <label style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
+                    <input type="checkbox" ${selected.includes(key) ? 'checked' : ''} onclick="OL.toggleNotificationTypeFilter(event, '${key}')">
+                    <span class="tiny">${label}</span>
+                </label>
+            `).join('')}
+        </div>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export function toggleNotificationTypeFilter(event, key) {
+    event.stopPropagation();
+    const list = OL.notificationsPanelState.types;
+    const idx = list.indexOf(key);
+    if (idx === -1) list.push(key); else list.splice(idx, 1);
+    refreshNotificationsModalBody();
+}
+
 export function openNotificationsModal() {
-    const notifications = getMyNotifications();
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">Notifications</div>
@@ -177,22 +254,8 @@ export function openNotificationsModal() {
             <button class="btn tiny soft" onclick="OL.openNotificationSettingsModal()" title="Settings"><i data-lucide="settings" style="width:13px;height:13px;"></i></button>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="width:100%;">
-            ${notifications.length ? `
-                <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
-                    <button class="btn tiny soft" onclick="OL.markAllNotificationsRead()">Mark all read</button>
-                </div>
-                ${notifications.map(n => `
-                    <div onclick="OL.markNotificationRead('${n.id}'); OL.closeModal(); if (typeof OL.openTaskInContext === 'function') OL.openTaskInContext('${n.clientId}', '${n.taskId}');"
-                         style="padding:10px; border-radius:8px; margin-bottom:6px; cursor:pointer; background:${n.read ? 'transparent' : 'rgba(var(--accent-rgb),0.08)'}; border:1px solid var(--panel-border);">
-                        <div class="tiny" style="display:flex; align-items:center; gap:6px;">
-                            <i data-lucide="${n.type === 'newComment' ? 'at-sign' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>
-                            ${esc(n.text)}
-                        </div>
-                        <div class="tiny muted" style="margin-top:2px;">${n.date ? esc(new Date(n.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</div>
-                    </div>
-                `).join('')}
-            ` : `<p class="tiny muted">Nothing new right now.</p>`}
+        <div class="modal-body" id="notifications-modal-body" style="width:100%;">
+            ${renderNotificationsModalBody()}
         </div>
     `;
     openModal(html);
@@ -329,5 +392,6 @@ Object.assign(window.OL, {
     openNotificationSettingsModal, requestDesktopNotificationPermission, toggleNotificationPref,
     getMyNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     openNotificationsModal, renderNotificationBell, refreshNotificationBell, notifyEvent,
-    startNotificationPolling
+    startNotificationPolling, renderNotificationsModalBody, setNotificationsPanelTab,
+    openNotificationTypesPopover, toggleNotificationTypeFilter
 });
