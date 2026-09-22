@@ -2172,7 +2172,8 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
             <div id="task-comment-editor-${task.id}" 
                  contenteditable="true" 
                  class="modal-input tiny" 
-                 style="min-height:70px; max-height:160px; overflow-y:auto; border-radius:0 0 6px 6px; background:var(--bg-card, #1e293b); padding:8px; line-height:1.4; text-align:left;"
+                 style="min-height:70px; max-height:160px; overflow-y:auto; border-radius:0 0 6px 6px; 
+                 background:var(--bg-card, #1e293b); padding:8px; line-height:1.4; text-align:left;"
                  placeholder="Add a comment... use @ to tag someone"
                  oninput="OL.handleCommentMentionInput(this, '${task.id}')"
                  onkeydown="OL.handleCommentMentionKeydown(event, '${task.id}')"></div>
@@ -2193,7 +2194,8 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                     <div style="background: rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--accent);">
                         <div class="tiny muted bold" style="margin-bottom:4px;">Editing comment</div>
                         <div id="task-comment-edit-editor-${c.id}" contenteditable="true" class="modal-input tiny"
-                             style="min-height:60px; max-height:200px; overflow-y:auto; padding:6px; line-height:1.4; background:var(--bg-card, #1e293b);">${c.html || esc(c.text || '')}</div>
+                             style="min-height:60px; max-height:200px; overflow-y:auto; padding:6px; line-height:1.4; 
+                             background:var(--bg-card, #1e293b); text-align:left;">${c.html || esc(c.text || '')}</div>
                         <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
                             <button class="btn tiny soft" onclick="OL.cancelEditTaskComment('${client?.id}', '${task.id}')">Cancel</button>
                             <button class="btn tiny primary" onclick="OL.saveEditedTaskComment('${client?.id}', '${task.id}', '${c.id}')">Save</button>
