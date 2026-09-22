@@ -1988,7 +1988,7 @@ OL.renderInContextTaskModal = function(client, task) {
                             <label class="bold tiny uppercase muted" style="margin:0;">Deliverable Details & Description:</label>
                             
                             <!-- UPLOAD BUTTON (ALWAYS ACCEPTS NEW FILES) -->
-                            <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;">
+                            <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:left; gap:4px; font-size:10px;">
                                 <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> Upload File to Drive
                                 <input type="file" style="display:none;" onchange="
                                     const file = this.files[0];
@@ -2011,7 +2011,7 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>
                         
                         <textarea class="modal-input tiny" id="task-desc-${task.id}" rows="4"
-                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical;"
+                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical; text-align;left;"
                                   placeholder="Add deliverable details / notes for this task..."
                                   onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
 
