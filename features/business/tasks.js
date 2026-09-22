@@ -574,7 +574,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     const { query, status, assignee, dateRange, groupBy, subGroupBy } = OL.globalTaskFilterState;
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = OL.localDateStr(now);
     
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
@@ -1324,7 +1324,7 @@ OL.openEditTaskStatusQuickDropdown = function(event, clientId, taskId) {
             ${statuses.map(s => `
                 <button class="btn tiny soft" 
                         style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; justify-content:flex-start; padding:6px 8px; ${task?.status === s.name ? 'border:1px solid var(--accent); background:rgba(var(--accent-rgb),0.1);' : ''}"
-                        onclick="OL.updateGlobalTaskStatus('${clientId}', '${taskId}', '${esc(s.name)}'); OL.closePopoverDropdown();">
+                        onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskStatus('${clientId}', '${taskId}', '${esc(s.name)}');">
                     <span style="width:8px; height:8px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
                     <span style="flex:1;">${esc(s.name)}</span>
                     ${task?.status === s.name ? '<i data-lucide="check" style="width:12px;height:12px;color:var(--accent);"></i>' : ''}
@@ -1343,16 +1343,16 @@ OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Assign Task</div>
         <div style="display:grid; gap:4px; max-height:260px; overflow-y:auto;">
-            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Sphynx Task'); OL.closePopoverDropdown();">
+            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Sphynx Task');">
                 <i data-lucide="zap" style="width:12px;height:12px;color:var(--accent);"></i> Sphynx Task
             </button>
-            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Client Task'); OL.closePopoverDropdown();">
+            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Client Task');">
                 <i data-lucide="user" style="width:12px;height:12px;color:#ec4899;"></i> Client Task
             </button>
             ${(state.master?.sphynxTeam || []).length > 0 ? `
                 <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Sphynx Team</div>
                 ${state.master.sphynxTeam.map(m => `
-                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}'); OL.closePopoverDropdown();">
+                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}');">
                         <i data-lucide="shield-check" style="width:12px;height:12px;color:var(--accent);"></i> ${esc(m.name)}
                     </button>
                 `).join('')}
@@ -1360,14 +1360,14 @@ OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
             ${teamOptions.length > 0 ? `
                 <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Client Team</div>
                 ${teamOptions.map(m => `
-                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}'); OL.closePopoverDropdown();">
+                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}');">
                         <i data-lucide="user" style="width:12px;height:12px;color:#ec4899;"></i> ${esc(m.name)}
                     </button>
                 `).join('')}
             ` : ''}
             <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Vendors / 3rd Party</div>
             ${OL.thirdPartyAssignees.map(tp => `
-                <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(tp)}'); OL.closePopoverDropdown();">
+                <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(tp)}');">
                     <i data-lucide="wrench" style="width:12px;height:12px;color:#a855f7;"></i> ${esc(tp)}
                 </button>
             `).join('')}
@@ -1384,17 +1384,17 @@ OL.openTaskTimerDropdown = function(event, clientId, taskId) {
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Timer & Time Log</div>
         <div style="display:grid; gap:4px;">
-            <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" style="display:flex; align-items:center; gap:6px; justify-content:center; font-weight:bold;" onclick="OL.toggleLiveTaskTimer('${clientId}', '${taskId}'); OL.closePopoverDropdown();">
+            <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" style="display:flex; align-items:center; gap:6px; justify-content:center; font-weight:bold;" onclick="OL.closePopoverDropdown(); OL.toggleLiveTaskTimer('${clientId}', '${taskId}');">
                 <i data-lucide="${isTimerRunning ? 'square' : 'play'}" style="width:12px;height:12px;"></i>
                 ${isTimerRunning ? 'Stop Timer' : 'Start Live Timer'}
             </button>
             <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Quick Time Add</div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
-                <button class="btn tiny soft" onclick="OL.logTaskHours('${clientId}', '${taskId}', 0.08); OL.closePopoverDropdown();">+5 mins</button>
-                <button class="btn tiny soft" onclick="OL.logTaskHours('${clientId}', '${taskId}', 0.17); OL.closePopoverDropdown();">+10 mins</button>
-                <button class="btn tiny soft" onclick="OL.logTaskHours('${clientId}', '${taskId}', 0.25); OL.closePopoverDropdown();">+15 mins</button>
-                <button class="btn tiny soft" onclick="OL.logTaskHours('${clientId}', '${taskId}', 0.50); OL.closePopoverDropdown();">+30 mins</button>
-                <button class="btn tiny soft" style="grid-column: span 2;" onclick="OL.logTaskHours('${clientId}', '${taskId}', 1.00); OL.closePopoverDropdown();">+60 mins (+1h)</button>
+                <button class="btn tiny soft" onclick="OL.closePopoverDropdown(); OL.logTaskHours('${clientId}', '${taskId}', 0.08);">+5 mins</button>
+                <button class="btn tiny soft" onclick="OL.closePopoverDropdown(); OL.logTaskHours('${clientId}', '${taskId}', 0.17);">+10 mins</button>
+                <button class="btn tiny soft" onclick="OL.closePopoverDropdown(); OL.logTaskHours('${clientId}', '${taskId}', 0.25);">+15 mins</button>
+                <button class="btn tiny soft" onclick="OL.closePopoverDropdown(); OL.logTaskHours('${clientId}', '${taskId}', 0.50);">+30 mins</button>
+                <button class="btn tiny soft" style="grid-column: span 2;" onclick="OL.closePopoverDropdown(); OL.logTaskHours('${clientId}', '${taskId}', 1.00);">+60 mins (+1h)</button>
             </div>
             <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">
                 <div class="tiny muted uppercase bold" style="margin-bottom:4px; padding:2px 4px;">Custom Entry (adds to total)</div>
@@ -1405,7 +1405,7 @@ OL.openTaskTimerDropdown = function(event, clientId, taskId) {
                 </div>
             </div>
             <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">
-                <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; width:100%; justify-content:center;" onclick="OL.openEditTaskTimeModal('${clientId}', '${taskId}'); OL.closePopoverDropdown();">
+                <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; width:100%; justify-content:center;" onclick="OL.closePopoverDropdown(); OL.openEditTaskTimeModal('${clientId}', '${taskId}');">
                     <i data-lucide="pencil" style="width:11px;height:11px;"></i> Edit Total (Override)
                 </button>
             </div>
@@ -1458,7 +1458,14 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
             task.dueDate = newDueDate;
         }
     }, clientId);
-    OL.refreshTaskView();
+    // Deferred one tick: this input's own onchange is still firing when we
+    // get here, and the browser is mid-way through closing its native date
+    // picker for it. Rebuilding the row (and thus this very input) inside
+    // that same synchronous handler was cutting that close animation off
+    // partway through, leaving the picker visually stuck open. Letting the
+    // browser finish first, then re-rendering, fixes that without changing
+    // anything else about the flow.
+    setTimeout(() => OL.refreshTaskView(), 0);
 };
 
 // 🚦 Persist Status Change to Supabase State
@@ -2273,18 +2280,28 @@ OL._setCaretOffset = function(element, offset) {
     return range;
 };
 
+// Positioned with `position:fixed` from the editor's live screen rect rather
+// than CSS `position:absolute`, because absolute positioning here nests
+// inside .modal-body / .modal-box, both of which set overflow-y:auto /
+// overflow:hidden — the list was getting silently clipped by that scroll
+// box any time it had less than ~160px of room above the editor. `fixed`
+// escapes that clipping entirely. It's re-anchored on every keystroke (via
+// this function) and closed on modal scroll/resize so it never drifts from
+// the editor it belongs to.
 OL.handleCommentMentionInput = function(editor, taskId) {
     const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
     if (!dropdown) return;
 
     const match = OL._findMentionQuery(editor.textContent || '', OL._getCaretOffset(editor));
-    if (!match) { dropdown.innerHTML = ''; return; }
+    if (!match) { dropdown.innerHTML = ''; OL._teardownMentionDropdownReposition(taskId); return; }
 
     const roster = OL.getMentionRoster().filter(m => m.name.toLowerCase().includes(match.query));
-    if (!roster.length) { dropdown.innerHTML = ''; return; }
+    if (!roster.length) { dropdown.innerHTML = ''; OL._teardownMentionDropdownReposition(taskId); return; }
+
+    const rect = editor.getBoundingClientRect();
 
     dropdown.innerHTML = `
-        <div style="position:absolute; z-index:20; bottom:100%; left:0; right:0; margin-bottom:4px; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:6px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); max-height:160px; overflow:auto;">
+        <div style="position:fixed; z-index:2000; left:${rect.left}px; width:${rect.width}px; bottom:${window.innerHeight - rect.top + 4}px; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:6px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); max-height:160px; overflow:auto;">
             ${roster.map((m, i) => `
                 <div class="tiny mention-suggestion" data-idx="${i}"
                      style="padding:7px 10px; cursor:pointer; ${i === 0 ? 'background:rgba(var(--accent-rgb),0.12);' : ''}"
@@ -2294,6 +2311,47 @@ OL.handleCommentMentionInput = function(editor, taskId) {
             `).join('')}
         </div>
     `;
+
+    OL._setupMentionDropdownReposition(taskId, editor);
+};
+
+// Keeps the fixed-position dropdown glued to the editor while its scroll
+// ancestor (.modal-body) scrolls, and closes it if the editor scrolls out
+// of view or the window resizes. One listener pair per task, replaced
+// (not stacked) on every call.
+OL._setupMentionDropdownReposition = function(taskId, editor) {
+    OL._teardownMentionDropdownReposition(taskId);
+    const reposition = () => {
+        const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
+        const box = dropdown && dropdown.firstElementChild;
+        if (!dropdown || !box || !document.body.contains(editor)) {
+            OL._teardownMentionDropdownReposition(taskId);
+            return;
+        }
+        const rect = editor.getBoundingClientRect();
+        const modalBody = editor.closest('.modal-body');
+        const modalRect = modalBody ? modalBody.getBoundingClientRect() : null;
+        if (modalRect && (rect.bottom < modalRect.top || rect.top > modalRect.bottom)) {
+            dropdown.innerHTML = '';
+            OL._teardownMentionDropdownReposition(taskId);
+            return;
+        }
+        box.style.left = rect.left + 'px';
+        box.style.width = rect.width + 'px';
+        box.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    };
+    OL._mentionRepositionHandlers = OL._mentionRepositionHandlers || {};
+    OL._mentionRepositionHandlers[taskId] = reposition;
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition, true);
+};
+
+OL._teardownMentionDropdownReposition = function(taskId) {
+    const handlers = OL._mentionRepositionHandlers;
+    if (!handlers || !handlers[taskId]) return;
+    window.removeEventListener('scroll', handlers[taskId], true);
+    window.removeEventListener('resize', handlers[taskId], true);
+    delete handlers[taskId];
 };
 
 OL.handleCommentMentionKeydown = function(event, taskId) {
@@ -2302,6 +2360,7 @@ OL.handleCommentMentionKeydown = function(event, taskId) {
 
     if (event.key === 'Escape') {
         dropdown.innerHTML = '';
+        OL._teardownMentionDropdownReposition(taskId);
         return;
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
@@ -2344,6 +2403,7 @@ OL.insertMention = function(taskId, name, atPosition) {
     sel.addRange(caretRange);
 
     if (dropdown) dropdown.innerHTML = '';
+    OL._teardownMentionDropdownReposition(taskId);
 };
 
 // Wires the Bold/Italic/List/Link toolbar buttons to the comment editor.
