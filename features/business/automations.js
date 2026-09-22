@@ -214,7 +214,7 @@ OL.executeAutomationAction = function(rule, ctx) {
         status: action.status || 'Pending Sphynx Action',
         assignee,
         dueDate,
-        isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
+        isClientTask: OL.computeIsClientTask(assignee),
         loggedHours,
         parentTaskId: (action.asSubtask && ctx.task) ? ctx.task.id : null,
         requestLineItemId: ctx.requestLineItemId || undefined,
