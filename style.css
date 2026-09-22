@@ -1834,3 +1834,13 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .ol-richtext-body ul, .ol-richtext-body ol, .ol-richtext-view ul, .ol-richtext-view ol { margin: 4px 0; padding-left: 20px; }
 .ol-richtext-body a, .ol-richtext-view a { color: var(--accent); text-decoration: underline; }
 .ol-richtext-body p, .ol-richtext-view p { margin: 0 0 6px; }
+
+/* Overdue due dates — beats the theme's !important input colors */
+.modal-input.due-overdue, .pill.due-overdue, .due-overdue {
+  color: #ef4444 !important;
+  font-weight: 700 !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+.modal-input.due-overdue::-webkit-datetime-edit { color: #ef4444 !important; }
+.modal-input.due-overdue::-webkit-calendar-picker-indicator { filter: invert(33%) sepia(90%) saturate(3000%) hue-rotate(345deg); }

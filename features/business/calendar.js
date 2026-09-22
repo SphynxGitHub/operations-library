@@ -718,6 +718,15 @@ OL.openCalendarEventModal = async function(id) {
                         </span>
                     </div>
 
+                    ${evt.linked_client_id && new Date(evt.start) < new Date() ? `
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-6px 0 18px; padding:10px 12px; border:1px solid rgba(37,99,235,0.3); background:rgba(37,99,235,0.05); border-radius:8px;">
+                            <button class="btn small primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">✉️ ${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
+                            ${evt.summary_sent_at ? `<span class="tiny muted">Sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
+                            <span class="tiny muted" style="margin-left:auto;">${OL.zoomStatusLine ? OL.zoomStatusLine(evt) : ''}</span>
+                            <button class="btn tiny soft" title="Look this meeting up in Zoom again (summary, action items, recording → Drive)" onclick="OL.recheckZoomForEvent('${evt.id}')"><i data-lucide="refresh-cw" style="width:11px;height:11px;"></i> Re-check Zoom</button>
+                        </div>
+                    ` : ''}
+
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                         <div><strong class="muted">When:</strong> ${esc(startLabel)}${endLabel ? ` – ${esc(endLabel)}` : ''}</div>
                         <div>
@@ -748,12 +757,7 @@ OL.openCalendarEventModal = async function(id) {
                                 <i data-lucide="video" style="width:12px;height:12px;color:#38bdf8;"></i> Zoom Summary
                             </label>
                             <div style="font-size:13px; line-height:1.5; color:var(--text); white-space:pre-wrap; overflow-wrap:break-word;">${OL.formatEventDescription(evt.zoom_summary)}</div>
-                            ${evt.linked_client_id ? `
-                                <div style="margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                    <button class="btn tiny primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">✉️ ${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
-                                    ${evt.summary_sent_at ? `<span class="tiny muted">Sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
-                                </div>
-                            ` : ''}
+
                         </div>
                     ` : ''}
 
@@ -1648,6 +1652,49 @@ OL.fetchLiveZoomMeetings = async function() {
         OL.calendarState.zoomSyncing = false;
         OL.renderBusinessCalendar();
     }
+};
+
+// One-line Zoom state for a meeting, so a missing summary/recording is
+// visible (and explainable) instead of silently absent.
+OL.zoomStatusLine = function(evt) {
+    const bits = [];
+    if (!evt.zoom_meeting_id) bits.push('Zoom: no meeting matched yet');
+    else {
+        bits.push(evt.zoom_summary ? 'Summary ✓' : (evt.zoom_summary_processed ? 'Summary: none from Zoom' : 'Summary: waiting on Zoom'));
+        const n = Array.isArray(evt.zoom_action_items) ? evt.zoom_action_items.length : 0;
+        if (evt.zoom_summary) bits.push(`${n} action item${n === 1 ? '' : 's'}${n && evt.zoom_tasks_created ? ' → tasks ✓' : ''}`);
+        bits.push(evt.zoom_recording_status === 'saved' ? 'Recording in Drive ✓' : evt.zoom_recording_status === 'none' ? 'No recording' : 'Recording: pending');
+    }
+    return esc(bits.join(' · '));
+};
+
+// Clears this meeting's Zoom flags and runs the sync now, then reports
+// exactly what happened for it.
+OL.recheckZoomForEvent = async function(eventId) {
+    const { error } = await db.from('calendar_events').update({
+        zoom_summary_processed: false, zoom_tasks_created: false, zoom_recording_status: null, zoom_summary_in_drive: false
+    }).eq('id', eventId);
+    if (error) { alert('Could not reset this meeting: ' + error.message); return; }
+    try {
+        const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/sync-zoom-meetings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) }, body: JSON.stringify({ eventId })
+        });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) { alert('Zoom sync failed: ' + (r.message || res.status)); return; }
+        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems();
+        const d = r.eventReport || {};
+        alert([
+            'Zoom re-check for this meeting:',
+            `• Zoom meeting: ${d.meetingId ? d.meetingId + (d.matchedBy ? ` (matched by ${d.matchedBy})` : '') : 'not found — no Zoom link on the invite and no Zoom meeting/recording at this time'}`,
+            `• Summary: ${d.summary || 'not checked'}`,
+            `• Action items: ${d.actionItems ?? 0}`,
+            `• Recording: ${d.recording || 'not checked'}`,
+            ...(d.notes || []).map(n => '• ' + n)
+        ].join('\n'));
+    } catch (e) {
+        alert('Zoom sync failed: ' + e.message);
+    }
+    OL.openCalendarEventModal(eventId);
 };
 
 OL.processCalendarAutomations = async function() {

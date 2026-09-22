@@ -266,6 +266,7 @@ OL.setCommProjectFilter = function(clientId) {
 
 OL.renderCommThreadRows = function(threads) {
     return `
+        ${threads.length > 1 && OL.renderEmailGroupSelectCheckbox ? `<label class="tiny muted" style="display:flex; align-items:center; gap:6px; margin:0 0 6px 12px; cursor:pointer;">${OL.renderEmailGroupSelectCheckbox(threads)} Select all ${threads.length}</label>` : ''}
         <div style="display:grid; gap:10px;">
             ${threads.map(m => OL.renderCommThreadRow(m)).join('')}
         </div>
@@ -278,8 +279,9 @@ OL.renderCommThreadRow = function(m) {
     const senderEmail = parsedSender?.email || '';
 
     return `
-        <div style="display:grid; grid-template-columns: 20px 76px 160px 1fr 118px; gap: 10px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; align-items:center;">
-            <div style="display:flex; align-items:center; justify-content:center;" title="Gmail">
+        <div style="display:grid; grid-template-columns: 38px 76px 160px minmax(0,1fr) 118px; gap: 10px; padding: 12px; background: ${OL.bulkEmailSelection?.[m.id] ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid var(--line); border-radius: 6px; align-items:center;">
+            <div style="display:flex; align-items:center; justify-content:center; gap:6px;" title="Select">
+                ${OL.renderEmailSelectCheckbox ? OL.renderEmailSelectCheckbox(m) : ''}
                 <i data-lucide="mail" style="width:14px;height:14px; color:var(--accent);"></i>
             </div>
             <div class="tiny muted monospace" style="white-space:nowrap;">${m.date ? new Date(m.date).toLocaleDateString() : ''}</div>
@@ -1159,6 +1161,7 @@ OL.openComposeEmailModal = function(options = {}) {
         linked_task_id: options.linked_task_id || null,
         linked_request_id: options.linked_request_id || null,
         linked_event_id: options.linked_event_id || null,
+        includedTaskIds: [],  // open project tasks ticked "include" — listed in the email
         attachments: [],      // from your computer: { filename, mimeType, contentBase64, size }
         projectFiles: [],     // from the project (Drive): { name, url } — sent as links
         includeSignature: true,
@@ -1179,7 +1182,8 @@ OL.openComposeEmailModal = function(options = {}) {
                 <div class="tiny muted">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>
                 <div>
                     <label class="tiny muted bold" style="display:block; margin-bottom:2px;">To</label>
-                    <input type="text" id="compose-email-to" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.to)}" placeholder="name@example.com">
+                    <input type="text" id="compose-email-to" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.to)}" placeholder="name@example.com"
+                           onchange="OL.renderComposeTaskPicker()" onblur="OL.renderComposeTaskPicker()">
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                     <div>
@@ -1234,6 +1238,8 @@ OL.openComposeEmailModal = function(options = {}) {
                     <div id="compose-project-file-picker"></div>
                 </div>
 
+                <div id="compose-task-picker"></div>
+
                 ${st.quoted || st.quotedHtml ? `
                     <details>
                         <summary class="tiny muted" style="cursor:pointer;">Quoted original message (included when sent)</summary>
@@ -1243,7 +1249,7 @@ OL.openComposeEmailModal = function(options = {}) {
                 ${!isReply ? `
                     <div>
                         <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Link to Project (optional)</label>
-                        <select id="compose-email-client" class="modal-input tiny">
+                        <select id="compose-email-client" class="modal-input tiny" onchange="OL.renderComposeTaskPicker()">
                             <option value="">— No project —</option>
                             ${Object.values(state.clients || {})
                                 .filter(c => c?.meta?.name)
@@ -1265,8 +1271,87 @@ OL.openComposeEmailModal = function(options = {}) {
     OL.showOverlayModal(html);
     OL.renderComposeSignaturePreview();
     OL.renderComposeAttachments();
+    OL.renderComposeTaskPicker();
     if (window.lucide) lucide.createIcons();
     document.getElementById(isReply ? 'compose-email-body' : 'compose-email-to')?.focus();
+};
+
+// ---- Open tasks for the recipient's project ----
+// Once there's a recipient (or a project picked), the project's open tasks
+// are listed with an "include" box; ticked ones go into the email as a
+// Next steps list, grouped by who owns them.
+OL._composeProjectId = function() {
+    const st = OL._composeState || {};
+    const picked = document.getElementById('compose-email-client')?.value;
+    if (picked) return picked;
+    if (st.linked_client_id) return st.linked_client_id;
+    const emails = ((document.getElementById('compose-email-to')?.value || '') + ',' + (document.getElementById('compose-email-cc')?.value || ''))
+        .toLowerCase().match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || [];
+    if (!emails.length) return '';
+    const hit = Object.values(state.clients || {}).find(c => (c.projectData?.teamMembers || []).some(m => emails.includes(String(m.email || '').toLowerCase())));
+    return hit?.id || '';
+};
+
+OL.renderComposeTaskPicker = function() {
+    const box = document.getElementById('compose-task-picker');
+    const st = OL._composeState;
+    if (!box || !st) return;
+    const clientId = OL._composeProjectId();
+    const client = clientId ? state.clients?.[clientId] : null;
+    if (!client?.projectData) { box.innerHTML = ''; return; }
+    const closed = new Set((OL.getSystemStatuses ? OL.getSystemStatuses() : []).filter(x => x.isClosed).map(x => x.name).concat(['Done']));
+    const today = OL.localDateStr();
+    const open = (client.projectData.clientTasks || []).filter(t => t && !closed.has(t.status) && !t.meetingSummaryEventId);
+    const isClient = (t) => t.isClientTask || (OL.computeIsClientTask && OL.computeIsClientTask(t.assignee));
+    open.sort((a, b) => isClient(b) - isClient(a) || String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+    const inc = new Set(st.includedTaskIds.map(String));
+    const q = String(st.taskFilter || '').toLowerCase();
+    const shown = open.filter(t => !q || `${t.title || t.name} ${t.assignee || ''}`.toLowerCase().includes(q));
+    box.innerHTML = open.length ? `
+        <details ${inc.size ? 'open' : ''} style="padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+            <summary class="tiny bold" style="cursor:pointer;">✅ Open tasks for ${esc(client.meta?.name || 'this project')} (${open.length})${inc.size ? ` · ${inc.size} included` : ''}</summary>
+            <div class="tiny muted" style="margin:6px 0;">Tick any to list them in the email as next steps / reminders.</div>
+            <input type="text" class="modal-input tiny" placeholder="Filter…" value="${esc(st.taskFilter || '')}" style="width:100%; margin-bottom:6px;"
+                   oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._composeState.taskFilter = v; OL.renderComposeTaskPicker(); })">
+            <div style="max-height:200px; overflow:auto; display:grid; gap:2px;">
+                ${shown.map(t => {
+                    const due = t.dueDate ? OL.localDayKey(t.dueDate) : '';
+                    const overdue = due && due < today;
+                    return `<label class="tiny" style="display:flex; gap:6px; align-items:flex-start; padding:3px 2px; cursor:pointer;">
+                        <input type="checkbox" ${inc.has(String(t.id)) ? 'checked' : ''} onchange="OL.toggleComposeTask('${esc(String(t.id))}', this.checked)">
+                        <span style="flex:1;">${esc(t.title || t.name)} <span class="muted">· ${esc(t.assignee || 'Unassigned')}${due ? ` · <span style="${overdue ? 'color:#ef4444; font-weight:700;' : ''}">${overdue ? 'overdue ' : 'due '}${esc(OL.formatDayKey(due, { month: 'short', day: 'numeric' }))}</span>` : ''}</span></span>
+                    </label>`;
+                }).join('') || '<span class="tiny muted">No matches.</span>'}
+            </div>
+        </details>` : '';
+    OL._composeTaskClientId = clientId;
+};
+
+OL.toggleComposeTask = function(taskId, on) {
+    const st = OL._composeState;
+    if (!st) return;
+    st.includedTaskIds = st.includedTaskIds.filter(id => String(id) !== String(taskId));
+    if (on) st.includedTaskIds.push(taskId);
+    const sum = document.querySelector('#compose-task-picker summary');
+    if (sum) sum.innerHTML = sum.innerHTML.replace(/ · \d+ included$/, '') + (st.includedTaskIds.length ? ` · ${st.includedTaskIds.length} included` : '');
+};
+
+OL._composeTaskListHtml = function() {
+    const st = OL._composeState || {};
+    const client = state.clients?.[OL._composeTaskClientId || OL._composeProjectId()];
+    if (!client || !st.includedTaskIds?.length) return { html: '', text: '' };
+    const tasks = st.includedTaskIds.map(id => (client.projectData?.clientTasks || []).find(t => String(t.id) === String(id))).filter(Boolean);
+    const isClient = (t) => t.isClientTask || (OL.computeIsClientTask && OL.computeIsClientTask(t.assignee));
+    const line = (t) => {
+        const who = t.assignee && !['Sphynx Task', 'Client Task'].includes(t.assignee) ? ` (${t.assignee})` : '';
+        const due = t.dueDate ? `, due ${OL.formatDayKey(OL.localDayKey(t.dueDate), { month: 'short', day: 'numeric' })}` : '';
+        return `${t.title || t.name}${who}${due}`;
+    };
+    const groups = [['Sphynx', tasks.filter(t => !isClient(t))], [client.meta?.name || 'Your team', tasks.filter(isClient)]].filter(([, l]) => l.length);
+    return {
+        html: `<p style="margin-top:12px;"><strong>Next steps</strong></p>${groups.map(([g, l]) => `<p style="margin:6px 0 2px;"><em>${esc(g)}</em></p><ul>${l.map(t => `<li>${esc(line(t))}</li>`).join('')}</ul>`).join('')}`,
+        text: '\n\nNEXT STEPS\n' + groups.map(([g, l]) => `\n${g}\n${l.map(t => '• ' + line(t)).join('\n')}`).join('\n')
+    };
 };
 
 // ---- Signature: one per Sphynx team member, picked by who's signed in ----
@@ -1466,6 +1551,8 @@ OL._buildComposeBody = function() {
     const st = OL._composeState || {};
     const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '');
     let html = msgHtml;
+    const taskList = OL._composeTaskListHtml();
+    html += taskList.html;
     if (st.projectFiles?.length) {
         html += `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `📎 <a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>`;
     }
@@ -1474,7 +1561,7 @@ OL._buildComposeBody = function() {
     if (st.quoted || st.quotedHtml) {
         html += `<br><div class="gmail_quote">${st.quotedMeta ? `<div>${esc(st.quotedMeta)}</div>` : ''}<blockquote class="gmail_quote" style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${st.quotedHtml ? OL.sanitizeCommentHtml(st.quotedHtml) : OL.plainTextToHtml(st.quoted)}</blockquote></div>`;
     }
-    let text = OL.htmlToPlainText(msgHtml);
+    let text = OL.htmlToPlainText(msgHtml) + taskList.text;
     if (st.projectFiles?.length) text += '\n\nFiles:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n');
     if (sig) text += '\n\n--\n' + OL.htmlToPlainText(sig);
     if (st.quoted) text += `\n\n${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n');
@@ -1963,7 +2050,7 @@ OL.renderGmailLinkStep = function() {
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkEvent('${esc(e.id).replace(/'/g, "\\'")}')">
                                 <div>${esc(e.title)}</div>${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
                             </div>
-                        `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events in 14-day window.' : 'Type to search events...'}</div>`}
+                        `).join('') : `<div class="tiny muted" style="padding:8px;">${(st.eventQuery || '').trim() ? 'No matching events in 14-day window.' : 'No meetings in the last/next 7 days — type to search.'}</div>`}
                     </div>
                 ` : ''}
             `}
@@ -1979,11 +2066,48 @@ OL.renderGmailLinkStep = function() {
 
 // Shared by all four search boxes — flips the corresponding *Focused flag
 // so its results list appears, without touching the query itself.
+OL._GMAIL_LINK_DD_FLAGS = ['clientFocused', 'resourceFocused', 'taskFocused', 'requestFocused', 'eventFocused'];
+
+// Opening one dropdown closes the others; the re-render keeps the cursor in
+// the box you clicked (it used to drop focus, so the list flashed open but
+// typing went nowhere).
 OL.setGmailLinkFocus = function(flagName, value) {
-    if (OL._gmailLinkState[flagName] === value) return; // already showing — don't re-render mid-keystroke
-    OL._gmailLinkState[flagName] = value;
-    OL.renderGmailLinkStep();
+    const st = OL._gmailLinkState;
+    if (!st) return;
+    const othersOpen = OL._GMAIL_LINK_DD_FLAGS.some(f => f !== flagName && st[f]);
+    if (st[flagName] === value && !othersOpen) return; // already showing — don't re-render mid-keystroke
+    OL._GMAIL_LINK_DD_FLAGS.forEach(f => { st[f] = false; });
+    st[flagName] = value;
+    OL.reRenderPreservingFocus(() => OL.renderGmailLinkStep());
+    if (flagName === 'eventFocused' && value && !(st.eventQuery || '').trim()) OL._loadNearbyGmailLinkEvents();
 };
+
+// With nothing typed, the Event list shows this project's (or everyone's)
+// meetings from a week either side, instead of "type to search".
+OL._loadNearbyGmailLinkEvents = async function() {
+    const st = OL._gmailLinkState;
+    if (!st) return;
+    const from = new Date(Date.now() - 7 * 86400000).toISOString();
+    const to = new Date(Date.now() + 7 * 86400000).toISOString();
+    let q = db.from('calendar_events').select('id, title, start, description').gte('start', from).lte('start', to).order('start', { ascending: false }).limit(30);
+    if (st.clientId) q = q.eq('linked_client_id', st.clientId);
+    const { data } = await q;
+    if (OL._gmailLinkState !== st || (st.eventQuery || '').trim()) return;
+    st.eventResults = data || [];
+    OL.reRenderPreservingFocus(() => OL.renderGmailLinkStep());
+};
+
+// Click anywhere outside the link panel's boxes/lists closes its dropdowns.
+document.addEventListener('mousedown', (e) => {
+    const st = OL._gmailLinkState;
+    if (!st || !OL._GMAIL_LINK_DD_FLAGS.some(f => st[f])) return;
+    const t = e.target;
+    if (!t || !document.body.contains(t)) return;               // a list item that just re-rendered
+    const panel = document.getElementById('gmail-link-body');
+    if (panel && panel.contains(t) && (t.closest('input') || t.closest('[onmousedown]'))) return;
+    OL._GMAIL_LINK_DD_FLAGS.forEach(f => { st[f] = false; });
+    if (panel) OL.renderGmailLinkStep();
+});
 
 OL.setGmailLinkClientQuery = function(value) {
     OL.reRenderPreservingFocus(() => {
@@ -2039,7 +2163,7 @@ OL.setGmailLinkEventQuery = function(value) {
 
     clearTimeout(OL._gmailLinkEventSearchTimer);
     const q = (value || '').trim();
-    if (!q) { OL._gmailLinkState.eventResults = []; OL.renderGmailLinkStep(); return; }
+    if (!q) { OL._loadNearbyGmailLinkEvents(); return; }
 
     OL._gmailLinkEventSearchTimer = setTimeout(async () => {
         const { data, error } = await db.from('calendar_events')

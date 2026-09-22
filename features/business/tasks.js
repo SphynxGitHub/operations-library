@@ -973,7 +973,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const masterStatuses = OL.getSystemStatuses();
     const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
     const dotColor = activeStatusObj.color;
-    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && !activeStatusObj.isClosed;
+    const isOverdue = !!t.dueDate && OL.localDayKey(t.dueDate) < (todayStr || OL.localDateStr()) && !activeStatusObj.isClosed && t.status !== 'Done';
 
     const { avatarBg, avatarColor, avatarContent } = OL.computeAssigneeAvatar(t.assignee);
 
@@ -1050,14 +1050,15 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 <!-- Due Date -->
                 <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
                     ${t.dueRelativeTo ? `
-                        <span class="pill tiny soft" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')" title="Due ${t.dueRelativeTo.offsetDays}d after '${esc(t.dueRelativeTo.predecessorTitle)}' completes">
+                        <span class="pill tiny soft ${isOverdue ? 'due-overdue' : ''}" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')" title="Due ${t.dueRelativeTo.offsetDays}d after '${esc(t.dueRelativeTo.predecessorTitle)}' completes">
                             <i data-lucide="link" style="width:10px;height:10px;"></i>
                             ${t.dueDate ? esc(t.dueDate.slice(0,10)) : `+${t.dueRelativeTo.offsetDays}d after predecessor`}
                         </span>
                     ` : `
                         <i data-lucide="calendar" style="position:absolute; left:6px; width:12px; height:12px; color:${isOverdue ? '#ef4444' : 'var(--muted)'}; pointer-events:none; cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')"></i>
                         <input type="date" 
-                               class="modal-input tiny monospace" 
+                               class="modal-input tiny monospace ${isOverdue ? 'due-overdue' : ''}"
+                               title="${isOverdue ? 'Overdue' : 'Due date'}" 
                                value="${t.dueDate ? t.dueDate.slice(0,10) : ''}"
                                style="width:125px; padding-left:22px; border:none; background:transparent; font-size:11px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
                                onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">

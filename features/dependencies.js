@@ -77,6 +77,7 @@ function createsCycle(clientId, aKind, aId, bKind, bId) {
 }
 
 OL._depSearch = {};
+OL._depOpen = {};   // which section's picker list is showing
 
 export function renderDependencySection(clientId, kind, id) {
     const item = findItem(clientId, kind, id);
@@ -96,8 +97,9 @@ export function renderDependencySection(clientId, kind, id) {
         </div>`;
 
     const q = (OL._depSearch[key] || '').trim().toLowerCase();
+    const open = !!OL._depOpen[key] || !!q;
     let results = [];
-    if (q) {
+    if (open) {
         const pd = project(clientId) || {};
         const pool = [
             ...(pd.clientTasks || []).map((t) => ({ kind: 'task', id: t.id, item: t })),
@@ -107,8 +109,10 @@ export function renderDependencySection(clientId, kind, id) {
         results = pool
             .filter((p) => !(p.kind === kind && String(p.id) === String(id)))
             .filter((p) => !(item.blockedBy || []).some((d) => d.kind === p.kind && String(d.id) === String(p.id)))
-            .filter((p) => titleOf(clientId, p.kind, p.item).toLowerCase().includes(q))
-            .slice(0, 12);
+            .filter((p) => !q || titleOf(clientId, p.kind, p.item).toLowerCase().includes(q))
+            // with nothing typed: open work first, most useful kinds first
+            .sort((a, b) => (isDone(a.kind, a.item) - isDone(b.kind, b.item)) || (['task', 'request', 'resource'].indexOf(a.kind) - ['task', 'request', 'resource'].indexOf(b.kind)))
+            .slice(0, q ? 20 : 30);
     }
 
     return `
@@ -120,9 +124,13 @@ export function renderDependencySection(clientId, kind, id) {
         </div>
         <div class="tiny muted" style="margin-bottom:4px;">Waiting on</div>
         <div style="display:grid; gap:3px; margin-bottom:8px;">${blockedBy.length ? blockedBy.map((d) => row(d, true)).join('') : '<span class="tiny muted">Nothing — ready to work.</span>'}</div>
-        <input type="text" class="modal-input tiny" placeholder="+ Add something this waits on (task, request, resource)…" value="${esc(OL._depSearch[key] || '')}"
-               style="width:100%;" oninput="OL.setDependencySearch('${esc(clientId)}', '${kind}', '${esc(String(id))}', this.value)">
-        ${q ? `<div style="display:grid; gap:3px; margin-top:4px; max-height:160px; overflow:auto;">
+        <div class="dep-picker" data-dep-key="${esc(key)}">
+        <input type="text" id="dep-search-${esc(key)}" class="modal-input tiny" placeholder="+ Add something this waits on (task, request, resource)…" value="${esc(OL._depSearch[key] || '')}" autocomplete="off"
+               style="width:100%;" onfocus="OL.openDependencyPicker('${esc(clientId)}', '${kind}', '${esc(String(id))}')"
+               onclick="OL.openDependencyPicker('${esc(clientId)}', '${kind}', '${esc(String(id))}')"
+               onkeydown="if(event.key==='Escape'){ OL.closeDependencyPickers(); this.blur(); }"
+               oninput="OL.setDependencySearch('${esc(clientId)}', '${kind}', '${esc(String(id))}', this.value)">
+        ${open ? `<div style="display:grid; gap:3px; margin-top:4px; max-height:200px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:4px;">
             ${results.length ? results.map((p) => `
                 <div class="tiny" style="padding:5px 8px; border:1px solid var(--line); border-radius:4px; cursor:pointer; display:flex; gap:6px; align-items:center;"
                      onmousedown="OL.addBlockedBy('${esc(clientId)}', '${kind}', '${esc(String(id))}', '${p.kind}', '${esc(String(p.id))}')">
@@ -131,6 +139,7 @@ export function renderDependencySection(clientId, kind, id) {
                     <span class="muted" style="font-size:9px;">${KIND_LABEL[p.kind]}</span>
                 </div>`).join('') : '<span class="tiny muted">No matches in this project.</span>'}
         </div>` : ''}
+        </div>
         ${blocking.length ? `
             <div class="tiny muted" style="margin:10px 0 4px;">Blocking</div>
             <div style="display:grid; gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
@@ -143,6 +152,32 @@ function refresh(clientId, kind, id) {
     el.outerHTML = renderDependencySection(clientId, kind, id);
     if (window.lucide) lucide.createIcons();
 }
+
+OL.openDependencyPicker = function (clientId, kind, id) {
+    const key = `${kind}-${id}`;
+    if (OL._depOpen[key]) return;
+    if (OL._depOpenCtx) OL.closeDependencyPickers();
+    OL._depOpen[key] = true;
+    OL._depOpenCtx = { clientId, kind, id };
+    OL.reRenderPreservingFocus ? OL.reRenderPreservingFocus(() => refresh(clientId, kind, id)) : refresh(clientId, kind, id);
+};
+
+OL.closeDependencyPickers = function () {
+    const ctx = OL._depOpenCtx;
+    Object.keys(OL._depOpen).forEach(k => { OL._depOpen[k] = false; });
+    if (ctx) refresh(ctx.clientId, ctx.kind, ctx.id);
+    OL._depOpenCtx = null;
+};
+
+// Click anywhere outside the picker closes it.
+document.addEventListener('mousedown', (e) => {
+    if (!OL._depOpenCtx) return;
+    const t = e.target;
+    if (!t || !document.body.contains(t)) return;
+    if (t.closest('.dep-picker')) return;
+    OL._depSearch[`${OL._depOpenCtx.kind}-${OL._depOpenCtx.id}`] = '';
+    OL.closeDependencyPickers();
+});
 
 OL.setDependencySearch = function (clientId, kind, id, value) {
     OL._depSearch[`${kind}-${id}`] = value;
@@ -163,6 +198,8 @@ OL.addBlockedBy = function (clientId, kind, id, depKind, depId) {
         }
     }, clientId);
     OL._depSearch[`${kind}-${id}`] = '';
+    OL._depOpen[`${kind}-${id}`] = false;
+    OL._depOpenCtx = null;
     refresh(clientId, kind, id);
 };
 

@@ -158,6 +158,7 @@ export function markNotificationRead(id) {
     if (!member.readNotificationIds) member.readNotificationIds = [];
     if (!member.readNotificationIds.includes(id)) member.readNotificationIds.push(id);
     OL.persist();
+    refreshNotificationBell();
 }
 
 export function markAllNotificationsRead() {
@@ -165,6 +166,7 @@ export function markAllNotificationsRead() {
     if (!member) return;
     member.readNotificationIds = getMyNotifications().map(n => n.id);
     OL.persist();
+    refreshNotificationBell();
     openNotificationsModal();
 }
 
@@ -338,14 +340,19 @@ function fireDesktopNotification(n) {
 async function pollForNotifications() {
     try {
         const { data: clientsData } = await db.from('workspace_clients').select('id, project_data');
+        // Never overwrite a project with unsaved local edits (this used to
+        // silently drop changes made in the ~1.5 s before a save ran).
+        const pendingSave = !!window.saveTimeout || state.isSaving === true;
         (clientsData || []).forEach(row => {
             const client = state.clients?.[row.id];
-            if (client) client.projectData = row.project_data || client.projectData;
+            if (client && !pendingSave) client.projectData = row.project_data || client.projectData;
         });
 
         const { data: masterRow } = await db.from('workspace_masters').select('sphynx_team').eq('id', 'main_state').maybeSingle();
-        if (Array.isArray(masterRow?.sphynx_team) && masterRow.sphynx_team.length) {
-            state.master.sphynxTeam = masterRow.sphynx_team;
+        if (Array.isArray(masterRow?.sphynx_team) && masterRow.sphynx_team.length && !pendingSave) {
+            // Keeps read-marks made locally (merges instead of replacing).
+            if (typeof OL._mergeMasterRow === 'function') OL._mergeMasterRow(masterRow);
+            else state.master.sphynxTeam = masterRow.sphynx_team;
             // Same staleness issue as sync() in core/data.js — keep a live
             // session's permissions current without requiring a re-login.
             if (typeof OL.reconcileCurrentUserPermissions === 'function' && OL.reconcileCurrentUserPermissions()) {

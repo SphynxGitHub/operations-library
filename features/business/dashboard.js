@@ -17,6 +17,8 @@ OL.dashboardTaskState = {
     dueRange: 'all',
     groupBy: 'none',
     subGroupBy: 'none',
+    showNoDueDate: true,     // tasks/requests with no due date
+    showUnassigned: true,    // tasks/requests/events with no real assignee
     assignees: [],
     status: 'all',
     types: ['task', 'email', 'event', 'comment', 'error', 'request'],
@@ -80,7 +82,8 @@ OL.getDashboardMasterTasks = function() {
             return {
                 ...t,
                 _type: 'task',
-                isUnassigned: !t.assignee,
+                // No one specific: blank, or only the generic "Sphynx Task"/"Sphynx" placeholder.
+                isUnassigned: !t.assignee || t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx',
                 clientName: c.meta?.name || 'Unknown Client',
                 clientId: c.id,
                 teamMembers: teamMembers,
@@ -130,11 +133,14 @@ OL.getDashboardEventItems = function() {
 // setting to turn this off yet; use the Types filter to hide them).
 OL._dashboardEmailsCache = null;
 OL.loadDashboardEmails = async function() {
-    const { data, error } = await db.from('gmail_messages')
-        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, participants')
+    let { data, error } = await db.from('gmail_messages')
+        .select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, participants')
         .eq('archived', false)
         .order('date', { ascending: false })
         .limit(100);
+    if (error && /linked_request_id/.test(error.message || '')) {
+        ({ data, error } = await db.from('gmail_messages').select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, participants').eq('archived', false).order('date', { ascending: false }).limit(100));
+    }
 
     if (error) { console.error('Failed to load dashboard emails:', error.message); OL._dashboardEmailsCache = []; return; }
     OL._dashboardEmailsCache = data || [];
@@ -318,6 +324,16 @@ OL.renderDailyDashboard = function() {
                         <i data-lucide="user" style="width:14px;height:14px;color:var(--muted);"></i>
                         <span class="tiny muted bold uppercase">Assignee:</span>
                         <button class="btn tiny soft" onclick="OL.openDashboardAssigneePopover(event)">${esc(assigneeSummary)} <i data-lucide="chevron-down" style="width:10px;height:10px;"></i></button>
+                    </div>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <button class="btn tiny ${OL.dashboardTaskState.showUnassigned ? 'soft' : 'primary'}" title="${OL.dashboardTaskState.showUnassigned ? 'Showing' : 'Hiding'} items with no assignee — click to ${OL.dashboardTaskState.showUnassigned ? 'hide' : 'show'} them"
+                                onclick="OL.setDashboardTaskFilter('showUnassigned', ${!OL.dashboardTaskState.showUnassigned})">
+                            <i data-lucide="${OL.dashboardTaskState.showUnassigned ? 'user-x' : 'eye-off'}" style="width:11px;height:11px;"></i> ${OL.dashboardTaskState.showUnassigned ? 'Unassigned: shown' : 'Unassigned: hidden'}
+                        </button>
+                        <button class="btn tiny ${OL.dashboardTaskState.showNoDueDate ? 'soft' : 'primary'}" title="${OL.dashboardTaskState.showNoDueDate ? 'Showing' : 'Hiding'} tasks with no due date — click to ${OL.dashboardTaskState.showNoDueDate ? 'hide' : 'show'} them"
+                                onclick="OL.setDashboardTaskFilter('showNoDueDate', ${!OL.dashboardTaskState.showNoDueDate})">
+                            <i data-lucide="${OL.dashboardTaskState.showNoDueDate ? 'calendar-x' : 'eye-off'}" style="width:11px;height:11px;"></i> ${OL.dashboardTaskState.showNoDueDate ? 'No due date: shown' : 'No due date: hidden'}
+                        </button>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center;">
                         <i data-lucide="flag" style="width:14px;height:14px;color:var(--muted);"></i>
@@ -520,6 +536,12 @@ OL.filterDashboardItems = function(items, assignees, status, types) {
 
         const statusMatch = (item._type !== 'task' && item._type !== 'request') || status === 'all' || (item.status || 'Pending Sphynx Action') === status;
 
+        // Independent of the Assignee picker: "All" + these off = everyone's
+        // assigned, dated work only.
+        const isWork = item._type === 'task' || item._type === 'request';
+        if (!OL.dashboardTaskState.showNoDueDate && isWork && !item.dueDate) return false;
+        if (!OL.dashboardTaskState.showUnassigned && (isWork || item._type === 'event') && item.isUnassigned) return false;
+
         return assigneeMatch && statusMatch;
     });
 };
@@ -559,15 +581,17 @@ OL.renderDashboardTaskStream = function(allItems) {
 
     const effectiveSub = subGroupBy && subGroupBy !== 'none' && subGroupBy !== groupBy ? subGroupBy : 'none';
 
-    const renderRows = rows => `<div style="display:flex; flex-direction:column; gap:6px;">${rows.map(renderItem).join('')}</div>`;
+    // min-width:0 all the way down keeps long one-line email snippets from
+    // pushing rows past the card's edge when nested in a sub-group.
+    const renderRows = rows => `<div style="display:flex; flex-direction:column; gap:6px; min-width:0; max-width:100%;">${rows.map(renderItem).join('')}</div>`;
 
     return OL.groupDashboardItems(filtered, groupBy).map(g => {
         const reqInfo = g.reqInfo;
         const body = effectiveSub === 'none'
             ? renderRows(g.items)
-            : `<div style="display:grid; gap:12px; padding-left:12px; border-left:2px solid rgba(var(--accent-rgb),0.2);">
+            : `<div style="display:grid; grid-template-columns:minmax(0,1fr); gap:12px; padding-left:12px; border-left:2px solid rgba(var(--accent-rgb),0.2); min-width:0;">
                 ${OL.groupDashboardItems(g.items, effectiveSub).map(sg => `
-                    <div>
+                    <div style="min-width:0;">
                         <div class="tiny muted uppercase bold" style="margin-bottom:6px; display:flex; align-items:center; gap:6px; ${sg.reqInfo ? 'cursor:pointer; color:#64c6a2;' : ''}"
                              ${sg.reqInfo ? `onclick="OL.openRequestFromTask('${esc(sg.reqInfo.clientId || '')}', '${esc(sg.reqInfo.itemId || '')}')"` : ''}>
                             <i data-lucide="corner-down-right" style="width:12px;height:12px;"></i> ${esc(sg.label)} (${sg.items.length})
@@ -576,12 +600,13 @@ OL.renderDashboardTaskStream = function(allItems) {
                     </div>`).join('')}
                </div>`;
         return `
-        <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
+        <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px; min-width:0; overflow:hidden;">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: ${g.overdue ? '#ef4444' : (reqInfo ? '#64c6a2' : 'var(--accent)')}; margin-bottom: 6px; display:flex; align-items:center; gap:8px; ${reqInfo ? 'cursor:pointer;' : ''}" ${reqInfo ? `onclick="OL.openRequestFromTask('${esc(reqInfo.clientId || '')}', '${esc(reqInfo.itemId || '')}')" title="Open this request on the scoping sheet"` : ''}>
                 ${reqInfo ? '<i data-lucide="git-pull-request" style="width:12px;height:12px;"></i>' : ''}
                 <span>${esc(g.label)}</span>
                 ${reqInfo ? `<span class="pill tiny soft" style="font-size:9px;">${esc((reqInfo.requestType || 'build').charAt(0).toUpperCase() + (reqInfo.requestType || 'build').slice(1))} · Round ${reqInfo.round}</span>` : ''}
                 <span class="pill tiny soft" style="font-size:10px;">${g.items.length}</span>
+                ${(() => { const em = g.items.filter(i => i._type === 'email'); return em.length > 1 && OL.renderEmailGroupSelectCheckbox ? `<label class="tiny muted" style="margin-left:auto; display:inline-flex; align-items:center; gap:4px; text-transform:none; letter-spacing:0; font-weight:500; cursor:pointer;" onclick="event.stopPropagation();">${OL.renderEmailGroupSelectCheckbox(em)} select ${em.length} emails</label>` : ''; })()}
             </div>
             ${body}
         </div>
@@ -618,10 +643,17 @@ OL.groupDashboardItems = function(items, by) {
             let req = null;
             if (item._type === 'request') {
                 req = { itemId: item.itemId, title: item.title, requestType: item.requestType, round: item.round };
-            } else if (item._type === 'task' && item.requestLineItemId) {
+            } else {
+                // Tasks by their own request link; emails (and anything else
+                // linked to a task) follow that task's request, so they stay
+                // grouped with the work they're about instead of falling
+                // out into "No Request".
                 const client = state.clients?.[item.clientId];
                 const resourceLookup = (id) => (client?.projectData?.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
-                req = client ? findRequestForTask(client, item, resourceLookup) : null;
+                let viaTask = item._type === 'task' ? item : null;
+                if (!viaTask && item.linked_task_id && client) viaTask = (client.projectData?.clientTasks || []).find(t => String(t.id) === String(item.linked_task_id)) || null;
+                if (viaTask?.requestLineItemId && client) req = findRequestForTask(client, viaTask, resourceLookup);
+                if (!req && item.linked_request_id && client) req = findRequestForTask(client, { requestLineItemId: item.linked_request_id }, resourceLookup);
             }
             if (req) {
                 key = `req:${item.clientId}:${req.itemId}`;
@@ -646,6 +678,8 @@ OL.renderDashboardRequestRowHTML = function(r) {
     const color = r.workStatus === 'in_testing' ? '#38bdf8' : r.workStatus === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b';
     const sub = [r.requestType ? r.requestType.charAt(0).toUpperCase() + r.requestType.slice(1) : '', `Round ${r.round}`, r.assignee || 'Unassigned',
                  r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : '', r.openAsks ? `${r.openAsks} open ask${r.openAsks === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+    const dueKey = r.dueDate ? OL.localDayKey(r.dueDate) : '';
+    const reqOverdue = dueKey && dueKey < OL.localDateStr();
     return `
     <div class="task-row-card" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(100,198,162,0.04); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
          onclick="OL.navigateToClientProject('${esc(r.clientId)}')">
@@ -654,6 +688,7 @@ OL.renderDashboardRequestRowHTML = function(r) {
             <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title)}</strong>
             <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(sub)}</div>
         </div>
+        ${dueKey ? `<span class="pill tiny ${reqOverdue ? 'due-overdue' : 'soft'}" style="flex-shrink:0;" title="Review period ends">${reqOverdue ? 'Overdue · ' : 'Due '}${esc(OL.formatDayKey(dueKey, { month: 'short', day: 'numeric' }))}</span>` : ''}
         <span class="pill tiny" style="flex-shrink:0; border:1px solid ${color}; color:${color};">${esc(r.status)}</span>
         ${r.clientName && r.clientId ? `<div style="flex-shrink:0;" onclick="event.stopPropagation();">${OL.renderProjectPill(r.clientId, r.clientName)}</div>` : ''}
     </div>`;
@@ -665,9 +700,10 @@ OL.renderDashboardRequestRowHTML = function(r) {
 OL.renderDashboardEmailRowHTML = function(m) {
     const linkLabel = m.linked_task_id ? OL.getLinkedTaskLabel(m) : (m.linked_resource_id ? OL.getLinkedResourceLabel(m) : '');
     return `
-    <div class="task-row-card" style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; background:rgba(168,85,247,0.03); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
+    <div class="task-row-card" style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; background:rgba(168,85,247,0.03); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; min-width:0; max-width:100%; box-sizing:border-box;"
          onclick="OL.openGmailMessageModal('${m.id}')">
-        <div style="display:flex; align-items:center; gap:10px; width:100%;">
+        <div style="display:flex; align-items:center; gap:10px; width:100%; min-width:0;">
+            ${OL.renderEmailSelectCheckbox ? OL.renderEmailSelectCheckbox(m) : ''}
             <div style="display:flex; align-items:center;" title="Email"><i data-lucide="mail" style="width:14px;height:14px; color:#a855f7;"></i></div>
             <div style="flex:1; min-width:0; overflow:hidden;">
                 <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject || 'No Subject')}</strong>

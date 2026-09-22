@@ -464,18 +464,81 @@ function assigneeOptionsHtml(client, current) {
         ${current && !known.has(current) ? `<optgroup label="Current">${opt(current)}</optgroup>` : ''}`;
 }
 
-const msTasks = () => tasksForEvent(OL._msState.client.projectData.clientTasks, OL._msState.evt.id, closedStatusNames());
+// Tasks from this meeting are included by default; ANY other open task on
+// the project can be ticked in too (reminders from earlier meetings, work
+// waiting on the client, etc.). st.excluded / st.included hold the choices.
+const meetingTasks = () => tasksForEvent(OL._msState.client.projectData.clientTasks, OL._msState.evt.id, closedStatusNames());
+const otherOpenTasks = () => {
+    const st = OL._msState;
+    const closed = new Set(closedStatusNames());
+    const fromMeeting = new Set(meetingTasks().map(t => String(t.id)));
+    return (st.client.projectData.clientTasks || []).filter(t => t && !closed.has(String(t.status || '')) && !fromMeeting.has(String(t.id))
+        && !t.meetingSummaryEventId && String(t.id) !== String(st.task?.id));
+};
+const msTasks = () => {
+    const st = OL._msState;
+    const ex = st.excluded || new Set();
+    const inc = st.included || new Set();
+    return [
+        ...meetingTasks().filter(t => !ex.has(String(t.id))),
+        ...otherOpenTasks().filter(t => inc.has(String(t.id)))
+    ];
+};
+
+OL.msToggleInclude = function(taskId, on, fromMeeting) {
+    const st = OL._msState;
+    if (!st) return;
+    st.excluded = st.excluded || new Set();
+    st.included = st.included || new Set();
+    const id = String(taskId);
+    if (fromMeeting) { if (on) st.excluded.delete(id); else st.excluded.add(id); }
+    else { if (on) st.included.add(id); else st.included.delete(id); }
+    renderMsNextSteps();
+    renderMsOtherTasks();
+};
+
+OL.msSetOtherFilter = function(q) {
+    OL._msState.otherFilter = q;
+    OL.reRenderPreservingFocus ? OL.reRenderPreservingFocus(renderMsOtherTasks) : renderMsOtherTasks();
+};
+
+function renderMsOtherTasks() {
+    const st = OL._msState;
+    const box = document.getElementById('ms-other-tasks');
+    if (!box) return;
+    const q = String(st.otherFilter || '').trim().toLowerCase();
+    const inc = st.included || new Set();
+    const today = OL.localDateStr ? OL.localDateStr() : new Date().toISOString().slice(0, 10);
+    const list = otherOpenTasks().filter(t => !q || `${t.title || t.name} ${t.assignee || ''}`.toLowerCase().includes(q));
+    // client-owned and overdue first — the usual things worth a reminder
+    list.sort((a, b) => (ownerOf(b.assignee) === 'client') - (ownerOf(a.assignee) === 'client') || String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+    box.innerHTML = list.length ? list.map(t => {
+        const due = t.dueDate ? String(t.dueDate).slice(0, 10) : '';
+        const overdue = due && due < today;
+        return `
+        <label style="display:flex !important; align-items:flex-start; gap:6px; padding:5px 4px; border-bottom:1px dashed var(--line); cursor:pointer; font-size:12px !important; margin:0 !important;">
+            <input type="checkbox" style="width:auto !important; display:inline-block !important; margin-top:2px !important;" ${inc.has(String(t.id)) ? 'checked' : ''} onchange="OL.msToggleInclude('${esc(String(t.id))}', this.checked, false)">
+            <span style="flex:1; min-width:0;">${esc(t.title || t.name || 'Task')}
+                <span style="display:block; opacity:.65; font-size:11px;">${esc(t.assignee || 'Unassigned')}${due ? ` · <span style="${overdue ? 'color:#ef4444; font-weight:700;' : ''}">${overdue ? 'overdue ' : 'due '}${esc(due)}</span>` : ''}${t.linkedEventId && String(t.linkedEventId) !== String(st.evt.id) ? ' · from another meeting' : ''}</span>
+            </span>
+        </label>`;
+    }).join('') : `<div class="tiny muted">${q ? 'No matches.' : 'No other open tasks on this project.'}</div>`;
+}
 
 function renderMsTaskRows() {
     const st = OL._msState;
     const box = document.getElementById('ms-task-rows');
     if (!box) return;
-    const tasks = msTasks();
+    const tasks = meetingTasks();
     box.innerHTML = tasks.length ? tasks.map(t => {
         const title = t.title || t.name || '';
         const rowsNeeded = Math.min(8, Math.max(2, Math.ceil(title.length / 34)));
         return `
-        <div class="ms-task-row" style="border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px;">
+        <div class="ms-task-row" style="border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; ${(st.excluded || new Set()).has(String(t.id)) ? 'opacity:.55;' : ''}">
+            <label style="display:flex !important; align-items:center; gap:6px; font-size:11px !important; margin:0 0 4px !important; cursor:pointer;">
+                <input type="checkbox" style="width:auto !important; display:inline-block !important;" ${(st.excluded || new Set()).has(String(t.id)) ? '' : 'checked'} onchange="OL.msToggleInclude('${esc(String(t.id))}', this.checked, true); this.closest('.ms-task-row').style.opacity = this.checked ? 1 : .55;">
+                Include in summary
+            </label>
             <textarea class="modal-input tiny" rows="${rowsNeeded}" style="resize:vertical;"
                       oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"
                       onchange="OL.msUpdateTask('${t.id}', 'title', this.value)">${esc(title)}</textarea>
@@ -502,7 +565,7 @@ function renderMsNextSteps() {
     const el = document.getElementById('ms-nextsteps-preview');
     if (!el) return;
     const text = nextStepsText(msTasks(), st.client.meta?.name || '');
-    el.textContent = text || '(No next steps section: there are no open tasks from this meeting.)';
+    el.textContent = text || '(No next steps section: nothing is ticked "Include in summary".)';
 }
 
 OL.msUpdateTask = async function(taskId, field, value) {
@@ -606,7 +669,7 @@ OL.msSend = async function() {
 OL.openMeetingSummaryEmail = async function(eventId) {
     const { data: evt, error } = await db.from('calendar_events').select('*').eq('id', eventId).single();
     if (error || !evt) { alert('Could not load that meeting.'); return; }
-    if (!String(evt.zoom_summary || '').trim()) { alert('This meeting has no Zoom summary yet.'); return; }
+    if (!String(evt.zoom_summary || '').trim() && !confirm("This meeting has no Zoom summary yet. Write the summary yourself?")) return;
     if (!evt.linked_client_id) { alert('Link this meeting to a client first, so the summary can be filed with them.'); return; }
 
     const client = await loadFullClient(evt.linked_client_id);
@@ -624,7 +687,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
     const draft = buildSummaryDraft({
         title: evt.title,
         start: evt.start,
-        summary: evt.zoom_summary,
+        summary: evt.zoom_summary || '(Add a short summary of the meeting here.)',
         attendeeEmails: evt.attendee_emails || [],
         senderEmails: senderEmails(),
         senderName: typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '',
@@ -632,7 +695,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         people: client.projectData.teamMembers || [],
         tasks: [],                      // the window builds Next steps from the live tasks
         clientName: client.meta?.name || '',
-        recordingUrl: evt.recording_url || '',
+        recordingUrl: evt.recording_url || evt.zoom_recording_url || '',
     });
 
     OL._msState = { evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };
@@ -708,6 +771,12 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                             <button type="button" class="btn tiny soft" onclick="OL.msAddTask()">+ Add task</button>
                         </div>
                     </div>
+                    <div style="border-top:1px solid var(--line); padding-top:10px; margin-top:12px;">
+                        <div class="bold tiny uppercase muted" style="margin-bottom:4px;">Other open tasks on this project</div>
+                        <div class="tiny muted" style="margin-bottom:6px;">Tick any to remind people of them in Next steps — from earlier meetings or anywhere else.</div>
+                        <input type="text" class="modal-input tiny" placeholder="Filter…" oninput="OL.msSetOtherFilter(this.value)" style="margin-bottom:6px !important;">
+                        <div id="ms-other-tasks"></div>
+                    </div>
                 </aside>
 
             </div>
@@ -717,6 +786,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
     renderMsRecipients('to');
     renderMsRecipients('cc');
     renderMsTaskRows();
+    renderMsOtherTasks();
 };
 
 window.OL = window.OL || {};
@@ -729,6 +799,8 @@ window.OL.msUpdateTask = OL.msUpdateTask;
 window.OL.msAddTask = OL.msAddTask;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
+window.OL.msToggleInclude = OL.msToggleInclude;
+window.OL.msSetOtherFilter = OL.msSetOtherFilter;
 Object.assign(window.OL, {
     msShowSuggestions: OL.msShowSuggestions, msAddRecipient: OL.msAddRecipient, msRemoveRecipient: OL.msRemoveRecipient,
     msPickRecipient: OL.msPickRecipient, msCommitRecipient: OL.msCommitRecipient, msRecipientKey: OL.msRecipientKey,

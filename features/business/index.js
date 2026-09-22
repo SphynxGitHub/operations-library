@@ -8,6 +8,7 @@ import './error-log.js';
 import './team.js';
 import './automations.js';
 import './meeting-agenda.js';
+import './bulk-email.js';
 
 export const renderDailyDashboard = OL.renderDailyDashboard;
 export const renderBusinessTaskManager = OL.renderBusinessTaskManager;

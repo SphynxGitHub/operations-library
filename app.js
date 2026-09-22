@@ -33,6 +33,7 @@ import './core/billable.js';
 import './core/recurrence.js';
 import './features/dependencies.js';
 import './features/rollup.js';
+import './core/live-refresh.js';
 
 window.isMatrixActive = false;
 
@@ -78,6 +79,7 @@ window.addEventListener("load", async () => {
         // timer's task) once sync() has actually populated state — this
         // runs after that finishes rather than racing it.
         if (typeof OL.restoreActiveTaskTimer === 'function') OL.restoreActiveTaskTimer();
+        if (!window.IS_GUEST && typeof OL.startLiveRefresh === 'function') OL.startLiveRefresh();
     });
 
     // Desktop/email notification polling — only meaningful for a real

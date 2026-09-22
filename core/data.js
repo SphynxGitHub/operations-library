@@ -101,6 +101,9 @@ export function persist() {
     // checkPermission(); this function just performs the save.
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
     window.lastSyncHash = null;
+    // Redraw the current page so the change shows everywhere right away
+    // (see core/live-refresh.js — waits if you're typing in a field).
+    try { window.OL?.scheduleViewRefresh?.(); } catch (e) { /* never block a save */ }
     // Always return a real Promise — several callers chain `.then()`
     // off this (e.g. features/apps.js handleAppTierSelection), which
     // previously crashed with "Cannot read properties of undefined
