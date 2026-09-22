@@ -698,24 +698,24 @@ window.buildLayout = function () {
                             <div class="divider" style="margin: 15px 0;"></div>
                         ` : ''}
 
-                        ${!isPartnerProject ? `
+                       ${!isPartnerProject ? `
                         <nav class="menu" style="margin-top:10px;">
                             ${clientTabs.map(item => {
-                                // 0. Maintenance & Hours, Client Requests and Error Tracking only show for clients in maintenance
-                                if (typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';
-                                // 1. Check if the module is turned on for this client project (or if user is admin / team member)
-                                const isModuleEnabled = effectiveAdminMode || state.teamMemberMode || (client.modules && client.modules[item.key] === true);
+                                // 0. Maintenance & Hours and Error Tracking only show for clients in maintenance
+                                if (item.key !== 'client-requests' && typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';
+                        
+                                // 1. Always allow Client Requests OR check module flag
+                                const isModuleEnabled = item.key === 'client-requests' || effectiveAdminMode || state.teamMemberMode || (client.modules && client.modules[item.key] === true);
                                 if (!isModuleEnabled) return '';
-                            
+                        
                                 // 2. Read-only / permission level check (view vs full edit)
                                 const perm = OL.checkPermission(item.key);
                                 const isActive = hash.startsWith(item.href);
-                            
+                        
                                 return `
                                     <a href="${item.href}" class="${isActive ? 'active' : ''}">
                                         <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                                        <span class="menu-item">${item.label}</span>
-                                        ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                                        <span class="menu-item">${item.label}</span>${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                                     </a>
                                 `;
                             }).join('')}
