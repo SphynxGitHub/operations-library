@@ -3111,7 +3111,7 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
                     </div>
                     ${isEditing ? `
                         <div style="margin-top:6px; min-width:0; width:100%;" onclick="event.stopPropagation();">
-                            <textarea id="linked-email-note-${m.id}" class="modal-input tiny" rows="12" style="width:100%; 
+                            <textarea id="linked-email-note-${m.id}" class="modal-input tiny" rows="50" style="width:100%; 
                             box-sizing:border-box; resize:vertical; text-align: left;">${esc(displayText)}</textarea>
                             <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
                                 <button class="btn tiny soft" onclick="OL.cancelEditLinkedEmailNote('${taskId}')">Cancel</button>
