@@ -1827,6 +1827,14 @@ OL.showOverlayModal = function(htmlContent) {
 
 OL.closeModal = function() {
     OL._activeModalTaskContext = null;
+    // A popover opened from inside a modal (e.g. the notifications "Type"
+    // filter) is appended directly to document.body, not nested inside
+    // #modal-layer — closing the modal never touched it, so it could be
+    // left orphaned and still visibly floating on screen after the modal
+    // behind it was gone. That read as "click-off didn't close it" since
+    // one click closed the modal but left the popover behind requiring a
+    // second click. closePopoverDropdown() is a no-op if none is open.
+    if (typeof OL.closePopoverDropdown === 'function') OL.closePopoverDropdown();
     const layer = document.getElementById("modal-layer");
     if (layer) {
         layer.style.display = "none";
