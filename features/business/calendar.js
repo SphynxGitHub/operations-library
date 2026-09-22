@@ -1057,11 +1057,18 @@ OL.renderCalendarEventProjectPicker = function(evt) {
     }
 
     const q = (pp.query || '').toLowerCase().trim();
-    const filtered = Object.values(state.clients || {})
+    const allMatches = Object.values(state.clients || {})
         .filter(c => c?.meta?.name)
         .filter(c => !q || c.meta.name.toLowerCase().includes(q))
-        .sort((a, b) => (a.meta.name || '').localeCompare(b.meta.name || ''))
-        .slice(0, 30);
+        .sort((a, b) => (a.meta.name || '').localeCompare(b.meta.name || ''));
+    // Was hard-capped at 30 regardless of query — with the workspace's full
+    // client count well above that, an empty/short search silently dropped
+    // everything past the 30th name alphabetically (which is what made the
+    // list look "cut off" at a specific client, rather than actually
+    // showing every match). 200 comfortably covers the real client count
+    // with room to grow; the cap now only matters for a genuinely blank
+    // search, and shrinks itself the moment you type anything to narrow it.
+    const filtered = allMatches.slice(0, 200);
 
     return `
         <div id="calendar-event-project-picker-${evt.id}" style="min-width:200px; position:relative;">
@@ -1074,6 +1081,7 @@ OL.renderCalendarEventProjectPicker = function(evt) {
                     ${filtered.length ? filtered.map(c => `
                         <div class="tiny" style="padding:6px 8px; border-radius:5px; cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'" onmousedown="OL.setCalendarEventClient('${evt.id}', '${c.id}')">${esc(c.meta.name)}</div>
                     `).join('') : `<div class="tiny muted" style="padding:6px;">No matching projects.</div>`}
+                    ${allMatches.length > filtered.length ? `<div class="tiny muted" style="padding:6px; text-align:center;">+${allMatches.length - filtered.length} more — keep typing to narrow it down</div>` : ''}
                 </div>
             ` : ''}
         </div>
@@ -1104,6 +1112,16 @@ OL._findLiveCalendarEvent = function(eventId) {
 };
 
 OL.setCalendarEventProjectFocus = function(eventId, value) {
+    // Guards against a re-render loop: every keystroke's oninput handler
+    // (setCalendarEventProjectQuery, below) also re-renders and re-focuses
+    // this input, and that programmatic focus() fires a native 'focus'
+    // event, which used to re-enter this function and re-render a SECOND
+    // time before the first render had restored the cursor position —
+    // corrupting it on every keystroke (typing looked reversed, since the
+    // cursor kept getting reset instead of staying after the new
+    // character). Once already in the requested focused state, this is
+    // exactly that echo, not a real focus change, so it's a no-op.
+    if (OL._calendarProjectPicker.focused === value) return;
     OL._calendarProjectPicker.focused = value;
     const evt = OL._findLiveCalendarEvent(eventId);
     const container = document.getElementById(`calendar-event-project-picker-${eventId}`);
