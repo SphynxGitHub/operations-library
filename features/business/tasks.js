@@ -279,7 +279,13 @@ OL.renderBusinessTaskManager = function() {
             let taskType = "Sphynx Task";
             if (OL.thirdPartyAssignees.includes(t.assignee)) {
                 taskType = "Developer / 3rd Party Task";
-            } else if (t.isClientTask || (t.assignee && t.assignee !== 'Sphynx Task' && t.assignee !== 'Sphynx')) {
+            } else if (!OL.isSphynxAssignee(t.assignee)) {
+                // Derived straight from the assignee name (via the roster
+                // check in OL.isSphynxAssignee) rather than trusting the
+                // stored t.isClientTask flag, since existing tasks already
+                // assigned to a named team member before this fix have that
+                // flag stuck at the wrong value — this self-heals the
+                // display without needing a data migration.
                 taskType = "Client Task";
             }
 
@@ -1243,7 +1249,7 @@ OL.applyBulkTaskEdit = function() {
                 if (newAssignee) {
                     const previousAssignee = task.assignee;
                     task.assignee = newAssignee;
-                    task.isClientTask = (newAssignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(newAssignee));
+                    task.isClientTask = OL.computeIsClientTask(newAssignee);
                     if (newAssignee !== previousAssignee && typeof OL.notifyEvent === 'function') {
                         OL.notifyEvent('newAssignment', newAssignee, {
                             subject: `You were assigned "${task.title || task.name}"`,
@@ -1568,7 +1574,7 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         if (task) {
             const previousAssignee = task.assignee;
             task.assignee = newAssignee;
-            task.isClientTask = (newAssignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(newAssignee));
+            task.isClientTask = OL.computeIsClientTask(newAssignee);
             console.log(`✅ Assignee updated successfully for [${taskId}] -> ${newAssignee}`);
             if (newAssignee !== previousAssignee && typeof OL.notifyEvent === 'function') {
                 OL.notifyEvent('newAssignment', newAssignee, {
@@ -3297,7 +3303,7 @@ OL.createGlobalQuickTask = function() {
             status: status,
             assignee: assignee,
             dueDate: dueDate,
-            isClientTask: (assignee !== 'Sphynx Task' && !OL.thirdPartyAssignees.includes(assignee)),
+            isClientTask: OL.computeIsClientTask(assignee),
             loggedHours: 0,
             createdAt: new Date().toISOString()
         };
