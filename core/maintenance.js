@@ -25,11 +25,10 @@ export function maintenanceMode(client) {
 export const isOngoing = (client) => maintenanceMode(client) === ONGOING;
 export const isMaintenanceClient = (client) => maintenanceMode(client) !== null;
 
-// Which tabs staff see for a client. Maintenance & Hours: any maintenance client. Client Requests and Error Tracking:
-// Ongoing Maintenance clients, or any client where the module has been switched on by hand.
 export function maintenanceTabAllowed(client, key) {
     if (key === 'maintenance') return isMaintenanceClient(client);
-    if (key === 'client-requests' || key === 'errors') return isOngoing(client) || client?.modules?.[key] === true;
+    if (key === 'client-requests') return true;
+    if (key === 'errors') return isOngoing(client) || client?.modules?.[key] === true;
     return true;
 }
 
