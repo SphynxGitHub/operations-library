@@ -69,7 +69,12 @@ window.addEventListener("load", async () => {
             </div>`;
     }
 
-    OL.sync();
+    OL.sync().then(() => {
+        // Only safe to look up client/task data (needed to resume a
+        // timer's task) once sync() has actually populated state — this
+        // runs after that finishes rather than racing it.
+        if (typeof OL.restoreActiveTaskTimer === 'function') OL.restoreActiveTaskTimer();
+    });
 
     // Desktop/email notification polling — only meaningful for a real
     // Sphynx Team login (state.currentUser), not guest/public token views.

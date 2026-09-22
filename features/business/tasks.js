@@ -1603,16 +1603,72 @@ OL.toggleLiveTaskTimer = function(clientId, taskId) {
     timer.taskId = taskId;
     timer.startTime = Date.now();
     timer.elapsedSeconds = 0;
+    OL._persistActiveTimer();
+    OL._runTaskTimerTick(taskId);
 
+    OL.refreshTaskView();
+};
+
+// Recomputes elapsed time from the wall-clock startTime rather than
+// counting "+1 per tick". A plain counter undercounts badly in a
+// background/minimized tab, since browsers throttle setInterval there
+// (often to once a minute, sometimes fully paused) — so a tab left
+// unfocused looked like the timer had "stopped". Deriving elapsed time
+// from Date.now() - startTime instead means it always self-corrects to
+// the true value the moment the tab wakes back up, tick throttling or not.
+OL._runTaskTimerTick = function(taskId) {
+    const timer = OL.activeTaskTimer;
+    clearInterval(timer.intervalId);
     timer.intervalId = setInterval(() => {
-        timer.elapsedSeconds++;
+        if (timer.taskId !== taskId || !timer.startTime) return;
+        timer.elapsedSeconds = Math.floor((Date.now() - timer.startTime) / 1000);
         const displayEl = document.getElementById(`timer-display-${taskId}`);
         if (displayEl) {
             displayEl.innerText = OL.formatSecondsDisplay(timer.elapsedSeconds);
         }
     }, 1000);
+};
 
-    OL.refreshTaskView();
+// Saved to localStorage (not just held in memory) so a running timer
+// survives the app being closed, refreshed, or crashing mid-session.
+// OL.restoreActiveTaskTimer (called on app boot) picks this back up and
+// recovers the real elapsed time from the saved startTime, instead of the
+// old behavior where closing the app while a timer ran lost that time
+// with no record of it at all.
+OL._TIMER_STORAGE_KEY = 'ol_active_task_timer';
+
+OL._persistActiveTimer = function() {
+    const timer = OL.activeTaskTimer;
+    try {
+        localStorage.setItem(OL._TIMER_STORAGE_KEY, JSON.stringify({
+            clientId: timer.clientId, taskId: timer.taskId, startTime: timer.startTime
+        }));
+    } catch (e) { console.warn('Could not persist active timer:', e); }
+};
+
+OL._clearPersistedTimer = function() {
+    try { localStorage.removeItem(OL._TIMER_STORAGE_KEY); } catch (e) { /* ignore */ }
+};
+
+// Called once on app load. If a timer was left running when the app last
+// closed (tab closed, browser crashed, laptop slept), this picks it back
+// up: elapsed time is recomputed from the saved startTime to now, so
+// nothing is lost, and the live timer resumes ticking for that task as if
+// it had never stopped.
+OL.restoreActiveTaskTimer = function() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(OL._TIMER_STORAGE_KEY) || 'null'); } catch (e) { /* ignore */ }
+    if (!saved || !saved.taskId || !saved.startTime) return;
+
+    const client = state.clients?.[saved.clientId];
+    const task = client?.projectData?.clientTasks?.find(t => t.id === saved.taskId);
+    if (!task) { OL._clearPersistedTimer(); return; } // task no longer exists — nothing to resume
+
+    OL.activeTaskTimer.clientId = saved.clientId;
+    OL.activeTaskTimer.taskId = saved.taskId;
+    OL.activeTaskTimer.startTime = saved.startTime;
+    OL.activeTaskTimer.elapsedSeconds = Math.floor((Date.now() - saved.startTime) / 1000);
+    OL._runTaskTimerTick(saved.taskId);
 };
 
 OL.stopLiveTaskTimer = function() {
@@ -1620,12 +1676,17 @@ OL.stopLiveTaskTimer = function() {
     if (!timer.taskId) return;
 
     clearInterval(timer.intervalId);
+    // Final read from wall-clock time, same reasoning as the tick above —
+    // whatever the throttled interval last managed to write, this corrects
+    // it to the true elapsed time before it's logged.
+    timer.elapsedSeconds = Math.floor((Date.now() - timer.startTime) / 1000);
     const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
 
     if (hoursEarned > 0) {
         OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);
     }
 
+    OL._clearPersistedTimer();
     OL.activeTaskTimer = {
         clientId: null,
         taskId: null,

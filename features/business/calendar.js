@@ -609,7 +609,12 @@ OL.loadCalendarEvents = async function() {
     if (error) { console.error('Failed to load calendar events:', error.message); return; }
 
     if (!state.master) state.master = {};
-    state.master.googleCalendarEvents = (data || []).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+    // Sort direction must match the filter: "past" was already fetched
+    // newest-first from Supabase (order('start', {ascending:false}) above),
+    // but this always re-sorted ascending afterward regardless of filter,
+    // silently flipping "Past" back to oldest-first every time.
+    const sortDir = OL.calendarState.filter === 'past' ? -1 : 1;
+    state.master.googleCalendarEvents = (data || []).slice().sort((a, b) => sortDir * (new Date(a.start) - new Date(b.start)));
     await OL.applyEventTimeRecalculation(state.master.googleCalendarEvents);
 };
 

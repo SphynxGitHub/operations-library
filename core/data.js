@@ -679,6 +679,24 @@ export async function importMasterBackup(event) {
 window.OL = window.OL || {};
 const OL = window.OL;
 
+// Local-timezone "YYYY-MM-DD" for a given Date (defaults to now). Due dates
+// are stored as plain YYYY-MM-DD strings with no time/zone component, so
+// "today" must be computed the same way — using the browser's local
+// calendar day — and compared as strings. Using Date().toISOString(), or
+// parsing a YYYY-MM-DD string back into a Date object, both go through UTC
+// internally and roll over to the next/previous calendar day for part of
+// the evening/morning in any timezone behind/ahead of UTC (e.g. it reads
+// as "tomorrow" every evening for US timezones). Do not reintroduce
+// toISOString()/new Date(dueDateStr) for "today" or due-date comparisons —
+// use this helper and plain string comparisons instead.
+OL.localDateStr = function(d) {
+    d = d || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
 // Resolves an email address against Sphynx staff and Client Team rosters.
 // Returns an interactive, clickable pill with display name if matched,
 // or an interactive '+' prompt button if unrecognized.

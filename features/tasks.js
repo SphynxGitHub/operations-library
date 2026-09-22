@@ -148,7 +148,7 @@ OL.setClientTaskFilter = function(key, val) {
 OL.renderFilteredClientTaskGroups = function(tasks) {
     const { query, status, assignee, groupBy } = OL.clientTaskFilterState;
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = OL.localDateStr(now);
     const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
     const closedStatusNames = masterStatuses.filter(s => s.isClosed).map(s => s.name);
 
