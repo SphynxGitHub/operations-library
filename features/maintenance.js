@@ -332,7 +332,7 @@ export function renderClientRequests() {
     // 2. Standalone requests not on a scoping sheet
     const standaloneRequests = (pd.clientRequests || []).filter(r => !scopedIds.has(String(r.id)));
 
-    // 3. Local resources not yet on a scoping sheet
+   // 3. Local resources not yet on a scoping sheet (always marked as Done)
     const unscopedResources = (pd.localResources || [])
         .filter(r => !scopedResourceIds.has(String(r.id)))
         .map(r => ({
@@ -340,7 +340,7 @@ export function renderClientRequests() {
             resourceId: r.id,
             name: r.name,
             requestType: r.type || 'build',
-            status: 'Do Now'
+            status: 'Done'
         }));
 
     const allItems = [...scopedItems, ...standaloneRequests, ...unscopedResources];
