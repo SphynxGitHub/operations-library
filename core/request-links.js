@@ -9,6 +9,8 @@ export function findRequestForTask(client, task, resourceFor) {
     const pd = client?.projectData;
     if (!pd || !task || isBlank(task.requestLineItemId)) return null;
     const lookup = resourceFor || ((id) => (pd.localResources || []).find((r) => r.id === id) || null);
+
+    // 1. Search across Scoping Sheets first
     for (const sheet of pd.scopingSheets || []) {
         const item = (sheet?.lineItems || []).find((i) => i && !isBlank(i.id) && String(i.id) === String(task.requestLineItemId));
         if (!item) continue;
@@ -19,8 +21,24 @@ export function findRequestForTask(client, task, resourceFor) {
             requestType: isBlank(item.requestType) ? 'build' : String(item.requestType),
             round: Math.max(parseInt(item.round, 10) || 1, 1), status: String(item.status || ''),
             resourceName: resource?.name || '', isRequestLine: String(item.id).startsWith('reqline-') || (!resource && !isBlank(item.name)),
+            isOnScopingSheet: true
         };
     }
+
+    // 2. Fallback: Search standalone Client Requests (for requests not currently on a scoping sheet)
+    const standaloneItem = (pd.clientRequests || []).find((r) => r && !isBlank(r.id) && String(r.id) === String(task.requestLineItemId));
+    if (standaloneItem) {
+        const resource = isBlank(standaloneItem.resourceId) ? null : lookup(standaloneItem.resourceId);
+        const title = !isBlank(standaloneItem.name || standaloneItem.title) ? String(standaloneItem.name || standaloneItem.title).trim() : (resource?.name || '');
+        return {
+            itemId: String(standaloneItem.id), sheetId: '', title: title || 'Request',
+            requestType: isBlank(standaloneItem.requestType) ? 'build' : String(standaloneItem.requestType),
+            round: Math.max(parseInt(standaloneItem.round, 10) || 1, 1), status: String(standaloneItem.status || ''),
+            resourceName: resource?.name || '', isRequestLine: false,
+            isOnScopingSheet: false
+        };
+    }
+
     return null;
 }
 
