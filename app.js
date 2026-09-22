@@ -29,6 +29,10 @@ import * as OLRequestTag from './features/request-tag.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
+import './core/billable.js';
+import './core/recurrence.js';
+import './features/dependencies.js';
+import './features/rollup.js';
 
 window.isMatrixActive = false;
 

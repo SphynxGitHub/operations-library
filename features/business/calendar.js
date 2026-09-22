@@ -732,6 +732,8 @@ OL.openCalendarEventModal = async function(id) {
                         ${showCalendarBadge ? `<div style="grid-column: span 2;"><strong class="muted">Calendar:</strong> ${esc(evt.calendar_summary)}</div>` : ''}
                     </div>
 
+                    ${OL.renderAgendaPlaceholder ? OL.renderAgendaPlaceholder(evt) : ''}
+
                     ${evt.description ? `
                         <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                             <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Description</label>
@@ -769,6 +771,7 @@ OL.openCalendarEventModal = async function(id) {
         </div>
     `;
     OL.showOverlayModal(html);
+    if (OL.renderAgendaSection) OL.renderAgendaSection(evt.id);
     // Handles the (rare) case of reopening this modal for a different
     // unlinked event while the shared picker singleton was already left in
     // its "focused" state from a previous event's modal — makes sure the
@@ -1630,11 +1633,12 @@ OL.fetchLiveZoomMeetings = async function() {
         }
 
         const syncResult = await response.json();
-        console.log(`Zoom sync: scanned ${syncResult.scannedEvents ?? 0} Zoom-linked events, ${syncResult.summariesPostedCount ?? 0} summaries posted, ${syncResult.tasksCreatedCount ?? 0} action-item tasks created, ${syncResult.noSummaryYetCount ?? 0} not ready yet, ${syncResult.otherErrorCount ?? 0} other errors`, syncResult);
+        console.log(`Zoom sync: scanned ${syncResult.scannedEvents ?? 0} Zoom-linked events, ${syncResult.summariesPostedCount ?? 0} summaries posted, ${syncResult.actionItemsFound ?? 0} action items found, ${syncResult.recordingsToDrive ?? 0} recordings + ${syncResult.summariesToDrive ?? 0} summaries saved to Drive, ${syncResult.noSummaryYetCount ?? 0} not ready yet, ${syncResult.otherErrorCount ?? 0} other errors`, syncResult);
 
-        // Summaries/tasks are written straight to Supabase by the sync
-        // function, not through this client's local state -- reload from
-        // the DB so the calendar and any open client workspaces pick them up.
+        // Action items are stored on the events; turn them into tasks here
+        // (through the app's own save), then reload the calendar.
+        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems();
+        if (syncResult.driveErrors) console.warn(`${syncResult.driveErrors} Zoom Drive export(s) failed — they retry on the next sync.`);
         await OL.loadCalendarEvents();
         if (OL.calendarState.view === 'grid') await OL.loadCalendarGridMonth();
         if (typeof OL.loadClientList === 'function') await OL.loadClientList();

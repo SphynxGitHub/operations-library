@@ -51,7 +51,9 @@ OL.toggleTaskBillable = function(clientId, taskId) {
         const task = client?.projectData?.clientTasks?.find(t =>
             String(t.id) === String(taskId) || String(t.key) === String(taskId)
         );
-        if (task) task.billable = task.billable === false ? true : false;
+        if (!task) return;
+        if (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task)) { task.billable = false; return; }
+        task.billable = !OL.isTaskBillable(task, client);
     }, clientId);
     OL.refreshTaskView();
 };
@@ -471,6 +473,7 @@ OL.renderBusinessTaskManager = function() {
                         <option value="All" ${OL.globalTaskFilterState.dateRange === 'All' ? 'selected' : ''}>All Dates</option>
                         <option value="Overdue" ${OL.globalTaskFilterState.dateRange === 'Overdue' ? 'selected' : ''}>Overdue</option>
                         <option value="Today" ${OL.globalTaskFilterState.dateRange === 'Today' ? 'selected' : ''}>Today</option>
+                        <option value="OverdueToday" ${OL.globalTaskFilterState.dateRange === 'OverdueToday' ? 'selected' : ''}>Overdue + Today</option>
                         <option value="Week" ${OL.globalTaskFilterState.dateRange === 'Week' ? 'selected' : ''}>This Week</option>
                         <option value="NextTwoWeeks" ${OL.globalTaskFilterState.dateRange === 'NextTwoWeeks' ? 'selected' : ''}>Next Two Weeks</option>
                         <option value="Month" ${OL.globalTaskFilterState.dateRange === 'Month' ? 'selected' : ''}>This Month</option>
@@ -634,19 +637,23 @@ OL.renderFilteredTaskGroups = function(allTasks) {
             if (!t.dueDate) {
                 dateMatch = false;
             } else {
-                const taskDate = new Date(t.dueDate);
-                const taskDateStr = t.dueDate.slice(0, 10);
+                const taskDateStr = OL.localDayKey(t.dueDate);
+                const startOfWeekStr = OL.localDateStr(startOfWeek);
+                const endOfWeekStr = OL.localDateStr(endOfWeek);
+                const nextTwoWeeksStr = OL.localDateStr(nextTwoWeeks);
 
                 if (dateRange === 'Overdue') {
                     dateMatch = taskDateStr < todayStr && !closedStatusNames.includes(t.status);
                 } else if (dateRange === 'Today') {
                     dateMatch = taskDateStr === todayStr;
+                } else if (dateRange === 'OverdueToday') {
+                    dateMatch = (taskDateStr < todayStr && !closedStatusNames.includes(t.status)) || taskDateStr === todayStr;
                 } else if (dateRange === 'Week') {
-                    dateMatch = taskDate >= startOfWeek && taskDate <= endOfWeek;
+                    dateMatch = taskDateStr >= startOfWeekStr && taskDateStr <= endOfWeekStr;
                 } else if (dateRange === 'NextTwoWeeks') {
-                    dateMatch = taskDate >= now && taskDate <= nextTwoWeeks;
+                    dateMatch = taskDateStr >= todayStr && taskDateStr <= nextTwoWeeksStr;
                 } else if (dateRange === 'Month') {
-                    dateMatch = taskDate.getMonth() === now.getMonth() && taskDate.getFullYear() === now.getFullYear();
+                    dateMatch = taskDateStr.slice(0, 7) === todayStr.slice(0, 7);
                 }
             }
         }
@@ -661,13 +668,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
     const DATE_BUCKETS = ['Overdue', 'Today', 'This Week', 'Later', 'No Due Date'];
     const taskDateBucket = (task) => {
         if (!task.dueDate) return 'No Due Date';
-        if (task.dueDate === todayStr) return 'Today';
-        const due = new Date(task.dueDate);
-        const today = new Date(todayStr);
-        if (due < today) return 'Overdue';
-        const weekOut = new Date(today);
-        weekOut.setDate(weekOut.getDate() + 7);
-        return due <= weekOut ? 'This Week' : 'Later';
+        const dueStr = OL.localDayKey(task.dueDate);
+        if (dueStr === todayStr) return 'Today';
+        if (dueStr < todayStr) return 'Overdue';
+        const weekOut = new Date(); weekOut.setDate(weekOut.getDate() + 7);
+        return dueStr <= OL.localDateStr(weekOut) ? 'This Week' : 'Later';
     };
 
     const groups = {};
@@ -1033,6 +1038,8 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     ${esc(typeof OL.taskResourceLabel === 'function' ? OL.taskResourceLabel(t) : (t.resourceName || t.category || 'General Resource'))}
                 </span>
                 ${typeof OL.renderRequestTagHTML === 'function' ? OL.renderRequestTagHTML(t) : ''}
+                ${t.recurrence?.freq ? `<span class="pill tiny soft" title="Repeats: ${esc(OL.describeRecurrence ? OL.describeRecurrence(t.recurrence) : '')}" style="font-size:10px; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="repeat" style="width:10px;height:10px;"></i></span>` : ''}
+                ${(t.blockedBy || []).length && OL.isBlocked && OL.isBlocked(t.clientId, t) ? `<span class="pill tiny" title="Blocked — a dependency isn't finished yet" style="font-size:10px; color:#f59e0b; border:1px solid #f59e0b; display:inline-flex; align-items:center; gap:3px;"><i data-lucide="lock" style="width:10px;height:10px;"></i> Blocked</span>` : ''}
 
                 ${(t.clickupComments && t.clickupComments.length) ? `
                 <span class="pill tiny soft" title="Imported from ClickUp" style="font-size:10px; display:inline-flex; align-items:center; gap:4px;">
@@ -1076,11 +1083,16 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
 
                 <!-- Billable Toggle -->
                 <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
-                    <span title="${t.billable === false ? 'Non-billable — click to mark billable' : 'Billable — click to mark non-billable'}"
-                          style="cursor:pointer; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px; ${t.billable === false ? 'background:rgba(148,163,184,0.15); color:var(--muted);' : 'background:rgba(34,197,94,0.15); color:#22c55e;'}"
-                          onclick="OL.toggleTaskBillable('${t.clientId}', '${t.id}')">
-                        ${t.billable === false ? '⊘ $' : '$'}
-                    </span>
+                    ${(() => {
+                        const isBill = OL.isTaskBillable(t, state.clients?.[t.clientId]);
+                        const locked = OL.isClientTaskForBilling(t);
+                        const why = OL.billableReason(t, state.clients?.[t.clientId]);
+                        return `<span title="${esc((isBill ? 'Billable' : 'Non-billable') + ' · ' + why + (locked ? '' : ' — click to change'))}"
+                          style="cursor:${locked ? 'not-allowed' : 'pointer'}; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px; ${!isBill ? 'background:rgba(148,163,184,0.15); color:var(--muted);' : 'background:rgba(34,197,94,0.15); color:#22c55e;'}"
+                          ${locked ? '' : `onclick="OL.toggleTaskBillable('${t.clientId}', '${t.id}')"`}>
+                        ${!isBill ? '⊘ $' : '$'}
+                    </span>`;
+                    })()}
                 </div>
 
                 <!-- Assignee Avatar -->
@@ -1265,7 +1277,7 @@ OL.applyBulkTaskEdit = function() {
                     }
                 }
                 if (newBillableVal !== '') {
-                    task.billable = newBillableVal === 'true';
+                    task.billable = (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task)) ? false : newBillableVal === 'true';
                 }
                 if (newDueDate) {
                     task.dueDate = newDueDate;
@@ -2017,10 +2029,12 @@ OL.renderInContextTaskModal = function(client, task) {
                             </label>
                         </div>
                         
-                        <textarea class="modal-input tiny" id="task-desc-${task.id}" rows="4"
-                                  style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; resize:vertical; text-align:left;"
-                                  placeholder="Add deliverable details / notes for this task..."
-                                  onblur="OL.updateTaskDescription('${client?.id}', '${task.id}', this.value)">${esc(task.description || '')}</textarea>
+                        ${OL.renderRichTextField({
+                            id: `task-desc-${task.id}`,
+                            html: OL.richHtmlFor(task.descriptionHtml, task.description),
+                            placeholder: 'Add deliverable details / notes for this task...',
+                            onBlur: `OL.updateTaskDescriptionRich('${client?.id}', '${task.id}', this.innerHTML)`
+                        })}
 
                         <!-- LIST OF ALL ATTACHED DRIVE FILES -->
                         ${attachedFiles.length ? `
@@ -2069,8 +2083,16 @@ OL.renderInContextTaskModal = function(client, task) {
 
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                         <div style="cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${client?.id}', '${task.id}')">
-                            <strong class="muted">Due Date:</strong> ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : (task.dueRelativeTo ? 'Relative (see below)' : 'Unscheduled')}
+                            <strong class="muted">Due Date:</strong> ${task.dueDate ? OL.formatDayKey(OL.localDayKey(task.dueDate), {}) : (task.dueRelativeTo ? 'Relative (see below)' : 'Unscheduled')}
                             <i data-lucide="pencil" style="width:10px;height:10px; opacity:0.5; margin-left:4px;"></i>
+                        </div>
+                        <div>
+                            <strong class="muted">Repeats:</strong>
+                            <select class="modal-input tiny" style="width:auto; display:inline-block; padding:2px 6px;" onchange="OL.setTaskRecurrence('${client?.id}', '${task.id}', this.value)">
+                                ${Object.entries(OL.RECURRENCE_PRESETS || {}).map(([k, p]) => `<option value="${k}" ${OL.recurrencePresetKey(task.recurrence) === k ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+                                ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<option value="custom" selected>${esc(OL.describeRecurrence(task.recurrence))}</option>` : ''}
+                            </select>
+                            ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
                         <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
@@ -2082,6 +2104,9 @@ OL.renderInContextTaskModal = function(client, task) {
                             <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
                         </div>
                     ` : ''}
+
+                    ${OL.renderDependencySection ? OL.renderDependencySection(client?.id, 'task', task.id) : ''}
+                    ${OL.renderRollupSection ? OL.renderRollupSection(client?.id, 'task', task.id) : ''}
 
                     <!-- LINKED EMAILS SECTION WITH ENFORCED CONSTRAINTS -->
                     <div style="margin-bottom: 20px; min-width: 0; width: 100%; overflow-x: hidden;">
@@ -2108,6 +2133,7 @@ OL.renderInContextTaskModal = function(client, task) {
 
     OL.showOverlayModal(content);
     OL.loadLinkedEmailsForTask(task.id);
+    if (OL.hydrateRollupSection) OL.hydrateRollupSection(client?.id, 'task', task.id);
     if (window.lucide) lucide.createIcons();
 };
 
@@ -2596,6 +2622,55 @@ OL.sanitizeCommentHtml = function(html) {
     return container.innerHTML;
 };
 
+// -------------------------------------------------------------
+// RICH TEXT FIELD — shared toolbar + contenteditable used by the task
+// description and linked-email notes. Output goes through the same
+// sanitizeCommentHtml allowlist as comments (plus headings), and a plain
+// text copy is always kept alongside so search, previews and anything that
+// expects text keep working.
+// -------------------------------------------------------------
+['H3', 'H4', 'BLOCKQUOTE', 'S', 'STRIKE', 'CODE', 'PRE'].forEach(t => OL._ALLOWED_COMMENT_TAGS.add(t));
+
+OL.plainTextToHtml = function(text) {
+    return esc(text || '').replace(/\n/g, '<br>');
+};
+
+OL.htmlToPlainText = function(html) {
+    const d = document.createElement('div');
+    d.innerHTML = (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h3|h4|blockquote)>/gi, '\n');
+    return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+};
+
+// opts: { id, html, placeholder, minHeight, onBlur } — onBlur is a JS
+// string run with `this` = the editor element.
+OL.renderRichTextField = function(opts) {
+    const btn = (cmd, label, title, style = '') => `<button type="button" class="btn tiny soft" style="padding:2px 6px; ${style}" title="${title}" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('${cmd}')">${label}</button>`;
+    return `
+        <div class="ol-richtext">
+            <div style="display:flex; align-items:center; gap:2px; flex-wrap:wrap; background:rgba(0,0,0,0.2); padding:4px 6px; border:1px solid var(--line); border-bottom:none; border-radius:6px 6px 0 0;">
+                ${btn('bold', 'B', 'Bold', 'font-weight:bold;')}
+                ${btn('italic', 'I', 'Italic', 'font-style:italic;')}
+                ${btn('underline', 'U', 'Underline', 'text-decoration:underline;')}
+                ${btn('strikeThrough', 'S', 'Strikethrough', 'text-decoration:line-through;')}
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Heading" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'h4')">H</button>
+                ${btn('insertUnorderedList', '• List', 'Bullet list')}
+                ${btn('insertOrderedList', '1. List', 'Numbered list')}
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')">❝</button>
+                ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
+                ${btn('removeFormat', '<i data-lucide="remove-formatting" style="width:11px;height:11px;"></i>', 'Clear formatting')}
+            </div>
+            <div id="${opts.id}" contenteditable="true" class="modal-input tiny ol-richtext-body"
+                 data-placeholder="${esc(opts.placeholder || '')}"
+                 style="min-height:${opts.minHeight || 90}px; max-height:520px; overflow-y:auto; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
+                 onblur="${opts.onBlur || ''}">${opts.html || ''}</div>
+        </div>`;
+};
+
+// Stored HTML if present, otherwise the old plain text converted.
+OL.richHtmlFor = function(html, text) {
+    return html ? OL.sanitizeCommentHtml(html) : OL.plainTextToHtml(text);
+};
+
 // Wraps every "@Name" match with a highlighted span, operating on actual
 // DOM text nodes (not a regex over the raw HTML string) so it can't
 // corrupt tag structure or match text sitting inside an attribute.
@@ -2703,11 +2778,7 @@ OL.renderTaskParentRequestBanner = function(client, task) {
     const pd = client?.projectData;
     if (!pd || !task.requestLineItemId) return '';
 
-    let item = null;
-    for (const sheet of pd.scopingSheets || []) {
-        item = (sheet?.lineItems || []).find(i => i && String(i.id) === String(task.requestLineItemId));
-        if (item) break;
-    }
+    const item = OL.findRequestItem(client, task.requestLineItemId);
     if (!item) return '';
 
     const resourceLookup = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
@@ -2745,7 +2816,41 @@ OL.renderTaskParentRequestBanner = function(client, task) {
     `;
 };
 
+// A request can live on a scoping sheet or in the standalone client
+// requests list; looks in both.
+OL.findRequestItem = function(client, requestId) {
+    const pd = client?.projectData;
+    if (!pd || requestId === undefined || requestId === null || requestId === '') return null;
+    for (const sheet of pd.scopingSheets || []) {
+        const hit = (sheet?.lineItems || []).find(i => i && String(i.id) === String(requestId));
+        if (hit) return hit;
+    }
+    return (pd.clientRequests || []).find(r => r && String(r.id) === String(requestId)) || null;
+};
+
+OL.requestItemTitle = function(client, item) {
+    if (!item) return 'Request';
+    const res = item.resourceId ? ((client?.projectData?.localResources || []).find(r => r.id === item.resourceId) || (state.master?.resources || []).find(r => r.id === item.resourceId)) : null;
+    return (item.name && String(item.name).trim()) || item.title || res?.name || 'Request';
+};
+
+// Every request on the project, for pickers.
+OL.listProjectRequests = function(client) {
+    const pd = client?.projectData || {};
+    const out = [];
+    (pd.scopingSheets || []).forEach(sh => (sh?.lineItems || []).forEach(i => {
+        if (i && i.id !== undefined && i.id !== null && String(i.id).trim() !== '') out.push(i);
+    }));
+    (pd.clientRequests || []).forEach(r => { if (r && r.id && !out.some(o => String(o.id) === String(r.id))) out.push(r); });
+    return out;
+};
+
 OL.getTaskParentLabel = function(client, task) {
+    // A request is the task's real parent in the lifecycle model, so it wins.
+    if (task.requestLineItemId) {
+        const item = OL.findRequestItem(client, task.requestLineItemId);
+        if (item) return 'Request · ' + esc(OL.requestItemTitle(client, item));
+    }
     if (task.parentResourceId) {
         const res = client?.projectData?.localResources?.find(r => r.id === task.parentResourceId);
         return esc(res ? res.name : 'Resource');
@@ -2787,6 +2892,9 @@ OL.renderTaskParentPickerStep = function() {
     const query = (st.query || '').trim().toLowerCase();
     const resources = (client.projectData?.localResources || []).filter(r => (r.name || '').toLowerCase().includes(query));
     const events = (st.events || []).filter(e => (e.title || '').toLowerCase().includes(query));
+    const requests = OL.listProjectRequests(client)
+        .filter(i => !['Done', "Don't Do"].includes(i.status) || String(i.id) === String(task.requestLineItemId))
+        .filter(i => OL.requestItemTitle(client, i).toLowerCase().includes(query));
 
     const content = `
         <div style="padding: 20px; max-width: 420px; width: 100%;" onclick="event.stopPropagation()">
@@ -2797,6 +2905,12 @@ OL.renderTaskParentPickerStep = function() {
             <input type="text" class="modal-input tiny" placeholder="Search resources or events..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
                    oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._taskParentPickerState.query = v; OL.renderTaskParentPickerStep(); })" id="task-parent-search">
             <button class="btn tiny soft" style="width:100%; margin-bottom:10px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">None</button>
+            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Requests</div>
+            <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
+                ${requests.length ? requests.map(r => `
+                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${String(task.requestLineItemId) === String(r.id) ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'request', '${esc(String(r.id))}')"><i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}</div>
+                `).join('') : `<div class="tiny muted">No open requests.</div>`}
+            </div>
             <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Resources</div>
             <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
                 ${resources.length ? resources.map(r => `
@@ -2812,6 +2926,7 @@ OL.renderTaskParentPickerStep = function() {
         </div>
     `;
     OL.showOverlayModal(content);
+    if (window.lucide) lucide.createIcons();
     document.getElementById('task-parent-search')?.focus();
 };
 
@@ -2820,11 +2935,31 @@ OL.setTaskParent = function(clientId, taskId, type, id) {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
         if (!task) return;
+        if (type === 'request') {
+            // Request is a separate axis: a task can sit under a request AND
+            // be about a resource, so picking a request keeps the others.
+            task.requestLineItemId = id;
+            return;
+        }
+        if (type === null) task.requestLineItemId = null;
         task.parentResourceId = type === 'resource' ? id : null;
         task.parentEventId = type === 'event' ? id : null;
     }, clientId);
 
     OL.closeModal();
+    OL.openTaskInContext(clientId, taskId);
+};
+
+OL.setTaskRecurrence = function(clientId, taskId, presetKey) {
+    if (presetKey === 'custom') return;
+    const preset = (OL.RECURRENCE_PRESETS || {})[presetKey];
+    updateAndSync(() => {
+        const task = state.clients?.[clientId]?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        if (!preset || !preset.freq) { delete task.recurrence; return; }
+        task.recurrence = { freq: preset.freq, interval: preset.interval || 1 };
+        delete task.recurrenceNextId; // re-arm if it was set on an already-closed task
+    }, clientId);
     OL.openTaskInContext(clientId, taskId);
 };
 
@@ -2846,13 +2981,24 @@ OL.updateTaskTitle = function(clientId, taskId, newTitle) {
     OL.refreshTaskView();
 };
 
+OL.updateTaskDescriptionRich = function(clientId, taskId, rawHtml) {
+    const html = OL.sanitizeCommentHtml(rawHtml || '');
+    const text = OL.htmlToPlainText(html);
+    const task = state.clients?.[clientId]?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    if (!task || ((task.descriptionHtml || '') === html && (task.description || '') === text)) return;
+    updateAndSync(() => {
+        task.descriptionHtml = html;
+        task.description = text;
+    }, clientId);
+};
+
 OL.updateTaskDescription = function(clientId, taskId, newDescription) {
     updateAndSync(() => {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t =>
             String(t.id) === String(taskId) || String(t.key) === String(taskId)
         );
-        if (task) task.description = newDescription;
+        if (task) { task.description = newDescription; delete task.descriptionHtml; }
     }, clientId);
 };
 
@@ -3077,11 +3223,14 @@ OL._editingLinkedEmailNoteId = null;
 
 OL.loadLinkedEmailsForTask = async function(taskId) {
     const container = document.getElementById('linked-emails-list');
-    const { data, error } = await db
+    let { data, error } = await db
         .from('gmail_messages')
-        .select('id, sender, subject, snippet, date, note, body')
+        .select('id, sender, subject, snippet, date, note, note_html, body')
         .eq('linked_task_id', taskId)
         .order('date', { ascending: false });
+    if (error && /note_html/.test(error.message || '')) {
+        ({ data, error } = await db.from('gmail_messages').select('id, sender, subject, snippet, date, note, body').eq('linked_task_id', taskId).order('date', { ascending: false }));
+    }
 
     if (!container) return; // modal already closed before this resolved
 
@@ -3107,12 +3256,14 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
                             <strong style="display:block; overflow-wrap:anywhere; word-break:break-word;">${esc(m.subject || 'No Subject')}</strong>
                             <div class="muted" style="overflow-wrap:anywhere; word-break:break-word;">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
                         </div>
-                        <i data-lucide="external-link" style="width:12px;height:12px; flex-shrink:0; margin-top:2px; color:var(--muted);"></i>
+                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button class="btn tiny soft" style="padding:2px 5px;" title="Unlink this email from the task" onclick="event.stopPropagation(); OL.unlinkEmailFromTask('${taskId}', '${m.id}')"><i data-lucide="unlink" style="width:10px;height:10px;"></i></button>
+                            <i data-lucide="external-link" style="width:12px;height:12px; margin-top:4px; color:var(--muted);"></i>
+                        </div>
                     </div>
                     ${isEditing ? `
                         <div style="margin-top:6px; min-width:0; width:100%;" onclick="event.stopPropagation();">
-                            <textarea id="linked-email-note-${m.id}" class="modal-input tiny" rows="50" style="width:100%; 
-                            box-sizing:border-box; resize:vertical; text-align: left;">${esc(displayText)}</textarea>
+                            ${OL.renderRichTextField({ id: `linked-email-note-${m.id}`, html: OL.richHtmlFor(m.note_html, displayText), minHeight: 160 })}
                             <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
                                 <button class="btn tiny soft" onclick="OL.cancelEditLinkedEmailNote('${taskId}')">Cancel</button>
                                 <button class="btn tiny primary" onclick="OL.saveLinkedEmailNote('${taskId}', '${m.id}')">Save Note</button>
@@ -3120,7 +3271,7 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
                         </div>
                     ` : (displayText ? `
                         <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:flex-start; gap:8px; min-width:0; width:100%;" onclick="event.stopPropagation();">
-                            <div class="muted" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.4; flex:1; min-width:0;">${esc(displayText)}</div>
+                            <div class="muted ol-richtext-view" style="${m.note_html ? '' : 'white-space:pre-wrap;'} overflow-wrap:anywhere; word-break:break-word; line-height:1.4; flex:1; min-width:0;">${m.note_html ? OL.sanitizeCommentHtml(m.note_html) : esc(displayText)}</div>
                             <button class="btn tiny soft" style="flex-shrink:0; padding:2px 5px;" title="Edit note" onclick="OL.startEditLinkedEmailNote('${taskId}', '${m.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                         </div>
                     ` : `
@@ -3136,6 +3287,15 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
     if (window.lucide) lucide.createIcons();
 };
 
+// Removes just the task link (project/resource links stay). link_locked
+// keeps auto-link from putting it straight back.
+OL.unlinkEmailFromTask = async function(taskId, messageId) {
+    if (!confirm('Unlink this email from the task?')) return;
+    const { error } = await db.from('gmail_messages').update({ linked_task_id: null, link_locked: true }).eq('id', messageId);
+    if (error) { alert('Failed to unlink: ' + error.message); return; }
+    OL.loadLinkedEmailsForTask(taskId);
+};
+
 OL.startEditLinkedEmailNote = function(taskId, messageId) {
     OL._editingLinkedEmailNoteId = messageId;
     OL.loadLinkedEmailsForTask(taskId);
@@ -3147,11 +3307,15 @@ OL.cancelEditLinkedEmailNote = function(taskId) {
 };
 
 OL.saveLinkedEmailNote = async function(taskId, messageId) {
-    const textarea = document.getElementById(`linked-email-note-${messageId}`);
-    if (!textarea) return;
-    const note = textarea.value; // intentionally allows saving back to empty — clearing it out is a valid edit
+    const editor = document.getElementById(`linked-email-note-${messageId}`);
+    if (!editor) return;
+    // Intentionally allows saving back to empty — clearing it out is a valid edit.
+    const note_html = OL.sanitizeCommentHtml(editor.innerHTML || '');
+    const note = OL.htmlToPlainText(note_html);
 
-    const { error } = await db.from('gmail_messages').update({ note }).eq('id', messageId);
+    let { error } = await db.from('gmail_messages').update({ note, note_html }).eq('id', messageId);
+    // note_html arrives with this release's migration; until it's run, keep saving the text.
+    if (error && /note_html/.test(error.message || '')) ({ error } = await db.from('gmail_messages').update({ note }).eq('id', messageId));
     if (error) { alert('Failed to save note: ' + error.message); return; }
 
     OL._editingLinkedEmailNoteId = null;

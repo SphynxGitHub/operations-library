@@ -7,7 +7,7 @@ OL.clientTaskFilterState = {
     status: 'Open',     // 'Open' | 'Closed' | 'All' | Specific Status
     assignee: 'All',   // 'All' | 'Sphynx' | 'Client' | '3rdParty' | Member Name
     dateRange: 'All',  // 'All' | 'Overdue' | 'Today' | 'Week' | 'Month'
-    groupBy: 'status'  // 'status' | 'assignee' | 'none'
+    groupBy: 'request' // 'request' | 'status' | 'assignee' | 'none'
 };
 
 export function renderClientTaskManager() {
@@ -130,6 +130,7 @@ export function renderClientTaskManager() {
                     <i data-lucide="layers" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Group:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setClientTaskFilter('groupBy', this.value)">
+                        <option value="request" ${OL.clientTaskFilterState.groupBy === 'request' ? 'selected' : ''}>Request (parent)</option>
                         <option value="status" ${OL.clientTaskFilterState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                         <option value="assignee" ${OL.clientTaskFilterState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
                         <option value="none" ${OL.clientTaskFilterState.groupBy === 'none' ? 'selected' : ''}>Flat List</option>
@@ -187,31 +188,48 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         return `<div style="display:grid; gap:8px;">${OL.sortTasksWithSubtasksNested(filtered).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
     }
 
+    const client = getActiveClient();
     const groups = {};
+    const reqMeta = {};
     filtered.forEach(task => {
         let groupKey = 'Other';
         if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
         else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
+        else if (groupBy === 'request') {
+            const item = task.requestLineItemId ? OL.findRequestItem(client, task.requestLineItemId) : null;
+            if (item) {
+                groupKey = 'req:' + item.id;
+                reqMeta[groupKey] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'build', round: Math.max(parseInt(item.round, 10) || 1, 1), status: item.status || '' };
+            } else groupKey = 'No Request';
+        }
 
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
     });
 
-    return Object.entries(groups).map(([groupTitle, groupTasks]) => `
-        <div style="margin-bottom: 20px; padding: 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 10px;">
-            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    ${OL.renderGroupSelectCheckbox(groupTasks)}
-                    <i data-lucide="folder" style="width:13px;height:13px;"></i>
+    // Requests first (as parents), loose tasks last.
+    const entries = Object.entries(groups).sort(([a], [b]) => (a === 'No Request') - (b === 'No Request'));
+
+    return entries.map(([groupKey, groupTasks]) => {
+        const req = reqMeta[groupKey];
+        const groupTitle = req ? req.title : groupKey;
+        return `
+        <div style="margin-bottom: 20px; padding: 14px; background: ${req ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${req ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: ${req ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display:flex; align-items:center; gap:8px; ${req ? 'cursor:pointer;' : ''}" ${req ? `onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(req.id)}')" title="Open this request"` : ''}>
+                    <span onclick="event.stopPropagation();">${OL.renderGroupSelectCheckbox(groupTasks)}</span>
+                    <i data-lucide="${req ? 'git-pull-request' : 'folder'}" style="width:13px;height:13px;"></i>
                     <span>${esc(groupTitle)}</span>
+                    ${req ? `<span class="pill tiny soft" style="font-size:9px;">${esc(req.type.charAt(0).toUpperCase() + req.type.slice(1))} · Round ${req.round}${req.status ? ' · ' + esc(req.status) : ''}</span>` : ''}
                     <span class="pill tiny soft" style="font-size:10px;">${groupTasks.length}</span>
                 </div>
             </div>
-            <div style="display: grid; gap: 8px;">
+            <div style="display: grid; gap: 8px; ${req ? 'padding-left:14px; border-left:2px solid rgba(100,198,162,0.3);' : ''}">
                 ${OL.sortTasksWithSubtasksNested(groupTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 };
 
 OL.isSphynxAssignee = function(assignee) {

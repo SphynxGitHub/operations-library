@@ -70,6 +70,9 @@ OL.renderBusinessTimeReports = function() {
                 <h2 style="margin:0;"><i data-lucide="bar-chart-2" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time & Reconciliation Audit</h2>
                 <div class="small muted" style="margin-top:2px;">Itemized client time logs, scoping burn rates, and billable value tracking</div>
             </div>
+            <button class="btn small soft" onclick="OL.openBillableRulesModal()" style="display:inline-flex; align-items:center; gap:6px;" title="Tasks are non-billable unless a rule or a manual toggle says otherwise">
+                <i data-lucide="badge-dollar-sign" style="width:14px;height:14px;"></i> Billable Rules
+            </button>
         </div>
 
         <!-- TOTALS & DATE PRESETS BAR (ROW BELOW TITLE) -->
@@ -232,8 +235,9 @@ OL.getFilteredTimeReportData = function(masterTasks, hourlyRate) {
         if (!matchesQuery) return false;
 
         // Billable filter
-        if (filter === 'billable' && t.billable === false) return false;
-        if (filter === 'non-billable' && t.billable !== false) return false;
+        const isBill = OL.isItemBillable(t);
+        if (filter === 'billable' && !isBill) return false;
+        if (filter === 'non-billable' && isBill) return false;
 
         // Date range filter
         if (OL.timeReportFilterState.datePreset !== 'all_time' && (t.createdAt || t.createdDate || t.date || t.completedDate)) {
@@ -245,7 +249,8 @@ OL.getFilteredTimeReportData = function(masterTasks, hourlyRate) {
     });
 
     const totalLoggedHours = filteredTasks.reduce((acc, t) => acc + t.loggedHours, 0);
-    const totalValue = totalLoggedHours * hourlyRate;
+    // Value counts billable time only (tasks are non-billable by default).
+    const totalValue = filteredTasks.filter(t => OL.isItemBillable(t)).reduce((acc, t) => acc + t.loggedHours, 0) * hourlyRate;
 
     return { filteredTasks, totalLoggedHours, totalValue };
 };
@@ -470,4 +475,83 @@ OL.closeTimeReportModal = function() {
     if (layer) { layer.style.display = "none"; layer.innerHTML = ""; layer.onclick = null; }
     const overlay = document.getElementById("modal-overlay");
     if (overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; overlay.onclick = null; }
+};
+
+
+// -------------------------------------------------------------
+// BILLABLE RULES — tasks are non-billable unless a rule here (or a manual
+// $ toggle on the task) makes them billable. Client tasks never are.
+// Stored on the master row (workspace_masters.billable_rules).
+// -------------------------------------------------------------
+OL.openBillableRulesModal = function() {
+    if (!state.master.billableRules) state.master.billableRules = [];
+    const rules = state.master.billableRules;
+    const fields = OL.BILLABLE_RULE_FIELDS || {};
+    const canSave = !!state.masterHasBillableRules;
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">💲 Billable Rules</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" style="max-width:720px; width:100%;">
+            <p class="tiny muted" style="margin-bottom:12px; line-height:1.5;">
+                Every task starts <strong>non-billable</strong>. The first rule that matches a task decides it; a task you toggle by hand keeps your choice.
+                Client tasks are never billable.
+            </p>
+            ${canSave ? '' : `<div class="tiny" style="padding:8px 10px; margin-bottom:12px; border:1px solid #f59e0b; color:#f59e0b; border-radius:6px;">Run the <code>billable_rules</code> migration first — rules can't be saved until that column exists.</div>`}
+            <div style="display:grid; gap:6px; margin-bottom:12px;">
+                ${rules.length ? rules.map((r, i) => `
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px; border:1px solid var(--line); border-radius:6px;">
+                        <span class="tiny muted" style="width:18px;">${i + 1}.</span>
+                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'field', this.value)">
+                            ${Object.entries(fields).map(([k, l]) => `<option value="${k}" ${r.field === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+                        </select>
+                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'op', this.value)">
+                            <option value="equals" ${r.op !== 'contains' ? 'selected' : ''}>is</option>
+                            <option value="contains" ${r.op === 'contains' ? 'selected' : ''}>contains</option>
+                        </select>
+                        <input class="modal-input tiny" style="flex:1; min-width:140px;" value="${esc(r.value || '')}" placeholder="value" onblur="OL.updateBillableRule(${i}, 'value', this.value)">
+                        <span class="tiny muted">→</span>
+                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'billable', this.value === 'true')">
+                            <option value="true" ${r.billable !== false ? 'selected' : ''}>Billable</option>
+                            <option value="false" ${r.billable === false ? 'selected' : ''}>Non-billable</option>
+                        </select>
+                        <button class="btn tiny soft" title="Move up" ${i === 0 ? 'disabled' : ''} onclick="OL.moveBillableRule(${i}, -1)">↑</button>
+                        <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.removeBillableRule(${i})">✕</button>
+                    </div>
+                `).join('') : `<div class="tiny muted">No rules yet — every Sphynx task is non-billable.</div>`}
+            </div>
+            <button class="btn tiny primary" onclick="OL.addBillableRule()"><i data-lucide="plus" style="width:11px;height:11px;"></i> Add Rule</button>
+            <div class="tiny muted" style="margin-top:14px;">Examples: <em>Request type is build → Billable</em> · <em>Task title contains internal → Non-billable</em> · <em>Project is General / Business Ops → Non-billable</em></div>
+        </div>`;
+    openModal(html);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL._saveBillableRules = function() {
+    OL.persist();
+    OL.openBillableRulesModal();
+    if (location.hash.includes('time-reports')) OL.renderBusinessTimeReports();
+};
+OL.addBillableRule = function() {
+    state.master.billableRules.push({ id: 'br-' + Date.now(), field: 'requestType', op: 'equals', value: '', billable: true });
+    OL._saveBillableRules();
+};
+OL.updateBillableRule = function(i, key, value) {
+    const r = state.master.billableRules[i];
+    if (!r || r[key] === value) return;
+    r[key] = typeof value === 'string' ? value.trim() : value;
+    OL._saveBillableRules();
+};
+OL.removeBillableRule = function(i) {
+    state.master.billableRules.splice(i, 1);
+    OL._saveBillableRules();
+};
+OL.moveBillableRule = function(i, dir) {
+    const list = state.master.billableRules;
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    OL._saveBillableRules();
 };

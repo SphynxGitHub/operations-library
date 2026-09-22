@@ -16,6 +16,7 @@ import { findRequestForTask } from '../../core/request-links.js';
 OL.dashboardTaskState = {
     dueRange: 'all',
     groupBy: 'none',
+    subGroupBy: 'none',
     assignees: [],
     status: 'all',
     types: ['task', 'email', 'event', 'comment', 'error', 'request'],
@@ -333,6 +334,7 @@ OL.renderDailyDashboard = function() {
                             <option value="all" ${OL.dashboardTaskState.dueRange === 'all' ? 'selected' : ''}>All</option>
                             <option value="overdue" ${OL.dashboardTaskState.dueRange === 'overdue' ? 'selected' : ''}>Overdue</option>
                             <option value="today" ${OL.dashboardTaskState.dueRange === 'today' ? 'selected' : ''}>Due Today</option>
+                            <option value="overdue_today" ${OL.dashboardTaskState.dueRange === 'overdue_today' ? 'selected' : ''}>Overdue + Due Today</option>
                             <option value="week" ${OL.dashboardTaskState.dueRange === 'week' ? 'selected' : ''}>Due This Week</option>
                             <option value="next2weeks" ${OL.dashboardTaskState.dueRange === 'next2weeks' ? 'selected' : ''}>Due Next 2 Weeks</option>
                         </select>
@@ -347,7 +349,16 @@ OL.renderDailyDashboard = function() {
                             <option value="date" ${OL.dashboardTaskState.groupBy === 'date' ? 'selected' : ''}>Due Date</option>
                             <option value="status" ${OL.dashboardTaskState.groupBy === 'status' ? 'selected' : ''}>Status</option>
                             <option value="assignee" ${OL.dashboardTaskState.groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
+                            <option value="type" ${OL.dashboardTaskState.groupBy === 'type' ? 'selected' : ''}>Item Type</option>
                         </select>
+                        ${OL.dashboardTaskState.groupBy !== 'none' ? `
+                            <span class="tiny muted bold uppercase">Sub-Group:</span>
+                            <select class="modal-input tiny" style="width:auto;" onchange="OL.setDashboardTaskFilter('subGroupBy', this.value)">
+                                ${[['none','None'],['client','Client'],['request','Request'],['date','Due Date'],['status','Status'],['assignee','Assignee'],['type','Item Type']]
+                                    .filter(([v]) => v !== OL.dashboardTaskState.groupBy)
+                                    .map(([v, l]) => `<option value="${v}" ${OL.dashboardTaskState.subGroupBy === v ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -383,7 +394,10 @@ OL.openDashboardAssigneePopover = function(event) {
 
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Filter by Assignee</div>
-        <div style="display:grid; gap:2px; max-height:260px; overflow-y:auto; min-width:180px;">
+        <input type="text" class="modal-input tiny" placeholder="Search assignees..." autocomplete="off"
+               style="width:100%; margin-bottom:6px;" onclick="event.stopPropagation();"
+               oninput="OL.filterDashboardAssigneeOptions(this)">
+        <div class="dash-assignee-options" style="display:grid; gap:2px; max-height:260px; overflow-y:auto; min-width:180px;">
             <label style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
                 <input type="checkbox" ${selected.length === 0 ? 'checked' : ''} onclick="OL.clearDashboardAssignees(event)">
                 <span class="tiny bold">All</span>
@@ -395,7 +409,7 @@ OL.openDashboardAssigneePopover = function(event) {
                 </label>
             ` : ''}
             ${options.map(a => `
-                <label style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
+                <label data-assignee-name="${esc(a.toLowerCase())}" style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
                     <input type="checkbox" ${selected.includes(a) ? 'checked' : ''} onclick="OL.toggleDashboardAssignee(event, '${esc(a)}')">
                     <span class="tiny">${esc(a)}${a === state.currentUser?.name ? ' (you)' : ''}</span>
                 </label>
@@ -403,6 +417,18 @@ OL.openDashboardAssigneePopover = function(event) {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    setTimeout(() => popover.querySelector('input[type="text"]')?.focus(), 0);
+};
+
+// Live text filter over the assignee checkboxes (DOM-only; the popover is
+// never re-rendered while it's open, so checked state is preserved).
+OL.filterDashboardAssigneeOptions = function(input) {
+    const q = (input.value || '').toLowerCase().trim();
+    const list = input.parentElement?.querySelector('.dash-assignee-options');
+    if (!list) return;
+    list.querySelectorAll('label[data-assignee-name]').forEach(label => {
+        label.style.display = !q || label.dataset.assigneeName.includes(q) ? 'flex' : 'none';
+    });
 };
 
 OL.toggleDashboardAssignee = function(event, value) {
@@ -473,9 +499,10 @@ OL.filterTasksByDueRange = function(items, range) {
     return items.filter(item => {
         if (item._type === 'email' || item._type === 'error') return true;
         if (!item.dueDate) return false;
-        const dueStr = String(item.dueDate).slice(0, 10);
+        const dueStr = OL.localDayKey(item.dueDate);
         if (range === 'overdue') return dueStr < todayStr;
         if (range === 'today') return dueStr === todayStr;
+        if (range === 'overdue_today') return dueStr <= todayStr;
         if (range === 'week') return dueStr >= todayStr && dueStr <= endOfWeekStr;
         if (range === 'next2weeks') return dueStr >= todayStr && dueStr <= twoWeeksOutStr;
         return true;
@@ -505,13 +532,13 @@ OL.filterDashboardItems = function(items, assignees, status, types) {
 // Types filter, so it matches this page's own control instead of
 // whatever the Task Manager last left it as.
 OL.renderDashboardTaskStream = function(allItems) {
-    const { dueRange, groupBy, assignees, status, types } = OL.dashboardTaskState;
+    const { dueRange, groupBy, subGroupBy, assignees, status, types } = OL.dashboardTaskState;
     OL.showTaskComments = types.includes('comment');
 
     const todayStr = OL.localDateStr();
     const filtered = OL.sortTasksMentionsFirst(
         OL.filterDashboardItems(OL.filterTasksByDueRange(allItems, dueRange), assignees, status, types)
-            .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
+            .sort((a, b) => (OL.localDayKey(a.dueDate) || '9999').localeCompare(OL.localDayKey(b.dueDate) || '9999'))
     );
 
     if (!filtered.length) {
@@ -530,54 +557,88 @@ OL.renderDashboardTaskStream = function(allItems) {
         return `<div style="display:flex; flex-direction:column; gap:6px;">${filtered.map(renderItem).join('')}</div>`;
     }
 
-    const groups = {};
-    const groupRequestInfo = {}; // key -> {title, requestType, round, clientId}, only set for groupBy === 'request'
-    filtered.forEach(item => {
-        let key = 'Other';
-        if (groupBy === 'client') key = item.clientName || 'Client';
-        else if (groupBy === 'status') key = (item._type === 'task' || item._type === 'request') ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors');
-        else if (groupBy === 'assignee') key = item.assignee || (item._type === 'task' || item._type === 'event' ? 'Sphynx Task' : item._type === 'request' ? 'Unassigned' : 'N/A');
-        else if (groupBy === 'date') key = item.dueDate ? new Date(item.dueDate).toLocaleDateString([], { dateStyle: 'medium' }) : 'Unscheduled';
-        else if (groupBy === 'request') {
-            if (item._type === 'request') {
-                key = `req:${item.clientId}:${item.itemId}`;
-                groupRequestInfo[key] = { title: item.title, requestType: item.requestType, round: item.round, clientId: item.clientId };
-            } else if (item._type === 'task' && item.requestLineItemId) {
-                const client = state.clients?.[item.clientId];
-                const resourceLookup = (id) => (client?.projectData?.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
-                const req = client ? findRequestForTask(client, item, resourceLookup) : null;
-                if (req) {
-                    key = `req:${item.clientId}:${req.itemId}`;
-                    if (!groupRequestInfo[key]) groupRequestInfo[key] = { title: req.title, requestType: req.requestType, round: req.round, clientId: item.clientId };
-                } else {
-                    key = 'No Request';
-                }
-            } else {
-                key = 'No Request';
-            }
-        }
+    const effectiveSub = subGroupBy && subGroupBy !== 'none' && subGroupBy !== groupBy ? subGroupBy : 'none';
 
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(item);
-    });
+    const renderRows = rows => `<div style="display:flex; flex-direction:column; gap:6px;">${rows.map(renderItem).join('')}</div>`;
 
-    return Object.entries(groups).map(([groupKey, groupItems]) => {
-        const reqInfo = groupBy === 'request' ? groupRequestInfo[groupKey] : null;
-        const groupTitle = reqInfo ? reqInfo.title : groupKey;
+    return OL.groupDashboardItems(filtered, groupBy).map(g => {
+        const reqInfo = g.reqInfo;
+        const body = effectiveSub === 'none'
+            ? renderRows(g.items)
+            : `<div style="display:grid; gap:12px; padding-left:12px; border-left:2px solid rgba(var(--accent-rgb),0.2);">
+                ${OL.groupDashboardItems(g.items, effectiveSub).map(sg => `
+                    <div>
+                        <div class="tiny muted uppercase bold" style="margin-bottom:6px; display:flex; align-items:center; gap:6px; ${sg.reqInfo ? 'cursor:pointer; color:#64c6a2;' : ''}"
+                             ${sg.reqInfo ? `onclick="OL.openRequestFromTask('${esc(sg.reqInfo.clientId || '')}', '${esc(sg.reqInfo.itemId || '')}')"` : ''}>
+                            <i data-lucide="corner-down-right" style="width:12px;height:12px;"></i> ${esc(sg.label)} (${sg.items.length})
+                        </div>
+                        ${renderRows(sg.items)}
+                    </div>`).join('')}
+               </div>`;
         return `
         <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
-            <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: ${reqInfo ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 6px; display:flex; align-items:center; gap:8px; ${reqInfo ? 'cursor:pointer;' : ''}" ${reqInfo ? `onclick="OL.openRequestFromTask('${esc(reqInfo.clientId || '')}', '${esc(groupKey.split(':')[2] || '')}')" title="Open this request on the scoping sheet"` : ''}>
+            <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: ${g.overdue ? '#ef4444' : (reqInfo ? '#64c6a2' : 'var(--accent)')}; margin-bottom: 6px; display:flex; align-items:center; gap:8px; ${reqInfo ? 'cursor:pointer;' : ''}" ${reqInfo ? `onclick="OL.openRequestFromTask('${esc(reqInfo.clientId || '')}', '${esc(reqInfo.itemId || '')}')" title="Open this request on the scoping sheet"` : ''}>
                 ${reqInfo ? '<i data-lucide="git-pull-request" style="width:12px;height:12px;"></i>' : ''}
-                <span>${esc(groupTitle)}</span>
+                <span>${esc(g.label)}</span>
                 ${reqInfo ? `<span class="pill tiny soft" style="font-size:9px;">${esc((reqInfo.requestType || 'build').charAt(0).toUpperCase() + (reqInfo.requestType || 'build').slice(1))} · Round ${reqInfo.round}</span>` : ''}
-                <span class="pill tiny soft" style="font-size:10px;">${groupItems.length}</span>
+                <span class="pill tiny soft" style="font-size:10px;">${g.items.length}</span>
             </div>
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                ${groupItems.map(renderItem).join('')}
-            </div>
+            ${body}
         </div>
     `;
     }).join('');
+};
+
+// One grouping pass, reused for both the top-level group and the optional
+// sub-group. Returns [{ key, label, items, reqInfo?, overdue? }] in display
+// order. Date groups key on the item's LOCAL calendar day (OL.localDayKey)
+// so the header always matches the date shown on the row itself.
+OL.groupDashboardItems = function(items, by) {
+    const TYPE_LABELS = { task: 'Tasks', request: 'Requests', email: 'Emails', event: 'Events', error: 'Errors' };
+    const todayStr = OL.localDateStr();
+    const groups = new Map();
+
+    items.forEach(item => {
+        let key = 'Other', label = 'Other', reqInfo = null, sortKey = null, overdue = false;
+        if (by === 'client') { key = label = item.clientName || 'Client'; }
+        else if (by === 'status') { key = label = (item._type === 'task' || item._type === 'request') ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors'); }
+        else if (by === 'assignee') { key = label = item.assignee || (item._type === 'task' || item._type === 'event' ? 'Sphynx Task' : item._type === 'request' ? 'Unassigned' : 'N/A'); }
+        else if (by === 'type') { key = item._type; label = TYPE_LABELS[item._type] || item._type; }
+        else if (by === 'date') {
+            const day = OL.localDayKey(item.dueDate);
+            if (!day) { key = label = 'Unscheduled'; sortKey = '9999-99-99'; }
+            else {
+                key = sortKey = day;
+                overdue = day < todayStr && (item._type === 'task' || item._type === 'request');
+                const pretty = OL.formatDayKey(day, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                label = day === todayStr ? `Today · ${pretty}` : pretty;
+            }
+        }
+        else if (by === 'request') {
+            let req = null;
+            if (item._type === 'request') {
+                req = { itemId: item.itemId, title: item.title, requestType: item.requestType, round: item.round };
+            } else if (item._type === 'task' && item.requestLineItemId) {
+                const client = state.clients?.[item.clientId];
+                const resourceLookup = (id) => (client?.projectData?.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+                req = client ? findRequestForTask(client, item, resourceLookup) : null;
+            }
+            if (req) {
+                key = `req:${item.clientId}:${req.itemId}`;
+                label = req.title;
+                reqInfo = { itemId: req.itemId, title: req.title, requestType: req.requestType, round: req.round, clientId: item.clientId };
+            } else { key = label = 'No Request'; }
+        }
+
+        if (!groups.has(key)) groups.set(key, { key, label, items: [], reqInfo, sortKey, overdue });
+        const g = groups.get(key);
+        if (!g.reqInfo && reqInfo) g.reqInfo = reqInfo;
+        g.items.push(item);
+    });
+
+    const out = [...groups.values()];
+    if (by === 'date') out.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    return out;
 };
 
 // Compact card for an active request, in the same style as the other rows in the stream.

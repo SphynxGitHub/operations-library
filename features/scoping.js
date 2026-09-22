@@ -1639,6 +1639,10 @@ export function openRequestDetailDrawer(client, req) {
         ` : `<div class="tiny muted">No files attached to this request yet.</div>`}
       </div>
 
+      ${OL.renderDependencySection ? OL.renderDependencySection(client.id, 'request', req.id) : ''}
+
+      ${OL.renderRollupSection ? OL.renderRollupSection(client.id, 'request', req.id) : ''}
+
       <!-- LINKED EMAILS FOR REQUESTS -->
       <div style="margin-bottom: 20px; min-width: 0; width: 100%; overflow-x: hidden;">
         <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
@@ -1656,6 +1660,7 @@ export function openRequestDetailDrawer(client, req) {
 
   openModal(html);
   OL.loadLinkedEmailsForRequest(req.id);
+  if (OL.hydrateRollupSection) OL.hydrateRollupSection(client.id, 'request', req.id);
   if (window.lucide) lucide.createIcons();
 };
 

@@ -68,6 +68,142 @@ function makeSummaryTask(client, evt) {
     };
 }
 
+// ---- Zoom action items -> real tasks ----
+// sync-zoom-meetings stores each meeting's action items on the event
+// (calendar_events.zoom_action_items) instead of writing tasks into the
+// project itself. Creating them here, through the app's normal save,
+// means they can't be overwritten by an open tab's older copy, and a
+// meeting that gets linked to a project AFTER its summary arrived still
+// gets its tasks (previously those were skipped forever).
+let materializing = false;
+OL.materializeZoomActionItems = async function() {
+    if (materializing) return 0;
+    materializing = true;
+    let created = 0;
+    try {
+        if (!state.isCloudSynced) return 0;
+        if (!(state.adminMode === true || state.teamMemberMode === true)) return 0;
+        const { data: events, error } = await db.from('calendar_events')
+            .select('id, title, start, linked_client_id, zoom_action_items')
+            .eq('zoom_tasks_created', false)
+            .not('linked_client_id', 'is', null)
+            .eq('zoom_summary_processed', true)
+            .limit(50);
+        if (error) { if (!/zoom_tasks_created|zoom_action_items/.test(error.message || '')) console.warn('Zoom action item check failed:', error.message); return 0; }
+
+        const done = [];
+        for (const evt of events || []) {
+            const items = (Array.isArray(evt.zoom_action_items) ? evt.zoom_action_items : []).map(x => String(x || '').trim()).filter(Boolean);
+            const client = await loadFullClient(evt.linked_client_id);
+            if (!client?.projectData) continue;
+            if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+            // Never duplicate: skip titles already created from this meeting.
+            const have = new Set(client.projectData.clientTasks
+                .filter(t => String(t.linkedEventId) === String(evt.id) && t.source === 'zoom_summary')
+                .map(t => (t.title || '').trim().toLowerCase()));
+            const toAdd = items.filter(i => !have.has(i.toLowerCase()));
+            if (toAdd.length) {
+                await updateAndSync(() => {
+                    toAdd.forEach(item => client.projectData.clientTasks.unshift({
+                        id: uid(), title: item, name: item,
+                        status: 'Pending Sphynx Action', assignee: 'Sphynx Task', dueDate: dueTwoDaysAfter(evt.start),
+                        isClientTask: false, loggedHours: 0, createdAt: new Date().toISOString(),
+                        linkedEventId: evt.id, parentEventId: evt.id, source: 'zoom_summary'
+                    }));
+                }, evt.linked_client_id);
+                created += toAdd.length;
+            }
+            done.push(evt.id);
+        }
+        if (done.length) await db.from('calendar_events').update({ zoom_tasks_created: true }).in('id', done);
+        if (created) console.log(`🎥 Created ${created} task${created === 1 ? '' : 's'} from Zoom action items.`);
+    } catch (err) {
+        console.warn('Zoom action item check failed:', err?.message || err);
+    } finally {
+        materializing = false;
+    }
+    return created;
+};
+
+// ---- background Zoom sync (replaces clicking "Sync Zoom") ----
+// Runs the sync function quietly every 10 minutes while a staff member has
+// the app open (the ol_sync_zoom cron job covers the rest of the time),
+// then turns any new action items into tasks. Doesn't re-render whatever
+// page you're on.
+const ZOOM_SYNC_EVERY_MS = 10 * 60 * 1000;
+let zoomSyncing = false;
+OL.backgroundZoomSync = async function() {
+    if (zoomSyncing) return;
+    if (!state.isCloudSynced || !(state.adminMode === true || state.teamMemberMode === true)) return;
+    if (state.master?.zoomConnected === false) return;
+    zoomSyncing = true;
+    try {
+        const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/sync-zoom-meetings', { method: 'POST', headers: await OL.getAuthHeaders() });
+        const result = await res.json().catch(() => ({}));
+        if (res.ok) {
+            if (result.summariesPostedCount || result.recordingsToDrive || result.summariesToDrive) console.log('🎥 Zoom auto-sync:', result);
+            if (result.driveErrors) console.warn(`Zoom auto-sync: ${result.driveErrors} Drive export(s) failed — will retry next run.`);
+        } else if (res.status !== 401 && res.status !== 403) {
+            console.warn('Zoom auto-sync failed:', result.message || res.status);
+        }
+    } catch (e) {
+        console.warn('Zoom auto-sync failed:', e?.message || e);
+    } finally {
+        zoomSyncing = false;
+    }
+    await OL.materializeZoomActionItems();
+    if (location.hash.includes('calendar') && typeof OL.loadCalendarEvents === 'function') {
+        await OL.loadCalendarEvents();
+        OL.renderBusinessCalendar?.();
+    }
+};
+
+// ---- Time from the Chrome extension -> task logged time ----
+// The extension writes time_entries rows; this adds each one to its task's
+// loggedHours through the app's normal save and marks it applied, so an
+// entry is counted exactly once.
+let applyingTime = false;
+OL.applyExtensionTimeEntries = async function() {
+    if (applyingTime) return 0;
+    if (!state.isCloudSynced || !(state.adminMode === true || state.teamMemberMode === true)) return 0;
+    applyingTime = true;
+    let applied = 0;
+    try {
+        const { data, error } = await db.from('time_entries').select('*').eq('applied', false).order('created_at').limit(100);
+        if (error) { if (!/time_entries/.test(error.message || '')) console.warn('Time entry check failed:', error.message); return 0; }
+        const byClient = {};
+        (data || []).forEach(e => (byClient[e.client_id] = byClient[e.client_id] || []).push(e));
+        for (const [clientId, entries] of Object.entries(byClient)) {
+            const client = await loadFullClient(clientId);
+            const tasks = client?.projectData?.clientTasks;
+            if (!tasks) continue;
+            const ok = [];
+            await updateAndSync(() => {
+                entries.forEach(e => {
+                    const t = tasks.find(x => String(x.id) === String(e.task_id));
+                    if (!t) return;
+                    const hrs = Number(e.minutes) / 60;
+                    t.loggedHours = Number(t.loggedHours || t.hoursLogged || 0) + hrs;
+                    t.hoursLogged = t.loggedHours;
+                    if (!Array.isArray(t.timeLog)) t.timeLog = [];
+                    t.timeLog.push({ id: e.id, by: e.user_name || '', minutes: Number(e.minutes), start: e.started_at, end: e.ended_at, note: e.note || '', source: e.source });
+                    ok.push(e.id);
+                });
+            }, clientId);
+            if (ok.length) {
+                await db.from('time_entries').update({ applied: true, applied_at: new Date().toISOString() }).in('id', ok);
+                applied += ok.length;
+            }
+        }
+        if (applied) { console.log(`⏱️ Applied ${applied} time entr${applied === 1 ? 'y' : 'ies'} from the Chrome extension.`); OL.refreshTaskView?.(); }
+    } catch (err) {
+        console.warn('Time entry check failed:', err?.message || err);
+    } finally {
+        applyingTime = false;
+    }
+    return applied;
+};
+
 // ---- background check: create the summary task once a summary exists ----
 let checking = false;
 
@@ -585,6 +721,9 @@ OL.openMeetingSummaryEmail = async function(eventId) {
 
 window.OL = window.OL || {};
 window.OL.checkMeetingSummaries = OL.checkMeetingSummaries;
+window.OL.materializeZoomActionItems = OL.materializeZoomActionItems;
+window.OL.backgroundZoomSync = OL.backgroundZoomSync;
+window.OL.applyExtensionTimeEntries = OL.applyExtensionTimeEntries;
 window.OL.openMeetingSummaryEmail = OL.openMeetingSummaryEmail;
 window.OL.msUpdateTask = OL.msUpdateTask;
 window.OL.msAddTask = OL.msAddTask;
@@ -600,4 +739,8 @@ Object.assign(window.OL, {
 if (typeof window !== 'undefined' && typeof setTimeout === 'function') {
     setTimeout(() => OL.checkMeetingSummaries(), 20 * 1000);
     setInterval(() => OL.checkMeetingSummaries(), CHECK_EVERY_MS);
+    setTimeout(() => OL.backgroundZoomSync(), 45 * 1000);
+    setTimeout(() => OL.applyExtensionTimeEntries(), 15 * 1000);
+    setInterval(() => OL.applyExtensionTimeEntries(), 2 * 60 * 1000);
+    setInterval(() => OL.backgroundZoomSync(), ZOOM_SYNC_EVERY_MS);
 }

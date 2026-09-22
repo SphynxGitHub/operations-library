@@ -537,7 +537,7 @@ OL.checkGoogleAuthReturn = function() {
 OL.loadGmailFeed = async function() {
     const { data, error } = await db
         .from('gmail_messages')
-        .select('id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, archived, participants')
+        .select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, link_locked, archived, participants')
         .eq('archived', OL.commTabState.showArchived)
         .order('date', { ascending: false })
         .limit(GMAIL_FEED_LIMIT);
@@ -554,6 +554,23 @@ OL.loadGmailFeed = async function() {
     await OL.autoLinkGmailMessagesToTasks();
 };
 
+// True when an email subject is clearly about a task: the whole task title
+// appears in it, or at least 2 (and at least 60%) of the title's meaningful
+// words do. Short/generic words ("call", "the", "update") don't count.
+OL._subjectMatchesTaskTitle = function(subjectLower, title) {
+    const STOP = new Set(['the','a','an','and','or','for','to','of','in','on','with','re','fw','fwd','call','meeting','update','follow','up','task','email','new','review','check','zoom','sphynx']);
+    const clean = (str) => String(str || '').toLowerCase().replace(/^(re|fw|fwd):\s*/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const subj = clean(subjectLower);
+    const t = clean(title);
+    if (!subj || !t) return false;
+    if (t.length >= 8 && subj.includes(t)) return true;
+    const words = [...new Set(t.split(' ').filter(w => w.length > 2 && !STOP.has(w)))];
+    if (words.length < 2) return false;
+    const subjWords = new Set(subj.split(' '));
+    const hits = words.filter(w => subjWords.has(w)).length;
+    return hits >= 2 && hits / words.length >= 0.6;
+};
+
 // -------------------------------------------------------------
 // AUTO-LINK TO TASK — an email is already matched to a client at import
 // time (server-side, via that project's Team tab emails — see
@@ -566,7 +583,10 @@ OL.loadGmailFeed = async function() {
 // -------------------------------------------------------------
 OL.autoLinkGmailMessagesToTasks = async function() {
     const threads = state.master?.communications?.threads || [];
-    const candidates = threads.filter(m => m.linked_client_id && !m.linked_task_id && !m.archived && (m.participants || []).length);
+    // link_locked = a person has set or cleared this email's links by hand.
+    // Auto-linking never touches those again — this is what used to undo a
+    // manual de-link on the very next feed load.
+    const candidates = threads.filter(m => m.linked_client_id && !m.linked_task_id && !m.link_locked && !m.archived && (m.participants || []).length);
     if (!candidates.length) return;
 
     const updates = [];
@@ -576,11 +596,18 @@ OL.autoLinkGmailMessagesToTasks = async function() {
 
         const emailByAssignee = OL.buildAssigneeEmailMap(client);
         const participants = (m.participants || []).map(p => p.toLowerCase());
+        const subjectText = `${m.subject || ''}`.toLowerCase();
 
         const openTasks = (client.projectData?.clientTasks || []).filter(t => t.status !== 'Done');
+        // Two independent signals are required now. Assignee-in-participants
+        // alone matched every email from a client contact who happened to
+        // own exactly one open task (the Wealth IG problem: every email from
+        // them landed on that one task). The subject also has to actually
+        // be about the task.
         const matches = openTasks.filter(t => {
             const assigneeEmail = emailByAssignee[(t.assignee || '').toLowerCase()];
-            return assigneeEmail && participants.includes(assigneeEmail);
+            if (!assigneeEmail || !participants.includes(assigneeEmail)) return false;
+            return OL._subjectMatchesTaskTitle(subjectText, t.title || t.name || '');
         });
 
         if (matches.length === 1) {
@@ -749,8 +776,19 @@ OL.disconnectGmailAccount = function() {
 // Archiving also best-effort removes it from your real Gmail inbox, since
 // you said that's fine once you're done with something.
 // -------------------------------------------------------------
+// Gmail's inbox works per conversation, so archive / restore / delete act
+// on the whole thread (here and in Gmail) whenever the thread is known.
+OL._gmailThreadIdFor = async function(id) {
+    const cached = (state.master?.communications?.threads || []).find(m => m.id === id);
+    if (cached && cached.thread_id !== undefined) return cached.thread_id || null;
+    const { data } = await db.from('gmail_messages').select('thread_id').eq('id', id).maybeSingle();
+    return data?.thread_id || null;
+};
+
 OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
-    const { error } = await db.from('gmail_messages').update({ archived: true }).eq('id', id);
+    const threadId = await OL._gmailThreadIdFor(id);
+    const q = db.from('gmail_messages').update({ archived: true });
+    const { error } = threadId ? await q.eq('thread_id', threadId) : await q.eq('id', id);
     if (error) { alert('Failed to archive: ' + error.message); return; }
 
     if (alsoInGmail) {
@@ -760,7 +798,7 @@ OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
         fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/archive-gmail-message", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({ id })
+            body: JSON.stringify({ id, threadId })
         }).then(res => OL.handleGmailActionResponse(res, 'Archived'))
           .catch(err => console.warn('Could not archive in Gmail (still archived in-app):', err));
     }
@@ -771,7 +809,9 @@ OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
 };
 
 OL.unarchiveGmailMessage = async function(id, alsoInGmail = true) {
-    const { error } = await db.from('gmail_messages').update({ archived: false }).eq('id', id);
+    const threadId = await OL._gmailThreadIdFor(id);
+    const q = db.from('gmail_messages').update({ archived: false });
+    const { error } = threadId ? await q.eq('thread_id', threadId) : await q.eq('id', id);
     if (error) { alert('Failed to move back to inbox: ' + error.message); return; }
 
     // 🚀 THE FIX: this used to be app-side only — archive removed the
@@ -783,7 +823,7 @@ OL.unarchiveGmailMessage = async function(id, alsoInGmail = true) {
         fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/unarchive-gmail-message", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({ id })
+            body: JSON.stringify({ id, threadId })
         }).then(res => OL.handleGmailActionResponse(res, 'Restored'))
           .catch(err => console.warn('Could not restore in Gmail (still restored in-app):', err));
     }
@@ -799,7 +839,8 @@ OL.unarchiveGmailMessage = async function(id, alsoInGmail = true) {
 // since this isn't reversible from this app once the row is gone.
 // -------------------------------------------------------------
 OL.deleteGmailMessage = async function(id, alsoInGmail = true) {
-    if (!confirm('Delete this email? This removes it from Operations Library' + (alsoInGmail ? ' and moves it to Trash in Gmail.' : '.'))) return;
+    if (!confirm('Delete this conversation? This removes it from Operations Library' + (alsoInGmail ? ' and moves it to Trash in Gmail.' : '.'))) return;
+    const threadId = await OL._gmailThreadIdFor(id);
 
     if (alsoInGmail) {
         // The delete function only accepts signed-in Sphynx admins and team members. This is still
@@ -809,12 +850,22 @@ OL.deleteGmailMessage = async function(id, alsoInGmail = true) {
         fetch("https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/delete-gmail-message", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({ id })
+            body: JSON.stringify({ id, threadId })
         }).then(res => OL.handleGmailActionResponse(res, 'Deleted'))
           .catch(err => console.warn('Could not delete in Gmail (still deleted in-app):', err));
     }
 
-    const { error } = await db.from('gmail_messages').delete().eq('id', id);
+    // Rows that carry links or a note are kept (archived) so a task's linked
+    // email history never silently vanishes; everything else is removed.
+    let rows = [{ id }];
+    if (threadId) {
+        const { data } = await db.from('gmail_messages').select('id, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, note').eq('thread_id', threadId);
+        if (data?.length) rows = data;
+    }
+    const keep = rows.filter(r => r.id !== id && (r.linked_client_id || r.linked_task_id || r.linked_resource_id || r.linked_request_id || r.linked_event_id || r.note)).map(r => r.id);
+    const drop = rows.map(r => r.id).filter(rid => !keep.includes(rid));
+    if (keep.length) await db.from('gmail_messages').update({ archived: true }).in('id', keep);
+    const { error } = await db.from('gmail_messages').delete().in('id', drop);
     if (error) { alert('Failed to delete: ' + error.message); return; }
 
     OL.closeModal();
@@ -901,7 +952,10 @@ OL.openGmailMessageModal = async function(id) {
         clientId: m.linked_client_id || '',
         resourceId: m.linked_resource_id || '',
         taskId: m.linked_task_id || '',
+        requestId: m.linked_request_id || '',
         eventId: m.linked_event_id || '',
+        threadId: m.thread_id || '',
+        hadLinks: !!(m.linked_client_id || m.linked_resource_id || m.linked_task_id || m.linked_request_id || m.linked_event_id),
         clientQuery: '',
         resourceQuery: '',
         taskQuery: '',
@@ -981,6 +1035,7 @@ OL.openGmailMessageModal = async function(id) {
                     <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
                         <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event
                     </label>
+                    <div id="gmail-thread-link-suggestion"></div>
                     <div id="gmail-link-body"></div>
                 </div>
             </div>
@@ -990,6 +1045,7 @@ OL.openGmailMessageModal = async function(id) {
 
     openModal(html);
     OL.renderGmailLinkStep();
+    OL.loadThreadLinkSuggestion(m);
 
     if (m.body_html) {
         const frame = document.getElementById('gmail-body-html-frame');
@@ -1089,47 +1145,99 @@ OL.openComposeEmailModal = function(options = {}) {
         title: options.title || '',
         to: options.to || '',
         cc: options.cc || '',
+        bcc: options.bcc || '',
         subject: options.subject || '',
         body: options.body || '',
+        bodyHtml: options.bodyHtml || '',
         quoted: options.quoted || null,
+        quotedHtml: options.quotedHtml || null,
+        quotedMeta: options.quotedMeta || '',
         threadId: options.threadId || null,
         replyToMessageId: options.replyToMessageId || null,
         linked_client_id: options.linked_client_id || null,
         linked_resource_id: options.linked_resource_id || null,
         linked_task_id: options.linked_task_id || null,
+        linked_request_id: options.linked_request_id || null,
         linked_event_id: options.linked_event_id || null,
+        attachments: [],      // from your computer: { filename, mimeType, contentBase64, size }
+        projectFiles: [],     // from the project (Drive): { name, url } — sent as links
+        includeSignature: true,
         onSent: typeof options.onSent === 'function' ? options.onSent : null
     };
     const st = OL._composeState;
     const isReply = !!st.replyToMessageId;
+    const templates = state.master?.emailTemplates || [];
+    const startHtml = st.bodyHtml || (st.body ? OL.plainTextToHtml(st.body) : '');
 
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">${st.title ? esc(st.title) : (isReply ? '↩ Reply' : '✉️ Compose Email')}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:640px; width:100%;">
+        <div class="modal-body" style="max-width:760px; width:100%;">
             <div style="display:grid; gap:10px;">
+                <div class="tiny muted">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>
                 <div>
                     <label class="tiny muted bold" style="display:block; margin-bottom:2px;">To</label>
                     <input type="text" id="compose-email-to" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.to)}" placeholder="name@example.com">
                 </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Cc</label>
-                    <input type="text" id="compose-email-cc" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.cc)}" placeholder="optional, comma-separated">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Cc</label>
+                        <input type="text" id="compose-email-cc" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.cc)}" placeholder="optional, comma-separated">
+                    </div>
+                    <div>
+                        <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Bcc</label>
+                        <input type="text" id="compose-email-bcc" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.bcc)}" placeholder="optional">
+                    </div>
                 </div>
                 <div>
                     <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Subject</label>
                     <input type="text" id="compose-email-subject" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.subject)}">
                 </div>
                 <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Message</label>
-                    <textarea id="compose-email-body" class="modal-input" rows="10" style="width:100%; box-sizing:border-box;">${esc(st.body)}</textarea>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; gap:8px; flex-wrap:wrap;">
+                        <label class="tiny muted bold">Message</label>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <select class="modal-input tiny" style="width:auto;" onchange="if(this.value){ OL.applyEmailTemplate(this.value); this.value=''; }">
+                                <option value="">${templates.length ? 'Insert template…' : 'No templates yet'}</option>
+                                ${templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}
+                            </select>
+                            <button type="button" class="btn tiny soft" onclick="OL.saveComposeAsTemplate()" title="Save this subject + message as a reusable template">Save as template</button>
+                            <button type="button" class="btn tiny soft" onclick="OL.openEmailTemplatesManager()" title="Edit or delete templates"><i data-lucide="settings-2" style="width:11px;height:11px;"></i></button>
+                        </div>
+                    </div>
+                    ${OL.renderRichTextField({ id: 'compose-email-body', html: startHtml, minHeight: 200, placeholder: 'Write your message…' })}
                 </div>
-                ${st.quoted ? `
+
+                <div style="padding:8px 10px; border:1px dashed var(--line); border-radius:6px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                        <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                            <input type="checkbox" id="compose-include-signature" checked onchange="OL._composeState.includeSignature = this.checked; OL.renderComposeSignaturePreview();">
+                            <span class="bold">Signature</span>
+                        </label>
+                        <button type="button" class="btn tiny soft" onclick="OL.openMySignatureEditor()">Edit my signature</button>
+                    </div>
+                    <div id="compose-signature-preview" class="tiny muted ol-richtext-view" style="margin-top:6px;"></div>
+                </div>
+
+                <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span class="tiny bold"><i data-lucide="paperclip" style="width:11px;height:11px;"></i> Attachments</span>
+                        <label class="btn tiny soft" style="cursor:pointer;">From computer
+                            <input type="file" multiple style="display:none;" onchange="OL.addComposeAttachments(this.files); this.value='';">
+                        </label>
+                        <button type="button" class="btn tiny soft" onclick="OL.openComposeProjectFilePicker()">From project files</button>
+                        <span class="tiny muted">PDF, images, Office docs, CSV/TXT · up to 5 files, 10 MB each</span>
+                    </div>
+                    <div id="compose-attachments-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;"></div>
+                    <div id="compose-project-file-picker"></div>
+                </div>
+
+                ${st.quoted || st.quotedHtml ? `
                     <details>
-                        <summary class="tiny muted" style="cursor:pointer;">Quoted original message</summary>
-                        <div class="tiny muted" style="white-space:pre-wrap; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; margin-top:4px; max-height:200px; overflow:auto;">${esc(st.quoted)}</div>
+                        <summary class="tiny muted" style="cursor:pointer;">Quoted original message (included when sent)</summary>
+                        <div class="tiny muted" style="white-space:pre-wrap; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; margin-top:4px; max-height:200px; overflow:auto;">${esc(st.quoted || '')}</div>
                     </details>
                 ` : ''}
                 ${!isReply ? `
@@ -1155,7 +1263,222 @@ OL.openComposeEmailModal = function(options = {}) {
         </div>
     `;
     OL.showOverlayModal(html);
+    OL.renderComposeSignaturePreview();
+    OL.renderComposeAttachments();
+    if (window.lucide) lucide.createIcons();
     document.getElementById(isReply ? 'compose-email-body' : 'compose-email-to')?.focus();
+};
+
+// ---- Signature: one per Sphynx team member, picked by who's signed in ----
+OL._myTeamCard = function() {
+    const me = OL.getCurrentUserName ? OL.getCurrentUserName() : state.currentUser?.name;
+    return (state.master?.sphynxTeam || []).find(m => m.name === me) || null;
+};
+OL.getMySignatureHtml = function() {
+    const card = OL._myTeamCard();
+    if (card?.emailSignatureHtml) return OL.sanitizeCommentHtml(card.emailSignatureHtml);
+    if (!card) return '';
+    // Sensible default until someone writes their own.
+    return [`<strong>${esc(card.name)}</strong>`, card.title || card.role ? esc(card.title || card.role) : '', 'Sphynx Automation', card.email ? esc(card.email) : '']
+        .filter(Boolean).join('<br>');
+};
+OL.renderComposeSignaturePreview = function() {
+    const box = document.getElementById('compose-signature-preview');
+    if (!box) return;
+    const on = OL._composeState?.includeSignature !== false;
+    const sig = OL.getMySignatureHtml();
+    box.innerHTML = on ? (sig || '<em>No team card found for the signed-in account — add yourself on the Sphynx Team page to get a signature.</em>') : '<em>Not included.</em>';
+};
+OL.openMySignatureEditor = function() {
+    const card = OL._myTeamCard();
+    const box = document.getElementById('compose-signature-preview');
+    if (!card || !box) { alert('The signed-in account has no Sphynx Team card yet, so there is nowhere to save a signature.'); return; }
+    box.innerHTML = `
+        ${OL.renderRichTextField({ id: 'compose-signature-editor', html: OL.getMySignatureHtml(), minHeight: 80 })}
+        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
+            <button type="button" class="btn tiny soft" onclick="OL.renderComposeSignaturePreview()">Cancel</button>
+            <button type="button" class="btn tiny primary" onclick="OL.saveMySignature()">Save signature</button>
+        </div>`;
+    if (window.lucide) lucide.createIcons();
+};
+OL.saveMySignature = function() {
+    const card = OL._myTeamCard();
+    const ed = document.getElementById('compose-signature-editor');
+    if (!card || !ed) return;
+    updateAndSync(() => { card.emailSignatureHtml = OL.sanitizeCommentHtml(ed.innerHTML); });
+    OL.renderComposeSignaturePreview();
+};
+
+// ---- Attachments ----
+OL.COMPOSE_ALLOWED_TYPES = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+    txt: 'text/plain', csv: 'text/csv', doc: 'application/msword', xls: 'application/vnd.ms-excel',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+};
+OL.addComposeAttachments = async function(fileList) {
+    const st = OL._composeState;
+    if (!st) return;
+    for (const file of Array.from(fileList || [])) {
+        if (st.attachments.length >= 5) { alert('At most 5 attachments.'); break; }
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const mimeType = OL.COMPOSE_ALLOWED_TYPES[ext];
+        if (!mimeType) { alert(`${file.name}: that file type can't be attached. Share it as a project (Drive) file instead.`); continue; }
+        if (file.size > 10 * 1024 * 1024) { alert(`${file.name} is over 10 MB.`); continue; }
+        const total = st.attachments.reduce((n, a) => n + a.size, 0) + file.size;
+        if (total > 15 * 1024 * 1024) { alert('Attachments can total at most 15 MB.'); break; }
+        const contentBase64 = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result).split(',')[1] || '');
+            r.onerror = () => rej(r.error);
+            r.readAsDataURL(file);
+        });
+        st.attachments.push({ filename: file.name, mimeType, contentBase64, size: file.size });
+    }
+    OL.renderComposeAttachments();
+};
+OL.removeComposeAttachment = function(kind, idx) {
+    const st = OL._composeState;
+    if (!st) return;
+    (kind === 'file' ? st.attachments : st.projectFiles).splice(idx, 1);
+    OL.renderComposeAttachments();
+};
+OL.renderComposeAttachments = function() {
+    const box = document.getElementById('compose-attachments-list');
+    const st = OL._composeState;
+    if (!box || !st) return;
+    const chip = (label, sub, kind, i) => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">${label} <span class="muted" style="font-size:9px;">${sub}</span><button type="button" class="btn tiny ghost" style="padding:0 3px;" onclick="OL.removeComposeAttachment('${kind}', ${i})">✕</button></span>`;
+    box.innerHTML = [
+        ...st.attachments.map((a, i) => chip(`📎 ${esc(a.filename)}`, `${Math.max(1, Math.round(a.size / 1024))} KB`, 'file', i)),
+        ...st.projectFiles.map((f, i) => chip(`🔗 ${esc(f.name)}`, 'Drive link', 'project', i))
+    ].join('') || '<span class="tiny muted">None.</span>';
+};
+// Project (Drive) files from the linked task/request/resource and its
+// rollup. Sent as links (with the file name) in the message rather than as
+// copies, so the recipient always gets the current version.
+OL.openComposeProjectFilePicker = function() {
+    const st = OL._composeState;
+    const box = document.getElementById('compose-project-file-picker');
+    if (!st || !box) return;
+    const clientId = st.linked_client_id || document.getElementById('compose-email-client')?.value || '';
+    const client = state.clients?.[clientId];
+    if (!client) { box.innerHTML = '<div class="tiny muted" style="margin-top:6px;">Pick a project first.</div>'; return; }
+    const pdata = client.projectData || {};
+    const files = [];
+    const add = (f, from) => f?.url && !files.some(x => x.url === f.url) && files.push({ name: f.name || 'File', url: f.url, from });
+    (pdata.clientTasks || []).forEach(t => (t.driveFiles || []).forEach(f => add(f, t.title || t.name || 'Task')));
+    (OL.listProjectRequests ? OL.listProjectRequests(client) : []).forEach(r => (r.driveFiles || []).forEach(f => add(f, 'Request: ' + (r.name || ''))));
+    (pdata.localResources || []).forEach(r => (r.files || []).forEach(f => add(f, 'Resource: ' + (r.name || ''))));
+    // The linked task's own files first.
+    files.sort((a, b) => {
+        const t = (pdata.clientTasks || []).find(x => String(x.id) === String(st.linked_task_id));
+        const inT = f => (t?.driveFiles || []).some(d => d.url === f.url) ? 0 : 1;
+        return inT(a) - inT(b);
+    });
+    box.innerHTML = `
+        <div style="margin-top:6px; max-height:180px; overflow:auto; display:grid; gap:3px; border-top:1px dashed var(--line); padding-top:6px;">
+            ${files.length ? files.map((f, i) => `
+                <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="checkbox" ${st.projectFiles.some(p => p.url === f.url) ? 'checked' : ''} onchange="OL.toggleComposeProjectFile(${i}, this.checked)">
+                    <span style="flex:1;">${esc(f.name)}</span><span class="muted" style="font-size:9px;">${esc(f.from)}</span>
+                </label>`).join('') : '<span class="tiny muted">No Drive files on this project yet.</span>'}
+        </div>`;
+    OL._composeProjectFileOptions = files;
+};
+OL.toggleComposeProjectFile = function(i, on) {
+    const st = OL._composeState;
+    const f = (OL._composeProjectFileOptions || [])[i];
+    if (!st || !f) return;
+    st.projectFiles = st.projectFiles.filter(p => p.url !== f.url);
+    if (on) st.projectFiles.push({ name: f.name, url: f.url });
+    OL.renderComposeAttachments();
+};
+
+// ---- Templates (workspace_masters.email_templates) ----
+// Merge fields: {{client_name}} {{first_name}} {{my_name}} {{my_first_name}} {{today}}
+OL._fillTemplateFields = function(text) {
+    const st = OL._composeState || {};
+    const client = state.clients?.[st.linked_client_id || document.getElementById('compose-email-client')?.value || ''];
+    const toEmail = (document.getElementById('compose-email-to')?.value || '').split(',')[0].trim().toLowerCase();
+    const contact = (client?.projectData?.teamMembers || []).find(m => (m.email || '').toLowerCase() === toEmail);
+    const me = OL.getCurrentUserName ? OL.getCurrentUserName() : '';
+    const map = {
+        client_name: client?.meta?.name || '',
+        first_name: (contact?.name || '').split(' ')[0] || '',
+        my_name: me, my_first_name: (me || '').split(' ')[0],
+        today: new Date().toLocaleDateString([], { dateStyle: 'long' })
+    };
+    return String(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in map ? esc(map[k]) : m));
+};
+OL.applyEmailTemplate = function(id) {
+    const t = (state.master?.emailTemplates || []).find(x => x.id === id);
+    if (!t) return;
+    const ed = document.getElementById('compose-email-body');
+    const subj = document.getElementById('compose-email-subject');
+    if (subj && t.subject && !subj.value.trim()) subj.value = OL._fillTemplateFields(t.subject).replace(/&amp;/g, '&');
+    if (ed) ed.innerHTML = OL._fillTemplateFields(OL.sanitizeCommentHtml(t.html || '')) + (ed.innerHTML.trim() ? '<br>' + ed.innerHTML : '');
+};
+OL.saveComposeAsTemplate = function() {
+    if (!state.masterHasEmailTemplates) { alert('Run the email_templates migration first — templates can’t be saved until that column exists.'); return; }
+    const name = prompt('Template name:');
+    if (!name) return;
+    const html = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '');
+    const subject = document.getElementById('compose-email-subject')?.value || '';
+    updateAndSync(() => {
+        if (!state.master.emailTemplates) state.master.emailTemplates = [];
+        state.master.emailTemplates.push({ id: 'et-' + Date.now(), name: name.trim(), subject, html, createdBy: OL.getCurrentUserName ? OL.getCurrentUserName() : '' });
+    });
+    alert(`Saved "${name.trim()}". Tip: use {{first_name}}, {{client_name}} or {{my_first_name}} in a template and they fill in automatically.`);
+};
+OL.openEmailTemplatesManager = function() {
+    const box = document.getElementById('compose-project-file-picker');
+    if (!box) return;
+    const list = state.master?.emailTemplates || [];
+    box.innerHTML = `
+        <div style="margin-top:6px; border-top:1px dashed var(--line); padding-top:6px; display:grid; gap:4px;">
+            <div class="tiny bold">Email templates</div>
+            ${list.length ? list.map(t => `
+                <div class="tiny" style="display:flex; align-items:center; gap:6px;">
+                    <span style="flex:1;">${esc(t.name)}${t.subject ? ` <span class="muted">— ${esc(t.subject)}</span>` : ''}</span>
+                    <button type="button" class="btn tiny soft" onclick="OL.renameEmailTemplate('${esc(t.id)}')">Rename</button>
+                    <button type="button" class="btn tiny soft" style="color:#ef4444;" onclick="OL.deleteEmailTemplate('${esc(t.id)}')">Delete</button>
+                </div>`).join('') : '<span class="tiny muted">None yet — write a message and click "Save as template".</span>'}
+            <div class="tiny muted">Merge fields: {{first_name}} {{client_name}} {{my_name}} {{my_first_name}} {{today}}</div>
+        </div>`;
+};
+OL.renameEmailTemplate = function(id) {
+    const t = (state.master?.emailTemplates || []).find(x => x.id === id);
+    const name = t && prompt('New name:', t.name);
+    if (!name) return;
+    updateAndSync(() => { t.name = name.trim(); });
+    OL.openEmailTemplatesManager();
+};
+OL.deleteEmailTemplate = function(id) {
+    if (!confirm('Delete this template?')) return;
+    updateAndSync(() => { state.master.emailTemplates = (state.master.emailTemplates || []).filter(x => x.id !== id); });
+    OL.openEmailTemplatesManager();
+};
+
+// Final HTML + plain text for sending: message, project-file links,
+// signature, then the quoted original (Gmail collapses it as usual).
+OL._buildComposeBody = function() {
+    const st = OL._composeState || {};
+    const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '');
+    let html = msgHtml;
+    if (st.projectFiles?.length) {
+        html += `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `📎 <a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>`;
+    }
+    const sig = st.includeSignature !== false ? OL.getMySignatureHtml() : '';
+    if (sig) html += `<br><div class="gmail_signature" style="color:#555;">--<br>${sig}</div>`;
+    if (st.quoted || st.quotedHtml) {
+        html += `<br><div class="gmail_quote">${st.quotedMeta ? `<div>${esc(st.quotedMeta)}</div>` : ''}<blockquote class="gmail_quote" style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${st.quotedHtml ? OL.sanitizeCommentHtml(st.quotedHtml) : OL.plainTextToHtml(st.quoted)}</blockquote></div>`;
+    }
+    let text = OL.htmlToPlainText(msgHtml);
+    if (st.projectFiles?.length) text += '\n\nFiles:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n');
+    if (sig) text += '\n\n--\n' + OL.htmlToPlainText(sig);
+    if (st.quoted) text += `\n\n${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n');
+    return { html, text, messageText: OL.htmlToPlainText(msgHtml) };
 };
 
 // The send function only accepts signed-in Sphynx admins and team members, so every call
@@ -1249,12 +1572,14 @@ OL.sendComposedEmail = async function() {
     const st = OL._composeState || {};
     const to = (document.getElementById('compose-email-to')?.value || '').trim();
     const subject = (document.getElementById('compose-email-subject')?.value || '').trim();
-    const body = document.getElementById('compose-email-body')?.value || '';
+    const built = OL._buildComposeBody();
+    const body = built.text;
     const cc = (document.getElementById('compose-email-cc')?.value || '').trim();
+    const bcc = (document.getElementById('compose-email-bcc')?.value || '').trim();
     const clientSelect = document.getElementById('compose-email-client');
     const linkedClientId = clientSelect ? clientSelect.value : st.linked_client_id;
 
-    if (!to || !subject || !body.trim()) {
+    if (!to || !subject || !built.messageText.trim()) {
         alert('To, subject, and message are all required.');
         return;
     }
@@ -1267,13 +1592,15 @@ OL.sendComposedEmail = async function() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) },
             body: JSON.stringify({
-                to, cc: cc || undefined, subject, body,
+                to, cc: cc || undefined, bcc: bcc || undefined, subject, body, bodyHtml: built.html,
+                attachments: (st.attachments || []).map(a => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 })),
                 threadId: st.threadId || undefined,
                 replyToMessageId: st.replyToMessageId || undefined,
                 linked_client_id: linkedClientId || st.linked_client_id || null,
                 linked_resource_id: st.linked_resource_id || null,
                 linked_task_id: st.linked_task_id || null,
-                linked_event_id: st.linked_event_id || null
+                linked_event_id: st.linked_event_id || null,
+                linked_request_id: st.linked_request_id || null
             })
         });
 
@@ -1328,6 +1655,9 @@ OL.openReplyToGmailMessage = async function(messageId, replyAll = false) {
         threadId: m.thread_id,
         replyToMessageId: m.id,
         quoted,
+        quotedHtml: m.body_html || null,
+        quotedMeta: `On ${m.date ? new Date(m.date).toLocaleString() : 'an earlier date'}, ${m.sender || 'the sender'} wrote:`,
+        linked_request_id: m.linked_request_id,
         linked_client_id: m.linked_client_id,
         linked_resource_id: m.linked_resource_id,
         linked_task_id: m.linked_task_id,
@@ -1503,7 +1833,9 @@ OL.renderGmailLinkStep = function() {
     });
 
     const selectedEvent = st.eventId ? OL._gmailLinkSelectedEvent : null;
-    const canLink = !!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId);
+    // Clearing every selection on an already-linked email and saving is a
+    // valid edit (= unlink), so Save stays enabled for it.
+    const canLink = !!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId || st.hadLinks);
 
     container.innerHTML = `
         <!-- Project Section -->
@@ -1742,6 +2074,7 @@ OL.setGmailLinkClient = function(id) {
     OL._gmailLinkState.taskId = '';
     OL._gmailLinkState.taskQuery = '';
     OL._gmailLinkState.taskFocused = false;
+    OL._gmailLinkState.requestId = '';
     OL._gmailLinkState.creatingTask = false;
     OL.renderGmailLinkStep();
 };
@@ -1834,7 +2167,12 @@ OL.createAndLinkGmailTask = async function() {
 
 OL.saveGmailLink = async function() {
     const st = OL._gmailLinkState;
-    if (!st || !(st.clientId || st.resourceId || st.taskId || st.eventId)) return;
+    if (!st) return;
+    // Everything cleared on a previously linked email → that's an unlink.
+    if (!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId)) {
+        if (st.hadLinks) return OL.unlinkGmailMessage();
+        return;
+    }
 
     // 1. Fetch current message record to get the full participant list, and
     // its body — copied into `note` below as a starting point the team can
@@ -1849,7 +2187,11 @@ OL.saveGmailLink = async function() {
         linked_client_id: st.clientId || null,
         linked_resource_id: st.resourceId || null,
         linked_task_id: st.taskId || null,
-        linked_event_id: st.eventId || null
+        linked_request_id: st.requestId || null,
+        linked_event_id: st.eventId || null,
+        // A person chose these links (including removing some) — auto-link
+        // and backfill must leave this row alone from now on.
+        link_locked: true
     };
 
     // Only seed the note the first time this message gets linked to a task
@@ -1880,8 +2222,8 @@ OL.saveGmailLink = async function() {
         }
     }
 
-    // 4. Auto-archive if specific enough (Project + Task/Event/Resource)
-    if (st.clientId && (st.taskId || st.eventId || st.resourceId)) {
+    // 4. Auto-archive if specific enough (Project + Task/Event/Resource/Request)
+    if (st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
         OL.closeModal();
         await OL.archiveGmailMessage(st.emailId, true);
         return;
@@ -2016,12 +2358,82 @@ OL.unlinkGmailMessage = async function() {
     const st = OL._gmailLinkState;
     if (!st) return;
 
-    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_resource_id: null, linked_task_id: null, linked_event_id: null }).eq('id', st.emailId);
+    // link_locked: true is what makes this stick — without it the next feed
+    // load's auto-link (and the project backfill) would re-link it.
+    const { error } = await db.from('gmail_messages').update({ linked_client_id: null, linked_resource_id: null, linked_task_id: null, linked_request_id: null, linked_event_id: null, link_locked: true }).eq('id', st.emailId);
     if (error) { alert('Failed to unlink: ' + error.message); return; }
 
     OL.closeModal();
     await OL.loadGmailFeed();
     OL._refreshAfterGmailAction();
+};
+
+// -------------------------------------------------------------
+// SAME-THREAD LINK SUGGESTION — when a reply arrives on a thread where an
+// earlier message was already linked, offer those links (banner + "Use
+// Same Links" button, same pattern as the recurring-error suggestion on
+// Error notes). Never applied automatically and never pre-selected: the
+// link fields start empty for the new message until you click the button.
+// -------------------------------------------------------------
+OL.loadThreadLinkSuggestion = async function(m) {
+    const box = document.getElementById('gmail-thread-link-suggestion');
+    if (!box || !m?.thread_id) return;
+    // Already linked: nothing to suggest.
+    if (m.linked_client_id || m.linked_task_id || m.linked_resource_id || m.linked_request_id || m.linked_event_id) return;
+
+    const { data, error } = await db.from('gmail_messages')
+        .select('id, date, linked_client_id, linked_resource_id, linked_task_id, linked_request_id, linked_event_id')
+        .eq('thread_id', m.thread_id)
+        .neq('id', m.id)
+        .order('date', { ascending: false })
+        .limit(20);
+    if (error || !data) return;
+    const prior = data.find(r => r.linked_client_id || r.linked_task_id || r.linked_resource_id || r.linked_request_id || r.linked_event_id);
+    if (!prior || OL._gmailLinkState?.emailId !== m.id) return;
+
+    OL._threadLinkSuggestion = prior;
+    const client = prior.linked_client_id ? state.clients?.[prior.linked_client_id] : null;
+    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(prior.linked_task_id));
+    const resource = client?.projectData?.localResources?.find(r => String(r.id) === String(prior.linked_resource_id));
+    const request = (client?.projectData?.scopingSheets || []).flatMap(sh => sh?.lineItems || []).find(i => String(i?.id) === String(prior.linked_request_id));
+    const parts = [
+        client ? `Project: ${client.meta?.name || 'Project'}` : '',
+        request ? `Request: ${request.name || request.title || 'Request'}` : '',
+        task ? `Task: ${task.title || task.name}` : '',
+        resource ? `Resource: ${resource.name}` : '',
+        prior.linked_event_id ? 'Event' : ''
+    ].filter(Boolean);
+
+    box.innerHTML = `
+        <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:14px; background:rgba(var(--accent-rgb),0.08); border:1px solid var(--accent); border-radius:8px;">
+            <i data-lucide="messages-square" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+            <div class="tiny" style="flex:1; min-width:0;">
+                An earlier message in this thread is linked to:<br>
+                <strong>${esc(parts.join(' · ') || 'a project')}</strong>
+            </div>
+            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyThreadLinkSuggestion()">Use Same Links</button>
+        </div>`;
+    if (window.lucide) lucide.createIcons();
+};
+
+// Fills the link fields from the earlier message; you still review and
+// click Save Link yourself.
+OL.applyThreadLinkSuggestion = async function() {
+    const prior = OL._threadLinkSuggestion;
+    const st = OL._gmailLinkState;
+    if (!prior || !st) return;
+    st.clientId = prior.linked_client_id || '';
+    st.resourceId = prior.linked_resource_id || '';
+    st.taskId = prior.linked_task_id || '';
+    st.requestId = prior.linked_request_id || '';
+    st.eventId = prior.linked_event_id || '';
+    if (st.eventId) {
+        const { data: evt } = await db.from('calendar_events').select('id, title, start, description').eq('id', st.eventId).maybeSingle();
+        OL._gmailLinkSelectedEvent = evt || null;
+    }
+    const box = document.getElementById('gmail-thread-link-suggestion');
+    if (box) box.innerHTML = '';
+    OL.renderGmailLinkStep();
 };
 
 window.OL.renderBusinessCommunications = OL.renderBusinessCommunications;

@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#64c6a2; --red:#ef4444; }
+  * { box-sizing: border-box; }
+  body { margin:0; width:360px; background:var(--bg); color:var(--text); font:13px/1.4 system-ui,-apple-system,sans-serif; }
+  header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+  header .who { margin-left:auto; color:var(--muted); font-size:11px; }
+  main { padding:12px; display:grid; gap:10px; }
+  input, textarea, select { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 8px; font:inherit; }
+  button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 10px; font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); color:#0b2a20; border-color:var(--accent); font-weight:700; }
+  button.danger { background:var(--red); color:#fff; border-color:var(--red); font-weight:700; }
+  button.link { background:none; border:none; color:var(--muted); padding:0; font-size:11px; text-decoration:underline; }
+  .muted { color:var(--muted); font-size:11px; }
+  .timer { background:var(--panel); border:1px solid var(--accent); border-radius:8px; padding:12px; display:grid; gap:6px; }
+  .clock { font-size:28px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+  .results { max-height:220px; overflow:auto; display:grid; gap:3px; }
+  .task { padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer; }
+  .task:hover, .task.sel { border-color:var(--accent); background:rgba(100,198,162,.08); }
+  .task .p { color:var(--muted); font-size:10px; }
+  .row { display:flex; gap:6px; align-items:center; }
+  .err { color:var(--red); font-size:11px; }
+  .entry { display:flex; justify-content:space-between; gap:6px; font-size:11px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>⏱️ OL Time Tracker</strong>
+    <span class="who" id="who"></span>
+  </header>
+
+  <!-- Signed out -->
+  <main id="login" class="hidden">
+    <div class="muted">Sign in with your Operations Library account.</div>
+    <input id="email" type="email" placeholder="you@sphynxautomation.com" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="primary" id="signin">Sign in</button>
+    <div class="err" id="login-err"></div>
+  </main>
+
+  <!-- Signed in -->
+  <main id="app" class="hidden">
+    <div class="timer hidden" id="running">
+      <div class="muted" id="run-project"></div>
+      <div><strong id="run-title"></strong></div>
+      <div class="clock" id="clock">0:00:00</div>
+      <textarea id="run-note" rows="2" placeholder="What are you working on? (optional)"></textarea>
+      <div class="row">
+        <button class="danger" id="stop" style="flex:1;">Stop & log</button>
+        <button id="discard">Discard</button>
+      </div>
+      <div class="row muted">Trim before logging: <input id="trim" type="number" min="0" step="1" value="0" style="width:60px;"> min off the end</div>
+    </div>
+
+    <div id="picker">
+      <div class="row" style="margin-bottom:6px;">
+        <input id="search" placeholder="Search tasks or projects…" autofocus>
+        <button id="reload" title="Refresh task list">↻</button>
+      </div>
+      <label class="muted row" style="gap:4px; margin-bottom:6px;"><input type="checkbox" id="mine" style="width:auto;" checked> Only my tasks</label>
+      <div class="results" id="results"><div class="muted">Loading tasks…</div></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="primary" id="start" style="flex:1;" disabled>Start timer</button>
+      </div>
+      <details style="margin-top:8px;">
+        <summary class="muted" style="cursor:pointer;">Log time manually instead</summary>
+        <div class="row" style="margin-top:6px;">
+          <input id="man-h" type="number" min="0" placeholder="h" style="width:60px;">
+          <input id="man-m" type="number" min="0" max="59" placeholder="min" style="width:70px;">
+          <button id="log-manual" disabled>Log</button>
+        </div>
+        <textarea id="man-note" rows="2" placeholder="Note (optional)" style="margin-top:6px;"></textarea>
+      </details>
+    </div>
+
+    <div class="err" id="app-err"></div>
+    <div>
+      <div class="muted" style="margin-bottom:4px;">Recent</div>
+      <div id="recent"></div>
+    </div>
+    <div class="row" style="justify-content:space-between;">
+      <button class="link" id="open-portal">Open Operations Library</button>
+      <button class="link" id="signout">Sign out</button>
+    </div>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -149,6 +149,9 @@ export function persist() {
                 team_prompt_suppressions: masterCopy.teamPromptSuppressions || []
             };
             if (state.masterHasTestTemplates) masterPayload.test_templates = masterCopy.testTemplates || [];
+            // billable_rules comes from migrations/billable_rules.sql; only saved once the column exists.
+            if (state.masterHasBillableRules) masterPayload.billable_rules = masterCopy.billableRules || [];
+            if (state.masterHasEmailTemplates) masterPayload.email_templates = masterCopy.emailTemplates || [];
             if (state.masterHasReviewDefaults) masterPayload.review_defaults = masterCopy.reviewDefaults || { days: 30, followUpEveryDays: 10 };
 
             // Only staff write the master row. A partner's or client's copy of it is a limited,
@@ -181,6 +184,16 @@ export function persist() {
                     }
                 } catch (activationErr) {
                     console.warn('Request activation rules failed:', activationErr);
+                }
+
+                // A repeating task that was just closed gets its next occurrence
+                // before this save captures the client.
+                try {
+                    if (!window.IS_GUEST && window.OL && typeof window.OL.spawnRecurringTasksFor === 'function') {
+                        window.OL.spawnRecurringTasksFor(client);
+                    }
+                } catch (recurErr) {
+                    console.warn('Recurring task spawn failed:', recurErr);
                 }
 
                 // A request whose steps are now done gets its testing checklist (and a fix task for any failed
@@ -299,6 +312,10 @@ export async function sync() {
             if (Array.isArray(masterData.synced_calendar_ids)) state.master.syncedCalendarIds = masterData.synced_calendar_ids;
             if (Array.isArray(masterData.roles)) state.master.roles = masterData.roles;
             if (Array.isArray(masterData.team_prompt_suppressions)) state.master.teamPromptSuppressions = masterData.team_prompt_suppressions;
+            state.masterHasBillableRules = Object.prototype.hasOwnProperty.call(masterData, 'billable_rules');
+            if (Array.isArray(masterData.billable_rules)) state.master.billableRules = masterData.billable_rules;
+            state.masterHasEmailTemplates = Object.prototype.hasOwnProperty.call(masterData, 'email_templates');
+            if (Array.isArray(masterData.email_templates)) state.master.emailTemplates = masterData.email_templates;
             // The test_templates column comes from 013_test_templates.sql. Until it exists, do not try to save it
             // (an unknown column would make every master save fail).
             state.masterHasTestTemplates = Object.prototype.hasOwnProperty.call(masterData, 'test_templates');
@@ -695,6 +712,28 @@ OL.localDateStr = function(d) {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+};
+
+// Local calendar day ("YYYY-MM-DD") for any stored date value. A bare
+// "YYYY-MM-DD" due date is already a calendar day and is returned as-is
+// (never run through new Date(), which parses it as UTC midnight and shows
+// the previous day in US timezones). A full timestamp (event start, email
+// date) is converted to the viewer's local day.
+OL.localDayKey = function(value) {
+    if (!value) return '';
+    const s = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    return isNaN(d) ? s.slice(0, 10) : OL.localDateStr(d);
+};
+
+// Display label for a "YYYY-MM-DD" day key, built from local parts so it
+// never shifts a day.
+OL.formatDayKey = function(key, opts = { dateStyle: 'medium' }) {
+    if (!key) return '';
+    const [y, m, d] = String(key).split('-').map(Number);
+    if (!y || !m || !d) return String(key);
+    return new Date(y, m - 1, d).toLocaleDateString([], opts);
 };
 
 // Resolves an email address against Sphynx staff and Client Team rosters.

@@ -446,9 +446,16 @@ export function openResourceModal(targetId, draftObj = null) {
     const isLockedByType = !!(typeDef && typeDef.matchedFunctionId);
     const isLockedByManual = !!res.matchedFunctionId;
     const isZap = rawType.toLowerCase() === 'zap';
-    const isCompliance = res.name === "Compliance Documents" || res.isContainer;
     const isNaming = res.name === "Naming Conventions";
     const isHierarchy = res.name === "Folder Hierarchy";
+    // Naming Conventions was provisioned with isContainer: true, which used
+    // to route it into the Compliance Documents file list instead of its own
+    // naming form. Container-ness only means "file list" for other resources.
+    const isCompliance = res.name === "Compliance Documents" || (res.isContainer && !isNaming && !isHierarchy);
+    const hierarchyRes = isNaming
+        ? (getActiveClient()?.projectData?.localResources || []).find(r => r.name === "Folder Hierarchy") || null
+        : null;
+    if (isNaming || isHierarchy) OL.repairNamingAndHierarchyTemplates(getActiveClient());
 
     const allowedWorkflowTypes = ['workflow', 'zap', 'email campaign'];
     const showWorkflowSteps = allowedWorkflowTypes.includes(String(res.type || '').toLowerCase());
@@ -884,6 +891,8 @@ const dependencyHtml = `
                               data-original="${esc(res.description || '')}"
                               onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'description', v);">${esc(res.description || '')}</textarea>
                 </div>
+
+            ${(getActiveClient() && (getActiveClient().projectData?.localResources || []).some(r => r.id === res.id) && OL.renderDependencySection) ? `<div style="margin-top:20px;">${OL.renderDependencySection(getActiveClient().id, 'resource', res.id)}${OL.renderRollupSection ? OL.renderRollupSection(getActiveClient().id, 'resource', res.id) : ''}</div>` : ''}
         
                 <!-- EMAIL COMPOSITION -->
                 <div class="card-section" style="margin-bottom:16px;background:rgba(255,255,255,0.02);padding:15px;border-radius:8px;border:1px solid var(--line);">
@@ -1510,6 +1519,7 @@ const dependencyHtml = `
     
     openModal(html);
     if (activeTab === 'internal') OL.loadLinkedEmailsIntoResourceNotes(res.id);
+    if (OL.hydrateRollupSection && getActiveClient()) OL.hydrateRollupSection(getActiveClient().id, 'resource', res.id);
     setTimeout(() => {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
@@ -2064,11 +2074,41 @@ export function handleConventionUpdate(resId, section, key, value) {
     if (res) {
         if (!res.data) res.data = {};
         if (!res.data[section]) res.data[section] = {};
-        
-        res.data[section][key] = value.trim();
-        OL.persist();
+        if ((res.data[section][key] || '') === value.trim()) return;
+        const clientId = getActiveClient()?.id;
+        OL.updateAndSync(() => { res.data[section][key] = value.trim(); }, clientId);
         console.log(`✅ Naming Convention Saved: ${section} -> ${key}`);
     }
+};
+
+// Older projects got the folder tree on "Naming Conventions" (and none on
+// "Folder Hierarchy"), plus an empty naming form. Moves the tree to where it
+// belongs and fills any blank naming fields with the standard defaults.
+// Safe to call repeatedly; only saves when something actually changed.
+export const NAMING_DEFAULTS = {
+    household: { individual: 'Last, First', jointSame: 'Last, First & Spouse First', jointDiff: 'Last, First & Spouse Last, Spouse First' },
+    folders:   { individual: 'Last, First', jointSame: 'Last, First & Spouse First', jointDiff: 'Last & Spouse Last' }
+};
+OL.repairNamingAndHierarchyTemplates = function(client) {
+    const list = client?.projectData?.localResources;
+    if (!list) return;
+    const naming = list.find(r => r.name === "Naming Conventions");
+    const hierarchy = list.find(r => r.name === "Folder Hierarchy");
+    let changed = false;
+    if (naming?.tree && hierarchy && !(hierarchy.tree && hierarchy.tree.length)) {
+        hierarchy.tree = naming.tree; delete naming.tree; changed = true;
+    }
+    if (naming) {
+        if (naming.isContainer) { delete naming.isContainer; changed = true; }
+        if (!naming.data) naming.data = {};
+        for (const [sec, fields] of Object.entries(NAMING_DEFAULTS)) {
+            if (!naming.data[sec]) naming.data[sec] = {};
+            for (const [k, v] of Object.entries(fields)) {
+                if (!naming.data[sec][k]) { naming.data[sec][k] = v; changed = true; }
+            }
+        }
+    }
+    if (changed) OL.updateAndSync(() => {}, client.id);
 };
 
 export function updateContainerFile(resId, fileIdx, field, value) {
@@ -2187,7 +2227,10 @@ OL.loadLinkedEmailsIntoResourceNotes = async function(resId) {
             <div style="flex:1; min-width:0;">
                 <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:3px;">
                     <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(senderName)}</span>
-                    <span class="tiny muted" style="flex-shrink:0;">${m.date ? new Date(m.date).toLocaleDateString([], { dateStyle: 'short' }) : ''}</span>
+                    <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                        <span class="tiny muted">${m.date ? new Date(m.date).toLocaleDateString([], { dateStyle: 'short' }) : ''}</span>
+                        <button class="btn tiny soft" style="padding:1px 4px;" title="Unlink this email from the resource" onclick="event.stopPropagation(); OL.unlinkEmailFromResource('${resId}', '${m.id}')"><i data-lucide="unlink" style="width:10px;height:10px;"></i></button>
+                    </span>
                 </div>
                 <div class="tiny bold" style="margin-bottom:2px;">${esc(m.subject || 'No Subject')}</div>
                 ${m.snippet ? `<div class="tiny muted" style="line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(m.snippet)}</div>` : ''}
@@ -2196,6 +2239,14 @@ OL.loadLinkedEmailsIntoResourceNotes = async function(resId) {
     `;
     }).join('');
     if (window.lucide) window.lucide.createIcons();
+};
+
+OL.unlinkEmailFromResource = async function(resId, messageId) {
+    if (!confirm('Unlink this email from the resource?')) return;
+    const { error } = await db.from('gmail_messages').update({ linked_resource_id: null, link_locked: true }).eq('id', messageId);
+    if (error) { alert('Failed to unlink: ' + error.message); return; }
+    const row = document.querySelector(`#resource-notes-email-rows [onclick*="${messageId}"]`);
+    if (row) row.remove();
 };
 
 // Wraps the current textarea selection in a markdown-style marker (or

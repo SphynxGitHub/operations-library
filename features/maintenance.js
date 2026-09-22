@@ -389,12 +389,15 @@ export function openMaintenanceRequestModal(itemId) {
             ${resources.length ? field('Resources it touches (optional)', `<div style="max-height:130px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:6px 8px;">
                 ${resources.map((r) => `<label class="tiny" style="display:flex; align-items:center; gap:6px; padding:2px 0;"><input type="checkbox" class="mr-res" value="${esc(r.id)}" ${covered.has(String(r.id)) ? 'checked' : ''}> ${esc(r.name || 'Untitled')}${r.type ? ` <span class="muted">(${esc(r.type)})</span>` : ''}</label>`).join('')}</div>`) : ''}
             ${field('Notes (optional)', `<textarea id="mr-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>`)}
+            ${isEdit && OL.renderDependencySection ? OL.renderDependencySection(client.id, 'request', item.id) : ''}
+            ${isEdit && OL.renderRollupSection ? OL.renderRollupSection(client.id, 'request', item.id) : ''}
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="btn primary" style="flex:1; justify-content:center;" onclick="OL.saveMaintenanceRequest(${itemId ? `'${esc(itemId)}'` : 'null'})">${isEdit ? 'Save' : 'Add to the queue'}</button>
                 ${isEdit ? `<button class="btn soft" onclick="OL.setMaintenanceRequestDone('${esc(itemId)}', ${done ? 'false' : 'true'})">${done ? 'Reopen' : 'Mark done'}</button>
                 <button class="btn soft" style="color:#ef4444;" onclick="OL.deleteMaintenanceRequest('${esc(itemId)}')">Delete</button>` : ''}
             </div>
         </div>`);
+    if (isEdit && OL.hydrateRollupSection) OL.hydrateRollupSection(client.id, 'request', item.id);
 }
 
 function readRequestForm() {

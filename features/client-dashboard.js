@@ -215,7 +215,7 @@ export function renderClientDashboard() {
                                             </span>
                                             ${task.dueDate ? `
                                                 <span style="font-size:10px;color:var(--text-dim);font-family:monospace;">
-                                                    ${new Date(task.dueDate).toLocaleDateString([],{month:'short',day:'numeric'})}
+                                                    ${OL.formatDayKey(OL.localDayKey(task.dueDate), {month:'short',day:'numeric'})}
                                                 </span>
                                             ` : ''}
                                         </div>
@@ -429,9 +429,16 @@ export function provisionSphynxTemplates(clientId) {
 
     // 📂 Admin Level
     const adminTemplates = [
-        { name: "Folder Hierarchy", type: "Admin", adminPinned: true },
         { name: "Naming Conventions", type: "Admin", adminPinned: true,
-          isContainer: true,
+          // Pre-loaded with the standard patterns; edit per client.
+          data: {
+            household: { individual: 'Last, First', jointSame: 'Last, First & Spouse First', jointDiff: 'Last, First & Spouse Last, Spouse First' },
+            folders:   { individual: 'Last, First', jointSame: 'Last, First & Spouse First', jointDiff: 'Last & Spouse Last' }
+          }
+        },
+        // The folder tree belongs to Folder Hierarchy (it used to be put on
+        // Naming Conventions, which has its own form and never showed it).
+        { name: "Folder Hierarchy", type: "Admin", adminPinned: true,
             tree: [
                 { 
                     id: "root-clients", 
@@ -472,7 +479,7 @@ export function provisionSphynxTemplates(clientId) {
                 description: "Standard Sphynx Asset.",
                 createdDate: new Date().toISOString(),
                 steps: [],
-                data: {}
+                data: temp.data || {}
             });
         }
     });
