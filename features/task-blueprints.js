@@ -260,7 +260,7 @@ OL.buildTaskFromBlueprint = function(blueprint, client, ctx) {
         status: blueprint.defaultStatus || 'Pending Sphynx Action',
         assignee,
         dueDate,
-        isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
+        isClientTask: OL.computeIsClientTask(assignee),
         loggedHours: 0,
         parentTaskId: (ctx.asSubtask && ctx.task) ? ctx.task.id : null,
         howToIds: [...(blueprint.howToIds || [])],
