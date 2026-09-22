@@ -281,7 +281,7 @@ OL.renderDailyDashboard = function() {
             </div>
         </div>
 
-        <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 25px;">
+        <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 25px;">
             <div class="card" style="padding: 15px;">
                 <div class="tiny muted uppercase bold">Active Clients</div>
                 <div style="font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 5px;">${clients.length}</div>
