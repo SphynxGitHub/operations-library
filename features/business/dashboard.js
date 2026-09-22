@@ -164,10 +164,13 @@ OL.getDashboardRequestItems = function() {
         const findResource = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
 
         (pd.scopingSheets || []).forEach(sheet => {
-            if (!sheet || sheet.status !== 'Approved') return;
+            if (!sheet) return;
             const real = (sheet.lineItems || []).filter(i => i && typeof i === 'object' && i.id !== undefined && i.id !== null && String(i.id).trim() !== ''
                 && (String(i.name || '').trim() || findResource(i.resourceId)?.name));
-            const current = getCurrentRound({ lineItems: real });
+            // Carries roundApprovals/status through so per-round approval
+            // gating (core/requests.js isRoundApproved) works — a bare
+            // {lineItems} object would make every round look unapproved.
+            const current = getCurrentRound({ lineItems: real, roundApprovals: sheet.roundApprovals, status: sheet.status });
             if (current === null) return;
 
             real.forEach(item => {

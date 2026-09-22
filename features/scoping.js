@@ -7,7 +7,7 @@
 // dependency management.
 
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
-import { getRequestTypes, getCurrentRound, isActiveItem, SHEET_STATUSES } from '../core/requests.js';
+import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 
@@ -132,13 +132,6 @@ export function renderScopingSheet() {
             <h2 style="margin:0;">${esc(client.meta.name)} Scoping Sheet</h2>
         </div>
         <div class="header-actions">
-            ${isAdmin ? `
-                <select class="tiny-select" style="width:auto;" title="Scoping sheet status"
-                        onchange="OL.setSheetStatus(this.value)">
-                    <option value="">Sheet status…</option>
-                    ${SHEET_STATUSES.map(st => `<option value="${esc(st)}" ${sheet.status === st ? 'selected' : ''}>${esc(st)}</option>`).join('')}
-                </select>
-            ` : (sheet.status ? `<span class="pill tiny accent">${esc(sheet.status)}</span>` : '')}
             <button class="btn small soft" onclick="OL.toggleScopingUnits()" style="display:flex; align-items:center; gap:6px;">
                 <i data-lucide="${showUnits ? "eye-off" : "eye"}" style="width:14px; height:14px;"></i>
                 ${showUnits ? "Hide Units" : "Show Units"}
@@ -300,8 +293,13 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
-    const isCurrentRound = sheet.status === 'Approved'
-        && getCurrentRound(sheet, i => !!OL.getResourceById(i.resourceId)) === Number(roundNum);
+    // getCurrentRound now gates on each round's own approval (isRoundApproved)
+    // internally, so the old "&& sheet.status === 'Approved'" prefix here
+    // would double-gate against the legacy sheet-wide flag specifically —
+    // dropped in favor of letting each round's own status decide.
+    const isCurrentRound = getCurrentRound(sheet, i => !!OL.getResourceById(i.resourceId)) === Number(roundNum);
+    const roundApprovalStatus = sheet.roundApprovals?.[String(roundNum)]?.status || sheet.status || '';
+    const roundIsAdmin = state.adminMode === true;
 
     return `
         <div class="round-section" style="margin-bottom: 25px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
@@ -309,6 +307,13 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                 <div class="col-expand">
                     <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
                     ${isCurrentRound ? '<span class="pill tiny accent" style="margin-left:8px;">Current</span>' : ''}
+                    ${roundIsAdmin ? `
+                        <select class="tiny-select" style="width:auto; margin-left:8px;" title="Approval status for this round"
+                                onchange="OL.setRoundApprovalStatus(${Number(roundNum)}, this.value)">
+                            <option value="">Round status…</option>
+                            ${SHEET_STATUSES.map(st => `<option value="${esc(st)}" ${roundApprovalStatus === st ? 'selected' : ''}>${esc(st)}</option>`).join('')}
+                        </select>
+                    ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}" style="margin-left:8px;">${esc(roundApprovalStatus)}</span>` : '')}
                     ${typeof OL.roundStatusHtml === 'function' ? OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound) : ''}
                 </div>
                 <div class="col-status"></div>
@@ -1873,6 +1878,46 @@ export async function setSheetStatus(newStatus) {
     renderScopingSheet();
 }
 
+// Approval, per round — see core/requests.js isRoundApproved for why this
+// exists separately from setSheetStatus: a round with no explicit entry of
+// its own inherits the legacy sheet-wide status, so existing approved
+// sheets keep behaving the same; setting a round's status here from now on
+// is what actually gates whether Sphynx work on that round is unlocked.
+export async function setRoundApprovalStatus(round, newStatus) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!client || !sheet) return;
+
+    const key = String(round);
+    const previous = sheet.roundApprovals?.[key]?.status || sheet.status || '';
+    const next = newStatus || '';
+    if (next === previous) return;
+
+    await OL.updateAndSync(() => {
+        const now = new Date().toISOString();
+        if (!sheet.roundApprovals) sheet.roundApprovals = {};
+        sheet.roundApprovals[key] = {
+            status: next,
+            statusChangedAt: now,
+            approvedAt: next === 'Approved' ? now : (sheet.roundApprovals[key]?.approvedAt || null),
+        };
+
+        if (typeof OL.runAutomationRules === 'function') {
+            OL.runAutomationRules('scoping_round_status_change', {
+                clientId: client.id,
+                client,
+                round: Number(round),
+                roundStatus: next,
+                previousRoundStatus: previous,
+                resourceName: '',
+                title: ''
+            });
+        }
+    });
+
+    renderScopingSheet();
+}
+
 function communicationAssignee(client) {
     const role = (state.master?.roles || []).find(r => /communicat/i.test(String(r?.name || '')));
     const assignment = role ? (client.projectData?.roleAssignments || []).find(a => a.roleId === role.id) : null;
@@ -2049,6 +2094,7 @@ Object.assign(window.OL, {
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
     openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
+    setRoundApprovalStatus,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest
 });

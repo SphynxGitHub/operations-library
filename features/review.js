@@ -13,6 +13,7 @@ import {
     updateRoundStates, roundStatus, setReviewDates, startReview, closeReview, openWorkInRound,
     buildClientChecklist, reviewDefaults, reviewEndFor, roundKey,
 } from '../core/conclusion.js';
+import { isRoundApproved } from '../core/requests.js';
 import { buildChecklistPdf } from '../core/checklist-pdf.js';
 import { applyClientFeedback, feedbackNeedsUpdate } from '../core/review-feedback.js';
 
@@ -54,7 +55,7 @@ function refreshScopingIfOpen() {
 
 // ---------------- the status line on a round ----------------
 export function roundStatusHtml(client, sheet, round, isCurrent = true) {
-    if (!client || !sheet || sheet.status !== 'Approved') return '';
+    if (!client || !sheet || !isRoundApproved(sheet, round)) return '';
     // A round that is not current shows a status only if it has been through review (for example "Review closed").
     if (!isCurrent && !client.projectData?.roundStates?.[roundKey(sheet.id, round)]) return '';
     const s = roundStatus(client, sheet, round, contextFor());

@@ -178,10 +178,12 @@ export function updateTestRuns(client, ctx) {
 
     // 1. a request whose steps are done gets its own checklist and a Testing task
     (pd.scopingSheets || []).forEach((sheet) => {
-        if (!sheet || sheet.status !== 'Approved') return;
+        if (!sheet) return;
         if (sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;   // client requests are plain: no testing checklist, no round review
         const real = (sheet.lineItems || []).filter((item) => item && typeof item === 'object' && !isBlank(item.id) && titleOf(item, ctx.resourceFor(item)));
-        const current = getCurrentRound({ lineItems: real });
+        // Carries roundApprovals/status through for per-round approval
+        // gating (core/requests.js isRoundApproved) — see that file for why.
+        const current = getCurrentRound({ lineItems: real, roundApprovals: sheet.roundApprovals, status: sheet.status });
         if (current === null) return;
 
         real.forEach((item) => {

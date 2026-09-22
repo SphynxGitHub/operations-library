@@ -36,7 +36,7 @@ export const SHEET_STATUSES = [
     'Declined',
 ];
 
-// The current round is the first round that still has a Do Now item open.
+// The current round is the first APPROVED round that still has a Do Now item open.
 // isReal lets callers ignore lines that are not really on the sheet.
 export function getCurrentRound(sheet, isReal = () => true) {
     let current = null;
@@ -45,17 +45,35 @@ export function getCurrentRound(sheet, isReal = () => true) {
         if (!isReal(item)) return;
         const r = parseInt(item.round, 10);
         const round = Number.isFinite(r) && r >= 1 ? r : 1;
+        if (!isRoundApproved(sheet, round)) return;   // an unapproved round never becomes "current" — see isRoundApproved
         if (current === null || round < current) current = round;
     });
     return current;
 }
 
-// True for a Do Now line in the current round of an approved sheet.
+// Approval used to be one flag for the whole sheet (sheet.status ===
+// 'Approved'), which meant approving the engagement once silently unlocked
+// every round as it came up — round 2 started the moment round 1's items
+// were done, with no separate go-ahead for round 2's own scope/price.
+// Approval is now tracked per round in sheet.roundApprovals[round].status.
+// A round with no explicit entry yet falls back to the legacy sheet-wide
+// status, so sheets approved before this change keep working exactly as
+// they did; any round given its own status going forward is gated on that
+// instead.
+export function isRoundApproved(sheet, round) {
+    const key = String(round);
+    const entry = sheet?.roundApprovals?.[key];
+    if (entry && entry.status) return entry.status === 'Approved';
+    return sheet?.status === 'Approved';
+}
+
+// True for a Do Now line in the current round of a sheet whose round is approved.
 export function isActiveItem(sheet, item, isReal = () => true) {
-    if (!sheet || sheet.status !== 'Approved' || !item || String(item.status || '') !== 'Do Now') return false;
-    const current = getCurrentRound(sheet, isReal);
+    if (!sheet || !item || String(item.status || '') !== 'Do Now') return false;
     const r = parseInt(item.round, 10);
     const round = Number.isFinite(r) && r >= 1 ? r : 1;
+    if (!isRoundApproved(sheet, round)) return false;
+    const current = getCurrentRound(sheet, isReal);
     return current !== null && round === current;
 }
 
@@ -144,7 +162,7 @@ function findResource(client, masterResources, resourceId) {
 export function listNewActivations(client, masterResources) {
     const out = [];
     (client?.projectData?.scopingSheets || []).forEach((sheet) => {
-        if (!sheet || sheet.status !== 'Approved') return;
+        if (!sheet) return;
 
         const real = [];
         (sheet.lineItems || []).forEach((item) => {
@@ -154,7 +172,10 @@ export function listNewActivations(client, masterResources) {
             if (title) real.push({ item, title });
         });
 
-        const current = getCurrentRound({ lineItems: real.map(r => r.item) });
+        // Carries roundApprovals/status along so getCurrentRound's per-round
+        // approval check (isRoundApproved) has what it needs — a bare
+        // {lineItems} object here would make every round look unapproved.
+        const current = getCurrentRound({ lineItems: real.map(r => r.item), roundApprovals: sheet.roundApprovals, status: sheet.status });
         if (current === null) return;
 
         real.forEach(({ item, title }) => {
@@ -195,10 +216,9 @@ function buildDesired(client, masterResources, opts = {}) {
             real.push({ item, idx, resource, title });
         });
 
-        // Only an approved sheet has an active round: its first round with a Do Now line open.
-        const currentRound = sheet.status === 'Approved'
-            ? getCurrentRound({ lineItems: real.map(r => r.item) })
-            : null;
+        // Active round = the first round, among this sheet's approved rounds,
+        // that still has a Do Now line open (see isRoundApproved).
+        const currentRound = getCurrentRound({ lineItems: real.map(r => r.item), roundApprovals: sheet.roundApprovals, status: sheet.status });
 
         real.forEach(({ item, idx, resource, title }) => {
             const status = String(item.status || '');

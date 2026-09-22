@@ -115,10 +115,12 @@ export function updateRoundStates(client, ctx) {
     const defaults = ctx.defaults || REVIEW_DEFAULTS;
 
     (pd.scopingSheets || []).forEach((sheet) => {
-        if (!sheet || sheet.status !== 'Approved') return;
+        if (!sheet) return;
         if (sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;   // client requests are plain: no testing checklist, no round review
         const real = (sheet.lineItems || []).filter((i) => i && typeof i === 'object' && !isBlank(i.id) && titleOf(i, ctx.resourceFor(i)));
-        const current = getCurrentRound({ lineItems: real });
+        // Carries roundApprovals/status through for per-round approval
+        // gating (core/requests.js isRoundApproved) — see that file for why.
+        const current = getCurrentRound({ lineItems: real, roundApprovals: sheet.roundApprovals, status: sheet.status });
         if (current === null) return;
 
         const key = roundKey(sheet.id, current);
