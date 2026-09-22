@@ -56,9 +56,18 @@ export function renderClientTaskManager() {
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
                     <select id="client-quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
-                        <option value="Sphynx Task" selected>Sphynx Task</option>
+                        <option value="Sphynx Task" selected>Sphynx Task (unassigned)</option>
+                        ${(state.master?.sphynxTeam || []).length ? `
+                            <optgroup label="Sphynx Team">
+                                ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                            </optgroup>
+                        ` : ''}
                         <option value="Client Task">Client Task</option>
-                        ${(client.projectData.teamMembers || []).map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                        ${(client.projectData.teamMembers || []).length ? `
+                            <optgroup label="Client Team">
+                                ${client.projectData.teamMembers.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                            </optgroup>
+                        ` : ''}
                         <optgroup label="Third-Party / Vendors">
                             ${(OL.thirdPartyAssignees || []).map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join('')}
                         </optgroup>
