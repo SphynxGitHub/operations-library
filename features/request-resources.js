@@ -103,12 +103,22 @@ function findItem(itemId) {
 async function changeResources(itemId, change) {
     const { client, item } = findItem(itemId);
     if (!client || !item) return false;
+
     if (typeof OL.applyRequestFormToItem === 'function') OL.applyRequestFormToItem(item);
     const result = change(client, item);
-    if (result === false) { OL.openRequestLineModal(itemId); return false; }
+    if (result === false) { 
+        if (typeof OL.openRequestLineModal === 'function') OL.openRequestLineModal(itemId); 
+        return false; 
+    }
+
     if (typeof OL.persist === 'function') await OL.persist();
-    OL.openRequestLineModal(itemId);
-    if (typeof document !== 'undefined' && document.getElementById('scoping-search-input') && typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
+    if (typeof OL.updateAndSync === 'function') OL.updateAndSync(() => {}, client.id);
+
+    if (typeof OL.openRequestLineModal === 'function') OL.openRequestLineModal(itemId);
+    if (typeof document !== 'undefined' && document.getElementById('scoping-search-input') && typeof window.renderScopingSheet === 'function') {
+        window.renderScopingSheet();
+    }
+    if (typeof OL.refreshActiveView === 'function') OL.refreshActiveView();
     return true;
 }
 
