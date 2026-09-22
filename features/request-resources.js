@@ -79,7 +79,23 @@ const itemIdOf = (item) => String(item.id);
 // ---------------- the actions ----------------
 function findItem(itemId) {
     const client = getActiveClient();
-    const item = (client?.projectData?.scopingSheets || []).flatMap((s) => s?.lineItems || []).find((i) => i && String(i.id) === String(itemId));
+    if (!client || !client.projectData) return { client: null, item: null };
+
+    // 1. Search scoping sheets
+    let item = (client.projectData.scopingSheets || [])
+        .flatMap((s) => s?.lineItems || [])
+        .find((i) => i && String(i.id) === String(itemId));
+
+    // 2. Fallback: Search standalone client requests
+    if (!item) {
+        item = (client.projectData.clientRequests || []).find((r) => r && String(r.id) === String(itemId));
+    }
+
+    // 3. Fallback: Search local resources
+    if (!item) {
+        item = (client.projectData.localResources || []).find((r) => r && String(r.id) === String(itemId));
+    }
+
     return { client, item };
 }
 
