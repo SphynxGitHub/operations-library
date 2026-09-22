@@ -364,7 +364,7 @@ OL.renderBusinessTaskManager = function() {
                     </div>
                 </div>
         
-                <input type="text" id="quick-task-title" class="modal-input tiny qtf-field" style="flex:2 1 260px; min-width:220px;" placeholder="Task title or deliverable description..." required>
+                <input type="text" id="quick-task-title" class="modal-input tiny qtf-field" style="flex:2 1 260px; min-width:220px; text-align: left;" placeholder="Task title or deliverable description..." required>
         
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
