@@ -265,6 +265,13 @@ OL.bulkDeleteTasks = function() {
     OL.refreshTaskView();
 };
 
+OL.isSphynxAssignee = function(assignee) {
+    if (!assignee) return true;
+    if (assignee === 'Sphynx Task' || assignee === 'Sphynx') return true;
+    const sphynxTeam = state.master?.sphynxTeam || [];
+    return sphynxTeam.some(m => m.name === assignee);
+};
+
 OL.renderBusinessTaskManager = function() {
     const main = document.getElementById("mainContent");
     if (!main) return;
