@@ -452,19 +452,27 @@ OL.toggleDashboardType = function(event, key) {
 OL.filterTasksByDueRange = function(items, range) {
     if (range === 'all') return items;
 
-    const startOfDay = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
-    const today = startOfDay(new Date());
+    // Due dates are plain "YYYY-MM-DD" strings with no time/zone. Comparing
+    // them as strings (against other local-derived "YYYY-MM-DD" strings)
+    // avoids the UTC round-trip that new Date("YYYY-MM-DD") + setHours()
+    // used to introduce — that combination re-anchors the UTC-parsed
+    // instant onto local time and silently shifts every due date back by
+    // a day in any timezone behind UTC. See OL.localDateStr.
+    const today = new Date();
+    const todayStr = OL.localDateStr(today);
     const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
+    const endOfWeekStr = OL.localDateStr(endOfWeek);
     const twoWeeksOut = new Date(today); twoWeeksOut.setDate(twoWeeksOut.getDate() + 14);
+    const twoWeeksOutStr = OL.localDateStr(twoWeeksOut);
 
     return items.filter(item => {
         if (item._type === 'email' || item._type === 'error') return true;
         if (!item.dueDate) return false;
-        const due = startOfDay(new Date(item.dueDate));
-        if (range === 'overdue') return due < today;
-        if (range === 'today') return due.getTime() === today.getTime();
-        if (range === 'week') return due >= today && due <= endOfWeek;
-        if (range === 'next2weeks') return due >= today && due <= twoWeeksOut;
+        const dueStr = String(item.dueDate).slice(0, 10);
+        if (range === 'overdue') return dueStr < todayStr;
+        if (range === 'today') return dueStr === todayStr;
+        if (range === 'week') return dueStr >= todayStr && dueStr <= endOfWeekStr;
+        if (range === 'next2weeks') return dueStr >= todayStr && dueStr <= twoWeeksOutStr;
         return true;
     });
 };
@@ -495,7 +503,7 @@ OL.renderDashboardTaskStream = function(allItems) {
     const { dueRange, groupBy, assignees, status, types } = OL.dashboardTaskState;
     OL.showTaskComments = types.includes('comment');
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = OL.localDateStr();
     const filtered = OL.sortTasksMentionsFirst(
         OL.filterDashboardItems(OL.filterTasksByDueRange(allItems, dueRange), assignees, status, types)
             .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
