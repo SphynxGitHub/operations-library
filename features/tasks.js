@@ -162,8 +162,9 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         else if (status !== 'All') statusMatch = (t.status || 'Pending Sphynx Action') === status;
 
         let assigneeMatch = true;
-        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || (!t.isClientTask && !(OL.thirdPartyAssignees || []).includes(t.assignee));
-        else if (assignee === 'Client') assigneeMatch = t.assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(t.assignee);
+        if (assignee === 'Sphynx') assigneeMatch = OL.isSphynxAssignee(t.assignee);
+        else if (assignee === 'Client') assigneeMatch = OL.computeIsClientTask(t.assignee);
+        else if (assignee === '3rdParty') assigneeMatch = (OL.thirdPartyAssignees || []).includes(t.assignee);
         else if (assignee !== 'All') assigneeMatch = t.assignee === assignee;
 
         return (titleMatch || resourceMatch) && statusMatch && assigneeMatch;
@@ -202,6 +203,19 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
             </div>
         </div>
     `).join('');
+};
+
+OL.isSphynxAssignee = function(assignee) {
+    if (!assignee) return true;
+    if (assignee === 'Sphynx Task' || assignee === 'Sphynx') return true;
+    const sphynxTeam = state.master?.sphynxTeam || [];
+    return sphynxTeam.some(m => m.name === assignee);
+};
+
+OL.computeIsClientTask = function(assignee) {
+    if (!assignee) return false;
+    if ((OL.thirdPartyAssignees || []).includes(assignee)) return false;
+    return !OL.isSphynxAssignee(assignee);
 };
 
 OL.createClientQuickTask = function(clientId) {
@@ -316,7 +330,7 @@ OL.saveClientCreateTask = function(clientId) {
             title, name: title,
             description,
             status, assignee, dueDate,
-            isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
+            isClientTask: OL.computeIsClientTask(assignee),
             loggedHours: 0,
             createdAt: new Date().toISOString()
         });
