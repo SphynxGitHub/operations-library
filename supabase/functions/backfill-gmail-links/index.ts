@@ -86,6 +86,8 @@ serve(async (req) => {
         .from("gmail_messages")
         .select("id, subject, snippet, body, participants")
         .is("linked_client_id", null)
+        // A person deliberately unlinked these — never re-link them.
+        .or("link_locked.is.null,link_locked.eq.false")
         .order("id", { ascending: true })
         .limit(PAGE_SIZE);
       if (cursor) query = query.gt("id", cursor);

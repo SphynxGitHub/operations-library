@@ -59,7 +59,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
     }
 
-    const { id } = await req.json();
+    const { id, threadId } = await req.json();
     if (!id) {
       return new Response(JSON.stringify({ error: "Missing message id" }), { status: 400, headers: corsHeaders });
     }
@@ -68,11 +68,15 @@ serve(async (req) => {
     if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(id))) {
       return new Response(JSON.stringify({ error: "Invalid message id" }), { status: 400, headers: corsHeaders });
     }
+    // Message-level ONLY: acting on one email must never change the other
+    // messages in its conversation. (threadId is accepted but ignored.)
+    const useThread = false && !!threadId;
+    const target = useThread ? `threads/${threadId}` : `messages/${id}`;
     console.log(`delete-gmail-message called by ${authz.role} ${authz.userId}`);
 
     const accessToken = await getFreshGoogleAccessToken(supabase);
 
-    const trashRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`, {
+    const trashRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${target}/trash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` }
     });

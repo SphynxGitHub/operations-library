@@ -264,10 +264,9 @@ serve(async (req) => {
         // matches are left unlinked rather than guessed.
         linked_client_id: matched.length === 1 ? matched[0].clientId : null,
         automation_processed: false,
-        // New events default to non-billable — someone has to actively
-        // mark a synced event billable, rather than every meeting counting
-        // toward billable time until someone notices and turns it off.
-        billable: false
+        // New events default to non-billable, EXCEPT coaching calls, which
+        // are billable by default. Either can be toggled by hand.
+        billable: /coaching/i.test(classifyCallType(r.title, r.description) || "")
       };
     });
 

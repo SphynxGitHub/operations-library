@@ -280,6 +280,105 @@ async function listInboxMessageIds(accessToken: string): Promise<string[]> {
   return ids;
 }
 
+// ---- Gmail -> app reconciliation ----------------------------------------
+// The sync used to only ever ADD rows. Archiving or deleting something in
+// Gmail itself never reached the app, so "bi-directional" only worked one
+// way. This pass mirrors Gmail's current state back:
+//   - a recent unarchived app row whose conversation is no longer in the
+//     Gmail inbox (archived there) -> archived in the app
+//   - one that's in Trash / gone from Gmail -> removed from the app, unless
+//     it carries links or a note (then it's archived instead, so nothing
+//     tied to a task silently disappears)
+//   - an app row archived via Gmail (archived_in_gmail) whose conversation
+//     is back in the inbox -> restored in the app
+// Sent-only messages (never in the inbox) are left alone.
+const RECONCILE_LOOKBACK_DAYS = 21;
+const RECONCILE_MAX_CHECKS = 60;
+
+async function listInboxThreadIds(accessToken: string): Promise<Set<string>> {
+  const threads = new Set<string>();
+  let pageToken: string | undefined;
+  let page = 0;
+  do {
+    const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    url.searchParams.set("q", "in:inbox");
+    url.searchParams.set("maxResults", "500");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (res.status === 401) throw new GoogleAuthError("Google rejected the token while listing the inbox.");
+    const data = await res.json();
+    (data.messages || []).forEach((m: any) => m.threadId && threads.add(m.threadId));
+    pageToken = data.nextPageToken;
+    page++;
+  } while (pageToken && page < 3);
+  return threads;
+}
+
+async function reconcileWithGmail(supabase: any, accessToken: string) {
+  const out = { archived: 0, removed: 0, restored: 0 };
+  const inboxThreads = await listInboxThreadIds(accessToken);
+  const since = new Date(Date.now() - RECONCILE_LOOKBACK_DAYS * 86400000).toISOString();
+
+  // 1. Restores: archived here because Gmail archived it, and it's back in the inbox now.
+  const { data: archivedRows } = await supabase.from("gmail_messages")
+    .select("id, thread_id")
+    .eq("archived", true).eq("archived_in_gmail", true)
+    .gte("date", since).limit(500);
+  // The conversation being in the inbox isn't enough: the app archives a
+  // single linked message while the rest of its thread stays in the inbox.
+  // Restore only messages that THEMSELVES carry the INBOX label again.
+  const restoreCandidates = (archivedRows || []).filter((r: any) => r.thread_id && inboxThreads.has(r.thread_id)).slice(0, 40);
+  const toRestore: string[] = [];
+  await Promise.all(restoreCandidates.map(async (r: any) => {
+    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${r.id}?format=minimal`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return;
+    const msg = await res.json();
+    if ((msg.labelIds || []).includes("INBOX")) toRestore.push(r.id);
+  }));
+  if (toRestore.length) {
+    await supabase.from("gmail_messages").update({ archived: false, archived_in_gmail: false }).in("id", toRestore);
+    out.restored = toRestore.length;
+  }
+
+  // 2. Archives/removals: unarchived here, conversation not in the inbox.
+  const { data: liveRows } = await supabase.from("gmail_messages")
+    .select("id, thread_id, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, note")
+    .eq("archived", false)
+    .gte("date", since)
+    .order("date", { ascending: false })
+    .limit(500);
+  const candidates = (liveRows || []).filter((r: any) => !r.thread_id || !inboxThreads.has(r.thread_id)).slice(0, RECONCILE_MAX_CHECKS);
+
+  const archiveIds: string[] = [];
+  const removeIds: string[] = [];
+  const CONC = 8;
+  for (let i = 0; i < candidates.length; i += CONC) {
+    await Promise.all(candidates.slice(i, i + CONC).map(async (row: any) => {
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${row.id}?format=minimal`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const hasLinks = !!(row.linked_client_id || row.linked_task_id || row.linked_resource_id || row.linked_request_id || row.linked_event_id || row.note);
+      if (res.status === 404) { (hasLinks ? archiveIds : removeIds).push(row.id); return; }
+      if (!res.ok) return; // transient — try again next run
+      const msg = await res.json();
+      const labels: string[] = msg.labelIds || [];
+      if (labels.includes("TRASH") || labels.includes("SPAM")) { (hasLinks ? archiveIds : removeIds).push(row.id); return; }
+      if (labels.includes("INBOX")) return;
+      if (labels.includes("SENT")) return; // sent-only, never was in the inbox
+      archiveIds.push(row.id);
+    }));
+  }
+  if (archiveIds.length) {
+    await supabase.from("gmail_messages").update({ archived: true, archived_in_gmail: true }).in("id", archiveIds);
+    out.archived = archiveIds.length;
+  }
+  if (removeIds.length) {
+    await supabase.from("gmail_messages").delete().in("id", removeIds);
+    out.removed = removeIds.length;
+  }
+  return out;
+}
+
 // ---- Project label rules: which clients want auto-labeling, and which
 // email addresses (their Team tab) identify a message as belonging to them.
 // (loadProjectRules/matchProjectRules now live in ../_shared/project-rules.ts,
@@ -347,11 +446,21 @@ serve(async (req) => {
 
     const accessToken = await getFreshGoogleAccessToken(supabase);
 
+    // 0. Mirror Gmail-side archives/deletes/restores back into the app.
+    // Runs every sync (before the "nothing new" early return below, which
+    // is what used to skip it). Failures here never block importing.
+    let reconciled = { archived: 0, removed: 0, restored: 0 };
+    try { reconciled = await reconcileWithGmail(supabase, accessToken); }
+    catch (e: any) {
+      if (e instanceof GoogleAuthError) throw e;
+      console.error("Gmail reconcile failed (import continues):", e?.message || e);
+    }
+
     // 1. List current inbox message ids (paginated)
     const inboxIds = await listInboxMessageIds(accessToken);
 
     if (inboxIds.length === 0) {
-      return new Response(JSON.stringify({ scannedCount: 0, importedCount: 0, labeledCount: 0 }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ scannedCount: 0, importedCount: 0, labeledCount: 0, reconciled }), { status: 200, headers: corsHeaders });
     }
 
     // 2. Find which ones we've already imported (chunk the .in() filter to be safe on size)
@@ -374,7 +483,7 @@ serve(async (req) => {
     const newIds = inboxIds.filter((id) => !alreadyImported.has(id));
 
     if (newIds.length === 0) {
-      return new Response(JSON.stringify({ scannedCount: inboxIds.length, importedCount: 0, labeledCount: 0 }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ scannedCount: inboxIds.length, importedCount: 0, labeledCount: 0, reconciled }), { status: 200, headers: corsHeaders });
     }
 
     // 3. Load project label-matching rules (client Gmail-label config + Team emails)
@@ -575,7 +684,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount, errorsLogged }),
+      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount, errorsLogged, reconciled }),
       { status: 200, headers: corsHeaders }
     );
 

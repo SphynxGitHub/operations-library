@@ -11,7 +11,13 @@ export const MAX_ATTACHMENTS = 5;
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;   // 10 MB each
 export const MAX_TOTAL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 // Only document and image types. This endpoint should never be a way to send arbitrary files.
-export const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "text/plain", "text/csv"];
+export const ALLOWED_MIME_TYPES = [
+  "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain", "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",   // .docx
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",         // .xlsx
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
+  "application/msword", "application/vnd.ms-excel"
+];
 
 // Line breaks in a header value would let a caller add headers of their own (for example a
 // hidden Bcc), so they are removed. Control characters go too.
@@ -84,14 +90,62 @@ function dispositionFor(filename: string): string {
 }
 
 export type MessageInput = {
-  from: string; to: string; cc?: string | null; subject: string; body: string;
+  from: string; to: string; cc?: string | null; bcc?: string | null; subject: string; body: string;
+  html?: string | null;   // when given, sent as multipart/alternative (plain text + HTML)
   inReplyTo?: string | null; references?: string | null; attachments?: Attachment[];
   boundary?: string;
 };
 
+// The text part(s): plain only (unchanged), or plain + HTML as alternatives.
+function bodyPart(m: MessageInput, altBoundary: string): { header: string; content: string } {
+  const b64 = (t: string) => wrapBase64(bytesToBase64(new TextEncoder().encode(t)));
+  if (!m.html) {
+    return { header: `Content-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64`, content: b64(m.body) };
+  }
+  const html = `<!DOCTYPE html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222;">${m.html}</body></html>`;
+  return {
+    header: `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+    content:
+      `--${altBoundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(m.body)}\r\n` +
+      `--${altBoundary}\r\nContent-Type: text/html; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(html)}\r\n` +
+      `--${altBoundary}--`
+  };
+}
+
 export function buildRawMessage(m: MessageInput): string {
   const attachments = m.attachments || [];
   const boundary = m.boundary || `sphynx-${crypto.randomUUID().replace(/-/g, "")}`;
+  const altBoundary = `${boundary}-alt`;
+  if (m.html) {
+    // HTML messages always use the part-based layout below.
+    const headers = [
+      `From: ${sanitizeHeaderValue(m.from)}`,
+      `To: ${sanitizeHeaderValue(m.to)}`,
+      ...(m.cc ? [`Cc: ${sanitizeHeaderValue(m.cc)}`] : []),
+      ...(m.bcc ? [`Bcc: ${sanitizeHeaderValue(m.bcc)}`] : []),
+      `Subject: ${encodeSubjectIfNeeded(sanitizeHeaderValue(m.subject))}`,
+      `MIME-Version: 1.0`,
+    ];
+    if (m.inReplyTo) headers.push(`In-Reply-To: ${sanitizeHeaderValue(m.inReplyTo)}`);
+    if (m.references) headers.push(`References: ${sanitizeHeaderValue(m.references)}`);
+    const bp = bodyPart(m, altBoundary);
+    if (attachments.length === 0) {
+      return headers.join("\r\n") + "\r\n" + bp.header + "\r\n\r\n" + bp.content + "\r\n";
+    }
+    const parts = [`--${boundary}\r\n${bp.header}\r\n\r\n${bp.content}`];
+    for (const a of attachments) {
+      const asciiName = a.filename.replace(/[^\x20-\x7E]/g, "_");
+      parts.push(
+        `--${boundary}\r\n` +
+        `Content-Type: ${a.mimeType}; name="${asciiName}"\r\n` +
+        `Content-Disposition: ${dispositionFor(a.filename)}\r\n` +
+        `Content-Transfer-Encoding: base64\r\n\r\n` +
+        wrapBase64(a.base64)
+      );
+    }
+    return headers.join("\r\n") + `\r\nContent-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` + parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
+  }
+
   const contentType = attachments.length === 0
     ? `Content-Type: text/plain; charset="UTF-8"`
     : `Content-Type: multipart/mixed; boundary="${boundary}"`;
@@ -101,6 +155,7 @@ export function buildRawMessage(m: MessageInput): string {
     `From: ${sanitizeHeaderValue(m.from)}`,
     `To: ${sanitizeHeaderValue(m.to)}`,
     ...(m.cc ? [`Cc: ${sanitizeHeaderValue(m.cc)}`] : []),
+    ...(m.bcc ? [`Bcc: ${sanitizeHeaderValue(m.bcc)}`] : []),
     `Subject: ${encodeSubjectIfNeeded(sanitizeHeaderValue(m.subject))}`,
     contentType,
     `MIME-Version: 1.0`,

@@ -52,7 +52,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
     }
 
-    const { id } = await req.json();
+    const { id, threadId } = await req.json();
     if (!id) {
       return new Response(JSON.stringify({ error: "Missing message id" }), { status: 400, headers: corsHeaders });
     }
@@ -61,10 +61,14 @@ serve(async (req) => {
     if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(id))) {
       return new Response(JSON.stringify({ error: "Invalid message id" }), { status: 400, headers: corsHeaders });
     }
+    // Message-level ONLY: acting on one email must never change the other
+    // messages in its conversation. (threadId is accepted but ignored.)
+    const useThread = false && !!threadId;
+    const target = useThread ? `threads/${threadId}` : `messages/${id}`;
 
     const accessToken = await getFreshGoogleAccessToken(supabase);
 
-    const modRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
+    const modRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${target}/modify`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ removeLabelIds: ["INBOX"] })
@@ -89,7 +93,8 @@ serve(async (req) => {
       throw new Error(`Gmail modify failed: ${errText}`);
     }
 
-    await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("id", id);
+    if (useThread) await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("thread_id", threadId);
+    else await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("id", id);
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
 

@@ -81,14 +81,24 @@ serve(async (req) => {
     console.log(`send-gmail-message called by ${authz.role} ${authz.userId}`);
 
     const {
-      to: rawTo, cc: rawCc, subject: rawSubject, body, threadId, replyToMessageId,
+      to: rawTo, cc: rawCc, bcc: rawBcc, subject: rawSubject, body, bodyHtml: rawBodyHtml, threadId, replyToMessageId,
       attachments: rawAttachments,
-      linked_client_id, linked_resource_id, linked_task_id, linked_event_id
+      linked_client_id, linked_resource_id, linked_task_id, linked_event_id, linked_request_id
     } = await req.json();
 
     // No line breaks or control characters in header values.
     const to = sanitizeHeaderValue(rawTo);
     const cc = sanitizeHeaderValue(rawCc);
+    const bcc = sanitizeHeaderValue(rawBcc);
+    // HTML body from the app's formatting editor (already sanitized there).
+    // Script/style/event handlers are stripped again here as a backstop.
+    const bodyHtml = rawBodyHtml
+      ? String(rawBodyHtml)
+          .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+          .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+          .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, "$1=$2#$2")
+          .slice(0, 400000)
+      : null;
     const subject = sanitizeHeaderValue(rawSubject);
 
     if (!to || !subject || !body) {
@@ -139,8 +149,10 @@ serve(async (req) => {
       from: fromAddress,
       to,
       cc: cc || null,
+      bcc: bcc || null,
       subject,
       body,
+      html: bodyHtml,
       inReplyTo: inReplyToHeader,
       references: referencesHeader,
       attachments,
@@ -184,13 +196,14 @@ serve(async (req) => {
       subject,
       snippet: body.slice(0, 200),
       body,
-      body_html: null,
+      body_html: bodyHtml,
       date: new Date().toISOString(),
       participants: [fromAddress.toLowerCase(), ...toEmails, ...ccEmails],
       linked_client_id: linked_client_id || null,
       linked_resource_id: linked_resource_id || null,
       linked_task_id: linked_task_id || null,
       linked_event_id: linked_event_id || null,
+      ...(linked_request_id ? { linked_request_id } : {}),
       sent_via_app: true
     }, { onConflict: "id", ignoreDuplicates: false });
 
