@@ -2719,6 +2719,10 @@ OL.renderRichTextField = function(opts) {
             <div id="${opts.id}" contenteditable="true" class="modal-input tiny ol-richtext-body"
                  data-placeholder="${esc(opts.placeholder || '')}"
                  style="min-height:${opts.minHeight || 90}px; max-height:520px; overflow-y:auto; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
+                 ${opts.emailTools ? `onpaste="OL.richHandlePaste(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
+                 ondragover="OL.richHandleDragOver(event)"
+                 ondrop="OL.richHandleDrop(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
+                 onclick="OL.richHandleEditorClick(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"` : ''}
                  onblur="${opts.onBlur || ''}">${opts.html || ''}</div>
         </div>`;
 };
@@ -2784,26 +2788,188 @@ OL.applyRichColor = function(editorId, color) {
 // light), and inserts it at the cursor. Stored as a data: URL in the editor;
 // the send function turns each one into a real inline attachment (cid:), which
 // is what Gmail and Outlook need to show it.
+// Picks an image from the computer and inserts it at the cursor.
 OL.richInsertImage = function(editorId, maxWidth = 600) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/png,image/jpeg,image/gif,image/webp';
-    input.onchange = async () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        if (file.size > 15 * 1024 * 1024) { alert('That image is over 15 MB. Pick a smaller one.'); return; }
-        try {
-            const dataUrl = await OL._shrinkImageFile(file, maxWidth);
-            const ed = OL.richRestoreSelection(editorId);
-            if (!ed) return;
-            document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="${esc(file.name)}" style="max-width:100%; height:auto;">`);
-            OL.richSaveSelection(editorId);
-        } catch (e) {
-            alert('Could not read that image: ' + (e?.message || e));
-        }
+    input.multiple = true;
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        if (files.length) OL._richInsertImageFiles(editorId, files, maxWidth, null);
     };
     input.click();
 };
+
+// Shared by the image button, paste and drag-and-drop. `range` is where to put
+// them (a drop point); null means the saved cursor position.
+OL._richInsertImageFiles = async function(editorId, files, maxWidth, range) {
+    const images = files.filter(f => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
+    if (!images.length) return;
+    let html = '';
+    for (const file of images) {
+        if (file.size > 15 * 1024 * 1024) { alert(`"${file.name}" is over 15 MB. Pick a smaller image.`); continue; }
+        try {
+            const dataUrl = await OL._shrinkImageFile(file, maxWidth);
+            html += `<img src="${dataUrl}" alt="${esc(file.name || 'image')}" style="max-width:100%; height:auto;">`;
+        } catch (e) {
+            alert(`Could not read "${file.name || 'that image'}": ${e?.message || e}`);
+        }
+    }
+    if (!html) return;
+    const ed = document.getElementById(editorId);
+    if (!ed) return;
+    if (range && ed.contains(range.commonAncestorContainer)) {
+        ed.focus();
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } else {
+        OL.richRestoreSelection(editorId);
+    }
+    document.execCommand('insertHTML', false, html);
+    OL.richSaveSelection(editorId);
+};
+
+// Paste: screenshots and copied image files come in as files. If the clipboard
+// also carries text (copying a whole section of a web page), the browser's own
+// paste handles it, and web images in it are kept as links.
+OL.richHandlePaste = function(e, editorId, maxWidth) {
+    const dt = e.clipboardData;
+    if (!dt) return;
+    const files = Array.from(dt.items || [])
+        .filter(it => it.kind === 'file' && /^image\//.test(it.type))
+        .map(it => it.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    if ((dt.getData('text/plain') || '').trim()) return;
+    e.preventDefault();
+    OL.richSaveSelection(editorId);
+    OL._richInsertImageFiles(editorId, files, maxWidth, null);
+};
+
+OL.richHandleDragOver = function(e) {
+    if (Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+};
+OL.richHandleDrop = function(e, editorId, maxWidth) {
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => /^image\//.test(f.type));
+    if (!files.length) return; // not an image drop: let the browser handle it
+    e.preventDefault();
+    let range = null;
+    if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    else if (document.caretPositionFromPoint) {
+        const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (p) { range = document.createRange(); range.setStart(p.offsetNode, p.offset); range.collapse(true); }
+    }
+    OL._richInsertImageFiles(editorId, files, maxWidth, range);
+};
+
+// ---- Resizing: click an image to get size buttons, a slider and a corner drag handle ----
+OL.richHandleEditorClick = function(e, editorId, maxWidth) {
+    const img = e.target && e.target.tagName === 'IMG' ? e.target : null;
+    if (img) OL._richShowImageTools(img, editorId, maxWidth);
+    else OL._richHideImageTools();
+};
+OL._richHideImageTools = function() {
+    document.getElementById('rich-img-tools')?.remove();
+    document.getElementById('rich-img-handle')?.remove();
+    document.querySelectorAll('.ol-richtext-body img[data-selected]').forEach(i => { i.removeAttribute('data-selected'); i.style.outline = ''; });
+    if (OL._richImgToolsCleanup) { OL._richImgToolsCleanup(); OL._richImgToolsCleanup = null; }
+};
+OL._richSetImageWidth = function(img, w) {
+    if (w == null) { img.removeAttribute('width'); img.style.width = ''; }
+    else { w = Math.max(24, Math.round(w)); img.setAttribute('width', String(w)); img.style.width = w + 'px'; }
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+};
+OL._richShowImageTools = function(img, editorId, maxWidth) {
+    OL._richHideImageTools();
+    const ed = document.getElementById(editorId);
+    if (!ed) return;
+    img.setAttribute('data-selected', '1');
+    img.style.outline = '2px solid var(--accent, #38bdf8)';
+    const natural = img.naturalWidth || maxWidth;
+    const limit = Math.max(24, Math.min(maxWidth, natural));
+    const current = () => Math.round(img.getBoundingClientRect().width);
+
+    const tools = document.createElement('div');
+    tools.id = 'rich-img-tools';
+    tools.style.cssText = 'position:fixed; z-index:2000; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:5px 6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:11px;';
+    const presets = [['S', 0.25], ['M', 0.5], ['L', 0.75], ['Full', 1]];
+    tools.innerHTML = presets.map(([label, f]) =>
+        `<button type="button" class="btn tiny soft" data-f="${f}" style="padding:2px 7px;" title="${Math.round(limit * f)}px wide">${label}</button>`).join('') +
+        `<input type="range" min="24" max="${limit}" value="${Math.min(current(), limit)}" style="width:110px;" title="Drag to resize">
+         <span class="rich-img-w" style="min-width:42px; opacity:.75;">${current()}px</span>
+         <button type="button" class="btn tiny soft" data-remove="1" title="Remove image" style="padding:2px 6px; color:#ef4444;">✕</button>`;
+    document.body.appendChild(tools);
+
+    const handle = document.createElement('div');
+    handle.id = 'rich-img-handle';
+    handle.title = 'Drag to resize';
+    handle.style.cssText = 'position:fixed; z-index:2001; width:12px; height:12px; background:var(--accent, #38bdf8); border:2px solid #fff; border-radius:3px; cursor:nwse-resize;';
+    document.body.appendChild(handle);
+
+    const slider = tools.querySelector('input[type=range]');
+    const label = tools.querySelector('.rich-img-w');
+    const place = () => {
+        const r = img.getBoundingClientRect();
+        const er = ed.getBoundingClientRect();
+        // hide the tools if the picture has scrolled out of the editor
+        const visible = r.bottom > er.top && r.top < er.bottom;
+        tools.style.display = handle.style.display = visible ? '' : 'none';
+        tools.style.left = Math.max(4, Math.min(r.left, window.innerWidth - tools.offsetWidth - 4)) + 'px';
+        tools.style.top = (r.bottom + 6 + tools.offsetHeight > window.innerHeight ? Math.max(4, r.top - tools.offsetHeight - 6) : r.bottom + 6) + 'px';
+        handle.style.left = (r.right - 7) + 'px';
+        handle.style.top = (r.bottom - 7) + 'px';
+        label.textContent = current() + 'px';
+        slider.value = String(Math.min(current(), limit));
+    };
+    place();
+
+    tools.addEventListener('mousedown', ev => { if (ev.target !== slider) ev.preventDefault(); });
+    tools.addEventListener('click', ev => {
+        const b = ev.target.closest('button');
+        if (!b) return;
+        if (b.dataset.remove) { img.remove(); OL._richHideImageTools(); return; }
+        const f = Number(b.dataset.f);
+        OL._richSetImageWidth(img, f >= 1 ? limit : limit * f);
+        place();
+    });
+    slider.addEventListener('input', () => { OL._richSetImageWidth(img, Number(slider.value)); place(); });
+
+    handle.addEventListener('mousedown', ev => {
+        ev.preventDefault();
+        const startX = ev.clientX, startW = current();
+        const move = (m) => { OL._richSetImageWidth(img, Math.min(limit, Math.max(24, startW + (m.clientX - startX)))); place(); };
+        const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+    });
+
+    const onScroll = () => place();
+    const onDocDown = (ev) => {
+        if (tools.contains(ev.target) || ev.target === handle || ev.target === img) return;
+        OL._richHideImageTools();
+    };
+    const onKey = (ev) => {
+        if ((ev.key === 'Delete' || ev.key === 'Backspace') && document.activeElement !== slider && img.isConnected && img.hasAttribute('data-selected')) {
+            ev.preventDefault(); img.remove(); OL._richHideImageTools();
+        } else if (ev.key === 'Escape') OL._richHideImageTools();
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    document.addEventListener('mousedown', onDocDown, true);
+    document.addEventListener('keydown', onKey, true);
+    // If the editor is closed or re-rendered, drop the tools too.
+    const watch = setInterval(() => { if (!img.isConnected || !ed.isConnected) OL._richHideImageTools(); }, 500);
+    OL._richImgToolsCleanup = () => {
+        window.removeEventListener('scroll', onScroll, true);
+        window.removeEventListener('resize', onScroll);
+        document.removeEventListener('mousedown', onDocDown, true);
+        document.removeEventListener('keydown', onKey, true);
+        clearInterval(watch);
+    };
+};
+
 OL._shrinkImageFile = function(file, maxWidth) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
