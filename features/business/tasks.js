@@ -2895,6 +2895,15 @@ OL.richHandleDrop = function(e, editorId, maxWidth) {
 };
 
 // ---- Resizing: click an image to get size buttons, a slider and a corner drag handle ----
+// The controls sit on document.body above every window: modals use z-index 10000, and the
+// first version put these at 2000, so they opened hidden BEHIND the compose window.
+(function addRichImageStyles() {
+    if (document.getElementById('rich-img-style')) return;
+    const st = document.createElement('style');
+    st.id = 'rich-img-style';
+    st.textContent = '.ol-richtext-body img { cursor: pointer; } .ol-richtext-body img:hover { outline: 2px dashed rgba(56,189,248,.7); outline-offset: 2px; }';
+    document.head.appendChild(st);
+})();
 OL.richHandleEditorClick = function(e, editorId, maxWidth) {
     const img = e.target && e.target.tagName === 'IMG' ? e.target : null;
     if (img) OL._richShowImageTools(img, editorId, maxWidth);
@@ -2924,7 +2933,7 @@ OL._richShowImageTools = function(img, editorId, maxWidth) {
 
     const tools = document.createElement('div');
     tools.id = 'rich-img-tools';
-    tools.style.cssText = 'position:fixed; z-index:2000; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:5px 6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:11px;';
+    tools.style.cssText = 'position:fixed; z-index:100050; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:5px 6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:11px;';
     const presets = [['S', 0.25], ['M', 0.5], ['L', 0.75], ['Full', 1]];
     tools.innerHTML = presets.map(([label, f]) =>
         `<button type="button" class="btn tiny soft" data-f="${f}" style="padding:2px 7px;" title="${Math.round(limit * f)}px wide">${label}</button>`).join('') +
@@ -2936,7 +2945,7 @@ OL._richShowImageTools = function(img, editorId, maxWidth) {
     const handle = document.createElement('div');
     handle.id = 'rich-img-handle';
     handle.title = 'Drag to resize';
-    handle.style.cssText = 'position:fixed; z-index:2001; width:12px; height:12px; background:var(--accent, #38bdf8); border:2px solid #fff; border-radius:3px; cursor:nwse-resize;';
+    handle.style.cssText = 'position:fixed; z-index:100051; width:12px; height:12px; background:var(--accent, #38bdf8); border:2px solid #fff; border-radius:3px; cursor:nwse-resize;';
     document.body.appendChild(handle);
 
     const slider = tools.querySelector('input[type=range]');
