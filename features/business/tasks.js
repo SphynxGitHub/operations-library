@@ -2598,19 +2598,48 @@ OL.execCommentCommand = function(command) {
 // paste from somewhere else smuggle in a <script>, an onerror handler, or
 // a javascript: link.
 OL._ALLOWED_COMMENT_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'UL', 'OL', 'LI', 'BR', 'A', 'DIV', 'SPAN', 'P']);
-OL.sanitizeCommentHtml = function(html) {
+// Colors are allowed everywhere (a text color can't run anything). Images
+// only when the caller asks for them ({ images: true }: the email message
+// and signature), and only as an uploaded picture (data:image/png|jpeg|gif|
+// webp;base64) or an https:// address.
+OL._SAFE_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
+OL._SAFE_IMG_SRC_RE = /^(data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]+|https:\/\/[^\s"'<>]+)$/i;
+OL.sanitizeCommentHtml = function(html, opts = {}) {
+    const allowImages = opts.images === true;
     const container = document.createElement('div');
     container.innerHTML = html || '';
 
     const walk = (node) => {
         Array.from(node.childNodes).forEach((child) => {
             if (child.nodeType === 1) { // element
+                // <font color="red"> (what some browsers produce for text color) -> <span style="color:red">
+                if (child.tagName === 'FONT') {
+                    const span = document.createElement('span');
+                    const c = (child.getAttribute('color') || '').trim();
+                    if (c && OL._SAFE_COLOR_RE.test(c)) span.style.color = c;
+                    while (child.firstChild) span.appendChild(child.firstChild);
+                    node.replaceChild(span, child);
+                    child = span;
+                }
+                if (child.tagName === 'IMG') {
+                    const src = (child.getAttribute('src') || '').trim();
+                    if (!allowImages || !OL._SAFE_IMG_SRC_RE.test(src)) { node.removeChild(child); return; }
+                    const width = parseInt(child.getAttribute('width') || child.style.width || '', 10);
+                    const alt = child.getAttribute('alt') || '';
+                    Array.from(child.attributes).forEach(a => child.removeAttribute(a.name));
+                    child.setAttribute('src', src.replace(/\s+/g, ''));
+                    if (width > 0 && width <= 1200) child.setAttribute('width', String(width));
+                    if (alt) child.setAttribute('alt', alt.slice(0, 200));
+                    child.setAttribute('style', 'max-width:100%; height:auto;');
+                    return;
+                }
                 if (!OL._ALLOWED_COMMENT_TAGS.has(child.tagName)) {
                     // Unwrap: keep its contents, drop the tag itself
                     while (child.firstChild) node.insertBefore(child.firstChild, child);
                     node.removeChild(child);
                     return;
                 }
+                const color = child.style?.color || '';
                 Array.from(child.attributes).forEach((attr) => {
                     if (child.tagName === 'A' && attr.name === 'href') {
                         const val = attr.value.trim();
@@ -2620,10 +2649,12 @@ OL.sanitizeCommentHtml = function(html) {
                             child.setAttribute('target', '_blank');
                             child.setAttribute('rel', 'noopener noreferrer');
                         }
-                    } else if (attr.name !== 'href') {
+                    } else if (!(child.tagName === 'A' && (attr.name === 'target' || attr.name === 'rel'))) {
                         child.removeAttribute(attr.name);
                     }
                 });
+                // Keep only a text color, nothing else from style.
+                if (color && OL._SAFE_COLOR_RE.test(color.replace(/\s+/g, ' ').trim())) child.style.color = color;
                 walk(child);
             } else if (child.nodeType !== 3) { // not an element, not plain text (comments, etc.)
                 node.removeChild(child);
@@ -2670,12 +2701,136 @@ OL.renderRichTextField = function(opts) {
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')">❝</button>
                 ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
                 ${btn('removeFormat', '<i data-lucide="remove-formatting" style="width:11px;height:11px;"></i>', 'Clear formatting')}
+                ${opts.emailTools ? `
+                <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
+                <span style="position:relative; display:inline-block;">
+                    <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Text color"
+                            onmousedown="event.preventDefault(); OL.richSaveSelection('${opts.id}')"
+                            onclick="OL.toggleRichColorPalette('${opts.id}', this)">
+                        <span style="font-weight:bold; border-bottom:3px solid #e11d48; padding:0 2px;">A</span> ▾
+                    </button>
+                </span>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Insert image"
+                        onmousedown="event.preventDefault(); OL.richSaveSelection('${opts.id}')"
+                        onclick="OL.richInsertImage('${opts.id}', ${Number(opts.imageMaxWidth) || 600})">
+                    <i data-lucide="image" style="width:11px;height:11px;"></i>
+                </button>` : ''}
             </div>
             <div id="${opts.id}" contenteditable="true" class="modal-input tiny ol-richtext-body"
                  data-placeholder="${esc(opts.placeholder || '')}"
                  style="min-height:${opts.minHeight || 90}px; max-height:520px; overflow-y:auto; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
                  onblur="${opts.onBlur || ''}">${opts.html || ''}</div>
         </div>`;
+};
+
+// ---- Email editor tools: text color + inline images ----
+// The color palette and file picker take focus away from the editor, so the
+// cursor/selection is saved on mousedown and put back before applying.
+OL._richSaved = {};
+OL.richSaveSelection = function(editorId) {
+    const ed = document.getElementById(editorId);
+    const sel = window.getSelection();
+    if (!ed || !sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (ed.contains(r.commonAncestorContainer)) OL._richSaved[editorId] = r.cloneRange();
+};
+OL.richRestoreSelection = function(editorId) {
+    const ed = document.getElementById(editorId);
+    if (!ed) return null;
+    ed.focus();
+    const sel = window.getSelection();
+    let r = OL._richSaved[editorId];
+    if (!r || !ed.contains(r.commonAncestorContainer)) {
+        r = document.createRange();
+        r.selectNodeContents(ed);
+        r.collapse(false); // end of the editor
+    }
+    sel.removeAllRanges();
+    sel.addRange(r);
+    return ed;
+};
+
+OL.RICH_TEXT_COLORS = ['#111827', '#6b7280', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0d9488', '#2563eb', '#7c3aed', '#db2777'];
+OL.toggleRichColorPalette = function(editorId, btn) {
+    const existing = document.getElementById('rich-color-palette');
+    if (existing) { existing.remove(); if (existing.dataset.for === editorId) return; }
+    const pal = document.createElement('div');
+    pal.id = 'rich-color-palette';
+    pal.dataset.for = editorId;
+    pal.style.cssText = 'position:absolute; top:100%; left:0; z-index:1000; margin-top:4px; padding:6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.4); display:grid; grid-template-columns:repeat(5, 20px); gap:5px; width:max-content;';
+    pal.innerHTML = OL.RICH_TEXT_COLORS.map(c =>
+        `<button type="button" title="${c}" onmousedown="event.preventDefault()" onclick="OL.applyRichColor('${editorId}', '${c}')" style="width:20px; height:20px; border-radius:4px; border:1px solid rgba(255,255,255,.25); background:${c}; cursor:pointer; padding:0;"></button>`
+    ).join('') + `
+        <label title="Custom color" style="grid-column:1 / -1; display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; margin-top:2px;">
+            <input type="color" value="#2563eb" style="width:26px; height:20px; padding:0; border:none; background:none; cursor:pointer;" onchange="OL.applyRichColor('${editorId}', this.value)"> Custom…
+        </label>`;
+    btn.parentElement.appendChild(pal);
+    setTimeout(() => {
+        const close = (e) => { if (!pal.contains(e.target) && e.target !== btn && !btn.contains(e.target)) { pal.remove(); document.removeEventListener('mousedown', close); } };
+        document.addEventListener('mousedown', close);
+    }, 0);
+};
+OL.applyRichColor = function(editorId, color) {
+    if (!OL._SAFE_COLOR_RE.test(color)) return;
+    OL.richRestoreSelection(editorId);
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('foreColor', false, color);
+    document.execCommand('styleWithCSS', false, false);
+    OL.richSaveSelection(editorId);
+    document.getElementById('rich-color-palette')?.remove();
+};
+
+// Picks an image from the computer, shrinks it to maxWidth (keeps emails
+// light), and inserts it at the cursor. Stored as a data: URL in the editor;
+// the send function turns each one into a real inline attachment (cid:), which
+// is what Gmail and Outlook need to show it.
+OL.richInsertImage = function(editorId, maxWidth = 600) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        if (file.size > 15 * 1024 * 1024) { alert('That image is over 15 MB. Pick a smaller one.'); return; }
+        try {
+            const dataUrl = await OL._shrinkImageFile(file, maxWidth);
+            const ed = OL.richRestoreSelection(editorId);
+            if (!ed) return;
+            document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="${esc(file.name)}" style="max-width:100%; height:auto;">`);
+            OL.richSaveSelection(editorId);
+        } catch (e) {
+            alert('Could not read that image: ' + (e?.message || e));
+        }
+    };
+    input.click();
+};
+OL._shrinkImageFile = function(file, maxWidth) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.onload = () => {
+            const src = String(reader.result);
+            // GIFs keep their animation, so they aren't redrawn (just size-checked).
+            if (file.type === 'image/gif') {
+                if (file.size > 2 * 1024 * 1024) return reject(new Error('animated GIFs must be under 2 MB'));
+                return resolve(src);
+            }
+            const img = new Image();
+            img.onerror = () => reject(new Error('not a readable image'));
+            img.onload = () => {
+                const scale = Math.min(1, maxWidth / img.naturalWidth);
+                const w = Math.max(1, Math.round(img.naturalWidth * scale));
+                const h = Math.max(1, Math.round(img.naturalHeight * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                // PNG keeps transparency (logos); photos go to JPEG to stay small.
+                resolve(file.type === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = src;
+        };
+        reader.readAsDataURL(file);
+    });
 };
 
 // Stored HTML if present, otherwise the old plain text converted.
