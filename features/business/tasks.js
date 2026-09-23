@@ -2604,6 +2604,7 @@ OL._ALLOWED_COMMENT_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'UL', 'OL', '
 // webp;base64) or an https:// address.
 OL._SAFE_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
 OL._SAFE_IMG_SRC_RE = /^(data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]+|https:\/\/[^\s"'<>]+)$/i;
+OL._ALIGNABLE_TAGS = new Set(['DIV', 'P', 'H3', 'H4', 'LI', 'BLOCKQUOTE', 'UL', 'OL']);
 OL.sanitizeCommentHtml = function(html, opts = {}) {
     const allowImages = opts.images === true;
     const container = document.createElement('div');
@@ -2640,6 +2641,10 @@ OL.sanitizeCommentHtml = function(html, opts = {}) {
                     return;
                 }
                 const color = child.style?.color || '';
+                // Alignment (left/center/right/justify) on block elements, from either
+                // style="text-align:…" or the old align="…" attribute.
+                const alignRaw = (child.style?.textAlign || child.getAttribute('align') || '').toLowerCase().trim();
+                const align = OL._ALIGNABLE_TAGS.has(child.tagName) && /^(left|center|right|justify)$/.test(alignRaw) ? alignRaw : '';
                 Array.from(child.attributes).forEach((attr) => {
                     if (child.tagName === 'A' && attr.name === 'href') {
                         const val = attr.value.trim();
@@ -2655,6 +2660,7 @@ OL.sanitizeCommentHtml = function(html, opts = {}) {
                 });
                 // Keep only a text color, nothing else from style.
                 if (color && OL._SAFE_COLOR_RE.test(color.replace(/\s+/g, ' ').trim())) child.style.color = color;
+                if (align && align !== 'left') child.style.textAlign = align;
                 walk(child);
             } else if (child.nodeType !== 3) { // not an element, not plain text (comments, etc.)
                 node.removeChild(child);
@@ -2684,6 +2690,27 @@ OL.htmlToPlainText = function(html) {
     return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
 };
 
+// Like htmlToPlainText, but a link keeps its address: "Here is the recording (https://…)".
+// For the plain-text copy of an HTML email.
+OL.htmlToPlainTextWithLinks = function(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    d.querySelectorAll('a[href]').forEach(a => {
+        const href = a.getAttribute('href') || '';
+        const label = (a.textContent || '').trim();
+        if (/^https?:/i.test(href) && label && label !== href) a.textContent = `${label} (${href})`;
+    });
+    d.querySelectorAll('img').forEach(img => img.replaceWith(document.createTextNode(img.getAttribute('alt') ? `[image: ${img.getAttribute('alt')}]` : '[image]')));
+    return OL.htmlToPlainText(d.innerHTML);
+};
+
+// Plain text -> editor HTML, with bare web addresses turned into links.
+OL.plainTextToLinkedHtml = function(text) {
+    return esc(text || '')
+        .replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)'"])/g, (u) => `<a href="${u}">${u}</a>`)
+        .replace(/\n/g, '<br>');
+};
+
 // opts: { id, html, placeholder, minHeight, onBlur } — onBlur is a JS
 // string run with `this` = the editor element.
 OL.renderRichTextField = function(opts) {
@@ -2700,6 +2727,10 @@ OL.renderRichTextField = function(opts) {
                 ${btn('insertOrderedList', '1. List', 'Numbered list')}
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')">❝</button>
                 ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
+                <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
+                ${btn('justifyLeft', '<i data-lucide="align-left" style="width:11px;height:11px;"></i>', 'Align left')}
+                ${btn('justifyCenter', '<i data-lucide="align-center" style="width:11px;height:11px;"></i>', 'Align center')}
+                ${btn('justifyRight', '<i data-lucide="align-right" style="width:11px;height:11px;"></i>', 'Align right')}
                 ${btn('removeFormat', '<i data-lucide="remove-formatting" style="width:11px;height:11px;"></i>', 'Clear formatting')}
                 ${opts.emailTools ? `
                 <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
