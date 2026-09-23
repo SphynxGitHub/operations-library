@@ -11,7 +11,7 @@
 // Needs 001_lifecycle_tables.sql (adds calendar_events.summary_sent_at).
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, renderEmailBodies } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -444,10 +444,12 @@ OL.msRefreshGreeting = function() {
         sphynxEmails: (state.master?.sphynxTeam || []).map(m => m.email).filter(Boolean),
         people: st.directory.filter(p => p.name),
     });
-    const lines = String(box.value || '').split('\n');
-    const greeting = `Hi ${joinNames(names) || 'there'},`;
-    if (/^hi\b/i.test(lines[0] || '')) lines[0] = greeting; else lines.unshift(greeting, '');
-    box.value = lines.join('\n');
+    // The message is a formatted editor now: swap the text of the first "Hi …," line
+    // and leave the rest (formatting, images, links) alone.
+    const greeting = esc(`Hi ${joinNames(names) || 'there'},`);
+    const html = box.innerHTML;
+    const m = html.match(/^((?:\s|<(?:div|p|span|b|strong|i|em|u)[^>]*>)*)\s*hi\b[^<]*/i);
+    box.innerHTML = m ? m[1] + greeting + html.slice(m[0].length) : `${greeting}<br><br>${html}`;
 };
 
 // ---- the window: email text on one side, the real tasks on the other ----
@@ -638,6 +640,7 @@ OL.msSend = async function() {
     const st = OL._msState;
     if (!st) return;
     const read = (id) => document.getElementById(id)?.value ?? '';
+    const readHtml = (id) => OL.sanitizeCommentHtml(document.getElementById(id)?.innerHTML || '', { images: true });
     OL.msCommitRecipient('to');
     OL.msCommitRecipient('cc');
     const to = st.to.join(', ');
@@ -645,16 +648,20 @@ OL.msSend = async function() {
     const subject = read('ms-subject').trim();
     // The next steps are rebuilt from the tasks as they are right now.
     const nextSteps = nextStepsText(msTasks(), st.client.meta?.name || '');
-    const body = assembleBody({ message: read('ms-message'), nextSteps, closing: read('ms-closing') });
+    const messageHtml = readHtml('ms-message');
+    const closingHtml = readHtml('ms-closing');
+    const body = assembleBody({
+        message: OL.htmlToPlainTextWithLinks(messageHtml), nextSteps, closing: OL.htmlToPlainTextWithLinks(closingHtml)
+    });
+    const bodyHtml = [messageHtml, nextSteps ? esc(nextSteps).replace(/\n/g, '<br>') : '', closingHtml]
+        .filter(part => String(part).trim()).join('<br><br>');
     if (!to || !subject || !body.trim()) { alert('To, subject and message are all required.'); return; }
 
     const btn = document.getElementById('ms-send-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
-    // "Here is the recording of our session" becomes a link to the recording in Drive.
-    const rendered = renderEmailBodies(body, st.recordingUrl);
     const { ok } = await OL.sendGmailMessage({
-        to, cc: cc || undefined, subject, body: rendered.text, bodyHtml: rendered.html,
+        to, cc: cc || undefined, subject, body, bodyHtml,
         linked_client_id: st.client.id, linked_event_id: st.evt.id, linked_task_id: st.task.id,
     });
     if (!ok) {
@@ -751,7 +758,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                         <label class="tiny muted" style="margin:0 !important;">Message</label>
                         <button type="button" class="btn tiny soft" onclick="OL.msRefreshGreeting()" title="Rewrites the first line to name the people in To">Update greeting from recipients</button>
                     </div>
-                    <textarea id="ms-message" class="modal-input" rows="14" style="margin-bottom:10px;">${esc(draft.message)}</textarea>
+                    <div style="margin-bottom:10px;">${OL.renderRichTextField({ id: 'ms-message', html: messageTextToHtml(draft.message, OL._msState.recordingUrl), minHeight: 260, emailTools: true, imageMaxWidth: 600 })}</div>
 
                     <div style="margin-bottom:10px;">
                         <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
@@ -759,7 +766,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                     </div>
 
                     <label class="tiny muted">Closing</label>
-                    <textarea id="ms-closing" class="modal-input" rows="4" style="margin-bottom:14px;">${esc(draft.closing)}</textarea>
+                    <div style="margin-bottom:14px;">${OL.renderRichTextField({ id: 'ms-closing', html: messageTextToHtml(draft.closing, ''), minHeight: 70, emailTools: true, imageMaxWidth: 600 })}</div>
 
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
@@ -794,6 +801,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         </div>
     `;
     openModal(html);
+    if (window.lucide) lucide.createIcons();
     renderMsRecipients('to');
     renderMsRecipients('cc');
     renderMsTaskRows();
