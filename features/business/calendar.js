@@ -1684,10 +1684,18 @@ OL.zoomStatusLine = function(evt) {
 
 // Clears this meeting's Zoom flags and runs the sync now, then reports
 // exactly what happened for it.
+// Scoped to ONE meeting. It only re-opens what's still missing for that
+// meeting: it never resets zoom_tasks_created (so action items that already
+// became tasks are never re-added, even if you renamed or deleted them),
+// never resets a recording already saved to Drive, and never re-exports a
+// summary already in Drive (that made duplicate files).
 OL.recheckZoomForEvent = async function(eventId) {
-    const { error } = await db.from('calendar_events').update({
-        zoom_summary_processed: false, zoom_tasks_created: false, zoom_recording_status: null, zoom_summary_in_drive: false
-    }).eq('id', eventId);
+    const { data: cur, error: readErr } = await db.from('calendar_events')
+        .select('zoom_recording_status').eq('id', eventId).maybeSingle();
+    if (readErr) { alert('Could not read this meeting: ' + readErr.message); return; }
+    const reset = { zoom_summary_processed: false };
+    if (cur?.zoom_recording_status !== 'saved') reset.zoom_recording_status = null;
+    const { error } = await db.from('calendar_events').update(reset).eq('id', eventId);
     if (error) { alert('Could not reset this meeting: ' + error.message); return; }
     try {
         const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/sync-zoom-meetings', {
@@ -1695,7 +1703,8 @@ OL.recheckZoomForEvent = async function(eventId) {
         });
         const r = await res.json().catch(() => ({}));
         if (!res.ok) { alert('Zoom sync failed: ' + (r.message || res.status)); return; }
-        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems();
+        // Only this meeting's action items — not every meeting's.
+        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems({ eventId });
         if (!r.eventReport) {
             // The server is running an older sync that ignores single-meeting
             // re-checks, so there's nothing meeting-specific to report.
