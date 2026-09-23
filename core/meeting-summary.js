@@ -137,6 +137,15 @@ export const RECORDING_LINE = 'Here is the recording of our session';
 
 const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// The message text as editor HTML, with the recording line already a real link, so what
+// you see in the editor is what gets sent.
+export function messageTextToHtml(text, recordingUrl) {
+    const url = String(recordingUrl || '').trim();
+    let html = escHtml(text).replace(/\n/g, '<br>');
+    if (url && /^https?:\/\//i.test(url)) html = html.replace(escHtml(RECORDING_LINE), `<a href="${escHtml(url)}">${escHtml(RECORDING_LINE)}</a>`);
+    return html;
+}
+
 // The finished email in both forms. If the recording line was deleted from the message,
 // no link is added anywhere.
 // Returns { text, html }.
