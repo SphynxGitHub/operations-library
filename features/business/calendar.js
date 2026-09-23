@@ -88,12 +88,16 @@ OL.renderBusinessCalendar = function() {
                             <i data-lucide="video" style="width:14px;height:14px;${OL.calendarState.zoomSyncing ? 'animation: spin 1s linear infinite;' : ''}"></i>
                             ${OL.calendarState.zoomSyncing ? 'Syncing Zoom...' : 'Sync Zoom'}
                         </button>
+                        ${state.adminMode === true ? `
+                        <button class="btn small soft" onclick="OL.initiateZoomAuth()" title="Open Zoom's permission screen again — needed after adding new permissions (scopes) to the Zoom app">
+                            <i data-lucide="key-round" style="width:14px;height:14px;"></i> Reconnect Zoom
+                        </button>` : ''}
                     ` : `
                         <button class="btn small soft" onclick="OL.initiateZoomAuth()">
                             <i data-lucide="video" style="width:14px;height:14px;"></i> Connect Zoom
                         </button>
                     `}
-                    <button class="btn small soft" onclick="OL.backfillEventAssigneesFromAttendees()" ${OL._backfillingAssignees ? 'disabled' : ''} title="Auto-assign every unassigned event from its attendee list, where the attendee matches a known Sphynx Team member or client contact">
+                    <button class="btn small soft" onclick="OL.backfillEventAssigneesFromAttendees()" ${OL._backfillingAssignees ? 'disabled' : ''} title="Add every Sphynx Team member on each event&#39;s attendee list as an assignee (never removes anyone)">
                         <i data-lucide="wand-2" style="width:14px;height:14px;"></i>
                         ${OL._backfillingAssignees ? 'Backfilling...' : 'Backfill Assignees'}
                     </button>
@@ -1410,74 +1414,79 @@ OL.backfillCalendarProjectLinks = async function() {
     }
 };
 
+// Adds every Sphynx Team member found in an event's attendees to its
+// assignees. Additive: it never removes anyone, and it now also fills in
+// events that already had ONE assignee (previously those were skipped, so
+// a meeting with three of us only ever showed the first).
 OL.backfillEventAssigneesFromAttendees = async function() {
     if (OL._backfillingAssignees) return;
     OL._backfillingAssignees = true;
     OL.renderBusinessCalendar();
 
     try {
-        const { data: rows, error } = await db.from('calendar_events')
-            .select('id, assignee, assignees, attendee_emails');
-
-        if (error) { alert('Failed to load events: ' + error.message); return; }
-
-        const unassignedRows = (rows || []).filter(r => {
-            const hasAttendees = Array.isArray(r.attendee_emails) && r.attendee_emails.length > 0;
-            const hasAssignees = (Array.isArray(r.assignees) && r.assignees.length > 0) || !!r.assignee;
-            return hasAttendees && !hasAssignees;
-        });
-
-        if (!unassignedRows.length) { 
-            alert('Nothing to backfill — every event with attendees already has an assignee.'); 
-            return; 
+        // Page through everything (a single select stops at 1,000 rows).
+        const rows = [];
+        const PAGE = 1000;
+        for (let from = 0; ; from += PAGE) {
+            const { data, error } = await db.from('calendar_events')
+                .select('id, assignee, assignees, attendee_emails')
+                .order('id')
+                .range(from, from + PAGE - 1);
+            if (error) { alert('Failed to load events: ' + error.message); return; }
+            rows.push(...(data || []));
+            if (!data || data.length < PAGE) break;
         }
 
+        // Every address a team member might be invited under.
         const roster = state.master?.sphynxTeam || [];
-        let updatedCount = 0;
-        let noMatchCount = 0;
+        const byEmail = new Map();
+        roster.forEach(m => {
+            [m.email, ...(Array.isArray(m.emails) ? m.emails : []), ...(Array.isArray(m.altEmails) ? m.altEmails : [])]
+                .map(e => String(e || '').toLowerCase().trim()).filter(Boolean)
+                .forEach(e => { if (m.name) byEmail.set(e, m.name); });
+        });
+
+        let updatedCount = 0, addedPeople = 0;
         const updates = [];
-
-        unassignedRows.forEach(evt => {
-            const currentAssignees = Array.isArray(evt.assignees) ? evt.assignees : (evt.assignee ? [evt.assignee] : []);
-            const existing = new Set(currentAssignees);
-            let matchedAny = false;
-
+        rows.forEach(evt => {
             const attendeeEmails = Array.isArray(evt.attendee_emails) ? evt.attendee_emails : [];
-            attendeeEmails.forEach(email => {
-                const cleanEmail = (typeof email === 'string' ? email : email?.email || '').toLowerCase().trim();
-                if (!cleanEmail) return;
-
-                const staffMatch = roster.find(m => (m.email || '').toLowerCase() === cleanEmail);
-                if (staffMatch) { existing.add(staffMatch.name); matchedAny = true; }
+            if (!attendeeEmails.length) return;
+            const hasList = Array.isArray(evt.assignees) && evt.assignees.length > 0;
+            const current = hasList ? evt.assignees : (evt.assignee ? [evt.assignee] : []);
+            const next = [...current];
+            attendeeEmails.forEach(raw => {
+                const email = (typeof raw === 'string' ? raw : raw?.email || '').toLowerCase().trim();
+                const name = email && byEmail.get(email);
+                if (name && !next.includes(name)) next.push(name);
             });
-
-            if (matchedAny) {
-                const nextAssignees = Array.from(existing);
-                updates.push({ id: evt.id, assignees: nextAssignees, assignee: nextAssignees[0] || null });
+            // Also repairs rows whose list was wiped but still have the single assignee.
+            if (next.length > current.length || (!hasList && next.length > 0)) {
+                addedPeople += next.length - current.length;
+                updates.push({ id: evt.id, assignees: next, assignee: next[0] || null });
                 updatedCount++;
-            } else {
-                noMatchCount++;
             }
         });
 
+        if (!updates.length) {
+            alert('Nothing to backfill: every event already has all its Sphynx Team attendees assigned.');
+            return;
+        }
+
+        let failed = 0;
         for (const u of updates) {
             const { error: updateErr } = await db.from('calendar_events')
                 .update({ assignees: u.assignees, assignee: u.assignee })
                 .eq('id', u.id);
-
-            if (updateErr) {
-                console.error(`Failed to backfill event ${u.id}:`, updateErr.message);
-                continue;
-            }
-
+            if (updateErr) { failed++; console.error(`Failed to backfill event ${u.id}:`, updateErr.message); continue; }
             [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
                 const e = (list || []).find(e => e.id === u.id);
                 if (e) { e.assignees = u.assignees; e.assignee = u.assignee; }
             });
         }
 
-        alert(`Backfilled ${updatedCount} event${updatedCount === 1 ? '' : 's'} from attendee matches.` +
-            (noMatchCount ? ` ${noMatchCount} event${noMatchCount === 1 ? '' : 's'} had attendees but none matched a Sphynx Team member — use "Auto-assign from attendees" on those individually to also get the create-a-client prompt.` : ''));
+        const ok = updatedCount - failed;
+        alert(`Updated ${ok} event${ok === 1 ? '' : 's'}, adding ${addedPeople} assignee${addedPeople === 1 ? '' : 's'} from attendee lists.` +
+            (failed ? ` ${failed} failed to save (see console).` : ''));
     } finally {
         OL._backfillingAssignees = false;
         OL.renderBusinessCalendar();
