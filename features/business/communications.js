@@ -1211,7 +1211,7 @@ OL.openComposeEmailModal = function(options = {}) {
                             <button type="button" class="btn tiny soft" onclick="OL.openEmailTemplatesManager()" title="Edit or delete templates"><i data-lucide="settings-2" style="width:11px;height:11px;"></i></button>
                         </div>
                     </div>
-                    ${OL.renderRichTextField({ id: 'compose-email-body', html: startHtml, minHeight: 200, placeholder: 'Write your message…' })}
+                    ${OL.renderRichTextField({ id: 'compose-email-body', html: startHtml, minHeight: 200, placeholder: 'Write your message…', emailTools: true, imageMaxWidth: 600 })}
                 </div>
 
                 <div style="padding:8px 10px; border:1px dashed var(--line); border-radius:6px;">
@@ -1466,7 +1466,7 @@ OL._myTeamCard = function() {
 };
 OL.getMySignatureHtml = function() {
     const card = OL._myTeamCard();
-    if (card?.emailSignatureHtml) return OL.sanitizeCommentHtml(card.emailSignatureHtml);
+    if (card?.emailSignatureHtml) return OL.sanitizeCommentHtml(card.emailSignatureHtml, { images: true });
     if (!card) return '';
     // Sensible default until someone writes their own.
     return [`<strong>${esc(card.name)}</strong>`, card.title || card.role ? esc(card.title || card.role) : '', 'Sphynx Automation', card.email ? esc(card.email) : '']
@@ -1484,7 +1484,7 @@ OL.openMySignatureEditor = function() {
     const box = document.getElementById('compose-signature-preview');
     if (!card || !box) { alert('The signed-in account has no Sphynx Team card yet, so there is nowhere to save a signature.'); return; }
     box.innerHTML = `
-        ${OL.renderRichTextField({ id: 'compose-signature-editor', html: OL.getMySignatureHtml(), minHeight: 80 })}
+        ${OL.renderRichTextField({ id: 'compose-signature-editor', html: OL.getMySignatureHtml(), minHeight: 80, emailTools: true, imageMaxWidth: 300 })}
         <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
             <button type="button" class="btn tiny soft" onclick="OL.renderComposeSignaturePreview()">Cancel</button>
             <button type="button" class="btn tiny primary" onclick="OL.saveMySignature()">Save signature</button>
@@ -1495,7 +1495,7 @@ OL.saveMySignature = function() {
     const card = OL._myTeamCard();
     const ed = document.getElementById('compose-signature-editor');
     if (!card || !ed) return;
-    updateAndSync(() => { card.emailSignatureHtml = OL.sanitizeCommentHtml(ed.innerHTML); });
+    updateAndSync(() => { card.emailSignatureHtml = OL.sanitizeCommentHtml(ed.innerHTML, { images: true }); });
     OL.renderComposeSignaturePreview();
 };
 
@@ -1607,13 +1607,13 @@ OL.applyEmailTemplate = function(id) {
     const ed = document.getElementById('compose-email-body');
     const subj = document.getElementById('compose-email-subject');
     if (subj && t.subject && !subj.value.trim()) subj.value = OL._fillTemplateFields(t.subject).replace(/&amp;/g, '&');
-    if (ed) ed.innerHTML = OL._fillTemplateFields(OL.sanitizeCommentHtml(t.html || '')) + (ed.innerHTML.trim() ? '<br>' + ed.innerHTML : '');
+    if (ed) ed.innerHTML = OL._fillTemplateFields(OL.sanitizeCommentHtml(t.html || '', { images: true })) + (ed.innerHTML.trim() ? '<br>' + ed.innerHTML : '');
 };
 OL.saveComposeAsTemplate = function() {
     if (!state.masterHasEmailTemplates) { alert('Run the email_templates migration first — templates can’t be saved until that column exists.'); return; }
     const name = prompt('Template name:');
     if (!name) return;
-    const html = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '');
+    const html = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '', { images: true });
     const subject = document.getElementById('compose-email-subject')?.value || '';
     updateAndSync(() => {
         if (!state.master.emailTemplates) state.master.emailTemplates = [];
@@ -1654,7 +1654,7 @@ OL.deleteEmailTemplate = function(id) {
 // signature, then the quoted original (Gmail collapses it as usual).
 OL._buildComposeBody = function() {
     const st = OL._composeState || {};
-    const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '');
+    const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '', { images: true });
     let html = msgHtml;
     const taskList = OL._composeTaskListHtml();
     html += taskList.html;
@@ -1730,6 +1730,14 @@ OL.handleGmailActionResponse = async function(res, verb) {
 };
 window.OL.handleGmailActionResponse = OL.handleGmailActionResponse;
 
+// The send function reports how it actually sent the email. If formatting was
+// written but the server says (or, being an older version, doesn't say) it went
+// out as HTML, the person is told instead of finding out from the recipient.
+OL._warnIfSentAsPlainText = function(result, hadHtml) {
+    if (!hadHtml || result?.format === 'html') return;
+    alert('Sent, but as PLAIN TEXT: the email server function is an older version that drops formatting, colors and images.\n\nRedeploy the send-gmail-message function (GitHub Actions → "Deploy Supabase Edge Functions", or Supabase → Edge Functions), then formatted emails will go out correctly.');
+};
+
 // Sends one email through the app's Gmail send function. Used by windows that build their own
 // email (like the meeting summary). Returns { ok, result }; shows the same error alerts as
 // the compose window. payload: { to, cc, subject, body, linked_client_id, linked_event_id, linked_task_id, ... }
@@ -1751,6 +1759,7 @@ OL.sendGmailMessage = async function(payload) {
             }
             return { ok: false, result };
         }
+        OL._warnIfSentAsPlainText(result, !!payload?.bodyHtml);
         return { ok: true, result };
     } catch (err) {
         console.error('Failed to send email:', err);
@@ -1811,6 +1820,7 @@ OL.sendComposedEmail = async function() {
         }
 
         OL.closeCompose();
+        OL._warnIfSentAsPlainText(result, !!built.html);
         if (typeof st.onSent === 'function') st.onSent(result);
     } catch (err) {
         console.error('Failed to send email:', err);
