@@ -53,7 +53,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
-import { buildRawMessage, base64UrlEncode, validateAttachments, sanitizeHeaderValue } from "../_shared/mime.ts";
+import { buildRawMessage, base64UrlEncode, validateAttachments, sanitizeHeaderValue, extractInlineImages } from "../_shared/mime.ts";
 import { authorizeTeamRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -92,13 +92,25 @@ serve(async (req) => {
     const bcc = sanitizeHeaderValue(rawBcc);
     // HTML body from the app's formatting editor (already sanitized there).
     // Script/style/event handlers are stripped again here as a backstop.
-    const bodyHtml = rawBodyHtml
+    const cleanedHtml = rawBodyHtml
       ? String(rawBodyHtml)
           .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
           .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
           .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, "$1=$2#$2")
-          .slice(0, 400000)
       : null;
+    // Pictures pasted/inserted in the editor arrive as data: URLs; they become
+    // inline (cid:) parts of the email. Done before the length cap so an image
+    // is never cut in half.
+    let bodyHtml: string | null = null;
+    let inlineImages: any[] = [];
+    if (cleanedHtml) {
+      const ex = extractInlineImages(cleanedHtml);
+      if ("error" in ex) {
+        return new Response(JSON.stringify({ error: "invalid_images", message: `Couldn't send: ${ex.error}.` }), { status: 400, headers: corsHeaders });
+      }
+      bodyHtml = ex.html.slice(0, 400000);
+      inlineImages = ex.images;
+    }
     const subject = sanitizeHeaderValue(rawSubject);
 
     if (!to || !subject || !body) {
@@ -153,6 +165,7 @@ serve(async (req) => {
       subject,
       body,
       html: bodyHtml,
+      inlineImages,
       inReplyTo: inReplyToHeader,
       references: referencesHeader,
       attachments,
@@ -196,7 +209,8 @@ serve(async (req) => {
       subject,
       snippet: body.slice(0, 200),
       body,
-      body_html: bodyHtml,
+      // the version with the pictures still embedded, so they show in the app
+      body_html: cleanedHtml && cleanedHtml.length <= 3000000 ? cleanedHtml : bodyHtml,
       date: new Date().toISOString(),
       participants: [fromAddress.toLowerCase(), ...toEmails, ...ccEmails],
       linked_client_id: linked_client_id || null,
@@ -213,7 +227,7 @@ serve(async (req) => {
       console.error("Sent successfully but failed to save local copy:", insertErr.message);
     }
 
-    return new Response(JSON.stringify({ success: true, id: sent.id, threadId: sent.threadId, attachments: attachments.length }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true, id: sent.id, threadId: sent.threadId, attachments: attachments.length, inlineImages: inlineImages.length, format: bodyHtml ? "html" : "text", version: "2026-09d" }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
     const isAuthErr = err instanceof GoogleAuthError;
