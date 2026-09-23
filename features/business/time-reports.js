@@ -71,7 +71,7 @@ OL.renderBusinessTimeReports = function() {
                 <div class="small muted" style="margin-top:2px;">Itemized client time logs, scoping burn rates, and billable value tracking</div>
             </div>
             <button class="btn small soft" onclick="OL.openBillableRulesModal()" style="display:inline-flex; align-items:center; gap:6px;" title="Tasks are non-billable unless a rule or a manual toggle says otherwise">
-                <i data-lucide="badge-dollar-sign" style="width:14px;height:14px;"></i> Billable Rules
+                <i data-lucide="badge-dollar-sign" style="width:14px;height:14px;"></i> Billable Rules (Automations)
             </button>
         </div>
 
@@ -483,22 +483,33 @@ OL.closeTimeReportModal = function() {
 // $ toggle on the task) makes them billable. Client tasks never are.
 // Stored on the master row (workspace_masters.billable_rules).
 // -------------------------------------------------------------
+// The editor now lives on the Automations page (Billable Rules tab). This
+// keeps the Time Reports button working: it just goes there.
 OL.openBillableRulesModal = function() {
+    OL.automationTab = 'billable';
+    if (!location.hash.includes('/automations')) location.hash = '#/vault/automations';
+    else OL.renderAutomationBuilder();
+};
+
+// Inline panel used by the Automations page.
+OL.renderBillableRulesPanel = function() {
     if (!state.master.billableRules) state.master.billableRules = [];
     const rules = state.master.billableRules;
     const fields = OL.BILLABLE_RULE_FIELDS || {};
     const canSave = !!state.masterHasBillableRules;
-
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">💲 Billable Rules</div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-        </div>
-        <div class="modal-body" style="max-width:720px; width:100%;">
-            <p class="tiny muted" style="margin-bottom:12px; line-height:1.5;">
-                Every task starts <strong>non-billable</strong>. The first rule that matches a task decides it; a task you toggle by hand keeps your choice.
-                Client tasks are never billable.
-            </p>
+    return `
+        <div class="card" style="padding:16px; margin-top:16px;">
+            <div class="small" style="line-height:1.6; margin-bottom:12px;">
+                How a task's billable status is decided, in order:
+                <ol style="margin:6px 0 0 18px; padding:0;">
+                    <li><strong>Client tasks are never billable</strong> (assigned to "Client Task" or one of the client's people).</li>
+                    <li>A manual <strong>$</strong> toggle on the task wins over everything below.</li>
+                    <li>The first matching rule in the list below.</li>
+                    <li>Built-in defaults: tasks on <strong>Ongoing Maintenance</strong> projects and tasks from <strong>coaching calls</strong> are billable.</li>
+                    <li>Everything else is non-billable.</li>
+                </ol>
+                <div class="tiny muted" style="margin-top:6px;">Calendar events: Coaching Calls are billable by default; any event can be toggled.</div>
+            </div>
             ${canSave ? '' : `<div class="tiny" style="padding:8px 10px; margin-bottom:12px; border:1px solid #f59e0b; color:#f59e0b; border-radius:6px;">Run the <code>billable_rules</code> migration first — rules can't be saved until that column exists.</div>`}
             <div style="display:grid; gap:6px; margin-bottom:12px;">
                 ${rules.length ? rules.map((r, i) => `
@@ -520,19 +531,16 @@ OL.openBillableRulesModal = function() {
                         <button class="btn tiny soft" title="Move up" ${i === 0 ? 'disabled' : ''} onclick="OL.moveBillableRule(${i}, -1)">↑</button>
                         <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.removeBillableRule(${i})">✕</button>
                     </div>
-                `).join('') : `<div class="tiny muted">No rules yet — every Sphynx task is non-billable.</div>`}
+                `).join('') : `<div class="tiny muted">No custom rules — only the built-in defaults above apply.</div>`}
             </div>
             <button class="btn tiny primary" onclick="OL.addBillableRule()"><i data-lucide="plus" style="width:11px;height:11px;"></i> Add Rule</button>
             <div class="tiny muted" style="margin-top:14px;">Examples: <em>Request type is build → Billable</em> · <em>Task title contains internal → Non-billable</em> · <em>Project is General / Business Ops → Non-billable</em></div>
         </div>`;
-    openModal(html);
-    if (window.lucide) lucide.createIcons();
 };
 
 OL._saveBillableRules = function() {
     OL.persist();
-    OL.openBillableRulesModal();
-    if (location.hash.includes('time-reports')) OL.renderBusinessTimeReports();
+    if (typeof OL.renderAutomationBuilder === 'function' && location.hash.includes('automations')) OL.renderAutomationBuilder();
 };
 OL.addBillableRule = function() {
     state.master.billableRules.push({ id: 'br-' + Date.now(), field: 'requestType', op: 'equals', value: '', billable: true });

@@ -52,7 +52,7 @@ OL.toggleTaskBillable = function(clientId, taskId) {
             String(t.id) === String(taskId) || String(t.key) === String(taskId)
         );
         if (!task) return;
-        if (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task)) { task.billable = false; return; }
+        if (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task, client)) { task.billable = false; alert('Client tasks are never billable.'); return; }
         task.billable = !OL.isTaskBillable(task, client);
     }, clientId);
     OL.refreshTaskView();
@@ -927,6 +927,7 @@ OL.computeAssigneeAvatar = function(assignee) {
     let avatarBg = 'rgba(56, 189, 248, 0.15)';
     let avatarColor = '#38bdf8';
     let avatarContent = '';
+    let avatarBorder = '';
 
     if (is3rdParty) {
         avatarBg = 'rgba(234, 179, 8, 0.15)';
@@ -941,7 +942,11 @@ OL.computeAssigneeAvatar = function(assignee) {
         avatarColor = '#ec4899';
         avatarContent = `<i data-lucide="user" style="width:12px;height:12px; pointer-events:none;"></i>`;
     } else if (isNamedPerson && isSphynxTeamMember) {
-        avatarBg = '#2dd4bf';
+        // Per-person fill (team card's avatarColor, else the defaults below),
+        // always with the Sphynx turquoise ring so it still reads as "Sphynx".
+        const card = (state.master?.sphynxTeam || []).find(m => m.name === assignee);
+        avatarBg = card?.avatarColor || OL.TEAM_AVATAR_COLORS[String(assignee || '').trim().split(/\s+/)[0].toLowerCase()] || '#2dd4bf';
+        avatarBorder = '#2dd4bf';
         avatarColor = '#ffffff';
         const nameParts = (assignee || 'SP').trim().split(' ');
         avatarContent = nameParts.length >= 2
@@ -958,8 +963,12 @@ OL.computeAssigneeAvatar = function(assignee) {
         avatarContent = `<i data-lucide="user" style="width:12px;height:12px; pointer-events:none; opacity:0.5;"></i>`;
     }
 
-    return { avatarBg, avatarColor, avatarContent, isNamedPerson };
+    return { avatarBg, avatarColor, avatarContent, isNamedPerson, avatarBorder };
 };
+
+// Default avatar fills for Sphynx team members (by first name). A team card
+// can override with its own avatarColor.
+OL.TEAM_AVATAR_COLORS = { chad: '#3b82f6', anthony: '#8b5cf6' };
 
 OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
@@ -975,7 +984,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const dotColor = activeStatusObj.color;
     const isOverdue = !!t.dueDate && OL.localDayKey(t.dueDate) < (todayStr || OL.localDateStr()) && !activeStatusObj.isClosed && t.status !== 'Done';
 
-    const { avatarBg, avatarColor, avatarContent } = OL.computeAssigneeAvatar(t.assignee);
+    const { avatarBg, avatarColor, avatarContent, avatarBorder } = OL.computeAssigneeAvatar(t.assignee);
 
     return `
     <div class="task-row-card" 
@@ -1086,7 +1095,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
                     ${(() => {
                         const isBill = OL.isTaskBillable(t, state.clients?.[t.clientId]);
-                        const locked = OL.isClientTaskForBilling(t);
+                        const locked = OL.isClientTaskForBilling(t, state.clients?.[t.clientId]);
                         const why = OL.billableReason(t, state.clients?.[t.clientId]);
                         return `<span title="${esc((isBill ? 'Billable' : 'Non-billable') + ' · ' + why + (locked ? '' : ' — click to change'))}"
                           style="cursor:${locked ? 'not-allowed' : 'pointer'}; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px; ${!isBill ? 'background:rgba(148,163,184,0.15); color:var(--muted);' : 'background:rgba(34,197,94,0.15); color:#22c55e;'}"
@@ -1099,7 +1108,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 <!-- Assignee Avatar -->
                 <div onclick="event.stopPropagation();" style="display:flex; justify-content:center; position:relative;">
                     <div title="Assignee: ${esc(t.assignee)}" 
-                         style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; ${isNamedPerson ? 'border:none;' : `border:1px solid ${avatarColor};`} font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; cursor:pointer;"
+                         style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; ${avatarBorder ? `border:2px solid ${avatarBorder}; box-sizing:border-box;` : (isNamedPerson ? 'border:none;' : `border:1px solid ${avatarColor};`)} font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; cursor:pointer;"
                          onclick="OL.openEditTaskAssigneeDropdown(event, '${t.clientId}', '${t.id}')">
                         ${avatarContent}
                     </div>
@@ -1278,7 +1287,7 @@ OL.applyBulkTaskEdit = function() {
                     }
                 }
                 if (newBillableVal !== '') {
-                    task.billable = (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task)) ? false : newBillableVal === 'true';
+                    task.billable = (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task, client)) ? false : newBillableVal === 'true';
                 }
                 if (newDueDate) {
                     task.dueDate = newDueDate;
@@ -1952,7 +1961,8 @@ OL.renderInContextTaskModal = function(client, task) {
                     <button class="btn tiny soft" onclick="OL.deleteTask('${client?.id}', '${task.id}')" style="color:#ef4444; font-weight:bold; display:flex; align-items:center; gap:4px;" title="Delete Task">
                         <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
                     </button>
-                    <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0;">✕</button>
+<button class="btn tiny soft" onclick="OL.openContextCompose({ kind: 'task', clientId: '${client?.id}', id: '${task.id}' })" title="New email about this task (opens docked; this window stays open)" style="flex-shrink:0;">✉️ Email</button>
+                                        <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0;">✕</button>
                 </div>
             </div>
 
@@ -2133,6 +2143,7 @@ OL.renderInContextTaskModal = function(client, task) {
     `;
 
     OL.showOverlayModal(content);
+    OL.setComposeContext?.({ kind: 'task', clientId: client?.id, id: task.id });
     OL.loadLinkedEmailsForTask(task.id);
     if (OL.hydrateRollupSection) OL.hydrateRollupSection(client?.id, 'task', task.id);
     if (window.lucide) lucide.createIcons();

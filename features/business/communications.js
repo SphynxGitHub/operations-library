@@ -787,8 +787,13 @@ OL._gmailThreadIdFor = async function(id) {
     return data?.thread_id || null;
 };
 
-OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
-    const threadId = await OL._gmailThreadIdFor(id);
+// opts.wholeThread (default true, the Archive button): the whole
+// conversation. Linking passes false so ONLY the linked email is archived —
+// other messages in the thread are never touched automatically; you get a
+// suggestion instead (OL.promptThreadFollowUp).
+OL.archiveGmailMessage = async function(id, alsoInGmail = true, opts = {}) {
+    const wholeThread = opts.wholeThread !== false;
+    const threadId = wholeThread ? await OL._gmailThreadIdFor(id) : null;
     const q = db.from('gmail_messages').update({ archived: true });
     const { error } = threadId ? await q.eq('thread_id', threadId) : await q.eq('id', id);
     if (error) { alert('Failed to archive: ' + error.message); return; }
@@ -805,6 +810,7 @@ OL.archiveGmailMessage = async function(id, alsoInGmail = true) {
           .catch(err => console.warn('Could not archive in Gmail (still archived in-app):', err));
     }
 
+    if (opts.skipClose) return;
     OL.closeModal();
     await OL.loadGmailFeed();
     OL._refreshAfterGmailAction();
@@ -1165,7 +1171,9 @@ OL.openComposeEmailModal = function(options = {}) {
         attachments: [],      // from your computer: { filename, mimeType, contentBase64, size }
         projectFiles: [],     // from the project (Drive): { name, url } — sent as links
         includeSignature: true,
-        onSent: typeof options.onSent === 'function' ? options.onSent : null
+        onSent: typeof options.onSent === 'function' ? options.onSent : null,
+        docked: !!options.docked,
+        suggestedPeople: options.suggestedPeople || []
     };
     const st = OL._composeState;
     const isReply = !!st.replyToMessageId;
@@ -1175,7 +1183,8 @@ OL.openComposeEmailModal = function(options = {}) {
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">${st.title ? esc(st.title) : (isReply ? '↩ Reply' : '✉️ Compose Email')}</div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            ${st.docked ? `<button class="btn tiny soft" title="Minimize" onclick="OL.toggleComposeDockMinimized()">▁</button>` : ''}
+            <button class="btn small soft" onclick="OL.closeCompose()">Close</button>
         </div>
         <div class="modal-body" style="max-width:760px; width:100%;">
             <div style="display:grid; gap:10px;">
@@ -1184,6 +1193,7 @@ OL.openComposeEmailModal = function(options = {}) {
                     <label class="tiny muted bold" style="display:block; margin-bottom:2px;">To</label>
                     <input type="text" id="compose-email-to" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.to)}" placeholder="name@example.com"
                            onchange="OL.renderComposeTaskPicker()" onblur="OL.renderComposeTaskPicker()">
+                    ${st.suggestedPeople.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${st.suggestedPeople.slice(0, 10).map(p => `<button type="button" class="btn tiny soft" style="font-size:10px;" title="${esc(p.email)}" onclick="OL.addComposeRecipient('${esc(p.email)}')">+ ${esc(p.name || p.email)}</button>`).join('')}</div>` : ''}
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                     <div>
@@ -1262,19 +1272,124 @@ OL.openComposeEmailModal = function(options = {}) {
                     <div class="tiny muted">Will stay linked to <strong>${esc(state.clients[st.linked_client_id].meta?.name || 'this project')}</strong>, same as the original email.</div>
                 ` : '')}
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+                    <button class="btn small soft" onclick="OL.closeCompose()">Cancel</button>
                     <button class="btn small primary" id="compose-email-send-btn" onclick="OL.sendComposedEmail()"><i data-lucide="send" style="width:12px;height:12px;"></i> Send</button>
                 </div>
             </div>
         </div>
     `;
-    OL.showOverlayModal(html);
+    if (st.docked) {
+        // Docked panel (bottom-right) — sits over whatever you're looking at,
+        // including an open task/meeting/request window, without closing it.
+        let dock = document.getElementById('compose-dock');
+        if (!dock) { dock = document.createElement('div'); dock.id = 'compose-dock'; document.body.appendChild(dock); }
+        dock.className = 'modal';
+        dock.style.cssText = 'position:fixed; right:20px; bottom:0; width:min(640px, 96vw); max-height:88vh; overflow:auto; z-index:600; border:1px solid var(--accent); border-bottom:none; border-radius:12px 12px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,0.45); background:var(--panel-dark, #111);';
+        dock.innerHTML = html;
+        dock.dataset.minimized = '';
+    } else {
+        OL.showOverlayModal(html);
+    }
     OL.renderComposeSignaturePreview();
     OL.renderComposeAttachments();
     OL.renderComposeTaskPicker();
     if (window.lucide) lucide.createIcons();
     document.getElementById(isReply ? 'compose-email-body' : 'compose-email-to')?.focus();
 };
+
+// ---- Closing / docking ----
+OL.closeCompose = function() {
+    const st = OL._composeState;
+    const dock = document.getElementById('compose-dock');
+    if (st?.docked || dock) { dock?.remove(); OL._composeState = null; return; }
+    OL.closeModal();
+};
+OL.toggleComposeDockMinimized = function() {
+    const dock = document.getElementById('compose-dock');
+    if (!dock) return;
+    const min = dock.dataset.minimized !== '1';
+    dock.dataset.minimized = min ? '1' : '';
+    dock.querySelector('.modal-body').style.display = min ? 'none' : '';
+};
+
+// ---- In-context compose, from anywhere ----
+// Works out what you're looking at (an open task, meeting or request
+// window, else the project page you're on) and opens a docked compose
+// pre-linked to it, with that project's people offered as recipients and
+// its open tasks ready to tick in. Open with the ✉️ button (bottom-left),
+// the Email buttons on task/meeting/request windows, or Alt+E.
+OL._composeContext = null; // set by the task/event/request windows while open
+OL.setComposeContext = function(ctx) { OL._composeContext = ctx ? { ...ctx, at: Date.now() } : null; };
+
+OL.openContextCompose = function(explicit) {
+    const layer = document.getElementById('modal-layer');
+    const modalOpen = layer && layer.style.display !== 'none' && layer.innerHTML.trim() !== '';
+    const ctx = explicit || (modalOpen ? OL._composeContext : null) || {};
+    const clientId = ctx.clientId || (state.activeClientId && state.clients?.[state.activeClientId] ? state.activeClientId : '');
+    const client = clientId ? state.clients[clientId] : null;
+    const opts = { docked: true, linked_client_id: clientId || null };
+    let subjectBits = [];
+    let to = [];
+
+    if (ctx.kind === 'task' && client) {
+        const t = (client.projectData?.clientTasks || []).find(x => String(x.id) === String(ctx.id));
+        if (t) {
+            opts.linked_task_id = t.id;
+            opts.linked_request_id = t.requestLineItemId || null;
+            subjectBits.push(t.title || t.name);
+            const person = (client.projectData?.teamMembers || []).find(m => m.name === t.assignee && m.email);
+            if (person) to.push(person.email);
+        }
+    } else if (ctx.kind === 'request' && client) {
+        const r = OL.findRequestItem ? OL.findRequestItem(client, ctx.id) : null;
+        if (r) { opts.linked_request_id = r.id; subjectBits.push(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || 'Request')); }
+    } else if (ctx.kind === 'event') {
+        opts.linked_event_id = ctx.id;
+        if (ctx.title) subjectBits.push(ctx.title);
+        (ctx.attendees || []).forEach(e => { if (!(state.master?.sphynxTeam || []).some(m => (m.email || '').toLowerCase() === String(e).toLowerCase())) to.push(e); });
+    }
+
+    opts.to = [...new Set(to)].join(', ');
+    opts.subject = subjectBits.length ? `${client?.meta?.name ? client.meta.name + ' — ' : ''}${subjectBits[0]}` : '';
+    opts.title = `✉️ New email${client ? ' · ' + (client.meta?.name || '') : ''}${subjectBits.length ? ' · ' + subjectBits[0] : ''}`;
+    opts.suggestedPeople = (client?.projectData?.teamMembers || []).filter(m => m.email).map(m => ({ name: m.name, email: m.email }));
+    if (ctx.kind === 'task' && opts.linked_task_id) {
+        // Pre-tick the task you were looking at in the "open tasks" list.
+        OL.openComposeEmailModal(opts);
+        if (OL._composeState) { OL._composeState.includedTaskIds = [opts.linked_task_id]; OL.renderComposeTaskPicker(); }
+        return;
+    }
+    OL.openComposeEmailModal(opts);
+};
+
+OL.addComposeRecipient = function(email) {
+    const el = document.getElementById('compose-email-to');
+    if (!el) return;
+    const list = el.value.split(',').map(x => x.trim()).filter(Boolean);
+    if (!list.some(x => x.toLowerCase() === email.toLowerCase())) list.push(email);
+    el.value = list.join(', ');
+    OL.renderComposeTaskPicker();
+};
+
+// Floating ✉️ button + Alt+E, for staff.
+(function installComposeLauncher() {
+    const mount = () => {
+        if (document.getElementById('compose-launcher') || window.IS_GUEST) return;
+        if (!(state.adminMode === true || state.teamMemberMode === true)) return;
+        const b = document.createElement('button');
+        b.id = 'compose-launcher';
+        b.title = 'New email about what you’re looking at (Alt+E)';
+        b.textContent = '✉️';
+        b.style.cssText = 'position:fixed; left:18px; bottom:18px; z-index:590; width:44px; height:44px; border-radius:50%; border:1px solid var(--accent); background:var(--panel-dark, #111); font-size:18px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.35);';
+        b.onclick = () => OL.openContextCompose();
+        document.body.appendChild(b);
+    };
+    setTimeout(mount, 3000);
+    setInterval(mount, 15000);
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && (e.key === 'e' || e.key === 'E' || e.code === 'KeyE')) { e.preventDefault(); OL.openContextCompose(); }
+    });
+})();
 
 // ---- Open tasks for the recipient's project ----
 // Once there's a recipient (or a project picked), the project's open tasks
@@ -1705,7 +1820,7 @@ OL.sendComposedEmail = async function() {
             return;
         }
 
-        OL.closeModal();
+        OL.closeCompose();
         if (typeof st.onSent === 'function') st.onSent(result);
     } catch (err) {
         console.error('Failed to send email:', err);
@@ -2346,14 +2461,63 @@ OL.saveGmailLink = async function() {
         }
     }
 
-    // 4. Auto-archive if specific enough (Project + Task/Event/Resource/Request)
+    // 4. Archive THIS email if the link is specific enough. Only this
+    // message — the rest of the conversation is left exactly as it is.
     if (st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
         OL.closeModal();
-        await OL.archiveGmailMessage(st.emailId, true);
-        return;
+        await OL.archiveGmailMessage(st.emailId, true, { wholeThread: false, skipClose: true });
+    } else {
+        OL.closeModal();
     }
+    await OL.loadGmailFeed();
+    OL._refreshAfterGmailAction();
+    // Then SUGGEST (never do) the same for the thread's other messages.
+    const { note: _omitNote, ...threadLinks } = updatePayload;
+    OL.promptThreadFollowUp(st.emailId, threadLinks);
+};
 
-    OL.closeModal();
+// After linking, if other messages in the same conversation are still
+// unlinked, offer to link them the same way (and/or archive them). Nothing
+// happens unless you click a button.
+OL.promptThreadFollowUp = async function(emailId, links) {
+    const threadId = await OL._gmailThreadIdFor(emailId);
+    if (!threadId) return;
+    const { data } = await db.from('gmail_messages')
+        .select('id, subject, date, archived, linked_client_id, linked_task_id, linked_request_id, linked_resource_id, linked_event_id')
+        .eq('thread_id', threadId).neq('id', emailId);
+    const others = (data || []).filter(m => !m.linked_task_id && !m.linked_request_id && !m.linked_resource_id && !m.linked_event_id);
+    if (!others.length) return;
+    OL._threadFollowUp = { ids: others.map(m => m.id), links };
+    const unarchived = others.filter(m => !m.archived).length;
+    let box = document.getElementById('thread-followup-prompt');
+    if (!box) { box = document.createElement('div'); box.id = 'thread-followup-prompt'; document.body.appendChild(box); }
+    box.style.cssText = 'position:fixed; right:20px; bottom:20px; z-index:530; max-width:380px; padding:14px 16px; border:1px solid var(--accent); background:var(--panel-dark, #111); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+    box.innerHTML = `
+        <div class="small bold" style="margin-bottom:4px;">💡 ${others.length} other message${others.length === 1 ? '' : 's'} in this conversation ${others.length === 1 ? "isn't" : "aren't"} linked</div>
+        <div class="tiny muted" style="margin-bottom:10px;">Suggestion only — nothing has been changed.</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn tiny primary" onclick="OL.applyThreadFollowUp(true, false)">Link them the same way</button>
+            ${unarchived ? `<button class="btn tiny soft" onclick="OL.applyThreadFollowUp(true, true)">Link + archive</button>` : ''}
+            <button class="btn tiny ghost" onclick="document.getElementById('thread-followup-prompt')?.remove()">Leave them</button>
+        </div>`;
+    setTimeout(() => { if (OL._threadFollowUp?.ids?.[0] === others[0].id) document.getElementById('thread-followup-prompt')?.remove(); }, 30000);
+};
+
+OL.applyThreadFollowUp = async function(link, archive) {
+    const f = OL._threadFollowUp;
+    document.getElementById('thread-followup-prompt')?.remove();
+    if (!f?.ids?.length) return;
+    const patch = {};
+    if (link && f.links) Object.assign(patch, f.links, { link_locked: true });
+    delete patch.note; // the note belongs to the one email it was written on
+    if (archive) patch.archived = true;
+    const { error } = await db.from('gmail_messages').update(patch).in('id', f.ids);
+    if (error) { alert('Could not update the other messages: ' + error.message); return; }
+    if (archive) {
+        const headers = { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) };
+        f.ids.forEach(id => fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/archive-gmail-message', { method: 'POST', headers, body: JSON.stringify({ id }) }).catch(() => {}));
+    }
+    OL._threadFollowUp = null;
     await OL.loadGmailFeed();
     OL._refreshAfterGmailAction();
 };

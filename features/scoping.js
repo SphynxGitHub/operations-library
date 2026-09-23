@@ -1659,6 +1659,7 @@ export function openRequestDetailDrawer(client, req) {
   `;
 
   openModal(html);
+  OL.setComposeContext?.({ kind: 'request', clientId: client.id, id: req.id });
   OL.loadLinkedEmailsForRequest(req.id);
   if (OL.hydrateRollupSection) OL.hydrateRollupSection(client.id, 'request', req.id);
   if (window.lucide) lucide.createIcons();

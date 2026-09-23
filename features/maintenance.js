@@ -398,6 +398,7 @@ export function openMaintenanceRequestModal(itemId) {
             </div>
         </div>`);
     if (isEdit && OL.hydrateRollupSection) OL.hydrateRollupSection(client.id, 'request', item.id);
+    if (isEdit) OL.setComposeContext?.({ kind: 'request', clientId: client.id, id: item.id });
 }
 
 function readRequestForm() {

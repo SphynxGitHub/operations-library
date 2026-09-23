@@ -317,8 +317,25 @@ OL.renderAutomationBuilder = function() {
     if (!main) return;
 
     const rules = state.master.automationRules || [];
+    const tab = OL.automationTab || 'tasks';
+    const tabBtn = (key, label, icon) => `<button class="btn small ${tab === key ? 'primary' : 'soft'}" onclick="OL.automationTab='${key}'; OL.renderAutomationBuilder();" style="display:inline-flex; align-items:center; gap:6px;"><i data-lucide="${icon}" style="width:13px;height:13px;"></i> ${label}</button>`;
+
+    if (tab === 'billable') {
+        main.innerHTML = `
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2><i data-lucide="zap" style="width:22px;height:22px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Automations</h2>
+                    <div class="small muted">Rules that decide which time is billable.</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}</div>
+            ${OL.renderBillableRulesPanel ? OL.renderBillableRulesPanel() : ''}`;
+        if (window.lucide) lucide.createIcons();
+        return;
+    }
 
     main.innerHTML = `
+        <div style="display:flex; gap:6px; margin-bottom:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}</div>
         <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h2><i data-lucide="zap" style="width:22px;height:22px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Automation Rules</h2>

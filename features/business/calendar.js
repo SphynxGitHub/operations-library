@@ -416,8 +416,8 @@ OL.renderEventRowHTML = function(evt) {
                          style="display:flex; cursor:pointer;"
                          onclick="OL.openEditEventAssigneeDropdown(event, '${evt.id}')">
                         ${assigneeList.length ? assigneeList.slice(0, 3).map((name, i) => {
-                            const { avatarBg, avatarColor, avatarContent } = OL.computeAssigneeAvatar ? OL.computeAssigneeAvatar(name) : { avatarBg: '#38bdf8', avatarColor: '#000', avatarContent: name.substring(0, 2).toUpperCase() };
-                            return `<div style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:2px solid var(--panel-bg); margin-left:${i > 0 ? '-8px' : '0'};">${avatarContent}</div>`;
+                            const { avatarBg, avatarColor, avatarContent, avatarBorder } = OL.computeAssigneeAvatar ? OL.computeAssigneeAvatar(name) : { avatarBg: '#38bdf8', avatarColor: '#000', avatarContent: name.substring(0, 2).toUpperCase() };
+                            return `<div style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:2px solid ${avatarBorder || 'var(--panel-bg)'}; box-sizing:border-box; margin-left:${i > 0 ? '-8px' : '0'};">${avatarContent}</div>`;
                         }).join('') : `<div style="width:24px; height:24px; border-radius:50%; background:rgba(148,163,184,0.15); color:var(--muted); font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center;">?</div>`}
                         ${assigneeList.length > 3 ? `<div style="width:24px; height:24px; border-radius:50%; background:rgba(148,163,184,0.2); color:var(--muted); font-size:9px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:2px solid var(--panel-bg); margin-left:-8px;">+${assigneeList.length - 3}</div>` : ''}
                     </div>
@@ -721,6 +721,7 @@ OL.openCalendarEventModal = async function(id) {
                     ${evt.linked_client_id && new Date(evt.start) < new Date() ? `
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-6px 0 18px; padding:10px 12px; border:1px solid rgba(37,99,235,0.3); background:rgba(37,99,235,0.05); border-radius:8px;">
                             <button class="btn small primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">✉️ ${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
+                            <button class="btn small soft" onclick="OL.openContextCompose()" title="Blank email about this meeting (stays open over this window)">New email</button>
                             ${evt.summary_sent_at ? `<span class="tiny muted">Sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
                             <span class="tiny muted" style="margin-left:auto;">${OL.zoomStatusLine ? OL.zoomStatusLine(evt) : ''}</span>
                             <button class="btn tiny soft" title="Look this meeting up in Zoom again (summary, action items, recording → Drive)" onclick="OL.recheckZoomForEvent('${evt.id}')"><i data-lucide="refresh-cw" style="width:11px;height:11px;"></i> Re-check Zoom</button>
@@ -775,6 +776,7 @@ OL.openCalendarEventModal = async function(id) {
         </div>
     `;
     OL.showOverlayModal(html);
+    OL.setComposeContext?.({ kind: 'event', clientId: evt.linked_client_id || null, id: evt.id, title: evt.title, attendees: evt.attendee_emails || [] });
     if (OL.renderAgendaSection) OL.renderAgendaSection(evt.id);
     // Handles the (rare) case of reopening this modal for a different
     // unlinked event while the shared picker singleton was already left in
@@ -1025,7 +1027,10 @@ OL.toggleEventBillable = async function(id) {
     const evt = list.find(e => e.id === id) || (OL._calendarGridEvents || []).find(e => e.id === id);
     const newValue = evt ? (evt.billable === false ? true : false) : true;
 
-    const { error } = await db.from('calendar_events').update({ billable: newValue }).eq('id', id);
+    // billable_manual: a person chose this, so a later call-type change
+    // won't flip it back to the default.
+    let { error } = await db.from('calendar_events').update({ billable: newValue, billable_manual: true }).eq('id', id);
+    if (error && /billable_manual/.test(error.message || '')) ({ error } = await db.from('calendar_events').update({ billable: newValue }).eq('id', id));
     if (error) { alert('Failed to update: ' + error.message); return; }
 
     [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
@@ -1243,12 +1248,17 @@ OL.openEditEventCallTypeDropdown = function(event, id) {
 };
 
 OL.setEventCallType = async function(id, callType) {
-    const { error } = await db.from('calendar_events').update({ call_type: callType || null }).eq('id', id);
+    // Coaching calls are billable by default: changing the category moves
+    // the billable flag with it, unless someone set billable by hand.
+    const { data: cur } = await db.from('calendar_events').select('billable_manual').eq('id', id).maybeSingle();
+    const patch = { call_type: callType || null };
+    if (cur && !cur.billable_manual) patch.billable = /coaching/i.test(callType || '');
+    const { error } = await db.from('calendar_events').update(patch).eq('id', id);
     if (error) { alert('Failed to update call category: ' + error.message); return; }
 
     [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
         const e = (list || []).find(e => e.id === id);
-        if (e) e.call_type = callType || null;
+        if (e) { e.call_type = callType || null; if ('billable' in patch) e.billable = patch.billable; }
     });
 
     if (OL._activeEventModalId === id) OL.openCalendarEventModal(id);
@@ -1663,9 +1673,13 @@ OL.zoomStatusLine = function(evt) {
         bits.push(evt.zoom_summary ? 'Summary ✓' : (evt.zoom_summary_processed ? 'Summary: none from Zoom' : 'Summary: waiting on Zoom'));
         const n = Array.isArray(evt.zoom_action_items) ? evt.zoom_action_items.length : 0;
         if (evt.zoom_summary) bits.push(`${n} action item${n === 1 ? '' : 's'}${n && evt.zoom_tasks_created ? ' → tasks ✓' : ''}`);
-        bits.push(evt.zoom_recording_status === 'saved' ? 'Recording in Drive ✓' : evt.zoom_recording_status === 'none' ? 'No recording' : 'Recording: pending');
+        bits.push(evt.zoom_recording_status === 'saved'
+            ? (evt.zoom_recording_drive_url ? `<a href="${esc(evt.zoom_recording_drive_url)}" target="_blank" rel="noopener">Recording in Drive ✓</a>` : 'Recording in Drive ✓')
+            : evt.zoom_recording_status === 'none' ? 'No recording' : 'Recording: pending');
+        if (evt.zoom_recording_url) bits.push(`<a href="${esc(evt.zoom_recording_url)}" target="_blank" rel="noopener">Zoom link</a>`);
     }
-    return esc(bits.join(' · '));
+    const line = bits.map(b => b.startsWith('<a ') ? b : esc(b)).join(' · ');
+    return evt.zoom_drive_error ? `${line}<br><span style="color:#ef4444;" title="Last Drive export error">⚠ ${esc(evt.zoom_drive_error)}</span>` : line;
 };
 
 // Clears this meeting's Zoom flags and runs the sync now, then reports
