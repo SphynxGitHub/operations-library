@@ -2,8 +2,8 @@
 // Same idea as the task bulk bar: tick emails (Communications feed or the
 // Daily Dashboard), and a bar appears at the bottom to Archive, Move to
 // inbox, Delete, or Link them to a project / task / request in one go.
-// Archive/delete act on each email's whole conversation, same as the
-// single-email buttons, and are mirrored to Gmail.
+// Every action applies to exactly the ticked messages (never the rest of
+// their conversations), and is mirrored to Gmail.
 
 import { db, state, esc } from '../../core/data.js';
 
@@ -99,35 +99,23 @@ async function afterBulk() {
 OL.bulkEmailAction = async function(action) {
     const sel = Object.entries(OL.bulkEmailSelection);
     if (!sel.length) return;
-    if (action === 'delete' && !confirm(`Delete ${sel.length} conversation${sel.length === 1 ? '' : 's'}? They'll be moved to Trash in Gmail too. Emails with links or notes are archived instead of removed.`)) return;
+    if (action === 'delete' && !confirm(`Delete ${sel.length} email${sel.length === 1 ? '' : 's'}? They'll be moved to Trash in Gmail too. Other messages in their conversations aren't affected.`)) return;
 
     const ids = sel.map(([id]) => id);
-    const threads = [...new Set(sel.map(([, v]) => v.threadId).filter(Boolean))];
     const headers = { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) };
 
     if (action === 'archive' || action === 'unarchive') {
         const archived = action === 'archive';
         await db.from('gmail_messages').update({ archived }).in('id', ids);
-        if (threads.length) await db.from('gmail_messages').update({ archived }).in('thread_id', threads);
         const fn = archived ? 'archive-gmail-message' : 'unarchive-gmail-message';
-        await Promise.all(sel.map(([id, v]) => fetch(`${SUPA}/${fn}`, { method: 'POST', headers, body: JSON.stringify({ id, threadId: v.threadId || undefined }) })
+        await Promise.all(sel.map(([id]) => fetch(`${SUPA}/${fn}`, { method: 'POST', headers, body: JSON.stringify({ id }) })
             .then(r => OL.handleGmailActionResponse?.(r, archived ? 'Archived' : 'Restored')).catch(() => {})));
     }
 
     if (action === 'delete') {
-        await Promise.all(sel.map(([id, v]) => fetch(`${SUPA}/delete-gmail-message`, { method: 'POST', headers, body: JSON.stringify({ id, threadId: v.threadId || undefined }) })
+        await Promise.all(sel.map(([id]) => fetch(`${SUPA}/delete-gmail-message`, { method: 'POST', headers, body: JSON.stringify({ id }) })
             .then(r => OL.handleGmailActionResponse?.(r, 'Deleted')).catch(() => {})));
-        let rows = [];
-        const q1 = await db.from('gmail_messages').select('id, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, note').in('id', ids);
-        rows = q1.data || [];
-        if (threads.length) {
-            const q2 = await db.from('gmail_messages').select('id, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, note').in('thread_id', threads);
-            (q2.data || []).forEach(r => { if (!rows.some(x => x.id === r.id)) rows.push(r); });
-        }
-        const keep = rows.filter(r => r.linked_client_id || r.linked_task_id || r.linked_resource_id || r.linked_request_id || r.linked_event_id || r.note).map(r => r.id);
-        const drop = rows.map(r => r.id).filter(id => !keep.includes(id));
-        if (keep.length) await db.from('gmail_messages').update({ archived: true }).in('id', keep);
-        if (drop.length) await db.from('gmail_messages').delete().in('id', drop);
+        await db.from('gmail_messages').delete().in('id', ids);
     }
     await afterBulk();
 };

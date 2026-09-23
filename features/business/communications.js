@@ -791,11 +791,12 @@ OL._gmailThreadIdFor = async function(id) {
 // conversation. Linking passes false so ONLY the linked email is archived —
 // other messages in the thread are never touched automatically; you get a
 // suggestion instead (OL.promptThreadFollowUp).
+// Archive / restore / delete act on THIS message only — never the rest of
+// its conversation (here or in Gmail). Other messages in the thread are
+// only ever suggested, never changed.
 OL.archiveGmailMessage = async function(id, alsoInGmail = true, opts = {}) {
-    const wholeThread = opts.wholeThread !== false;
-    const threadId = wholeThread ? await OL._gmailThreadIdFor(id) : null;
-    const q = db.from('gmail_messages').update({ archived: true });
-    const { error } = threadId ? await q.eq('thread_id', threadId) : await q.eq('id', id);
+    const threadId = null; // message-level only
+    const { error } = await db.from('gmail_messages').update({ archived: true }).eq('id', id);
     if (error) { alert('Failed to archive: ' + error.message); return; }
 
     if (alsoInGmail) {
@@ -817,9 +818,8 @@ OL.archiveGmailMessage = async function(id, alsoInGmail = true, opts = {}) {
 };
 
 OL.unarchiveGmailMessage = async function(id, alsoInGmail = true) {
-    const threadId = await OL._gmailThreadIdFor(id);
-    const q = db.from('gmail_messages').update({ archived: false });
-    const { error } = threadId ? await q.eq('thread_id', threadId) : await q.eq('id', id);
+    const threadId = null; // message-level only
+    const { error } = await db.from('gmail_messages').update({ archived: false }).eq('id', id);
     if (error) { alert('Failed to move back to inbox: ' + error.message); return; }
 
     // 🚀 THE FIX: this used to be app-side only — archive removed the
@@ -847,8 +847,8 @@ OL.unarchiveGmailMessage = async function(id, alsoInGmail = true) {
 // since this isn't reversible from this app once the row is gone.
 // -------------------------------------------------------------
 OL.deleteGmailMessage = async function(id, alsoInGmail = true) {
-    if (!confirm('Delete this conversation? This removes it from Operations Library' + (alsoInGmail ? ' and moves it to Trash in Gmail.' : '.'))) return;
-    const threadId = await OL._gmailThreadIdFor(id);
+    if (!confirm('Delete this email? This removes it from Operations Library' + (alsoInGmail ? ' and moves it to Trash in Gmail.' : '.') + ' Other messages in the conversation are not affected.')) return;
+    const threadId = null; // message-level only
 
     if (alsoInGmail) {
         // The delete function only accepts signed-in Sphynx admins and team members. This is still
@@ -863,17 +863,7 @@ OL.deleteGmailMessage = async function(id, alsoInGmail = true) {
           .catch(err => console.warn('Could not delete in Gmail (still deleted in-app):', err));
     }
 
-    // Rows that carry links or a note are kept (archived) so a task's linked
-    // email history never silently vanishes; everything else is removed.
-    let rows = [{ id }];
-    if (threadId) {
-        const { data } = await db.from('gmail_messages').select('id, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, note').eq('thread_id', threadId);
-        if (data?.length) rows = data;
-    }
-    const keep = rows.filter(r => r.id !== id && (r.linked_client_id || r.linked_task_id || r.linked_resource_id || r.linked_request_id || r.linked_event_id || r.note)).map(r => r.id);
-    const drop = rows.map(r => r.id).filter(rid => !keep.includes(rid));
-    if (keep.length) await db.from('gmail_messages').update({ archived: true }).in('id', keep);
-    const { error } = await db.from('gmail_messages').delete().in('id', drop);
+    const { error } = await db.from('gmail_messages').delete().eq('id', id);
     if (error) { alert('Failed to delete: ' + error.message); return; }
 
     OL.closeModal();
@@ -2493,11 +2483,10 @@ OL.promptThreadFollowUp = async function(emailId, links) {
     if (!box) { box = document.createElement('div'); box.id = 'thread-followup-prompt'; document.body.appendChild(box); }
     box.style.cssText = 'position:fixed; right:20px; bottom:20px; z-index:530; max-width:380px; padding:14px 16px; border:1px solid var(--accent); background:var(--panel-dark, #111); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.4);';
     box.innerHTML = `
-        <div class="small bold" style="margin-bottom:4px;">💡 ${others.length} other message${others.length === 1 ? '' : 's'} in this conversation ${others.length === 1 ? "isn't" : "aren't"} linked</div>
+        <div class="small bold" style="margin-bottom:4px;">💡 ${others.length} other message${others.length === 1 ? '' : 's'} in this conversation ${others.length === 1 ? "isn't" : "aren't"} linked — link ${others.length === 1 ? 'it' : 'them'} the same way?</div>
         <div class="tiny muted" style="margin-bottom:10px;">Suggestion only — nothing has been changed.</div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="btn tiny primary" onclick="OL.applyThreadFollowUp(true, false)">Link them the same way</button>
-            ${unarchived ? `<button class="btn tiny soft" onclick="OL.applyThreadFollowUp(true, true)">Link + archive</button>` : ''}
             <button class="btn tiny ghost" onclick="document.getElementById('thread-followup-prompt')?.remove()">Leave them</button>
         </div>`;
     setTimeout(() => { if (OL._threadFollowUp?.ids?.[0] === others[0].id) document.getElementById('thread-followup-prompt')?.remove(); }, 30000);
