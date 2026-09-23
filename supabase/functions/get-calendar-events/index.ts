@@ -303,10 +303,20 @@ serve(async (req) => {
     // Filtering by calendar_id instead keeps every query small regardless
     // of how long individual event ids get.
     const existingIds = new Set<string>();
+    // Events whose meeting category was set by hand in the app: the sync
+    // must not re-guess it (billing rules depend on it). Falls back to the
+    // plain lookup if call_type_manual hasn't been added yet.
+    const manualCallType = new Set<string>();
     for (const calendarId of calendarIds) {
-      const { data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId);
+      let { data, error } = await supabase.from("calendar_events").select("id, call_type_manual").eq("calendar_id", calendarId);
+      if (error && /call_type_manual/.test(error.message || "")) {
+        ({ data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId));
+      }
       if (error) throw new Error(`Lookup failed for calendar "${calendarId}": ${error.message}`);
-      (data || []).forEach((r: any) => existingIds.add(r.id));
+      (data || []).forEach((r: any) => {
+        existingIds.add(r.id);
+        if (r.call_type_manual) manualCallType.add(r.id);
+      });
     }
 
     const coreFields = (r: any) => ({
@@ -332,7 +342,13 @@ serve(async (req) => {
       // They're set once on new events below, then only changed in the app.
     });
 
-    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id)).map(coreFields);
+    // Hand-categorized events are refreshed without call_type (sent as their
+    // own batch so every row in an upsert has the same columns).
+    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id) && !manualCallType.has(r.id)).map(coreFields);
+    const existingManualRows = dedupedParsed.filter((r) => existingIds.has(r.id) && manualCallType.has(r.id)).map((r) => {
+      const { call_type: _keep, ...rest } = coreFields(r);
+      return rest;
+    });
     const newRows = dedupedParsed.filter((r) => !existingIds.has(r.id)).map((r) => {
       // Attendee-email match first (higher confidence); if that's
       // ambiguous or empty, fall back to the project name appearing in the
@@ -351,8 +367,9 @@ serve(async (req) => {
         // matches are left unlinked rather than guessed.
         linked_client_id: matched.length === 1 ? matched[0].clientId : null,
         automation_processed: false,
-        // New events default to non-billable, EXCEPT coaching calls, which
-        // are billable by default. Either can be toggled by hand.
+        // Starting guess only: the app re-applies the Billable Rules to every
+        // event it loads (core/billable.js syncEventBillableFromRules), so
+        // this just avoids a coaching call showing as non-billable until then.
         billable: /coaching/i.test(classifyCallType(r.title, r.description) || "")
       };
     });
@@ -360,9 +377,9 @@ serve(async (req) => {
     // Existing events: refresh core fields only (title/time/location may
     // have changed in Calendar) — linked_client_id/automation_processed are
     // simply not in this payload, so Postgres leaves them untouched.
-    if (existingRows.length > 0) {
-      for (let i = 0; i < existingRows.length; i += 500) {
-        const chunk = existingRows.slice(i, i + 500);
+    for (const batch of [existingRows, existingManualRows]) {
+      for (let i = 0; i < batch.length; i += 500) {
+        const chunk = batch.slice(i, i + 500);
         const { error } = await supabase.from("calendar_events").upsert(chunk, { onConflict: "id" });
         if (error) throw new Error(`Update failed: ${error.message}`);
       }
