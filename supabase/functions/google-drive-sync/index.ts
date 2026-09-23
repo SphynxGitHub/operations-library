@@ -235,38 +235,55 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "drive_session_failed", message: t.slice(0, 500) }), { status: 502, headers: corsHeaders });
       }
 
+      // One fixed 8 MB buffer, filled in place and reused for every chunk.
+      // The previous version grew the buffer by allocating a NEW array and
+      // copying everything on every network read (~64 KB), so each 8 MB
+      // chunk meant hundreds of MB of copying -- that's what exhausted the
+      // function's CPU/memory ("not enough compute resources").
       const CHUNK = 8 * 1024 * 1024; // must be a multiple of 256 KB
+      const buf = new Uint8Array(CHUNK);
+      let filled = 0;
       const reader = zoomRes.body.getReader();
-      let buffer = new Uint8Array(0);
       let offset = 0;
       let finalData: any = null;
-      let done = false;
+
+      // Stop cleanly before Supabase's wall-clock limit kills the function,
+      // so the caller gets a readable error instead of a crash.
+      const startedAt = Date.now();
+      const TIME_BUDGET_MS = 130_000;
 
       const sendChunk = async (chunk: Uint8Array, isLast: boolean) => {
         const end = offset + chunk.length - 1;
         const total = isLast ? String(offset + chunk.length) : "*";
         const range = chunk.length ? `bytes ${offset}-${end}/${total}` : `bytes */${total}`;
         const r = await fetch(sessionUrl, { method: "PUT", headers: { "Content-Range": range }, body: chunk });
-        if (r.status === 308) { offset += chunk.length; return; }
+        if (r.status === 308) { await r.body?.cancel(); offset += chunk.length; return; }
         if (r.ok) { finalData = await r.json().catch(() => ({})); offset += chunk.length; return; }
         throw new Error(`Drive chunk upload failed (HTTP ${r.status}): ${(await r.text()).slice(0, 300)}`);
       };
 
       try {
-        while (!done) {
-          const { value, done: streamDone } = await reader.read();
+        while (true) {
+          const { value, done } = await reader.read();
           if (value) {
-            const merged = new Uint8Array(buffer.length + value.length);
-            merged.set(buffer); merged.set(value, buffer.length);
-            buffer = merged;
+            let pos = 0;
+            while (pos < value.length) {
+              const n = Math.min(CHUNK - filled, value.length - pos);
+              buf.set(value.subarray(pos, pos + n), filled);
+              filled += n; pos += n;
+              if (filled === CHUNK) {
+                await sendChunk(buf, false);
+                filled = 0;
+                if (Date.now() - startedAt > TIME_BUDGET_MS) {
+                  await reader.cancel().catch(() => {});
+                  throw new Error(`recording is too large to copy within one run (stopped after ${Math.round(offset / 1048576)} MB of ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "?"})`);
+                }
+              }
+            }
           }
-          done = streamDone;
-          while (buffer.length >= CHUNK && !(done && buffer.length === CHUNK)) {
-            await sendChunk(buffer.slice(0, CHUNK), false);
-            buffer = buffer.slice(CHUNK);
-          }
+          if (done) break;
         }
-        await sendChunk(buffer, true);
+        await sendChunk(buf.subarray(0, filled), true);
       } catch (e: any) {
         return new Response(JSON.stringify({ error: "drive_upload_failed", message: e.message }), { status: 502, headers: corsHeaders });
       }
