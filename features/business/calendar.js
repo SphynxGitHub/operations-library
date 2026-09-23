@@ -1,7 +1,9 @@
 import { esc, state, db, updateAndSync, uid } from '../../core/data.js';
+import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
 const CALENDAR_PAGE_SIZE = 150;
-const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'General Call'];
+// One list, shared with the Billable Rules "Meeting category" field.
+const CALL_TYPES = MEETING_CATEGORIES;
 
 OL.calendarState = {
     loading: false,
@@ -592,6 +594,8 @@ OL.loadCalendarGridMonth = async function() {
     
     OL._calendarGridEvents = data || [];
     await OL.applyEventTimeRecalculation(OL._calendarGridEvents);
+    // Events nobody toggled by hand follow the Billable Rules.
+    await syncEventBillableFromRules(OL._calendarGridEvents);
 };
 
 // -------------------------------------------------------------
@@ -620,6 +624,8 @@ OL.loadCalendarEvents = async function() {
     const sortDir = OL.calendarState.filter === 'past' ? -1 : 1;
     state.master.googleCalendarEvents = (data || []).slice().sort((a, b) => sortDir * (new Date(a.start) - new Date(b.start)));
     await OL.applyEventTimeRecalculation(state.master.googleCalendarEvents);
+    // Events nobody toggled by hand follow the Billable Rules.
+    await syncEventBillableFromRules(state.master.googleCalendarEvents);
 };
 
 // -------------------------------------------------------------
@@ -1252,18 +1258,24 @@ OL.openEditEventCallTypeDropdown = function(event, id) {
 };
 
 OL.setEventCallType = async function(id, callType) {
-    // Coaching calls are billable by default: changing the category moves
-    // the billable flag with it, unless someone set billable by hand.
-    const { data: cur } = await db.from('calendar_events').select('billable_manual').eq('id', id).maybeSingle();
-    const patch = { call_type: callType || null };
-    if (cur && !cur.billable_manual) patch.billable = /coaching/i.test(callType || '');
-    const { error } = await db.from('calendar_events').update(patch).eq('id', id);
+    // The billable flag follows the Billable Rules for the new category,
+    // unless someone set billable by hand. call_type_manual stops the
+    // calendar sync from re-guessing the category over this choice.
+    const { data: cur } = await db.from('calendar_events').select('id, title, linked_client_id, assignee, billable_manual').eq('id', id).maybeSingle();
+    const patch = { call_type: callType || null, call_type_manual: true };
+    if (cur && !cur.billable_manual) patch.billable = eventBillableFromRules({ ...cur, call_type: callType || null });
+    let { error } = await db.from('calendar_events').update(patch).eq('id', id);
+    if (error && /call_type_manual/.test(error.message || '')) {
+        delete patch.call_type_manual;
+        ({ error } = await db.from('calendar_events').update(patch).eq('id', id));
+    }
     if (error) { alert('Failed to update call category: ' + error.message); return; }
 
     [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) { e.call_type = callType || null; if ('billable' in patch) e.billable = patch.billable; }
     });
+    if (window.OL._eventCallTypeCache) window.OL._eventCallTypeCache[id] = { id, call_type: callType || null };
 
     if (OL._activeEventModalId === id) OL.openCalendarEventModal(id);
     else OL.refreshTaskView();
