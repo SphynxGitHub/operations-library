@@ -1696,10 +1696,22 @@ OL.recheckZoomForEvent = async function(eventId) {
         const r = await res.json().catch(() => ({}));
         if (!res.ok) { alert('Zoom sync failed: ' + (r.message || res.status)); return; }
         if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems();
-        const d = r.eventReport || {};
+        if (!r.eventReport) {
+            // The server is running an older sync that ignores single-meeting
+            // re-checks, so there's nothing meeting-specific to report.
+            alert([
+                'The Zoom sync on the server is an older version that can\'t re-check a single meeting.',
+                'Redeploy the sync-zoom-meetings function (Supabase → Edge Functions), then click Re-check Zoom again.',
+                '',
+                `What it did return: ${r.summariesPostedCount ?? 0} summaries, ${r.recordingsToDrive ?? 0} recordings to Drive, ${r.driveErrors ?? 0} Drive errors.`
+            ].join('\n'));
+            OL.openCalendarEventModal(eventId);
+            return;
+        }
+        const d = r.eventReport;
         alert([
             'Zoom re-check for this meeting:',
-            `• Zoom meeting: ${d.meetingId ? d.meetingId + (d.matchedBy ? ` (matched by ${d.matchedBy})` : '') : 'not found — no Zoom link on the invite and no Zoom meeting/recording at this time'}`,
+            `• Zoom meeting: ${d.meetingId ? d.meetingId + (d.matchedBy ? ` (matched by ${d.matchedBy})` : '') : 'not identified (see notes below)'}`,
             `• Summary: ${d.summary || 'not checked'}`,
             `• Action items: ${d.actionItems ?? 0}`,
             `• Recording: ${d.recording || 'not checked'}`,
