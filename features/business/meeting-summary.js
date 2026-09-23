@@ -76,19 +76,23 @@ function makeSummaryTask(client, evt) {
 // meeting that gets linked to a project AFTER its summary arrived still
 // gets its tasks (previously those were skipped forever).
 let materializing = false;
-OL.materializeZoomActionItems = async function() {
+// Pass { eventId } to limit it to one meeting (the Re-check Zoom button);
+// with no argument it handles every meeting still waiting for tasks.
+OL.materializeZoomActionItems = async function(opts = {}) {
+    const onlyEventId = opts?.eventId ? String(opts.eventId) : null;
     if (materializing) return 0;
     materializing = true;
     let created = 0;
     try {
         if (!state.isCloudSynced) return 0;
         if (!(state.adminMode === true || state.teamMemberMode === true)) return 0;
-        const { data: events, error } = await db.from('calendar_events')
+        let q = db.from('calendar_events')
             .select('id, title, start, linked_client_id, zoom_action_items')
             .eq('zoom_tasks_created', false)
             .not('linked_client_id', 'is', null)
-            .eq('zoom_summary_processed', true)
-            .limit(50);
+            .eq('zoom_summary_processed', true);
+        q = onlyEventId ? q.eq('id', onlyEventId) : q.limit(50);
+        const { data: events, error } = await q;
         if (error) { if (!/zoom_tasks_created|zoom_action_items/.test(error.message || '')) console.warn('Zoom action item check failed:', error.message); return 0; }
 
         const done = [];
@@ -98,10 +102,15 @@ OL.materializeZoomActionItems = async function() {
             if (!client?.projectData) continue;
             if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
             // Never duplicate: skip titles already created from this meeting.
-            const have = new Set(client.projectData.clientTasks
-                .filter(t => String(t.linkedEventId) === String(evt.id) && t.source === 'zoom_summary')
-                .map(t => (t.title || '').trim().toLowerCase()));
-            const toAdd = items.filter(i => !have.has(i.toLowerCase()));
+            // Any task tied to this meeting counts (older syncs didn't tag
+            // source), and if Zoom tasks already exist for this meeting,
+            // nothing more is added — a re-worded summary shouldn't spawn
+            // a second set.
+            const fromThisMeeting = client.projectData.clientTasks.filter(t =>
+                [t.linkedEventId, t.parentEventId, t.meetingSummaryEventId].some(id => id != null && String(id) === String(evt.id)));
+            const alreadyHasZoomTasks = fromThisMeeting.some(t => t.source === 'zoom_summary' || t.createdBy === 'zoom-sync');
+            const have = new Set(fromThisMeeting.map(t => (t.title || t.name || '').trim().toLowerCase()));
+            const toAdd = alreadyHasZoomTasks ? [] : items.filter(i => !have.has(i.toLowerCase()));
             if (toAdd.length) {
                 await updateAndSync(() => {
                     toAdd.forEach(item => client.projectData.clientTasks.unshift({
