@@ -6,9 +6,10 @@
 // Layout
 //   Hi <names of the non-Sphynx attendees>,
 //   <intro paragraph>
+//   Here is the recording of our session   only when a recording link exists
+//                                           (a hyperlink in the sent email)
 //   SUMMARY            the Zoom summary
 //   NEXT STEPS         open tasks from the meeting, grouped Sphynx / client
-//   RECORDING          only when a recording link exists
 //   Best, <sender>
 
 const PLACEHOLDER_ASSIGNEES = ['Sphynx Task', 'Client Task'];
@@ -130,6 +131,26 @@ export function assembleBody({ message, nextSteps, closing }) {
         .join('\n\n');
 }
 
+// The recording line. In the sent email this exact text becomes a link to the recording;
+// the plain-text copy gets the address after it.
+export const RECORDING_LINE = 'Here is the recording of our session';
+
+const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// The finished email in both forms. If the recording line was deleted from the message,
+// no link is added anywhere.
+// Returns { text, html }.
+export function renderEmailBodies(body, recordingUrl) {
+    const url = String(recordingUrl || '').trim();
+    const hasLine = !!url && /^https?:\/\//i.test(url) && String(body || '').includes(RECORDING_LINE);
+    // (a trailing period is dropped in the text copy so it can't end up inside the address)
+    const text = hasLine ? String(body).replace(new RegExp(`${RECORDING_LINE}\\.?`), `${RECORDING_LINE}: ${url}`) : String(body || '');
+    let html = escHtml(body);
+    if (hasLine) html = html.replace(escHtml(RECORDING_LINE), `<a href="${escHtml(url)}">${escHtml(RECORDING_LINE)}</a>`);
+    html = `<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5;">${html.replace(/\n/g, '<br>')}</div>`;
+    return { text, html };
+}
+
 // input: { title, start, summary, attendeeEmails, senderEmail (or senderEmails), senderName, sphynxEmails,
 //          people: [{ name, email }], tasks (already filtered to this meeting), clientName, recordingUrl }
 // Returns the pieces separately so the window can edit the message and closing as text while
@@ -139,18 +160,22 @@ export function buildSummaryDraft(input) {
     const names = greetingNames(recipients, { sphynxEmails: input.sphynxEmails, people: input.people });
     const meetingDate = formatMeetingDate(input.start);
 
+    const recordingUrl = String(input.recordingUrl || '').trim();
+    // Thanks / recording / summary intro, one per line (the recording line only when there is one).
+    const intro = [
+        `Thanks for taking the time to meet with us${meetingDate ? ` on ${meetingDate}` : ''}.`,
+        ...(recordingUrl ? [`${RECORDING_LINE}.`] : []),
+        'Below is a summary of what we covered and the next steps.',
+    ].join('\n');
     const message = [
         `Hi ${joinNames(names) || 'there'},`,
-        `Thanks for taking the time to meet with us${meetingDate ? ` on ${meetingDate}` : ''}. Below is a summary of what we covered and the next steps.`,
+        intro,
         `SUMMARY\n\n${tidySummary(input.summary)}`,
     ].join('\n\n');
 
     const nextSteps = nextStepsText(input.tasks, input.clientName);
 
-    const closingParts = [];
-    if (String(input.recordingUrl || '').trim()) closingParts.push(`RECORDING\n\n${String(input.recordingUrl).trim()}`);
-    closingParts.push(`Best,\n${String(input.senderName || '').trim() || 'The Sphynx team'}`);
-    const closing = closingParts.join('\n\n');
+    const closing = `Best,\n${String(input.senderName || '').trim() || 'The Sphynx team'}`;
 
     const date = shortDate(input.start);
     return {
