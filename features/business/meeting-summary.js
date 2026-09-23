@@ -11,7 +11,7 @@
 // Needs 001_lifecycle_tables.sql (adds calendar_events.summary_sent_at).
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, renderEmailBodies } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -651,8 +651,10 @@ OL.msSend = async function() {
     const btn = document.getElementById('ms-send-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
+    // "Here is the recording of our session" becomes a link to the recording in Drive.
+    const rendered = renderEmailBodies(body, st.recordingUrl);
     const { ok } = await OL.sendGmailMessage({
-        to, cc: cc || undefined, subject, body,
+        to, cc: cc || undefined, subject, body: rendered.text, bodyHtml: rendered.html,
         linked_client_id: st.client.id, linked_event_id: st.evt.id, linked_task_id: st.task.id,
     });
     if (!ok) {
@@ -704,10 +706,10 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         people: client.projectData.teamMembers || [],
         tasks: [],                      // the window builds Next steps from the live tasks
         clientName: client.meta?.name || '',
-        recordingUrl: evt.recording_url || evt.zoom_recording_url || '',
+        recordingUrl: evt.zoom_recording_drive_url || '',
     });
 
-    OL._msState = { evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };
+    OL._msState = { recordingUrl: evt.zoom_recording_drive_url || '', evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };
 
     const html = `
         <style>
