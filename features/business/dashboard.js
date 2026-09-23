@@ -114,6 +114,8 @@ OL.loadDashboardEvents = async function() {
     if (error) { console.error('Failed to load dashboard events:', error.message); OL._dashboardEventsCache = []; return; }
     OL._dashboardEventsCache = data || [];
     if (typeof OL.applyEventTimeRecalculation === 'function') await OL.applyEventTimeRecalculation(OL._dashboardEventsCache);
+    // Events nobody toggled by hand follow the Billable Rules.
+    if (typeof OL.syncEventBillableFromRules === 'function') await OL.syncEventBillableFromRules(OL._dashboardEventsCache);
 };
 
 OL.getDashboardEventItems = function() {
