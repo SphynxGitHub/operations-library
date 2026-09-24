@@ -14,7 +14,7 @@ import {
     ensureMaintenanceSheet, maintenanceSheetOf, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
-    allocateHours, entryKey,
+    allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
 } from '../core/maintenance.js';
 import { isClientTask, isTaskBillableForHours, stampBillableFor } from '../core/billable.js';
 import { markClientDirty } from '../core/data.js';
@@ -207,7 +207,8 @@ function grantCardHtml(client, g, ledger, gt) {
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="tiny bold" style="color:${u > h ? '#ef4444' : 'var(--text)'};">${esc(hoursText(u))} of ${esc(hoursText(h))}</span>
-                    ${g.source !== 'plan_allotment' && canManage() ? `<button class="btn tiny soft" onclick="OL.openGrantTasksModal('${esc(g.id)}')" title="Set tasks aside for these hours">Set aside tasks${n ? ` (${n})` : ''}…</button>` : ''}
+                    ${g.source !== 'plan_allotment' && canManage() ? `<button class="btn tiny soft" onclick="OL.openGrantTasksModal('${esc(g.id)}')" title="Set tasks aside for these hours">Set aside tasks${n ? ` (${n})` : ''}…</button>
+                    <button class="btn tiny soft" onclick="OL.openEditGrantModal('${esc(g.id)}')">Edit</button>` : ''}
                 </div>
             </div>
             <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:8px 0 4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
@@ -545,6 +546,50 @@ export async function submitAdHocPurchase() {
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
 
+// ---------------- editing an ad hoc purchase or carryover ----------------
+const STATUS_LABEL = { active: 'Active', used_up: 'Used up', expired: 'Expired' };
+function findGrant(grantId) { const client = getActiveClient(); return { client, grant: slotFor(client?.id).grants.find((g) => String(g.id) === String(grantId)) }; }
+
+export function openEditGrantModal(grantId) {
+    const { grant } = findGrant(grantId); if (!grant || !canManage()) return;
+    const adHoc = grant.source === 'ad_hoc_purchase';
+    const d = (v) => esc(String(v || '').slice(0, 10));
+    openModal(`${modalHead(`Edit ${esc((GRANT_LABEL[grant.source] || 'grant').toLowerCase())}`)}<div class="modal-body" style="padding-top:14px;">
+        ${field('Hours', `<input id="eg-hours" type="number" min="0" step="0.25" class="modal-input" value="${esc(grant.hours_granted)}">`)}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${field(adHoc ? 'Purchase date' : 'Starts', `<input id="eg-granted" type="date" class="modal-input" value="${d(grant.granted_on)}" ${adHoc ? 'oninput="OL.egRecalc()"' : ''}>`)}
+            ${field('Expires', `<input id="eg-expires" type="date" class="modal-input" value="${d(grant.expires_on)}" oninput="this.dataset.touched='1'">`)}
+        </div>
+        ${adHoc ? '<div class="tiny muted" style="margin:-6px 0 12px;">Changing the purchase date moves the expiry to a year later, unless you set the expiry yourself.</div>' : ''}
+        ${field('Status', `<select id="eg-status" class="modal-input">${GRANT_STATUSES.map((st) => `<option value="${st}" ${grant.status === st ? 'selected' : ''}>${STATUS_LABEL[st]}</option>`).join('')}</select>`)}
+        ${field('Note (optional)', `<input id="eg-note" type="text" class="modal-input" value="${esc(grant.note || '')}" placeholder="e.g. Invoice 1042">`)}
+        <div style="display:flex; gap:10px;">
+            <button class="btn primary" style="flex:1; justify-content:center;" onclick="OL.submitEditGrant('${esc(grant.id)}')">Save</button>
+            <button class="btn soft" style="color:#ef4444;" onclick="OL.deleteGrant('${esc(grant.id)}')">Delete</button>
+        </div></div>`);
+}
+export function egRecalc() {
+    const s = val('eg-granted'); const exp = document.getElementById('eg-expires');
+    if (exp && !exp.dataset.touched && validDate(s)) exp.value = adHocExpiry(s);
+}
+export async function submitEditGrant(grantId) {
+    const { client, grant } = findGrant(grantId); if (!grant) return;
+    const plan = planEditGrant({ grant, patch: { hours: val('eg-hours'), granted_on: val('eg-granted'), expires_on: val('eg-expires'), status: val('eg-status'), note: val('eg-note') } });
+    if (plan.error) { alert(plan.error); return; }
+    const { error } = await db.from('hours_grant').update(plan.update).eq('id', grant.id);
+    if (error) { alert(friendly(error)); return; }
+    OL.closeModal(); await reloadAndRedraw(client.id);
+}
+export async function deleteGrant(grantId) {
+    const { client, grant } = findGrant(grantId); if (!grant) return;
+    const tasks = (client.projectData?.clientTasks || []).filter((t) => String(t.hoursGrantId || '') === String(grant.id));
+    if (!confirm(`Delete this ${(GRANT_LABEL[grant.source] || 'grant').toLowerCase()} (${hoursText(grant.hours_granted)})?${tasks.length ? ` The ${tasks.length} task${tasks.length === 1 ? '' : 's'} set aside for it go back to Auto.` : ''} Time already logged stays on the tasks.`)) return;
+    const { error } = await db.from('hours_grant').delete().eq('id', grant.id);
+    if (error) { alert(friendly(error)); return; }
+    if (tasks.length) await saveTaskGrants(client, tasks.map((t) => ({ taskId: t.id, grantId: null })));
+    OL.closeModal(); await reloadAndRedraw(client.id);
+}
+
 // ---------------- Client Requests ----------------
 function closedNames() {
     const names = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter((s) => s.isClosed).map((s) => s.name);
@@ -708,7 +753,8 @@ export async function deleteMaintenanceRequest(itemId) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderMaintenancePage, renderClientRequests, loadMaintenanceData,
-    openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
+    openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
+    openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
     openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
     maintenanceTabAllowed,

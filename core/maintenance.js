@@ -242,6 +242,24 @@ export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '' }) {
     return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: adHocExpiry(purchasedOn), status: 'active', note: String(note || '').trim() || null } };
 }
 
+// Edit an ad hoc purchase or a courtesy carryover. (A plan allotment is edited through its plan period.)
+export const GRANT_STATUSES = ['active', 'used_up', 'expired'];
+export function planEditGrant({ grant, patch }) {
+    if (!grant) return { error: 'That grant no longer exists. Reload and try again.' };
+    if (grant.source === 'plan_allotment') return { error: 'Edit the plan period to change its allotment.' };
+    const h = cleanHours(patch.hours ?? grant.hours_granted);
+    if (h <= 0) return { error: 'Enter the number of hours.' };
+    const granted = patch.granted_on ?? String(grant.granted_on).slice(0, 10);
+    if (!validDate(granted)) return { error: grant.source === 'ad_hoc_purchase' ? 'Enter a valid purchase date.' : 'Enter a valid start date.' };
+    const expires = patch.expires_on ?? String(grant.expires_on).slice(0, 10);
+    if (!validDate(expires) || expires <= granted) return { error: 'The expiry date must be after the ' + (grant.source === 'ad_hoc_purchase' ? 'purchase date.' : 'start date.') };
+    const status = patch.status ?? grant.status;
+    if (!GRANT_STATUSES.includes(status)) return { error: 'Pick a status.' };
+    const update = { hours_granted: h, granted_on: granted, expires_on: expires, status };
+    if (patch.note !== undefined) update.note = String(patch.note || '').trim() || null;
+    return { update };
+}
+
 // ---- Client Requests: plain requests kept on a second sheet ----
 export function ensureMaintenanceSheet(pd) {
     if (!pd) return null;
