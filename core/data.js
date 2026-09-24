@@ -628,9 +628,37 @@ export function getActiveClient() {
 // (client.meta.partnerOwner === that partner's client id).
 export function getBusinessScopedClients() {
     const all = Object.values(state.clients || {});
-    const partnerId = state.businessScopePartnerId;
-    if (!partnerId) return all;
-    return all.filter(c => String(c.meta?.partnerOwner) === String(partnerId));
+    const ids = getBusinessScopeClientIds();
+    return ids === null ? all : all.filter(c => ids.has(String(c.id)));
+}
+
+// Which projects' business data (emails, calendar events, errors, tasks...) this session may see.
+//   null      -> no limit (Sphynx staff)
+//   a Set     -> only these project ids (a partner's managed clients; empty for a plain client login)
+// It follows who is LOGGED IN, not which page is open, so a partner can never widen it by navigating.
+export function getBusinessScopeClientIds() {
+    const guest = window.IS_GUEST === true;
+    const partnerId = state.businessScopePartnerId || (guest && state.loginIsPartner ? state.loginClientId : null);
+    if (partnerId) {
+        return new Set(Object.values(state.clients || {})
+            .filter(c => String(c.meta?.partnerOwner) === String(partnerId))
+            .map(c => String(c.id)));
+    }
+    return guest ? new Set() : null;
+}
+
+// True if an item linked to this project (or to none) may be shown. Unlinked items are staff-only.
+export function isInBusinessScope(clientId) {
+    const ids = getBusinessScopeClientIds();
+    return ids === null || (clientId != null && clientId !== '' && ids.has(String(clientId)));
+}
+
+// Narrows a Supabase query to the projects this session may see, so other clients' rows are never
+// even downloaded. `column` is the project-id column of the table being read.
+export function scopeQueryToBusinessClients(query, column) {
+    const ids = getBusinessScopeClientIds();
+    if (ids === null) return query;
+    return query.in(column, ids.size ? [...ids] : ['__none__']);
 }
 
 // Was referenced in a couple of places (task comments, and now how-to guide

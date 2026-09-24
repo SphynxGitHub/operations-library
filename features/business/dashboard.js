@@ -1,4 +1,4 @@
-import { esc, state, db, getBusinessScopedClients } from '../../core/data.js';
+import { esc, state, db, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getCurrentRound } from '../../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
 import { assigneeForRole } from '../../core/testing.js';
@@ -104,20 +104,22 @@ OL.loadDashboardEvents = async function() {
     const windowStart = new Date(); windowStart.setHours(0, 0, 0, 0);
     const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
 
-    const { data, error } = await db.from('calendar_events')
+    const { data, error } = await scopeQueryToBusinessClients(db.from('calendar_events')
         .select('id, title, start, end, all_day, linked_client_id, assignee, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
         .gte('start', windowStart.toISOString())
         .lte('start', windowEnd.toISOString())
-        .eq('hidden_from_dashboard', false)
+        .eq('hidden_from_dashboard', false), 'linked_client_id')
         .order('start', { ascending: true });
 
     if (error) { console.error('Failed to load dashboard events:', error.message); OL._dashboardEventsCache = []; return; }
     OL._dashboardEventsCache = data || [];
     if (typeof OL.applyEventTimeRecalculation === 'function') await OL.applyEventTimeRecalculation(OL._dashboardEventsCache);
+    // Events nobody toggled by hand follow the Billable Rules.
+    if (typeof OL.syncEventBillableFromRules === 'function') await OL.syncEventBillableFromRules(OL._dashboardEventsCache);
 };
 
 OL.getDashboardEventItems = function() {
-    return (OL._dashboardEventsCache || []).map(e => ({
+    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id)).map(e => ({
         ...e,
         _type: 'event',
         isUnassigned: !e.assignee,
@@ -133,13 +135,13 @@ OL.getDashboardEventItems = function() {
 // setting to turn this off yet; use the Types filter to hide them).
 OL._dashboardEmailsCache = null;
 OL.loadDashboardEmails = async function() {
-    let { data, error } = await db.from('gmail_messages')
+    let { data, error } = await scopeQueryToBusinessClients(db.from('gmail_messages')
         .select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, participants')
-        .eq('archived', false)
+        .eq('archived', false), 'linked_client_id')
         .order('date', { ascending: false })
         .limit(100);
     if (error && /linked_request_id/.test(error.message || '')) {
-        ({ data, error } = await db.from('gmail_messages').select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, participants').eq('archived', false).order('date', { ascending: false }).limit(100));
+        ({ data, error } = await scopeQueryToBusinessClients(db.from('gmail_messages').select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, participants').eq('archived', false), 'linked_client_id').order('date', { ascending: false }).limit(100));
     }
 
     if (error) { console.error('Failed to load dashboard emails:', error.message); OL._dashboardEmailsCache = []; return; }
@@ -147,7 +149,7 @@ OL.loadDashboardEmails = async function() {
 };
 
 OL.getDashboardEmailItems = function() {
-    return (OL._dashboardEmailsCache || []).map(m => ({
+    return (OL._dashboardEmailsCache || []).filter(m => isInBusinessScope(m.linked_client_id)).map(m => ({
         ...m,
         _type: 'email',
         dueDate: m.date,
@@ -209,9 +211,9 @@ OL.getDashboardRequestItems = function() {
 
 OL._dashboardErrorsCache = null;
 OL.loadDashboardErrors = async function() {
-    const { data, error } = await db.from('error_log')
+    const { data, error } = await scopeQueryToBusinessClients(db.from('error_log')
         .select('*')
-        .neq('status', 'resolved')
+        .neq('status', 'resolved'), 'client_id')
         .order('occurred_at', { ascending: false })
         .limit(100);
 
@@ -220,7 +222,7 @@ OL.loadDashboardErrors = async function() {
 };
 
 OL.getDashboardErrorItems = function() {
-    return (OL._dashboardErrorsCache || []).map(r => ({
+    return (OL._dashboardErrorsCache || []).filter(r => isInBusinessScope(r.client_id)).map(r => ({
         ...r,
         _type: 'error',
         dueDate: r.occurred_at,

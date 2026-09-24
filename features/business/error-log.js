@@ -1,4 +1,4 @@
-import { esc, uid, state, db, updateAndSync, getActiveClient, getBusinessScopedClients } from '../../core/data.js';
+import { esc, uid, state, db, updateAndSync, getActiveClient, getBusinessScopedClients, getBusinessScopeClientIds, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 
 // Small Lucide icon helper for inline pill/tag labels.
 function ic(name) {
@@ -310,7 +310,18 @@ OL.setErrorLogClientFilter = function(clientId) {
 OL.loadErrorLog = async function() {
     OL.errorLogState.loading = true;
 
-    let query = db.from('error_log').select('*');
+    // Inside one project's own Error Tracking tab the list is that project only (and a partner/client login
+    // may only open a project that is theirs or one they manage). Everywhere else it is limited to the
+    // projects this login may see business data for.
+    const lockedId = OL.errorLogState.lockedClientId;
+    const scopeErrors = (q) => lockedId ? q.eq('client_id', lockedId) : scopeQueryToBusinessClients(q, 'client_id');
+    if (lockedId && window.IS_GUEST === true) {
+        const managed = getBusinessScopeClientIds();
+        const allowed = String(lockedId) === String(state.loginClientId) || (managed && managed.has(String(lockedId)));
+        if (!allowed) { OL.errorLogState.loading = false; OL.errorLogState.rows = []; return; }
+    }
+
+    let query = scopeErrors(db.from('error_log').select('*'));
 
     if (OL.errorLogState.lockedClientId) {
         query = query.eq('client_id', OL.errorLogState.lockedClientId);
@@ -338,14 +349,14 @@ OL.loadErrorLog = async function() {
     OL.errorLogState.loading = false;
 
     if (error) { console.error('Failed to load error log:', error.message); OL.errorLogState.rows = []; return; }
-    OL.errorLogState.rows = data || [];
+    OL.errorLogState.rows = (data || []).filter(r => lockedId || isInBusinessScope(r.client_id));
 
     // Populate the service filter dropdown from whatever's actually in the table
-    const { data: serviceRows } = await db.from('error_log').select('service').not('service', 'is', null);
+    const { data: serviceRows } = await scopeErrors(db.from('error_log').select('service').not('service', 'is', null));
     OL.errorLogState.services = [...new Set((serviceRows || []).map(r => r.service).filter(Boolean))].sort();
 
     // Same, for the resource filter dropdown
-    const { data: resourceRows } = await db.from('error_log').select('resource_name').not('resource_name', 'is', null);
+    const { data: resourceRows } = await scopeErrors(db.from('error_log').select('resource_name').not('resource_name', 'is', null));
     OL.errorLogState.resources = [...new Set((resourceRows || []).map(r => r.resource_name).filter(Boolean))].sort();
 };
 

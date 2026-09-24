@@ -60,7 +60,6 @@ export function clearPreviewTarget() {
 const ALLOWED_NON_READS = [
     /\/auth\/v1\/token/,                          // session refresh
     /\/rest\/v1\/rpc\/ol_master_for_clients/,     // the limited master registry a client/partner gets
-    /\/functions\/v1\/get-gmail-messages/,        // partner Communications tab reads mail through this
 ];
 
 let lastNotice = 0;
