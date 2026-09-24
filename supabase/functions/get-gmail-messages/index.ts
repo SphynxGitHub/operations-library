@@ -284,8 +284,9 @@ async function listInboxMessageIds(accessToken: string): Promise<string[]> {
 // The sync used to only ever ADD rows. Archiving or deleting something in
 // Gmail itself never reached the app, so "bi-directional" only worked one
 // way. This pass mirrors Gmail's current state back:
-//   - a recent unarchived app row whose conversation is no longer in the
-//     Gmail inbox (archived there) -> archived in the app
+//   - a conversation that is no longer in the Gmail inbox (archived there)
+//     -> ONLY its most recent message is archived in the app. Older
+//     messages in the same thread are left as they are.
 //   - one that's in Trash / gone from Gmail -> removed from the app, unless
 //     it carries links or a note (then it's archived instead, so nothing
 //     tied to a task silently disappears)
@@ -347,7 +348,32 @@ async function reconcileWithGmail(supabase: any, accessToken: string) {
     .gte("date", since)
     .order("date", { ascending: false })
     .limit(500);
-  const candidates = (liveRows || []).filter((r: any) => !r.thread_id || !inboxThreads.has(r.thread_id)).slice(0, RECONCILE_MAX_CHECKS);
+  const outOfInbox = (liveRows || []).filter((r: any) => !r.thread_id || !inboxThreads.has(r.thread_id));
+
+  // A Gmail thread archive only archives the thread's MOST RECENT message
+  // here. "Most recent" is across every app row in the thread, archived or
+  // not, so an older message never inherits the archive just because the
+  // newest one was already archived.
+  const latestByThread = new Map<string, { id: string; date: string }>();
+  const threadIds = [...new Set(outOfInbox.map((r: any) => r.thread_id).filter(Boolean))] as string[];
+  for (let i = 0; i < threadIds.length; i += 100) {
+    const { data: threadRows } = await supabase.from("gmail_messages")
+      .select("id, thread_id, date")
+      .in("thread_id", threadIds.slice(i, i + 100));
+    (threadRows || []).forEach((t: any) => {
+      const cur = latestByThread.get(t.thread_id);
+      if (!cur || new Date(t.date).getTime() > new Date(cur.date).getTime()) latestByThread.set(t.thread_id, { id: t.id, date: t.date });
+    });
+  }
+  const isLatestInThread = (r: any) => !r.thread_id || latestByThread.get(r.thread_id)?.id === r.id;
+
+  // Latest-in-thread rows are checked first. Older rows are still checked
+  // (after them, within the cap) but only so a trashed/deleted message is
+  // still removed — they are never archived because of a thread archive.
+  const candidates = [
+    ...outOfInbox.filter(isLatestInThread),
+    ...outOfInbox.filter((r: any) => !isLatestInThread(r))
+  ].slice(0, RECONCILE_MAX_CHECKS);
 
   const archiveIds: string[] = [];
   const removeIds: string[] = [];
@@ -365,6 +391,7 @@ async function reconcileWithGmail(supabase: any, accessToken: string) {
       if (labels.includes("TRASH") || labels.includes("SPAM")) { (hasLinks ? archiveIds : removeIds).push(row.id); return; }
       if (labels.includes("INBOX")) return;
       if (labels.includes("SENT")) return; // sent-only, never was in the inbox
+      if (!isLatestInThread(row)) return; // older message: thread archive doesn't touch it
       archiveIds.push(row.id);
     }));
   }

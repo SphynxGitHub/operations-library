@@ -5,7 +5,9 @@
 //                 Manage Calendars (180 days back, 365 days ahead), saves and updates
 //                 them, links new events to a client project when exactly one matches,
 //                 and tags the call type (follow up, intro, coaching, general).
-//                 Removes stored events for calendars that are no longer chosen.
+//                 Removes stored events for calendars that are no longer chosen, and
+//                 events that were cancelled, declined, deleted or replaced by a
+//                 reschedule in Google (see removeStaleEvents).
 //
 // CALLED BY:      The Sync Calendar button, the app's auto-sync while a tab is open,
 //                 and the ol_sync_calendar cron job (every 10 minutes).
@@ -77,7 +79,7 @@ async function getCalendarSummaries(accessToken: string): Promise<Map<string, st
   return map;
 }
 
-async function listEventsForCalendar(accessToken: string, calendarId: string): Promise<{ items: any[]; error: string | null }> {
+async function listEventsForCalendar(accessToken: string, calendarId: string): Promise<{ items: any[]; error: string | null; complete: boolean; timeMin: string; timeMax: string }> {
   const timeMin = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString();
   const timeMax = new Date(Date.now() + DAYS_FORWARD * 24 * 60 * 60 * 1000).toISOString();
 
@@ -102,7 +104,7 @@ async function listEventsForCalendar(accessToken: string, calendarId: string): P
       // but report it back to the caller instead of only logging server-side.
       const message = data.error.message || `HTTP ${res.status}`;
       console.error(`Failed to list events for calendar "${calendarId}": ${message}`);
-      return { items, error: message };
+      return { items, error: message, complete: false, timeMin, timeMax };
     }
 
     console.log(`[Calendar Sync] "${calendarId}" page ${page + 1}: ${(data.items || []).length} item(s)${data.nextPageToken ? ' (more pages)' : ''}`);
@@ -111,7 +113,78 @@ async function listEventsForCalendar(accessToken: string, calendarId: string): P
     page++;
   } while (pageToken && page < MAX_LIST_PAGES);
 
-  return { items, error: null };
+  // "complete" = Google gave us every event in the window. Only then is it
+  // safe to treat a stored event that wasn't returned as deleted.
+  return { items, error: null, complete: !pageToken, timeMin, timeMax };
+}
+
+// ---- Stale-event cleanup ----
+// Google only returns events that still exist, so an event that was cancelled,
+// deleted, or replaced by a reschedule (Calendly-style reschedules cancel the
+// old event and create a new one) simply stops appearing. Any stored event for
+// that calendar, inside the synced window, that Google no longer returns is
+// removed here.
+//
+// Safety:
+//   - Only for a calendar whose listing finished with no error and no pages left over.
+//   - If Google returned nothing at all but we have more than 25 events stored for that
+//     calendar, nothing is removed (looks like a permissions/connection problem, not
+//     25 real cancellations) and it's reported instead.
+//   - An event that has work attached in the app (a Zoom summary or saved recording, a
+//     sent summary email, or comments) is kept and counted, never deleted.
+const MAX_BLIND_PURGE = 25;
+const hasAppWork = (r: any) =>
+  !!(r.zoom_summary && String(r.zoom_summary).trim()) ||
+  r.zoom_recording_status === "saved" ||
+  !!r.summary_sent_at ||
+  (Array.isArray(r.comments) && r.comments.some((c: any) => c && c.author !== "Zoom"));
+
+async function removeStaleEvents(
+  supabase: any,
+  liveIdsByCalendar: Map<string, { ids: Set<string>; complete: boolean; timeMin: string; timeMax: string }>
+): Promise<{ staleRemoved: number; staleKept: number; staleSkippedCalendars: string[] }> {
+  let staleRemoved = 0, staleKept = 0;
+  const staleSkippedCalendars: string[] = [];
+
+  for (const [calendarId, live] of liveIdsByCalendar) {
+    if (!live.complete) { staleSkippedCalendars.push(calendarId); continue; }
+
+    const stored: string[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from("calendar_events").select("id")
+        .eq("calendar_id", calendarId).gte("start", live.timeMin).lte("start", live.timeMax)
+        .order("id").range(from, from + 999);
+      if (error) { console.warn(`Stale check failed for "${calendarId}":`, error.message); stored.length = 0; break; }
+      stored.push(...(data || []).map((r: any) => r.id));
+      if (!data || data.length < 1000) break;
+    }
+
+    const stale = stored.filter((id) => !live.ids.has(id));
+    if (!stale.length) continue;
+    if (live.ids.size === 0 && stale.length > MAX_BLIND_PURGE) {
+      console.warn(`Calendar "${calendarId}" returned no events but ${stale.length} are stored; not removing anything.`);
+      staleSkippedCalendars.push(calendarId);
+      continue;
+    }
+
+    // Small batches: some recurring-event ids are 100+ characters long.
+    for (let i = 0; i < stale.length; i += 40) {
+      const batch = stale.slice(i, i + 40);
+      const { data: rows, error } = await supabase.from("calendar_events").select("*").in("id", batch);
+      if (error) { console.warn("Stale event lookup failed:", error.message); continue; }
+      const keep = (rows || []).filter(hasAppWork).map((r: any) => r.id);
+      const remove = batch.filter((id) => !keep.includes(id));
+      staleKept += keep.length;
+      if (keep.length) console.log(`Keeping ${keep.length} event(s) gone from Google because they have work attached:`, keep);
+      if (remove.length) {
+        const { error: delErr } = await supabase.from("calendar_events").delete().in("id", remove);
+        if (delErr) console.warn("Stale event delete failed:", delErr.message);
+        else staleRemoved += remove.length;
+      }
+    }
+  }
+  if (staleRemoved) console.log(`Removed ${staleRemoved} cancelled/deleted/rescheduled event(s).`);
+  return { staleRemoved, staleKept, staleSkippedCalendars };
 }
 
 // Auth: a signed-in Sphynx admin or team member (Authorization: Bearer <login token>), or the scheduled
@@ -166,12 +239,19 @@ serve(async (req) => {
     const parsed: any[] = [];
     const perCalendarSummary: { calendarId: string; summary: string; rawCount: number; error: string | null }[] = [];
 
-    for (const { calendarId, items, error: calError } of perCalendarResults) {
+    // Per calendar: the ids Google still shows as live, for the stale-event cleanup below.
+    const liveIdsByCalendar = new Map<string, { ids: Set<string>; complete: boolean; timeMin: string; timeMax: string }>();
+
+    for (const { calendarId, items, error: calError, complete, timeMin, timeMax } of perCalendarResults) {
       const calendarSummary = calendarId === "primary" ? "Primary" : (calendarSummaries.get(calendarId) || calendarId);
       perCalendarSummary.push({ calendarId, summary: calendarSummary, rawCount: items.length, error: calError });
+      const liveIds = new Set<string>();
+      liveIdsByCalendar.set(calendarId, { ids: liveIds, complete: !calError && complete, timeMin, timeMax });
 
       items
         .filter((evt: any) => evt.status !== "cancelled")
+        // Events the connected account declined count as cancelled for us.
+        .filter((evt: any) => !(evt.attendees || []).some((a: any) => a?.self && a.responseStatus === "declined"))
         .forEach((evt: any) => {
           const isAllDay = !!evt.start?.date && !evt.start?.dateTime;
           const start = evt.start?.dateTime || (evt.start?.date ? `${evt.start.date}T00:00:00Z` : null);
@@ -181,6 +261,7 @@ serve(async (req) => {
           if (evt.organizer?.email) attendeeEmails.add(evt.organizer.email.toLowerCase());
           (evt.attendees || []).forEach((a: any) => { if (a?.email) attendeeEmails.add(a.email.toLowerCase()); });
 
+          liveIds.add(`${calendarId}::${evt.id}`);
           parsed.push({
             id: `${calendarId}::${evt.id}`,
             calendar_id: calendarId,
@@ -197,8 +278,10 @@ serve(async (req) => {
         });
     }
 
+    const cleanup = await removeStaleEvents(supabase, liveIdsByCalendar);
+
     if (parsed.length === 0) {
-      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ syncedCount: 0, newCount: 0, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary, ...cleanup }), { status: 200, headers: corsHeaders });
     }
 
     // Dedupe within this batch itself — Google's API can return the same
@@ -220,10 +303,20 @@ serve(async (req) => {
     // Filtering by calendar_id instead keeps every query small regardless
     // of how long individual event ids get.
     const existingIds = new Set<string>();
+    // Events whose meeting category was set by hand in the app: the sync
+    // must not re-guess it (billing rules depend on it). Falls back to the
+    // plain lookup if call_type_manual hasn't been added yet.
+    const manualCallType = new Set<string>();
     for (const calendarId of calendarIds) {
-      const { data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId);
+      let { data, error } = await supabase.from("calendar_events").select("id, call_type_manual").eq("calendar_id", calendarId);
+      if (error && /call_type_manual/.test(error.message || "")) {
+        ({ data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId));
+      }
       if (error) throw new Error(`Lookup failed for calendar "${calendarId}": ${error.message}`);
-      (data || []).forEach((r: any) => existingIds.add(r.id));
+      (data || []).forEach((r: any) => {
+        existingIds.add(r.id);
+        if (r.call_type_manual) manualCallType.add(r.id);
+      });
     }
 
     const coreFields = (r: any) => ({
@@ -242,12 +335,20 @@ serve(async (req) => {
       // Explicitly map all text[] array columns to valid JavaScript arrays
       attendee_emails: r.attendeeEmails && r.attendeeEmails.size > 0 
         ? Array.from(r.attendeeEmails) 
-        : [],
-      attendees: Array.isArray(r.attendees) ? r.attendees : [],
-      assignees: Array.isArray(r.assignees) ? r.assignees : []
+        : []
+      // attendees / assignees are NOT refreshed here. They used to be sent as
+      // [] on every sync, which wiped every existing event's assignee list and
+      // left only the old single `assignee` column (the first person) behind.
+      // They're set once on new events below, then only changed in the app.
     });
 
-    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id)).map(coreFields);
+    // Hand-categorized events are refreshed without call_type (sent as their
+    // own batch so every row in an upsert has the same columns).
+    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id) && !manualCallType.has(r.id)).map(coreFields);
+    const existingManualRows = dedupedParsed.filter((r) => existingIds.has(r.id) && manualCallType.has(r.id)).map((r) => {
+      const { call_type: _keep, ...rest } = coreFields(r);
+      return rest;
+    });
     const newRows = dedupedParsed.filter((r) => !existingIds.has(r.id)).map((r) => {
       // Attendee-email match first (higher confidence); if that's
       // ambiguous or empty, fall back to the project name appearing in the
@@ -260,12 +361,15 @@ serve(async (req) => {
       }
       return {
         ...coreFields(r),
+        attendees: [],
+        assignees: [],
         // Only auto-link when exactly one project matches — ambiguous
         // matches are left unlinked rather than guessed.
         linked_client_id: matched.length === 1 ? matched[0].clientId : null,
         automation_processed: false,
-        // New events default to non-billable, EXCEPT coaching calls, which
-        // are billable by default. Either can be toggled by hand.
+        // Starting guess only: the app re-applies the Billable Rules to every
+        // event it loads (core/billable.js syncEventBillableFromRules), so
+        // this just avoids a coaching call showing as non-billable until then.
         billable: /coaching/i.test(classifyCallType(r.title, r.description) || "")
       };
     });
@@ -273,9 +377,9 @@ serve(async (req) => {
     // Existing events: refresh core fields only (title/time/location may
     // have changed in Calendar) — linked_client_id/automation_processed are
     // simply not in this payload, so Postgres leaves them untouched.
-    if (existingRows.length > 0) {
-      for (let i = 0; i < existingRows.length; i += 500) {
-        const chunk = existingRows.slice(i, i + 500);
+    for (const batch of [existingRows, existingManualRows]) {
+      for (let i = 0; i < batch.length; i += 500) {
+        const chunk = batch.slice(i, i + 500);
         const { error } = await supabase.from("calendar_events").upsert(chunk, { onConflict: "id" });
         if (error) throw new Error(`Update failed: ${error.message}`);
       }
@@ -295,7 +399,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ syncedCount: dedupedParsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary }),
+      JSON.stringify({ syncedCount: dedupedParsed.length, newCount: newRows.length, calendarsScanned: calendarIds.length, perCalendar: perCalendarSummary, ...cleanup }),
       { status: 200, headers: corsHeaders }
     );
 
