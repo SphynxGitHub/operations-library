@@ -2523,6 +2523,15 @@ export function _fvDrawStepConnections(resources) {
 
   const group = document.getElementById('fv-lines');
 
+  // Measure each card once and add every line in one batch at the end. Measuring right after adding a
+  // line forced the browser to re-lay out the whole map per line; with every step linked, that was one
+  // full re-layout per step and the step view froze on larger projects.
+  const frag = document.createDocumentFragment();
+  const rectCache = new Map();
+  const rectOf = (el) => { let r = rectCache.get(el); if (!r) { r = el.getBoundingClientRect(); rectCache.set(el, r); } return r; };
+  const elById = new Map();
+  canvas.querySelectorAll('[id^="fv-step-"], [id^="fv-consol-"]').forEach(el => elById.set(el.id, el));
+
   resources.forEach(sourceRes => {
     (sourceRes.steps || []).forEach((sourceStep, sourceIdx) => {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
@@ -2536,20 +2545,15 @@ export function _fvDrawStepConnections(resources) {
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
 
-        const fromElRaw = document.getElementById(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        const fromElRaw = elById.get(`fv-step-${sourceRes.id}-${sourceStep.id}`);
         // If fromEl is a consolidated anchor (tiny proxy div), use the real card for exit coords
-        const fromEl = (fromElRaw?.dataset.consolCardId && document.getElementById(fromElRaw.dataset.consolCardId)) || fromElRaw;
-        const toEl   = document.getElementById(
-          `fv-step-${tResId}-${tStepId}` ||
-          // fallback: find by resId + step index if id-based lookup fails
-          Array.from(document.querySelectorAll(`[data-res-id="${tResId}"]`))
-            .find(el => el.dataset.stepId === tStepId)?.id
-        );
+        const fromEl = (fromElRaw?.dataset.consolCardId && elById.get(fromElRaw.dataset.consolCardId)) || fromElRaw;
+        const toEl   = elById.get(`fv-step-${tResId}-${tStepId}`);
 
         if (!fromEl || !toEl) return;
 
-        const fRect = fromEl.getBoundingClientRect();
-        const tRect = toEl.getBoundingClientRect();
+        const fRect = rectOf(fromEl);
+        const tRect = rectOf(toEl);
 
         // Determine best anchor based on relative positions
         const fx_center = fRect.left - cRect.left + fRect.width / 2;
@@ -2619,7 +2623,7 @@ export function _fvDrawStepConnections(resources) {
         path.setAttribute('marker-end', isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
         if (isImplicit) path.setAttribute('stroke-dasharray', '4,4');
         else if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
-        group.appendChild(path);
+        frag.appendChild(path);
 
         // Logic icon on line midpoint (implicit links get no icon)
         const hasRule  = !isImplicit && outRule.rule?.trim();
@@ -2635,7 +2639,7 @@ export function _fvDrawStepConnections(resources) {
           bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
           bg.setAttribute('fill', '#fff');
           bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
-          group.appendChild(bg);
+          frag.appendChild(bg);
 
           const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
@@ -2646,7 +2650,7 @@ export function _fvDrawStepConnections(resources) {
           txt.setAttribute('font-family', 'DM Sans, sans-serif');
           txt.setAttribute('pointer-events', 'none');
           txt.textContent = iconChar;
-          group.appendChild(txt);
+          frag.appendChild(txt);
 
           // Tooltip on hover showing the rule/delay
           if (hasRule || hasDelay) {
@@ -2660,6 +2664,7 @@ export function _fvDrawStepConnections(resources) {
       });
     });
   });
+  group.appendChild(frag);
 };
 
 export function _fvSetupCardDrag(el, resId, stepId) {
