@@ -1052,7 +1052,10 @@ OL.handleGlobalSearch = function(query) {
     if (!resultsEl) return;
 
     const q = (query || "").toLowerCase().trim();
-    const clients = Object.values(state.clients);
+    // A partner searches its own portfolio: its clients, not its own project.
+    const clients = (window.IS_GUEST === true && state.loginIsPartner)
+        ? OL.getPortfolioClients(state.loginClientId)
+        : Object.values(state.clients);
     const apps = state.master.apps || [];
 
     // 🐛 FIX: .name could be missing on a client stub or an app record
