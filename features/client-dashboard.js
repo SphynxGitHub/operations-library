@@ -650,11 +650,12 @@ export function openClientProfileModal(clientId) {
                     { id: 'how-to', label: 'How-To' },
                     { id: 'team', label: 'Team' },
                     { id: 'data', label: 'Data' },
-                    { id: 'errors', label: 'Error Tracking' }
+                    { id: 'errors', label: 'Error Tracking' },
+                    { id: 'client-requests', label: 'Client Requests' }
                 ].map(m => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
                         <input type="checkbox" 
-                            ${client.modules?.[m.id] ? 'checked' : ''} 
+                            ${isClientModuleOn(client, m.id) ? 'checked' : ''} 
                             onchange="OL.toggleClientModule('${clientId}', '${m.id}')">
                         ${m.label}
                     </label>
@@ -829,11 +830,12 @@ export function openPartnerClientModulesModal(clientId) {
                     { id: 'analysis', label: 'Analysis' },
                     { id: 'how-to', label: 'How-To' },
                     { id: 'team', label: 'Team' },
-                    { id: 'data', label: 'Data' }
+                    { id: 'data', label: 'Data' },
+                    { id: 'client-requests', label: 'Client Requests' }
                 ].map(m => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
                         <input type="checkbox" 
-                            ${client.modules?.[m.id] ? 'checked' : ''} 
+                            ${isClientModuleOn(client, m.id) ? 'checked' : ''} 
                             onchange="OL.toggleClientModule('${clientId}', '${m.id}')">
                         ${m.label}
                     </label>
@@ -943,11 +945,20 @@ export function pushLocalItemToClient(itemType, itemId, targetClientId) {
     alert(`"${item.name || item.title}" pushed to ${state.clients[targetClientId]?.meta?.name || targetClientId}.`);
 };
 
+// Modules clients see unless they are switched off (every other module is off until switched on).
+// Client Requests was always visible before it had a checkbox, so existing projects keep it.
+const DEFAULT_ON_MODULES = ['client-requests'];
+export function isClientModuleOn(client, moduleId) {
+    const v = client?.modules?.[moduleId];
+    return DEFAULT_ON_MODULES.includes(moduleId) ? v !== false : v === true;
+}
+
 export function toggleClientModule(clientId, moduleId) {
     OL.updateAndSync(() => {
         const client = state.clients[clientId];
+        const wasOn = isClientModuleOn(client, moduleId);
         if (!client.modules) client.modules = {};
-        client.modules[moduleId] = !client.modules[moduleId];
+        client.modules[moduleId] = !wasOn;
     }, clientId);
 };
 
@@ -1250,7 +1261,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderPartnerDashboard, partnerCreateClient, handlePartnerAssignment,
     onboardNewClient, provisionSphynxTemplates, getDynamicPartners,
-    openClientProfileModal, toggleClientModule, toggleClientBusinessModule, copyShareLink,
+    openClientProfileModal, toggleClientModule, isClientModuleOn, toggleClientBusinessModule, copyShareLink,
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
     deleteClient, setAllPermissions, pushFeaturesToAllClients,
