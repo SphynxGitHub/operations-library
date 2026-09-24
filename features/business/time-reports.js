@@ -1,5 +1,8 @@
 import { esc, state, getBusinessScopedClients } from '../../core/data.js';
 
+// Dollar amounts and the hourly rate are for Sphynx staff. A partner or client login sees hours only.
+const canSeeMoney = () => window.IS_GUEST !== true;
+
 // Global state for filtering and grouping time report entries
 OL.timeReportFilterState = OL.timeReportFilterState || {
     filter: 'all',          // 'all' | 'billable' | 'non-billable'
@@ -68,11 +71,12 @@ OL.renderBusinessTimeReports = function() {
         <div class="section-header" style="margin-bottom:12px;">
             <div>
                 <h2 style="margin:0;"><i data-lucide="bar-chart-2" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time & Reconciliation Audit</h2>
-                <div class="small muted" style="margin-top:2px;">Itemized client time logs, scoping burn rates, and billable value tracking</div>
+                <div class="small muted" style="margin-top:2px;">${canSeeMoney() ? 'Itemized client time logs, scoping burn rates, and billable value tracking' : 'Itemized client time logs and scoping burn rates'}</div>
             </div>
+            ${window.IS_GUEST === true ? '' : `
             <button class="btn small soft" onclick="OL.openBillableRulesModal()" style="display:inline-flex; align-items:center; gap:6px;" title="Tasks are non-billable unless a rule or a manual toggle says otherwise">
                 <i data-lucide="badge-dollar-sign" style="width:14px;height:14px;"></i> Billable Rules (Automations)
-            </button>
+            </button>`}
         </div>
 
         <!-- TOTALS & DATE PRESETS BAR (ROW BELOW TITLE) -->
@@ -106,8 +110,8 @@ OL.renderBusinessTimeReports = function() {
             <div class="pill accent" style="padding: 6px 12px; display: flex; gap: 12px; align-items: center; font-size: 12px; font-weight: bold; flex-shrink:0;">
                 <i data-lucide="clock" style="width:14px;height:14px;"></i>
                 <span>Logged: <span style="color:var(--text);">${totalLoggedHours.toFixed(1)}h</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span>Grand Value: <span style="color:var(--accent); font-size: 14px;">$${totalValue.toLocaleString()}</span></span>
+                ${canSeeMoney() ? `<span style="opacity: 0.3;">|</span>
+                <span>Grand Value: <span style="color:var(--accent); font-size: 14px;">$${totalValue.toLocaleString()}</span></span>` : ''}
             </div>
         </div>
 
@@ -165,7 +169,7 @@ OL.renderBusinessTimeReports = function() {
                             ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
                         </div>
                         <div class="tiny muted" style="margin-top:2px;">
-                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">$${m.remainingValue.toLocaleString()}</strong>
+                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">${canSeeMoney() ? '$' + m.remainingValue.toLocaleString() : m.remainingHours.toFixed(1) + 'h'}</strong>
                         </div>
                     </div>
                 `;
@@ -272,7 +276,7 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                         <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 18%; text-align: center;">ASSIGNEE</th>
                         <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 12%; text-align: center;">STATUS</th>
                         <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 8%; text-align: right;">LOGGED</th>
-                        <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 8%; text-align: right;">VALUE ($)</th>
+                        ${canSeeMoney() ? `<th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); border-right: 1px solid var(--line); width: 8%; text-align: right;">VALUE ($)</th>` : ''}
                         <th style="position: sticky; top: 0; z-index: 20; background: var(--panel-dark, #111); padding: 10px 12px; border-bottom: 2px solid var(--line); width: 4%; text-align: center;">ACTION</th>
                     </tr>
                 </thead>
@@ -297,8 +301,9 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                                     <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
                                 </td>
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold;">
-                                    ${hours.toFixed(2)}h                                 </td>                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
-                                </td>
+                                    ${hours.toFixed(2)}h                                 </td>
+                                ${canSeeMoney() ? `<td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
+                                </td>` : ''}
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: center;">
                                     <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">
                                         <i data-lucide="pencil" style="width:12px; height:12px;"></i>
@@ -338,7 +343,7 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                     </div>
                     <div class="tiny bold" style="color:var(--accent); display:flex; gap:12px;">
                         <span>Hours: ${groupHours.toFixed(1)}h</span>
-                        <span>Value: $${groupSubtotal.toLocaleString()}</span>
+                        ${canSeeMoney() ? `<span>Value: $${groupSubtotal.toLocaleString()}</span>` : ''}
                     </div>
                 </div>
                 ${renderTableMarkup(groupTasks)}
@@ -361,17 +366,17 @@ OL.renderClientReportView = function(clientId) {
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
                 <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>
+                ${canSeeMoney() ? `<div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Logged Hours Used</div>
                 <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>
+                ${canSeeMoney() ? `<div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Remaining Hours</div>
                 <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
-                <div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>
+                ${canSeeMoney() ? `<div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Scoping Burn Rate</div>
@@ -389,7 +394,7 @@ OL.renderClientReportView = function(clientId) {
                         <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">ASSIGNEE</th>
                         <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">STATUS</th>
                         <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:right;">LOGGED</th>
-                        <th style="padding:10px 12px; border-right:1px solid var(--line); text-align:right;">VALUE ($)</th>
+                        ${canSeeMoney() ? `<th style="padding:10px 12px; border-right:1px solid var(--line); text-align:right;">VALUE ($)</th>` : ''}
                         <th style="padding:10px 12px; text-align:center;">ACTION</th>
                     </tr>
                 </thead>
@@ -407,7 +412,7 @@ OL.renderClientReportView = function(clientId) {
                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">
                                     <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
                                 </td>
-                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
+                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>${canSeeMoney() ? `                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>` : ''}
                                 <td style="padding:10px 12px; text-align:center;">
                                     <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">
                                         <i data-lucide="pencil" style="width:12px; height:12px;"></i>
@@ -486,6 +491,7 @@ OL.closeTimeReportModal = function() {
 // The editor now lives on the Automations page (Billable Rules tab). This
 // keeps the Time Reports button working: it just goes there.
 OL.openBillableRulesModal = function() {
+    if (window.IS_GUEST === true) return;   // partners and clients never open the billing rules
     OL.automationTab = 'billable';
     if (!location.hash.includes('/automations')) location.hash = '#/vault/automations';
     else OL.renderAutomationBuilder();
