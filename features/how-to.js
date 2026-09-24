@@ -133,16 +133,34 @@ function renderHowToGroupedByCategory(guides, client, isVaultView) {
 }
 
 // ---- GUIDE VISIBILITY ----------------------------------------------------
-// A master guide is either Internal Only (default) or Visible to Clients (scope 'global').
-// Client projects only ever see Visible-to-Clients master guides, plus their own local guides.
-// Guides shared with a project before scope existed (no scope set, but in that project's
-// sharedMasterIds) stay visible there until someone sets their scope.
+// Who can see a master guide. Two independent switches, shown as one status:
+//   Internal Only          scope 'internal', not partner-shared   (the default for every new guide)
+//   Visible to Clients     scope 'global'                         every client project, including a partner's clients
+//   Shared with Partners   partnerShared: true                    partner projects only
+//   Clients & Partners     both of the above
+// Partners are NOT covered by "Visible to Clients": a guide only reaches a partner when it is marked Shared
+// with Partners. (Guides from before scope existed, shared straight to a project through sharedMasterIds,
+// stay visible in that project until someone sets their audience.)
 export function isGuideClientFacing(guide) {
     return guide?.scope === 'global';
+}
+export function isGuideSharedWithPartners(guide) {
+    return guide?.partnerShared === true;
 }
 export function isGuideVisibleInProject(guide, client) {
     if (!guide) return false;
     if ((client?.projectData?.localHowTo || []).some(h => h.id === guide.id)) return true;
+
+    // A partner logged in sees Shared-with-Partners guides everywhere they work, including their clients' projects.
+    if (window.IS_GUEST === true && state.loginIsPartner === true && guide.partnerShared === true) return true;
+
+    // A partner's own project only gets guides shared with partners.
+    if (client?.meta?.status === 'Partner') {
+        if (guide.partnerShared === true) return true;
+        if (guide.scope === undefined || guide.scope === null) return (client.sharedMasterIds || []).includes(guide.id);
+        return false;
+    }
+
     if (guide.scope === 'global') return true;
     if (guide.scope === 'internal') return false;
     return (client?.sharedMasterIds || []).includes(guide.id);
@@ -159,39 +177,78 @@ export function findGuide(id, client) {
         || (client?.projectData?.localHowTo || []).find(g => g.id === id) || null;
 }
 
-// Switch a master guide between Internal Only and Visible to Clients (affects every project).
+const GUIDE_AUDIENCES = {
+    internal: { icon: 'lock',      label: 'Internal Only',      help: 'Only Sphynx staff can see it.' },
+    clients:  { icon: 'globe',     label: 'Visible to Clients', help: 'Every client project, including the clients of partners. Partners themselves do not see it.' },
+    partners: { icon: 'handshake', label: 'Shared with Partners', help: 'Partner projects only. Clients do not see it.' },
+    both:     { icon: 'users',     label: 'Clients & Partners', help: 'Everyone above.' }
+};
+function guideAudience(ht) {
+    const c = isGuideClientFacing(ht), p = isGuideSharedWithPartners(ht);
+    return c && p ? 'both' : c ? 'clients' : p ? 'partners' : 'internal';
+}
+
+// Click the status pill: choose who can see a master guide (affects every project).
 export function toggleGuideScope(htId, event) {
     if (event) event.stopPropagation();
     if (!(window.FORCE_ADMIN === true || state.adminMode === true || state.teamMemberMode === true)) return;
     const ht = (state.master.howToLibrary || []).find(g => g.id === htId);
     if (!ht) return;
-    const makeVisible = !isGuideClientFacing(ht);
-    const msg = makeVisible
-        ? `Make "${ht.name || 'this guide'}" visible to clients?\n\nIt will show in every client project's How-To library and can be linked on their tasks.`
-        : `Make "${ht.name || 'this guide'}" internal only?\n\nClients will no longer see it, and it can't be linked on client tasks. Existing links stay saved but are hidden.`;
-    if (!confirm(msg)) return;
+    const cur = guideAudience(ht);
 
-    ht.scope = makeVisible ? 'global' : 'internal';
-    if (!makeVisible) {
-        Object.values(state.clients || {}).forEach(c => {
-            if ((c.sharedMasterIds || []).includes(htId)) {
-                c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
-                if (OL.markClientDirty) OL.markClientDirty(c.id);
-            }
-        });
-    }
+    openModal(`
+        <div class="modal-head">
+            <div class="modal-title-text">Who can see "${esc(ht.name || 'this guide')}"?</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:8px;">
+            ${Object.entries(GUIDE_AUDIENCES).map(([key, a]) => `
+                <button class="btn ${key === cur ? 'primary' : 'soft'}" style="text-align:left; display:flex; align-items:flex-start; gap:10px; padding:10px 12px;"
+                        onclick="OL.setGuideAudience('${esc(htId)}', '${key}')">
+                    <i data-lucide="${a.icon}" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;"></i>
+                    <span><b>${a.label}</b>${key === cur ? ' (current)' : ''}<br><span class="tiny muted">${a.help}</span></span>
+                </button>`).join('')}
+            <p class="tiny muted" style="margin:4px 0 0;">Taking a guide away from a group also removes it from any project of theirs it was shared to directly. Existing links on tasks stay saved but are hidden.</p>
+        </div>`);
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export function setGuideAudience(htId, audience) {
+    if (!(window.FORCE_ADMIN === true || state.adminMode === true || state.teamMemberMode === true)) return;
+    const ht = (state.master.howToLibrary || []).find(g => g.id === htId);
+    if (!ht || !GUIDE_AUDIENCES[audience]) return;
+
+    const toClients = audience === 'clients' || audience === 'both';
+    const toPartners = audience === 'partners' || audience === 'both';
+
+    ht.scope = toClients ? 'global' : 'internal';
+    if (toPartners) ht.partnerShared = true; else delete ht.partnerShared;
+
+    // A group that no longer sees the guide also loses any direct share of it to their projects.
+    Object.values(state.clients || {}).forEach(c => {
+        const isPartnerProject = c.meta?.status === 'Partner';
+        const stillSees = isPartnerProject ? toPartners : toClients;
+        if (!stillSees && (c.sharedMasterIds || []).includes(htId)) {
+            c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
+            if (OL.markClientDirty) OL.markClientDirty(c.id);
+        }
+    });
+
     persist();
+    if (typeof OL.closeModal === 'function') OL.closeModal();
     if (document.getElementById('ge-shell')) openGuideEditor(htId);
     else renderHowToLibrary();
 }
 
 function guideScopePill(ht, { clickable = true } = {}) {
-    const on = isGuideClientFacing(ht);
-    return `<span class="pill tiny ${on ? 'accent' : 'soft'}"
+    const key = guideAudience(ht);
+    const a = GUIDE_AUDIENCES[key];
+    return `<span class="pill tiny ${key === 'internal' ? 'soft' : 'accent'}"
                   style="font-size:8px; display:inline-flex; align-items:center; gap:4px; ${clickable ? 'cursor:pointer;' : ''}"
                   ${clickable ? `title="Click to change who can see this guide" onclick="OL.toggleGuideScope('${ht.id}', event)"` : ''}>
-                <i data-lucide="${on ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
-                ${on ? 'Visible to Clients' : 'Internal Only'}
+                <i data-lucide="${a.icon}" style="width:10px; height:10px;"></i>
+                ${a.label}
             </span>`;
 }
 
@@ -2132,7 +2189,7 @@ Object.assign(window.OL, {
     openHowToEditorModal, promoteLocalSOPToMaster, toggleHTApp, filterHTAppSearch,
     parseVideoEmbed, toggleHTResource, filterHTResourceSearch, toggleSOPSharing,
     syncHowToName, handleHowToSave, deleteSOP, importHowToToProject,
-    isGuideClientFacing, isGuideVisibleInProject, masterGuidesFor, findGuide, toggleGuideScope,
+    isGuideClientFacing, isGuideSharedWithPartners, isGuideVisibleInProject, masterGuidesFor, findGuide, toggleGuideScope, setGuideAudience,
     filterMasterHowToImport, getSOPBacklinks, filterTaskHowToSearch, toggleTaskHowTo,
     addHTRequirement, updateHTReq, removeHTRequirement, resolveRequirementTarget,
     deployRequirementsFromResource,
