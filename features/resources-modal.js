@@ -19,9 +19,10 @@ import { renderDependencyRow } from './scoping.js';
 // picks up once it's added to a proposal's scoping sheet (Do Now/Do
 // Later/etc., a different lifecycle entirely, left untouched below).
 OL.openEditResourceStatusDropdown = function(event, resourceId) {
-    const popover = OL.createPopoverContainer(event);
     const data = OL.getCurrentProjectData();
     const res = data?.resources?.find(r => String(r.id) === String(resourceId));
+    if (OL.isReferenceResource(res)) return;   // references have no status
+    const popover = OL.createPopoverContainer(event);
     const currentStatus = res?.status || 'Pending Sphynx Action';
     const statuses = OL.getSystemStatuses();
 
@@ -44,7 +45,14 @@ OL.openEditResourceStatusDropdown = function(event, resourceId) {
 
 // Small shared pill so the card/list renderers below don't each duplicate
 // the color lookup and click wiring.
+// References (the old "Admin" type, and anything pinned into the References section) are
+// look-up material, not work, so they have no status.
+OL.isReferenceResource = function(res) {
+    return !!res && (res.type === 'Reference' || res.type === 'Admin' || !!res.systemPinned || !!res.adminPinned);
+};
+
 OL.renderResourceStatusPill = function(res) {
+    if (OL.isReferenceResource(res)) return '';
     const statusName = res.status || 'Pending Sphynx Action';
     const statusObj = (OL.getSystemStatuses() || []).find(s => s.name === statusName);
     const color = statusObj?.color || 'var(--accent)';
