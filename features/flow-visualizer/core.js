@@ -221,14 +221,17 @@ export function initWBMotion(e, id) {
 };
     
 // Add this near your other event listeners
+// Resizing only moves things on screen, so it redraws once the resize settles. It used to save the
+// whole workspace and rebuild the map on EVERY resize event (the debounce timer name had a typo, so
+// nothing was ever cancelled): dragging a window edge or opening DevTools queued dozens of full
+// saves + redraws and froze the page.
 window.addEventListener('resize', () => {
-    if (window.location.hash.includes('visualizer')) {
-        // Debounce this if you want to be extra performant
-        clearTimeout(window.resizeSnapTimer);
-        window.resizeSnapSnapTimer = setTimeout(() => {
-            OL.autoAlignNodes();
-        }, 200);
-    }
+    if (!window.location.hash.includes('visualizer')) return;
+    clearTimeout(window.resizeSnapTimer);
+    window.resizeSnapTimer = setTimeout(() => {
+        if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+        if (typeof OL.drawConnections === 'function') OL.drawConnections();
+    }, 250);
 });
 
 export async function handleCanvasDrop(e) {
@@ -348,7 +351,7 @@ export async function autoAlignNodes() {
         if (depth === 'step') {
             // Flatten all steps into a single list for this stage
             stageResources.forEach(res => {
-                res.steps.forEach((step, idx) => {
+                (res.steps || []).forEach((step, idx) => {
                     nodesToAlign.push({
                         ...step,
                         parentId: res.id,
@@ -1560,11 +1563,11 @@ export function _fvComputeLayout(resources, stageFilter) {
   const workflows = OL.getWorkflows() || [];
   const orderedIds = workflows.flatMap(w => w.resourceIds || []);
 
+  const resById = new Map(resources.map(r => [String(r.id), r]));
+  const orderedSet = new Set(orderedIds.map(String));
   const sortedResources = [
-    ...orderedIds
-        .map(id => resources.find(r => String(r.id) === String(id)))
-        .filter(Boolean),
-    ...resources.filter(r => !orderedIds.map(String).includes(String(r.id)))
+    ...[...orderedSet].map(id => resById.get(id)).filter(Boolean),
+    ...resources.filter(r => !orderedSet.has(String(r.id)))
   ];
 
   sortedResources.forEach(res => {
@@ -1595,11 +1598,8 @@ export function _fvComputeLayout(resources, stageFilter) {
       if (lastH === -1) return;
       const tResId  = out.targetId.substring(0, lastH);
       const tStepId = out.targetId.substring(lastH + 1);
-      // Find matching step
-      const toEntry = allSteps.find(e =>
-        String(e.res.id) === String(tResId) &&
-        String(e.step.id) === String(tStepId)
-      );
+      // Find matching step (map lookup; scanning every step for every link was O(steps x links))
+      const toEntry = stepMap[`${tResId}-${tStepId}`];
       if (toEntry && outEdges[fromId]) {
         outEdges[fromId].push(toEntry.fullId);
         inDegree[toEntry.fullId] = (inDegree[toEntry.fullId] || 0) + 1;
@@ -1613,8 +1613,8 @@ export function _fvComputeLayout(resources, stageFilter) {
     .map(e => ({ id: e.fullId, col: 0 }));
 
   const visited = new Set();
-  while (queue.length > 0) {
-    const { id, col } = queue.shift();
+  for (let qi = 0; qi < queue.length; qi++) {   // index walk: shift() re-copies the whole queue each time
+    const { id, col } = queue[qi];
     if (visited.has(id)) continue;
     visited.add(id);
     const entry = stepMap[id];
@@ -8545,10 +8545,15 @@ export function drawConnections() {
 };
 
 // 🚀 THE FIX: Attach to document so it works even if the element is rendered later
+let _fvScrollFramePending = false;
 document.addEventListener('scroll', (e) => {
     if (e.target && e.target.id === 'v2-canvas-scroll-wrap') {
-        // Use requestAnimationFrame to keep the lines buttery smooth during scroll
+        // At most one redraw per frame: a fast scroll fires many events per frame, and each one
+        // used to queue its own full redraw of every line.
+        if (_fvScrollFramePending) return;
+        _fvScrollFramePending = true;
         requestAnimationFrame(() => {
+            _fvScrollFramePending = false;
             if (typeof OL.drawConnections === 'function') {
                 OL.drawConnections();
             }
