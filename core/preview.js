@@ -62,6 +62,30 @@ const ALLOWED_NON_READS = [
     /\/rest\/v1\/rpc\/ol_master_for_clients/,     // the limited master registry a client/partner gets
 ];
 
+// Tables the database only lets STAFF read (row-level security: ol_is_staff()). A real partner or client login
+// gets zero rows back from them, but the admin viewing in preview would get everything. To show what they really
+// get, preview reads of these come back empty. Keep this in step with the policies in the database.
+const STAFF_ONLY_TABLES = [
+    'calendar_events', 'client_checklist_results', 'client_checklists', 'dependency_edge', 'email_link',
+    'error_log', 'gmail_messages', 'google_auth_tokens', 'request_assignment', 'request_target',
+    'request_types', 'requests', 'task_request_link', 'task_resource_link', 'time_entry', 'work_codes',
+    'workspace_masters',
+];
+const STAFF_ONLY_RX = new RegExp('/rest/v1/(' + STAFF_ONLY_TABLES.join('|') + ')(\\?|/|$)');
+
+// What PostgREST itself answers when row-level security hides every row.
+function emptyStaffOnlyResponse(method, wantsSingleObject) {
+    if (wantsSingleObject) {
+        return new Response(JSON.stringify({
+            code: 'PGRST116', details: 'The result contains 0 rows', hint: null,
+            message: 'JSON object requested, multiple (or no) rows returned'
+        }), { status: 406, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(method === 'HEAD' ? null : '[]', {
+        status: 200, headers: { 'Content-Type': 'application/json', 'Content-Range': '*/0' }
+    });
+}
+
 let lastNotice = 0;
 export function notifyPreviewBlocked() {
     const now = Date.now();
@@ -81,7 +105,15 @@ export function previewFetchGuard(fetchImpl, input, init) {
 
     const isRequest = typeof Request !== 'undefined' && input instanceof Request;
     const method = String((init && init.method) || (isRequest && input.method) || 'GET').toUpperCase();
-    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return fetchImpl(input, init);
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+        const url0 = String(isRequest ? input.url : (input && input.url) || input);
+        if (method !== 'OPTIONS' && STAFF_ONLY_RX.test(url0)) {
+            let accept = '';
+            try { accept = new Headers((init && init.headers) || (isRequest ? input.headers : undefined)).get('accept') || ''; } catch (e) { /* ignore */ }
+            return Promise.resolve(emptyStaffOnlyResponse(method, /pgrst\.object/.test(accept)));
+        }
+        return fetchImpl(input, init);
+    }
 
     const url = String(isRequest ? input.url : (input && input.url) || input);
     if (ALLOWED_NON_READS.some((rx) => rx.test(url))) return fetchImpl(input, init);
