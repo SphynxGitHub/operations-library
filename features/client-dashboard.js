@@ -594,6 +594,7 @@ window.renderClientDriveCard = OL.renderClientDriveCard;
 window.OL.renderClientDriveCard = OL.renderClientDriveCard;
 
 export function openClientProfileModal(clientId) {
+    if (window.OL?.isClientLogin?.()) return;   // clients never open project settings
     const client = state.clients[clientId];
     if (!client) return;
 
@@ -803,6 +804,7 @@ export function openClientProfileModal(clientId) {
 // IDs). Delete only shows for clients the partner created themselves
 // (meta.createdByPartner) — not ones an admin assigned to their portfolio.
 export function openPartnerClientModulesModal(clientId) {
+    if (window.OL?.isClientLogin?.()) return;   // clients never open project settings
     const client = state.clients[clientId];
     if (!client) return;
 
