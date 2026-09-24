@@ -29,13 +29,7 @@ if (!token) {
             return;
         }
 
-        // The confirmation email must bring them back to this app's login page, not the bare github.io
-        // domain (Supabase's Site URL). This URL must also be listed under Supabase → Authentication →
-        // URL Configuration → Redirect URLs, or Supabase ignores it and uses the Site URL.
-        const { data: signUpData, error: signUpError } = await db.auth.signUp({
-            email, password,
-            options: { emailRedirectTo: new URL('login.html?confirmed=1', window.location.href).toString() }
-        });
+        const { data: signUpData, error: signUpError } = await db.auth.signUp({ email, password });
         if (signUpError) {
             errorEl.textContent = signUpError.message;
             errorEl.style.display = 'block';

@@ -333,7 +333,7 @@ export function updateAppMeta(appId, field, value) {
 export function renderAppModalInnerContent(app, client) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const isLinkedToMaster = !!app.masterRefId;
-    const linkedGuides = (OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master.howToLibrary || [])).filter(ht => (ht.appIds || []).includes(app.id));
+    const linkedGuides = (state.master.howToLibrary || []).filter(ht => (ht.appIds || []).includes(app.id));
 
     const isMasterCard = isVaultRoute || app.id.startsWith('master-');
     const showAddButton = !isVaultRoute || (isVaultRoute && app.id.startsWith('master-'));

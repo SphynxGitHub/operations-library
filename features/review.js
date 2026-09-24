@@ -128,7 +128,7 @@ export async function openReviewNotification(key, clientId) {
     openModal(`
         <style>
             .rv label { display:block !important; margin:0 0 4px !important; font-size:12px !important; }
-            .rv input[type="text"], .rv input[type="date"], .rv input[type="number"], .rv textarea { display:block !important; width:100% !important; box-sizing:border-box !important; font-size:13px !important; font-family:inherit !important; margin:0 !important; }
+            .rv input, .rv textarea { display:block !important; width:100% !important; box-sizing:border-box !important; font-size:13px !important; font-family:inherit !important; margin:0 !important; }
         </style>
         <div class="modal-head">
             <div class="modal-title-text">📨 Notify client: Round ${esc(st.round)} review</div>
@@ -153,7 +153,7 @@ export async function openReviewNotification(key, clientId) {
             <label class="tiny muted">Subject</label>
             <input id="rv-subject" type="text" class="modal-input" style="margin-bottom:8px;" value="${esc(`Round ${st.round} is ready for your review: ${client.meta?.name || ''}`)}">
             <label class="tiny muted">Message</label>
-            <div style="margin-bottom:6px;">${OL.renderRichTextField({ id: 'rv-body', html: OL.plainTextToLinkedHtml(message), minHeight: 300, emailTools: true, imageMaxWidth: 600 })}</div>
+            <textarea id="rv-body" class="modal-input" rows="16" style="margin-bottom:6px;">${esc(message)}</textarea>
             <div class="tiny muted" style="margin-bottom:12px;">If you change the dates above, use "Refresh dates in the message" to update the text. The PDF is attached automatically.</div>
             <div style="display:flex; gap:10px; justify-content:flex-end;">
                 <button class="btn soft" onclick="OL.rvRefreshMessage()">Refresh dates in the message</button>
@@ -161,7 +161,6 @@ export async function openReviewNotification(key, clientId) {
                 <button id="rv-send" class="btn primary" onclick="OL.sendReviewNotification()">Send</button>
             </div>
         </div>`);
-    if (window.lucide) lucide.createIcons();
 }
 
 const val = (id) => document.getElementById(id)?.value ?? '';
@@ -179,8 +178,7 @@ export function rvRefreshMessage() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !(days >= 1) || !(every >= 1)) { alert('Enter a start date, a length and a check-in spacing first.'); return; }
     const names = primaryContacts(client).map(firstName).filter(Boolean);
     const sender = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
-    const ed = document.getElementById('rv-body');
-    if (ed) ed.innerHTML = OL.plainTextToLinkedHtml(draftReviewEmail({ names, round: st.round, start, end: reviewEndFor(start, days), days, followUpEveryDays: every, link: checklistLink(draft.token), senderName: sender }));
+    document.getElementById('rv-body').value = draftReviewEmail({ names, round: st.round, start, end: reviewEndFor(start, days), days, followUpEveryDays: every, link: checklistLink(draft.token), senderName: sender });
 }
 
 export async function sendReviewNotification() {
@@ -188,9 +186,7 @@ export async function sendReviewNotification() {
     const client = await clientFor(draft.clientId);
     const st = client?.projectData?.roundStates?.[draft.key];
     if (!st || st.status !== 'ready_to_notify') { alert('This review was already started.'); return; }
-    const bodyHtml = OL.sanitizeCommentHtml(document.getElementById('rv-body')?.innerHTML || '', { images: true });
-    const body = OL.htmlToPlainTextWithLinks(bodyHtml);
-    const to = val('rv-to').trim(), cc = val('rv-cc').trim(), subject = val('rv-subject').trim();
+    const to = val('rv-to').trim(), cc = val('rv-cc').trim(), subject = val('rv-subject').trim(), body = val('rv-body');
     const start = val('rv-start'), days = Number(val('rv-days')), every = Number(val('rv-every'));
     if (!to || !subject || !body.trim()) { alert('To, subject and message are all required.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !(days >= 1) || !(every >= 1)) { alert('Enter a valid start date, review length and check-in spacing.'); return; }
@@ -224,7 +220,7 @@ export async function sendReviewNotification() {
 
     const filename = `Testing checklist - Round ${st.round}.pdf`;
     const { ok } = await OL.sendGmailMessage({
-        to, cc: cc || undefined, subject, body, bodyHtml,
+        to, cc: cc || undefined, subject, body,
         attachments: [{ filename, mimeType: 'application/pdf', contentBase64: pdfBase64 }],
         linked_client_id: client.id, linked_task_id: st.notifyTaskId,
     });

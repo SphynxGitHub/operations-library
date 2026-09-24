@@ -39,6 +39,9 @@ export function renderClientTaskManager() {
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
                     <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h
                 </div>
+                <button class="btn small primary" onclick="OL.openClientCreateTaskModal('${client.id}')" style="display:flex; align-items:center; gap:6px; font-weight:bold;">
+                    <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Deliverable
+                </button>
             </div>
         </div>
 

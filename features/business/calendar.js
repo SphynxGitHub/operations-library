@@ -1,9 +1,7 @@
 import { esc, state, db, updateAndSync, uid } from '../../core/data.js';
-import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
 const CALENDAR_PAGE_SIZE = 150;
-// One list, shared with the Billable Rules "Meeting category" field.
-const CALL_TYPES = MEETING_CATEGORIES;
+const CALL_TYPES = ['Follow Up Call', 'Coaching Call', 'Introductory Call', 'General Call'];
 
 OL.calendarState = {
     loading: false,
@@ -90,16 +88,12 @@ OL.renderBusinessCalendar = function() {
                             <i data-lucide="video" style="width:14px;height:14px;${OL.calendarState.zoomSyncing ? 'animation: spin 1s linear infinite;' : ''}"></i>
                             ${OL.calendarState.zoomSyncing ? 'Syncing Zoom...' : 'Sync Zoom'}
                         </button>
-                        ${state.adminMode === true ? `
-                        <button class="btn small soft" onclick="OL.initiateZoomAuth()" title="Open Zoom's permission screen again — needed after adding new permissions (scopes) to the Zoom app">
-                            <i data-lucide="key-round" style="width:14px;height:14px;"></i> Reconnect Zoom
-                        </button>` : ''}
                     ` : `
                         <button class="btn small soft" onclick="OL.initiateZoomAuth()">
                             <i data-lucide="video" style="width:14px;height:14px;"></i> Connect Zoom
                         </button>
                     `}
-                    <button class="btn small soft" onclick="OL.backfillEventAssigneesFromAttendees()" ${OL._backfillingAssignees ? 'disabled' : ''} title="Add every Sphynx Team member on each event&#39;s attendee list as an assignee (never removes anyone)">
+                    <button class="btn small soft" onclick="OL.backfillEventAssigneesFromAttendees()" ${OL._backfillingAssignees ? 'disabled' : ''} title="Auto-assign every unassigned event from its attendee list, where the attendee matches a known Sphynx Team member or client contact">
                         <i data-lucide="wand-2" style="width:14px;height:14px;"></i>
                         ${OL._backfillingAssignees ? 'Backfilling...' : 'Backfill Assignees'}
                     </button>
@@ -594,8 +588,6 @@ OL.loadCalendarGridMonth = async function() {
     
     OL._calendarGridEvents = data || [];
     await OL.applyEventTimeRecalculation(OL._calendarGridEvents);
-    // Events nobody toggled by hand follow the Billable Rules.
-    await syncEventBillableFromRules(OL._calendarGridEvents);
 };
 
 // -------------------------------------------------------------
@@ -624,8 +616,6 @@ OL.loadCalendarEvents = async function() {
     const sortDir = OL.calendarState.filter === 'past' ? -1 : 1;
     state.master.googleCalendarEvents = (data || []).slice().sort((a, b) => sortDir * (new Date(a.start) - new Date(b.start)));
     await OL.applyEventTimeRecalculation(state.master.googleCalendarEvents);
-    // Events nobody toggled by hand follow the Billable Rules.
-    await syncEventBillableFromRules(state.master.googleCalendarEvents);
 };
 
 // -------------------------------------------------------------
@@ -1258,24 +1248,18 @@ OL.openEditEventCallTypeDropdown = function(event, id) {
 };
 
 OL.setEventCallType = async function(id, callType) {
-    // The billable flag follows the Billable Rules for the new category,
-    // unless someone set billable by hand. call_type_manual stops the
-    // calendar sync from re-guessing the category over this choice.
-    const { data: cur } = await db.from('calendar_events').select('id, title, linked_client_id, assignee, billable_manual').eq('id', id).maybeSingle();
-    const patch = { call_type: callType || null, call_type_manual: true };
-    if (cur && !cur.billable_manual) patch.billable = eventBillableFromRules({ ...cur, call_type: callType || null });
-    let { error } = await db.from('calendar_events').update(patch).eq('id', id);
-    if (error && /call_type_manual/.test(error.message || '')) {
-        delete patch.call_type_manual;
-        ({ error } = await db.from('calendar_events').update(patch).eq('id', id));
-    }
+    // Coaching calls are billable by default: changing the category moves
+    // the billable flag with it, unless someone set billable by hand.
+    const { data: cur } = await db.from('calendar_events').select('billable_manual').eq('id', id).maybeSingle();
+    const patch = { call_type: callType || null };
+    if (cur && !cur.billable_manual) patch.billable = /coaching/i.test(callType || '');
+    const { error } = await db.from('calendar_events').update(patch).eq('id', id);
     if (error) { alert('Failed to update call category: ' + error.message); return; }
 
     [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) { e.call_type = callType || null; if ('billable' in patch) e.billable = patch.billable; }
     });
-    if (window.OL._eventCallTypeCache) window.OL._eventCallTypeCache[id] = { id, call_type: callType || null };
 
     if (OL._activeEventModalId === id) OL.openCalendarEventModal(id);
     else OL.refreshTaskView();
@@ -1426,79 +1410,74 @@ OL.backfillCalendarProjectLinks = async function() {
     }
 };
 
-// Adds every Sphynx Team member found in an event's attendees to its
-// assignees. Additive: it never removes anyone, and it now also fills in
-// events that already had ONE assignee (previously those were skipped, so
-// a meeting with three of us only ever showed the first).
 OL.backfillEventAssigneesFromAttendees = async function() {
     if (OL._backfillingAssignees) return;
     OL._backfillingAssignees = true;
     OL.renderBusinessCalendar();
 
     try {
-        // Page through everything (a single select stops at 1,000 rows).
-        const rows = [];
-        const PAGE = 1000;
-        for (let from = 0; ; from += PAGE) {
-            const { data, error } = await db.from('calendar_events')
-                .select('id, assignee, assignees, attendee_emails')
-                .order('id')
-                .range(from, from + PAGE - 1);
-            if (error) { alert('Failed to load events: ' + error.message); return; }
-            rows.push(...(data || []));
-            if (!data || data.length < PAGE) break;
-        }
+        const { data: rows, error } = await db.from('calendar_events')
+            .select('id, assignee, assignees, attendee_emails');
 
-        // Every address a team member might be invited under.
-        const roster = state.master?.sphynxTeam || [];
-        const byEmail = new Map();
-        roster.forEach(m => {
-            [m.email, ...(Array.isArray(m.emails) ? m.emails : []), ...(Array.isArray(m.altEmails) ? m.altEmails : [])]
-                .map(e => String(e || '').toLowerCase().trim()).filter(Boolean)
-                .forEach(e => { if (m.name) byEmail.set(e, m.name); });
+        if (error) { alert('Failed to load events: ' + error.message); return; }
+
+        const unassignedRows = (rows || []).filter(r => {
+            const hasAttendees = Array.isArray(r.attendee_emails) && r.attendee_emails.length > 0;
+            const hasAssignees = (Array.isArray(r.assignees) && r.assignees.length > 0) || !!r.assignee;
+            return hasAttendees && !hasAssignees;
         });
 
-        let updatedCount = 0, addedPeople = 0;
+        if (!unassignedRows.length) { 
+            alert('Nothing to backfill — every event with attendees already has an assignee.'); 
+            return; 
+        }
+
+        const roster = state.master?.sphynxTeam || [];
+        let updatedCount = 0;
+        let noMatchCount = 0;
         const updates = [];
-        rows.forEach(evt => {
+
+        unassignedRows.forEach(evt => {
+            const currentAssignees = Array.isArray(evt.assignees) ? evt.assignees : (evt.assignee ? [evt.assignee] : []);
+            const existing = new Set(currentAssignees);
+            let matchedAny = false;
+
             const attendeeEmails = Array.isArray(evt.attendee_emails) ? evt.attendee_emails : [];
-            if (!attendeeEmails.length) return;
-            const hasList = Array.isArray(evt.assignees) && evt.assignees.length > 0;
-            const current = hasList ? evt.assignees : (evt.assignee ? [evt.assignee] : []);
-            const next = [...current];
-            attendeeEmails.forEach(raw => {
-                const email = (typeof raw === 'string' ? raw : raw?.email || '').toLowerCase().trim();
-                const name = email && byEmail.get(email);
-                if (name && !next.includes(name)) next.push(name);
+            attendeeEmails.forEach(email => {
+                const cleanEmail = (typeof email === 'string' ? email : email?.email || '').toLowerCase().trim();
+                if (!cleanEmail) return;
+
+                const staffMatch = roster.find(m => (m.email || '').toLowerCase() === cleanEmail);
+                if (staffMatch) { existing.add(staffMatch.name); matchedAny = true; }
             });
-            // Also repairs rows whose list was wiped but still have the single assignee.
-            if (next.length > current.length || (!hasList && next.length > 0)) {
-                addedPeople += next.length - current.length;
-                updates.push({ id: evt.id, assignees: next, assignee: next[0] || null });
+
+            if (matchedAny) {
+                const nextAssignees = Array.from(existing);
+                updates.push({ id: evt.id, assignees: nextAssignees, assignee: nextAssignees[0] || null });
                 updatedCount++;
+            } else {
+                noMatchCount++;
             }
         });
 
-        if (!updates.length) {
-            alert('Nothing to backfill: every event already has all its Sphynx Team attendees assigned.');
-            return;
-        }
-
-        let failed = 0;
         for (const u of updates) {
             const { error: updateErr } = await db.from('calendar_events')
                 .update({ assignees: u.assignees, assignee: u.assignee })
                 .eq('id', u.id);
-            if (updateErr) { failed++; console.error(`Failed to backfill event ${u.id}:`, updateErr.message); continue; }
+
+            if (updateErr) {
+                console.error(`Failed to backfill event ${u.id}:`, updateErr.message);
+                continue;
+            }
+
             [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
                 const e = (list || []).find(e => e.id === u.id);
                 if (e) { e.assignees = u.assignees; e.assignee = u.assignee; }
             });
         }
 
-        const ok = updatedCount - failed;
-        alert(`Updated ${ok} event${ok === 1 ? '' : 's'}, adding ${addedPeople} assignee${addedPeople === 1 ? '' : 's'} from attendee lists.` +
-            (failed ? ` ${failed} failed to save (see console).` : ''));
+        alert(`Backfilled ${updatedCount} event${updatedCount === 1 ? '' : 's'} from attendee matches.` +
+            (noMatchCount ? ` ${noMatchCount} event${noMatchCount === 1 ? '' : 's'} had attendees but none matched a Sphynx Team member — use "Auto-assign from attendees" on those individually to also get the create-a-client prompt.` : ''));
     } finally {
         OL._backfillingAssignees = false;
         OL.renderBusinessCalendar();
@@ -1705,18 +1684,10 @@ OL.zoomStatusLine = function(evt) {
 
 // Clears this meeting's Zoom flags and runs the sync now, then reports
 // exactly what happened for it.
-// Scoped to ONE meeting. It only re-opens what's still missing for that
-// meeting: it never resets zoom_tasks_created (so action items that already
-// became tasks are never re-added, even if you renamed or deleted them),
-// never resets a recording already saved to Drive, and never re-exports a
-// summary already in Drive (that made duplicate files).
 OL.recheckZoomForEvent = async function(eventId) {
-    const { data: cur, error: readErr } = await db.from('calendar_events')
-        .select('zoom_recording_status').eq('id', eventId).maybeSingle();
-    if (readErr) { alert('Could not read this meeting: ' + readErr.message); return; }
-    const reset = { zoom_summary_processed: false };
-    if (cur?.zoom_recording_status !== 'saved') reset.zoom_recording_status = null;
-    const { error } = await db.from('calendar_events').update(reset).eq('id', eventId);
+    const { error } = await db.from('calendar_events').update({
+        zoom_summary_processed: false, zoom_tasks_created: false, zoom_recording_status: null, zoom_summary_in_drive: false
+    }).eq('id', eventId);
     if (error) { alert('Could not reset this meeting: ' + error.message); return; }
     try {
         const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/sync-zoom-meetings', {
@@ -1724,8 +1695,7 @@ OL.recheckZoomForEvent = async function(eventId) {
         });
         const r = await res.json().catch(() => ({}));
         if (!res.ok) { alert('Zoom sync failed: ' + (r.message || res.status)); return; }
-        // Only this meeting's action items — not every meeting's.
-        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems({ eventId });
+        if (typeof OL.materializeZoomActionItems === 'function') await OL.materializeZoomActionItems();
         if (!r.eventReport) {
             // The server is running an older sync that ignores single-meeting
             // re-checks, so there's nothing meeting-specific to report.

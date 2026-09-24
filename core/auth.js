@@ -5,9 +5,67 @@
 // it was readable in the public source and granted admin screens to anyone.
 
 import { db, state, persist } from './data.js';
+import { getPreviewTarget, clearPreviewTarget, mountPreviewBanner, isPreviewActive, exitPreview } from './preview.js';
 
 // Old ?access=token share links. OFF: they no longer open anything (the database lockdown ends them).
 const LEGACY_LINKS_ENABLED = false;
+
+// ---- setProjectSession: the app state a partner/client login gets ----
+// Shared by a real partner/client sign-in and by an admin's read-only preview of one (core/preview.js),
+// so the preview can never drift from what the real login shows.
+function setProjectSession(client, loginMemberId, userId) {
+    state.activeClientId = client.id;
+    // Who is logged in — kept separate from activeClientId, which changes as a partner opens
+    // their managed clients. A plain client login is locked to its own project.
+    state.loginClientId = client.id;
+    state.loginIsPartner = client.meta?.status === 'Partner';
+    state.loginMemberId = loginMemberId;
+    if (loginMemberId) {
+        // Name comments and "my tasks" after the person, not the project.
+        const me = (client.project_data?.teamMembers || []).find((m) => String(m.id) === String(loginMemberId));
+        state.currentUser = { id: userId, name: me?.name || client.meta?.name || 'Client', role: 'Project member', authType: 'project_member' };
+    }
+    state.clients[client.id] = {
+        id: client.id,
+        publicToken: client.public_token,
+        meta: client.meta || {},
+        modules: client.modules,
+        permissions: client.permissions,
+        projectData: client.project_data || { localResources: [], clientTasks: [] },
+        sharedMasterIds: client.shared_master_ids || []
+    };
+
+    state.adminMode = false;
+    window.FORCE_ADMIN = false;
+    // IS_GUEST historically meant "not admin" throughout app.js's UI
+    // branching — a logged-in partner/client is still not admin, so
+    // this stays true, same as the old ?access=token path.
+    window.IS_GUEST = true;
+}
+
+// ---- enterPreviewSession: an admin viewing as a partner/client (read-only) ----
+// Returns true when the preview is set up. See core/preview.js for the whole picture.
+async function enterPreviewSession(clientId, session) {
+    const { data: client, error } = await db
+        .from('workspace_clients')
+        .select('*')
+        .eq('id', clientId)
+        .maybeSingle();
+
+    if (error || !client) {
+        clearPreviewTarget();
+        alert('That project could not be found, so there is nothing to preview. Opening the normal admin view instead.');
+        return false;
+    }
+
+    setProjectSession(client, null, session.user.id);
+    mountPreviewBanner({
+        name: client.meta?.name || client.id,
+        kind: client.meta?.status === 'Partner' ? 'Partner' : 'Client'
+    });
+    console.log(`👁️ Preview mode: viewing as ${client.meta?.name || client.id} (read-only)`);
+    return true;
+}
 
 // ---- initializeSecurityContext: gate the whole app on load ----
 // Now async — the load listener that calls this in app.js needs
@@ -29,6 +87,10 @@ export async function initializeSecurityContext() {
             .maybeSingle();
 
         if (adminRow) {
+            // "Preview as a client/partner": only an admin can, and only ever read-only (core/preview.js).
+            const previewTarget = getPreviewTarget();
+            if (previewTarget && await enterPreviewSession(previewTarget.clientId, session)) return true;
+
             // Try to attach a real name for attribution (task comments, etc.)
             // by matching this admin's session against the team roster —
             // first by authUserId (if they were also provisioned as a team
@@ -58,6 +120,9 @@ export async function initializeSecurityContext() {
             console.log(`🛠️ Admin Mode Active (real login)${matchedMember ? ` — ${matchedMember.name}` : ''}`);
             return true;
         }
+
+        // Not an admin: a preview request (?preview=) means nothing here, so drop it.
+        if (getPreviewTarget()) clearPreviewTarget();
 
         // Not an admin — check if this is a logged-in Sphynx team member
         // (see supabase/migrations/team_member_login.sql). Team members get
@@ -121,33 +186,7 @@ export async function initializeSecurityContext() {
             return false;
         }
 
-        state.activeClientId = client.id;
-        // Who is logged in — kept separate from activeClientId, which changes as a partner opens
-        // their managed clients. A plain client login is locked to its own project.
-        state.loginClientId = client.id;
-        state.loginIsPartner = client.meta?.status === 'Partner';
-        state.loginMemberId = loginMemberId;
-        if (loginMemberId) {
-            // Name comments and "my tasks" after the person, not the project.
-            const me = (client.project_data?.teamMembers || []).find((m) => String(m.id) === String(loginMemberId));
-            state.currentUser = { id: session.user.id, name: me?.name || client.meta?.name || 'Client', role: 'Project member', authType: 'project_member' };
-        }
-        state.clients[client.id] = {
-            id: client.id,
-            publicToken: client.public_token,
-            meta: client.meta || {},
-            modules: client.modules,
-            permissions: client.permissions,
-            projectData: client.project_data || { localResources: [], clientTasks: [] },
-            sharedMasterIds: client.shared_master_ids || []
-        };
-
-        state.adminMode = false;
-        window.FORCE_ADMIN = false;
-        // IS_GUEST historically meant "not admin" throughout app.js's UI
-        // branching — a logged-in partner/client is still not admin, so
-        // this stays true, same as the old ?access=token path.
-        window.IS_GUEST = true;
+        setProjectSession(client, loginMemberId, session.user.id);
         return true;
     }
 
@@ -211,6 +250,7 @@ export function renderClientAccessList() {
                     }
                 </td>
                 <td>
+                    <button class="btn tiny soft" onclick="OL.startPreview('${c.id}')" title="See what they see (read-only, opens a new tab)">👁 Preview</button>
                     ${isMigrated ? '' : `
                         <input type="email" id="setupEmail-${c.id}" class="modal-input tiny"
                                placeholder="their@email.com" value="${c.meta?.setupEmail || ''}"
@@ -267,6 +307,9 @@ export function getAdminQuery() {
 }
 
 export async function signOut() {
+    // In a preview tab "sign out" means "leave the preview". Signing out for real would also end the
+    // admin's own session in every other tab.
+    if (isPreviewActive()) { exitPreview(); return; }
     await db.auth.signOut();
     window.location.href = 'login.html';
 }

@@ -216,7 +216,6 @@ OL.executeAutomationAction = function(rule, ctx) {
         dueDate,
         isClientTask: OL.computeIsClientTask(assignee),
         loggedHours,
-        timeLog: loggedHours > 0 ? [{ id: 'tl-' + uid(), by: 'Automation', minutes: Math.round(loggedHours * 60), start: null, end: new Date().toISOString(), note: rule.name || '', source: 'automation' }] : [],
         parentTaskId: (action.asSubtask && ctx.task) ? ctx.task.id : null,
         requestLineItemId: ctx.requestLineItemId || undefined,
         createdBy: 'automation',

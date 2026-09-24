@@ -1620,24 +1620,7 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
     OL.refreshTaskView();
 };
 
-// Every change to a task's time also records an itemized entry in task.timeLog
-// ({ id, by, minutes, start, end, note, source }), which the task modal lists for clients and staff.
-OL.recordTaskTimeEntry = function(task, hours, meta = {}) {
-    if (!task || !Number(hours)) return;
-    if (!Array.isArray(task.timeLog)) task.timeLog = [];
-    const end = meta.end || new Date().toISOString();
-    task.timeLog.push({
-        id: 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        by: meta.by || (OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team'),
-        minutes: Math.round(Number(hours) * 60),
-        start: meta.start || null,
-        end,
-        note: meta.note || '',
-        source: meta.source || 'manual'
-    });
-};
-
-OL.logTaskHours = function(clientId, taskId, additionalHours, meta = {}) {
+OL.logTaskHours = function(clientId, taskId, additionalHours) {
     updateAndSync(() => {
         const client = state.clients[clientId];
         if (!client || !client.projectData?.clientTasks) return;
@@ -1647,7 +1630,6 @@ OL.logTaskHours = function(clientId, taskId, additionalHours, meta = {}) {
             const current = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = current + Number(additionalHours);
             task.hoursLogged = task.loggedHours;
-            OL.recordTaskTimeEntry(task, additionalHours, meta);
         }
     }, clientId);
     OL.refreshTaskView();
@@ -1770,7 +1752,7 @@ OL.stopLiveTaskTimer = function() {
     const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
 
     if (hoursEarned > 0) {
-        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned, { start: new Date(timer.startTime).toISOString(), source: 'timer' });
+        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);
     }
 
     OL._clearPersistedTimer();
@@ -2090,10 +2072,8 @@ OL.renderInContextTaskModal = function(client, task) {
                          ${(task.howToIds && task.howToIds.length) ? `
                             <div style="display:grid; gap:8px; margin-bottom:10px;">
                                 ${task.howToIds.map(htId => {
-                                    const guide = OL.findGuide ? OL.findGuide(htId, client) : (state.master.howToLibrary || []).find(g => g.id === htId);
+                                    const guide = (state.master.howToLibrary || []).find(g => g.id === htId);
                                     if (!guide) return '';
-                                    // Internal-only master guides never show on a client task, even if linked earlier.
-                                    if (OL.isGuideVisibleInProject && !OL.isGuideVisibleInProject(guide, client)) return '';
                                     const textBlock = (guide.blocks || []).find(b => b.type === 'text');
                                     const preview = textBlock?.data?.html ? textBlock.data.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
                                     return `
@@ -2129,8 +2109,6 @@ OL.renderInContextTaskModal = function(client, task) {
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
                         <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
                     </div>
-
-                    ${OL.renderTaskTimeLogHTML ? OL.renderTaskTimeLogHTML(task) : ''}
 
                     ${task.timeAuditNote ? `
                         <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
@@ -2620,53 +2598,19 @@ OL.execCommentCommand = function(command) {
 // paste from somewhere else smuggle in a <script>, an onerror handler, or
 // a javascript: link.
 OL._ALLOWED_COMMENT_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'UL', 'OL', 'LI', 'BR', 'A', 'DIV', 'SPAN', 'P']);
-// Colors are allowed everywhere (a text color can't run anything). Images
-// only when the caller asks for them ({ images: true }: the email message
-// and signature), and only as an uploaded picture (data:image/png|jpeg|gif|
-// webp;base64) or an https:// address.
-OL._SAFE_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
-OL._SAFE_IMG_SRC_RE = /^(data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]+|https:\/\/[^\s"'<>]+)$/i;
-OL._ALIGNABLE_TAGS = new Set(['DIV', 'P', 'H3', 'H4', 'LI', 'BLOCKQUOTE', 'UL', 'OL']);
-OL.sanitizeCommentHtml = function(html, opts = {}) {
-    const allowImages = opts.images === true;
+OL.sanitizeCommentHtml = function(html) {
     const container = document.createElement('div');
     container.innerHTML = html || '';
 
     const walk = (node) => {
         Array.from(node.childNodes).forEach((child) => {
             if (child.nodeType === 1) { // element
-                // <font color="red"> (what some browsers produce for text color) -> <span style="color:red">
-                if (child.tagName === 'FONT') {
-                    const span = document.createElement('span');
-                    const c = (child.getAttribute('color') || '').trim();
-                    if (c && OL._SAFE_COLOR_RE.test(c)) span.style.color = c;
-                    while (child.firstChild) span.appendChild(child.firstChild);
-                    node.replaceChild(span, child);
-                    child = span;
-                }
-                if (child.tagName === 'IMG') {
-                    const src = (child.getAttribute('src') || '').trim();
-                    if (!allowImages || !OL._SAFE_IMG_SRC_RE.test(src)) { node.removeChild(child); return; }
-                    const width = parseInt(child.getAttribute('width') || child.style.width || '', 10);
-                    const alt = child.getAttribute('alt') || '';
-                    Array.from(child.attributes).forEach(a => child.removeAttribute(a.name));
-                    child.setAttribute('src', src.replace(/\s+/g, ''));
-                    if (width > 0 && width <= 1200) child.setAttribute('width', String(width));
-                    if (alt) child.setAttribute('alt', alt.slice(0, 200));
-                    child.setAttribute('style', 'max-width:100%; height:auto;');
-                    return;
-                }
                 if (!OL._ALLOWED_COMMENT_TAGS.has(child.tagName)) {
                     // Unwrap: keep its contents, drop the tag itself
                     while (child.firstChild) node.insertBefore(child.firstChild, child);
                     node.removeChild(child);
                     return;
                 }
-                const color = child.style?.color || '';
-                // Alignment (left/center/right/justify) on block elements, from either
-                // style="text-align:…" or the old align="…" attribute.
-                const alignRaw = (child.style?.textAlign || child.getAttribute('align') || '').toLowerCase().trim();
-                const align = OL._ALIGNABLE_TAGS.has(child.tagName) && /^(left|center|right|justify)$/.test(alignRaw) ? alignRaw : '';
                 Array.from(child.attributes).forEach((attr) => {
                     if (child.tagName === 'A' && attr.name === 'href') {
                         const val = attr.value.trim();
@@ -2676,13 +2620,10 @@ OL.sanitizeCommentHtml = function(html, opts = {}) {
                             child.setAttribute('target', '_blank');
                             child.setAttribute('rel', 'noopener noreferrer');
                         }
-                    } else if (!(child.tagName === 'A' && (attr.name === 'target' || attr.name === 'rel'))) {
+                    } else if (attr.name !== 'href') {
                         child.removeAttribute(attr.name);
                     }
                 });
-                // Keep only a text color, nothing else from style.
-                if (color && OL._SAFE_COLOR_RE.test(color.replace(/\s+/g, ' ').trim())) child.style.color = color;
-                if (align && align !== 'left') child.style.textAlign = align;
                 walk(child);
             } else if (child.nodeType !== 3) { // not an element, not plain text (comments, etc.)
                 node.removeChild(child);
@@ -2712,27 +2653,6 @@ OL.htmlToPlainText = function(html) {
     return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
 };
 
-// Like htmlToPlainText, but a link keeps its address: "Here is the recording (https://…)".
-// For the plain-text copy of an HTML email.
-OL.htmlToPlainTextWithLinks = function(html) {
-    const d = document.createElement('div');
-    d.innerHTML = html || '';
-    d.querySelectorAll('a[href]').forEach(a => {
-        const href = a.getAttribute('href') || '';
-        const label = (a.textContent || '').trim();
-        if (/^https?:/i.test(href) && label && label !== href) a.textContent = `${label} (${href})`;
-    });
-    d.querySelectorAll('img').forEach(img => img.replaceWith(document.createTextNode(img.getAttribute('alt') ? `[image: ${img.getAttribute('alt')}]` : '[image]')));
-    return OL.htmlToPlainText(d.innerHTML);
-};
-
-// Plain text -> editor HTML, with bare web addresses turned into links.
-OL.plainTextToLinkedHtml = function(text) {
-    return esc(text || '')
-        .replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)'"])/g, (u) => `<a href="${u}">${u}</a>`)
-        .replace(/\n/g, '<br>');
-};
-
 // opts: { id, html, placeholder, minHeight, onBlur } — onBlur is a JS
 // string run with `this` = the editor element.
 OL.renderRichTextField = function(opts) {
@@ -2749,316 +2669,13 @@ OL.renderRichTextField = function(opts) {
                 ${btn('insertOrderedList', '1. List', 'Numbered list')}
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')">❝</button>
                 ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
-                <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
-                ${btn('justifyLeft', '<i data-lucide="align-left" style="width:11px;height:11px;"></i>', 'Align left')}
-                ${btn('justifyCenter', '<i data-lucide="align-center" style="width:11px;height:11px;"></i>', 'Align center')}
-                ${btn('justifyRight', '<i data-lucide="align-right" style="width:11px;height:11px;"></i>', 'Align right')}
                 ${btn('removeFormat', '<i data-lucide="remove-formatting" style="width:11px;height:11px;"></i>', 'Clear formatting')}
-                ${opts.emailTools ? `
-                <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
-                <span style="position:relative; display:inline-block;">
-                    <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Text color"
-                            onmousedown="event.preventDefault(); OL.richSaveSelection('${opts.id}')"
-                            onclick="OL.toggleRichColorPalette('${opts.id}', this)">
-                        <span style="font-weight:bold; border-bottom:3px solid #e11d48; padding:0 2px;">A</span> ▾
-                    </button>
-                </span>
-                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Insert image"
-                        onmousedown="event.preventDefault(); OL.richSaveSelection('${opts.id}')"
-                        onclick="OL.richInsertImage('${opts.id}', ${Number(opts.imageMaxWidth) || 600})">
-                    <i data-lucide="image" style="width:11px;height:11px;"></i>
-                </button>` : ''}
             </div>
             <div id="${opts.id}" contenteditable="true" class="modal-input tiny ol-richtext-body"
                  data-placeholder="${esc(opts.placeholder || '')}"
                  style="min-height:${opts.minHeight || 90}px; max-height:520px; overflow-y:auto; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
-                 ${opts.emailTools ? `onpaste="OL.richHandlePaste(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
-                 ondragover="OL.richHandleDragOver(event)"
-                 ondrop="OL.richHandleDrop(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
-                 onclick="OL.richHandleEditorClick(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"` : ''}
                  onblur="${opts.onBlur || ''}">${opts.html || ''}</div>
         </div>`;
-};
-
-// ---- Email editor tools: text color + inline images ----
-// The color palette and file picker take focus away from the editor, so the
-// cursor/selection is saved on mousedown and put back before applying.
-OL._richSaved = {};
-OL.richSaveSelection = function(editorId) {
-    const ed = document.getElementById(editorId);
-    const sel = window.getSelection();
-    if (!ed || !sel || !sel.rangeCount) return;
-    const r = sel.getRangeAt(0);
-    if (ed.contains(r.commonAncestorContainer)) OL._richSaved[editorId] = r.cloneRange();
-};
-OL.richRestoreSelection = function(editorId) {
-    const ed = document.getElementById(editorId);
-    if (!ed) return null;
-    ed.focus();
-    const sel = window.getSelection();
-    let r = OL._richSaved[editorId];
-    if (!r || !ed.contains(r.commonAncestorContainer)) {
-        r = document.createRange();
-        r.selectNodeContents(ed);
-        r.collapse(false); // end of the editor
-    }
-    sel.removeAllRanges();
-    sel.addRange(r);
-    return ed;
-};
-
-OL.RICH_TEXT_COLORS = ['#111827', '#6b7280', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0d9488', '#2563eb', '#7c3aed', '#db2777'];
-OL.toggleRichColorPalette = function(editorId, btn) {
-    const existing = document.getElementById('rich-color-palette');
-    if (existing) { existing.remove(); if (existing.dataset.for === editorId) return; }
-    const pal = document.createElement('div');
-    pal.id = 'rich-color-palette';
-    pal.dataset.for = editorId;
-    pal.style.cssText = 'position:absolute; top:100%; left:0; z-index:1000; margin-top:4px; padding:6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.4); display:grid; grid-template-columns:repeat(5, 20px); gap:5px; width:max-content;';
-    pal.innerHTML = OL.RICH_TEXT_COLORS.map(c =>
-        `<button type="button" title="${c}" onmousedown="event.preventDefault()" onclick="OL.applyRichColor('${editorId}', '${c}')" style="width:20px; height:20px; border-radius:4px; border:1px solid rgba(255,255,255,.25); background:${c}; cursor:pointer; padding:0;"></button>`
-    ).join('') + `
-        <label title="Custom color" style="grid-column:1 / -1; display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; margin-top:2px;">
-            <input type="color" value="#2563eb" style="width:26px; height:20px; padding:0; border:none; background:none; cursor:pointer;" onchange="OL.applyRichColor('${editorId}', this.value)"> Custom…
-        </label>`;
-    btn.parentElement.appendChild(pal);
-    setTimeout(() => {
-        const close = (e) => { if (!pal.contains(e.target) && e.target !== btn && !btn.contains(e.target)) { pal.remove(); document.removeEventListener('mousedown', close); } };
-        document.addEventListener('mousedown', close);
-    }, 0);
-};
-OL.applyRichColor = function(editorId, color) {
-    if (!OL._SAFE_COLOR_RE.test(color)) return;
-    OL.richRestoreSelection(editorId);
-    document.execCommand('styleWithCSS', false, true);
-    document.execCommand('foreColor', false, color);
-    document.execCommand('styleWithCSS', false, false);
-    OL.richSaveSelection(editorId);
-    document.getElementById('rich-color-palette')?.remove();
-};
-
-// Picks an image from the computer, shrinks it to maxWidth (keeps emails
-// light), and inserts it at the cursor. Stored as a data: URL in the editor;
-// the send function turns each one into a real inline attachment (cid:), which
-// is what Gmail and Outlook need to show it.
-// Picks an image from the computer and inserts it at the cursor.
-OL.richInsertImage = function(editorId, maxWidth = 600) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/png,image/jpeg,image/gif,image/webp';
-    input.multiple = true;
-    input.onchange = () => {
-        const files = Array.from(input.files || []);
-        if (files.length) OL._richInsertImageFiles(editorId, files, maxWidth, null);
-    };
-    input.click();
-};
-
-// Shared by the image button, paste and drag-and-drop. `range` is where to put
-// them (a drop point); null means the saved cursor position.
-OL._richInsertImageFiles = async function(editorId, files, maxWidth, range) {
-    const images = files.filter(f => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
-    if (!images.length) return;
-    let html = '';
-    for (const file of images) {
-        if (file.size > 15 * 1024 * 1024) { alert(`"${file.name}" is over 15 MB. Pick a smaller image.`); continue; }
-        try {
-            const dataUrl = await OL._shrinkImageFile(file, maxWidth);
-            html += `<img src="${dataUrl}" alt="${esc(file.name || 'image')}" style="max-width:100%; height:auto;">`;
-        } catch (e) {
-            alert(`Could not read "${file.name || 'that image'}": ${e?.message || e}`);
-        }
-    }
-    if (!html) return;
-    const ed = document.getElementById(editorId);
-    if (!ed) return;
-    if (range && ed.contains(range.commonAncestorContainer)) {
-        ed.focus();
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-    } else {
-        OL.richRestoreSelection(editorId);
-    }
-    document.execCommand('insertHTML', false, html);
-    OL.richSaveSelection(editorId);
-};
-
-// Paste: screenshots and copied image files come in as files. If the clipboard
-// also carries text (copying a whole section of a web page), the browser's own
-// paste handles it, and web images in it are kept as links.
-OL.richHandlePaste = function(e, editorId, maxWidth) {
-    const dt = e.clipboardData;
-    if (!dt) return;
-    const files = Array.from(dt.items || [])
-        .filter(it => it.kind === 'file' && /^image\//.test(it.type))
-        .map(it => it.getAsFile()).filter(Boolean);
-    if (!files.length) return;
-    if ((dt.getData('text/plain') || '').trim()) return;
-    e.preventDefault();
-    OL.richSaveSelection(editorId);
-    OL._richInsertImageFiles(editorId, files, maxWidth, null);
-};
-
-OL.richHandleDragOver = function(e) {
-    if (Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
-};
-OL.richHandleDrop = function(e, editorId, maxWidth) {
-    const files = Array.from(e.dataTransfer?.files || []).filter(f => /^image\//.test(f.type));
-    if (!files.length) return; // not an image drop: let the browser handle it
-    e.preventDefault();
-    let range = null;
-    if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(e.clientX, e.clientY);
-    else if (document.caretPositionFromPoint) {
-        const p = document.caretPositionFromPoint(e.clientX, e.clientY);
-        if (p) { range = document.createRange(); range.setStart(p.offsetNode, p.offset); range.collapse(true); }
-    }
-    OL._richInsertImageFiles(editorId, files, maxWidth, range);
-};
-
-// ---- Resizing: click an image to get size buttons, a slider and a corner drag handle ----
-// The controls sit on document.body above every window: modals use z-index 10000, and the
-// first version put these at 2000, so they opened hidden BEHIND the compose window.
-(function addRichImageStyles() {
-    if (document.getElementById('rich-img-style')) return;
-    const st = document.createElement('style');
-    st.id = 'rich-img-style';
-    st.textContent = '.ol-richtext-body img { cursor: pointer; } .ol-richtext-body img:hover { outline: 2px dashed rgba(56,189,248,.7); outline-offset: 2px; }';
-    document.head.appendChild(st);
-})();
-OL.richHandleEditorClick = function(e, editorId, maxWidth) {
-    const img = e.target && e.target.tagName === 'IMG' ? e.target : null;
-    if (img) OL._richShowImageTools(img, editorId, maxWidth);
-    else OL._richHideImageTools();
-};
-OL._richHideImageTools = function() {
-    document.getElementById('rich-img-tools')?.remove();
-    document.getElementById('rich-img-handle')?.remove();
-    document.querySelectorAll('.ol-richtext-body img[data-selected]').forEach(i => { i.removeAttribute('data-selected'); i.style.outline = ''; });
-    if (OL._richImgToolsCleanup) { OL._richImgToolsCleanup(); OL._richImgToolsCleanup = null; }
-};
-OL._richSetImageWidth = function(img, w) {
-    if (w == null) { img.removeAttribute('width'); img.style.width = ''; }
-    else { w = Math.max(24, Math.round(w)); img.setAttribute('width', String(w)); img.style.width = w + 'px'; }
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-};
-OL._richShowImageTools = function(img, editorId, maxWidth) {
-    OL._richHideImageTools();
-    const ed = document.getElementById(editorId);
-    if (!ed) return;
-    img.setAttribute('data-selected', '1');
-    img.style.outline = '2px solid var(--accent, #38bdf8)';
-    const natural = img.naturalWidth || maxWidth;
-    const limit = Math.max(24, Math.min(maxWidth, natural));
-    const current = () => Math.round(img.getBoundingClientRect().width);
-
-    const tools = document.createElement('div');
-    tools.id = 'rich-img-tools';
-    tools.style.cssText = 'position:fixed; z-index:100050; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:5px 6px; background:var(--panel-dark, #1a1a1a); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:11px;';
-    const presets = [['S', 0.25], ['M', 0.5], ['L', 0.75], ['Full', 1]];
-    tools.innerHTML = presets.map(([label, f]) =>
-        `<button type="button" class="btn tiny soft" data-f="${f}" style="padding:2px 7px;" title="${Math.round(limit * f)}px wide">${label}</button>`).join('') +
-        `<input type="range" min="24" max="${limit}" value="${Math.min(current(), limit)}" style="width:110px;" title="Drag to resize">
-         <span class="rich-img-w" style="min-width:42px; opacity:.75;">${current()}px</span>
-         <button type="button" class="btn tiny soft" data-remove="1" title="Remove image" style="padding:2px 6px; color:#ef4444;">✕</button>`;
-    document.body.appendChild(tools);
-
-    const handle = document.createElement('div');
-    handle.id = 'rich-img-handle';
-    handle.title = 'Drag to resize';
-    handle.style.cssText = 'position:fixed; z-index:100051; width:12px; height:12px; background:var(--accent, #38bdf8); border:2px solid #fff; border-radius:3px; cursor:nwse-resize;';
-    document.body.appendChild(handle);
-
-    const slider = tools.querySelector('input[type=range]');
-    const label = tools.querySelector('.rich-img-w');
-    const place = () => {
-        const r = img.getBoundingClientRect();
-        const er = ed.getBoundingClientRect();
-        // hide the tools if the picture has scrolled out of the editor
-        const visible = r.bottom > er.top && r.top < er.bottom;
-        tools.style.display = handle.style.display = visible ? '' : 'none';
-        tools.style.left = Math.max(4, Math.min(r.left, window.innerWidth - tools.offsetWidth - 4)) + 'px';
-        tools.style.top = (r.bottom + 6 + tools.offsetHeight > window.innerHeight ? Math.max(4, r.top - tools.offsetHeight - 6) : r.bottom + 6) + 'px';
-        handle.style.left = (r.right - 7) + 'px';
-        handle.style.top = (r.bottom - 7) + 'px';
-        label.textContent = current() + 'px';
-        slider.value = String(Math.min(current(), limit));
-    };
-    place();
-
-    tools.addEventListener('mousedown', ev => { if (ev.target !== slider) ev.preventDefault(); });
-    tools.addEventListener('click', ev => {
-        const b = ev.target.closest('button');
-        if (!b) return;
-        if (b.dataset.remove) { img.remove(); OL._richHideImageTools(); return; }
-        const f = Number(b.dataset.f);
-        OL._richSetImageWidth(img, f >= 1 ? limit : limit * f);
-        place();
-    });
-    slider.addEventListener('input', () => { OL._richSetImageWidth(img, Number(slider.value)); place(); });
-
-    handle.addEventListener('mousedown', ev => {
-        ev.preventDefault();
-        const startX = ev.clientX, startW = current();
-        const move = (m) => { OL._richSetImageWidth(img, Math.min(limit, Math.max(24, startW + (m.clientX - startX)))); place(); };
-        const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', up);
-    });
-
-    const onScroll = () => place();
-    const onDocDown = (ev) => {
-        if (tools.contains(ev.target) || ev.target === handle || ev.target === img) return;
-        OL._richHideImageTools();
-    };
-    const onKey = (ev) => {
-        if ((ev.key === 'Delete' || ev.key === 'Backspace') && document.activeElement !== slider && img.isConnected && img.hasAttribute('data-selected')) {
-            ev.preventDefault(); img.remove(); OL._richHideImageTools();
-        } else if (ev.key === 'Escape') OL._richHideImageTools();
-    };
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onScroll);
-    document.addEventListener('mousedown', onDocDown, true);
-    document.addEventListener('keydown', onKey, true);
-    // If the editor is closed or re-rendered, drop the tools too.
-    const watch = setInterval(() => { if (!img.isConnected || !ed.isConnected) OL._richHideImageTools(); }, 500);
-    OL._richImgToolsCleanup = () => {
-        window.removeEventListener('scroll', onScroll, true);
-        window.removeEventListener('resize', onScroll);
-        document.removeEventListener('mousedown', onDocDown, true);
-        document.removeEventListener('keydown', onKey, true);
-        clearInterval(watch);
-    };
-};
-
-OL._shrinkImageFile = function(file, maxWidth) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error('read failed'));
-        reader.onload = () => {
-            const src = String(reader.result);
-            // GIFs keep their animation, so they aren't redrawn (just size-checked).
-            if (file.type === 'image/gif') {
-                if (file.size > 2 * 1024 * 1024) return reject(new Error('animated GIFs must be under 2 MB'));
-                return resolve(src);
-            }
-            const img = new Image();
-            img.onerror = () => reject(new Error('not a readable image'));
-            img.onload = () => {
-                const scale = Math.min(1, maxWidth / img.naturalWidth);
-                const w = Math.max(1, Math.round(img.naturalWidth * scale));
-                const h = Math.max(1, Math.round(img.naturalHeight * scale));
-                const canvas = document.createElement('canvas');
-                canvas.width = w; canvas.height = h;
-                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                // PNG keeps transparency (logos); photos go to JPEG to stay small.
-                resolve(file.type === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85));
-            };
-            img.src = src;
-        };
-        reader.readAsDataURL(file);
-    });
 };
 
 // Stored HTML if present, otherwise the old plain text converted.
@@ -3401,59 +3018,6 @@ OL.updateTaskDescription = function(clientId, taskId, newDescription) {
 // description — anything that used to narrate itself into the description
 // (guide links, etc.) should call this instead. Not yet wired into status/
 // assignee/due-date changes; just the how-to guide linking for now.
-// Itemized time on a task: who, when, how long. Shown to clients and staff.
-// Time logged before itemizing existed has no entries; it shows as one "earlier time" line.
-OL.renderTaskTimeLogHTML = function(task) {
-    const entries = (Array.isArray(task.timeLog) ? task.timeLog : []).slice()
-        .sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0));
-    const totalMin = Math.round(Number(task.loggedHours || task.hoursLogged || 0) * 60);
-    const itemizedMin = entries.reduce((s, e) => s + Number(e.minutes || 0), 0);
-    const earlierMin = totalMin - itemizedMin;
-    if (!entries.length && totalMin <= 0) return '';
-
-    const dur = (m) => {
-        const sign = m < 0 ? '−' : '';
-        const a = Math.abs(Math.round(m));
-        const h = Math.floor(a / 60), mm = a % 60;
-        return sign + (h ? `${h}h ${String(mm).padStart(2, '0')}m` : `${mm}m`);
-    };
-    const when = (e) => {
-        if (!e.end && !e.start) return 'No date';
-        const d = new Date(e.end || e.start);
-        if (isNaN(d)) return '';
-        const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        const time = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-        return e.start && e.end ? `${day}, ${time(e.start)} – ${time(e.end)}` : day;
-    };
-    const SOURCE = { timer: 'Timer', manual: 'Added', adjustment: 'Adjusted', automation: 'From meeting', chrome_extension: 'Timer (extension)' };
-    const row = (left, sub, right, muted) => `
-        <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--line);${muted ? ' opacity:0.75;' : ''}">
-            <div style="min-width:0;">
-                <div class="tiny" style="font-weight:600;">${left}</div>
-                ${sub ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis;">${sub}</div>` : ''}
-            </div>
-            <div class="tiny monospace bold" style="flex-shrink:0; color:var(--accent);">${right}</div>
-        </div>`;
-
-    return `
-        <div style="margin-bottom:20px; background:rgba(255,255,255,0.02); padding:14px; border-radius:6px; border:1px solid var(--line);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label class="bold tiny uppercase muted" style="margin:0;">
-                    <i data-lucide="clock" style="width:12px;height:12px;vertical-align:sub;"></i> Time Log
-                </label>
-                <span class="tiny bold" style="color:var(--accent);">Total ${dur(totalMin)}</span>
-            </div>
-            <div style="max-height:220px; overflow:auto;">
-                ${entries.map(e => row(
-                    `${esc(e.by || 'Sphynx Team')} <span class="muted" style="font-weight:400;">· ${esc(SOURCE[e.source] || 'Logged')}</span>`,
-                    [esc(when(e)), e.note ? esc(e.note) : ''].filter(Boolean).join(' · '),
-                    dur(e.minutes)
-                )).join('')}
-                ${earlierMin > 0 ? row('Earlier time', 'Logged before itemized entries were recorded', dur(earlierMin), true) : ''}
-            </div>
-        </div>`;
-};
-
 OL.logTaskActivity = function(clientId, taskId, text) {
     updateAndSync(() => {
         const client = state.clients?.[clientId];
@@ -3851,13 +3415,9 @@ OL.saveTaskTimeEdit = function(clientId, taskId) {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
         if (task) {
-            const before = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = hoursVal;
             task.hoursLogged = hoursVal;
             task.timeAuditNote = noteVal || '';
-            if (Math.round((hoursVal - before) * 60) !== 0) {
-                OL.recordTaskTimeEntry(task, hoursVal - before, { source: 'adjustment', note: noteVal || 'Total adjusted' });
-            }
         }
     }, clientId);
 

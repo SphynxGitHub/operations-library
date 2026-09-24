@@ -28,7 +28,7 @@ export function renderHowToLibrary() {
     
     const visibleGuides = isVaultView 
         ? masterLibrary 
-        : [...masterLibrary.filter(ht => isGuideVisibleInProject(ht, client)), ...localLibrary];
+        : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
 
     container.innerHTML = `
         <div class="section-header" style="display: flex !important; align-items: center; gap: 12px; visibility: visible !important; opacity: 1 !important;">
@@ -111,7 +111,6 @@ function renderHowToGroupedByCategory(guides, client, isVaultView) {
                                         <div style="font-weight:600;font-size:13px;">${esc(ht.name||'Untitled SOP')}</div>
                                         ${ht.summary ? `<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ht.summary)}</div>` : ''}
                                     </div>
-                                    ${isVaultView && !String(ht.id).includes('local') ? guideScopePill(ht) : ''}
                                     <span class="pill tiny ${String(ht.id).includes('local') ? 'soft' : 'vault'}" style="font-size:8px;">
                                         ${String(ht.id).includes('local') ? 'LOCAL' : 'MASTER'}
                                     </span>
@@ -130,69 +129,6 @@ function renderHowToGroupedByCategory(guides, client, isVaultView) {
             `).join('')}
         </div>
     `;
-}
-
-// ---- GUIDE VISIBILITY ----------------------------------------------------
-// A master guide is either Internal Only (default) or Visible to Clients (scope 'global').
-// Client projects only ever see Visible-to-Clients master guides, plus their own local guides.
-// Guides shared with a project before scope existed (no scope set, but in that project's
-// sharedMasterIds) stay visible there until someone sets their scope.
-export function isGuideClientFacing(guide) {
-    return guide?.scope === 'global';
-}
-export function isGuideVisibleInProject(guide, client) {
-    if (!guide) return false;
-    if ((client?.projectData?.localHowTo || []).some(h => h.id === guide.id)) return true;
-    if (guide.scope === 'global') return true;
-    if (guide.scope === 'internal') return false;
-    return (client?.sharedMasterIds || []).includes(guide.id);
-}
-// Master guides for the current context: all of them in the Vault, only visible ones in a project.
-export function masterGuidesFor(client) {
-    const all = state.master.howToLibrary || [];
-    if (window.location.hash.startsWith('#/vault')) return all;
-    return all.filter(g => isGuideVisibleInProject(g, client));
-}
-// Any guide by id, master or this project's local ones.
-export function findGuide(id, client) {
-    return (state.master.howToLibrary || []).find(g => g.id === id)
-        || (client?.projectData?.localHowTo || []).find(g => g.id === id) || null;
-}
-
-// Switch a master guide between Internal Only and Visible to Clients (affects every project).
-export function toggleGuideScope(htId, event) {
-    if (event) event.stopPropagation();
-    if (!(window.FORCE_ADMIN === true || state.adminMode === true || state.teamMemberMode === true)) return;
-    const ht = (state.master.howToLibrary || []).find(g => g.id === htId);
-    if (!ht) return;
-    const makeVisible = !isGuideClientFacing(ht);
-    const msg = makeVisible
-        ? `Make "${ht.name || 'this guide'}" visible to clients?\n\nIt will show in every client project's How-To library and can be linked on their tasks.`
-        : `Make "${ht.name || 'this guide'}" internal only?\n\nClients will no longer see it, and it can't be linked on client tasks. Existing links stay saved but are hidden.`;
-    if (!confirm(msg)) return;
-
-    ht.scope = makeVisible ? 'global' : 'internal';
-    if (!makeVisible) {
-        Object.values(state.clients || {}).forEach(c => {
-            if ((c.sharedMasterIds || []).includes(htId)) {
-                c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
-                if (OL.markClientDirty) OL.markClientDirty(c.id);
-            }
-        });
-    }
-    persist();
-    if (document.getElementById('ge-shell')) openGuideEditor(htId);
-    else renderHowToLibrary();
-}
-
-function guideScopePill(ht, { clickable = true } = {}) {
-    const on = isGuideClientFacing(ht);
-    return `<span class="pill tiny ${on ? 'accent' : 'soft'}"
-                  style="font-size:8px; display:inline-flex; align-items:center; gap:4px; ${clickable ? 'cursor:pointer;' : ''}"
-                  ${clickable ? `title="Click to change who can see this guide" onclick="OL.toggleGuideScope('${ht.id}', event)"` : ''}>
-                <i data-lucide="${on ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
-                ${on ? 'Visible to Clients' : 'Internal Only'}
-            </span>`;
 }
 
 // 2. RENDER HOW TO CARDS
@@ -239,7 +175,14 @@ export function renderHowToCard(clientId, ht, isClientView) {
                         ${isMaster ? 'MASTER' : 'LOCAL'}
                     </span>
 
-                    ${!isClientView && isMaster ? guideScopePill(ht) : ''}
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer; display:flex; align-items:center; gap:4px;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            <i data-lucide="${isShared ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
+                            ${isShared ? 'Client-Facing' : 'Internal-Only'}
+                        </span>
+                    ` : ''}
                 </div>
                 <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; font-size: 11px;">
                     ${esc(ht.summary || 'No summary provided.')}
@@ -313,9 +256,6 @@ export function openGuideEditor(htId, draftObj = null) {
                        onblur="OL._geSaveField('name', this.value)">
 
                 <div style="flex:1;"></div>
-
-                ${!isLocal && !String(ht.id).startsWith('draft') && (isAdmin || state.adminMode === true || state.teamMemberMode === true)
-                    ? guideScopePill(ht) : ''}
 
                 ${canEdit ? `
                     <div style="position:relative;">
@@ -1904,11 +1844,8 @@ export function filterTaskHowToSearch(taskId, query, isVault, clientId) {
     
     const existingIds = task?.howToIds || [];
 
-    // 2. Filter available guides (exclude existing). Client tasks only get guides visible to that project.
-    const pool = isVault
-        ? (state.master.howToLibrary || [])
-        : [...(state.master.howToLibrary || []).filter(g => isGuideVisibleInProject(g, client)), ...(client?.projectData?.localHowTo || [])];
-    const results = pool.filter(guide => {
+    // 2. Filter available guides (exclude existing)
+    const results = (state.master.howToLibrary || []).filter(guide => {
         const matches = (guide.name || "").toLowerCase().includes(q);
         const alreadyLinked = existingIds.includes(guide.id);
         return matches && !alreadyLinked;
@@ -1937,10 +1874,7 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
         ? state.master.taskBlueprints.find(t => t.id === taskId)
         : client?.projectData?.clientTasks.find(t => t.id === taskId);
 
-    const guide = isVault ? (state.master.howToLibrary || []).find(g => g.id === howToId) : findGuide(howToId, client);
-    // Linking an internal-only guide to a client task isn't allowed (unlinking always is).
-    const linking = !(task?.howToIds || []).includes(howToId);
-    if (!isVault && linking && guide && !isGuideVisibleInProject(guide, client)) return;
+    const guide = (state.master.howToLibrary || []).find(g => g.id === howToId);
 
     if (task && guide) {
         if (!task.howToIds) task.howToIds = [];
@@ -2094,7 +2028,7 @@ export function filterResourceSOPLinker(resId, query) {
     if (!listEl) return;
     const q = (query || "").toLowerCase();
 
-    const availableSOPs = masterGuidesFor(getActiveClient()).filter(ht => {
+    const availableSOPs = (state.master.howToLibrary || []).filter(ht => {
         const isMatch = ht.name.toLowerCase().includes(q);
         const isNotLinked = !(ht.resourceIds || []).includes(resId);
         return isMatch && isNotLinked;
@@ -2132,7 +2066,6 @@ Object.assign(window.OL, {
     openHowToEditorModal, promoteLocalSOPToMaster, toggleHTApp, filterHTAppSearch,
     parseVideoEmbed, toggleHTResource, filterHTResourceSearch, toggleSOPSharing,
     syncHowToName, handleHowToSave, deleteSOP, importHowToToProject,
-    isGuideClientFacing, isGuideVisibleInProject, masterGuidesFor, findGuide, toggleGuideScope,
     filterMasterHowToImport, getSOPBacklinks, filterTaskHowToSearch, toggleTaskHowTo,
     addHTRequirement, updateHTReq, removeHTRequirement, resolveRequirementTarget,
     deployRequirementsFromResource,

@@ -11,7 +11,7 @@
 // Needs 001_lifecycle_tables.sql (adds calendar_events.summary_sent_at).
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -76,23 +76,19 @@ function makeSummaryTask(client, evt) {
 // meeting that gets linked to a project AFTER its summary arrived still
 // gets its tasks (previously those were skipped forever).
 let materializing = false;
-// Pass { eventId } to limit it to one meeting (the Re-check Zoom button);
-// with no argument it handles every meeting still waiting for tasks.
-OL.materializeZoomActionItems = async function(opts = {}) {
-    const onlyEventId = opts?.eventId ? String(opts.eventId) : null;
+OL.materializeZoomActionItems = async function() {
     if (materializing) return 0;
     materializing = true;
     let created = 0;
     try {
         if (!state.isCloudSynced) return 0;
         if (!(state.adminMode === true || state.teamMemberMode === true)) return 0;
-        let q = db.from('calendar_events')
+        const { data: events, error } = await db.from('calendar_events')
             .select('id, title, start, linked_client_id, zoom_action_items')
             .eq('zoom_tasks_created', false)
             .not('linked_client_id', 'is', null)
-            .eq('zoom_summary_processed', true);
-        q = onlyEventId ? q.eq('id', onlyEventId) : q.limit(50);
-        const { data: events, error } = await q;
+            .eq('zoom_summary_processed', true)
+            .limit(50);
         if (error) { if (!/zoom_tasks_created|zoom_action_items/.test(error.message || '')) console.warn('Zoom action item check failed:', error.message); return 0; }
 
         const done = [];
@@ -102,15 +98,10 @@ OL.materializeZoomActionItems = async function(opts = {}) {
             if (!client?.projectData) continue;
             if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
             // Never duplicate: skip titles already created from this meeting.
-            // Any task tied to this meeting counts (older syncs didn't tag
-            // source), and if Zoom tasks already exist for this meeting,
-            // nothing more is added — a re-worded summary shouldn't spawn
-            // a second set.
-            const fromThisMeeting = client.projectData.clientTasks.filter(t =>
-                [t.linkedEventId, t.parentEventId, t.meetingSummaryEventId].some(id => id != null && String(id) === String(evt.id)));
-            const alreadyHasZoomTasks = fromThisMeeting.some(t => t.source === 'zoom_summary' || t.createdBy === 'zoom-sync');
-            const have = new Set(fromThisMeeting.map(t => (t.title || t.name || '').trim().toLowerCase()));
-            const toAdd = alreadyHasZoomTasks ? [] : items.filter(i => !have.has(i.toLowerCase()));
+            const have = new Set(client.projectData.clientTasks
+                .filter(t => String(t.linkedEventId) === String(evt.id) && t.source === 'zoom_summary')
+                .map(t => (t.title || '').trim().toLowerCase()));
+            const toAdd = items.filter(i => !have.has(i.toLowerCase()));
             if (toAdd.length) {
                 await updateAndSync(() => {
                     toAdd.forEach(item => client.projectData.clientTasks.unshift({
@@ -444,12 +435,10 @@ OL.msRefreshGreeting = function() {
         sphynxEmails: (state.master?.sphynxTeam || []).map(m => m.email).filter(Boolean),
         people: st.directory.filter(p => p.name),
     });
-    // The message is a formatted editor now: swap the text of the first "Hi …," line
-    // and leave the rest (formatting, images, links) alone.
-    const greeting = esc(`Hi ${joinNames(names) || 'there'},`);
-    const html = box.innerHTML;
-    const m = html.match(/^((?:\s|<(?:div|p|span|b|strong|i|em|u)[^>]*>)*)\s*hi\b[^<]*/i);
-    box.innerHTML = m ? m[1] + greeting + html.slice(m[0].length) : `${greeting}<br><br>${html}`;
+    const lines = String(box.value || '').split('\n');
+    const greeting = `Hi ${joinNames(names) || 'there'},`;
+    if (/^hi\b/i.test(lines[0] || '')) lines[0] = greeting; else lines.unshift(greeting, '');
+    box.value = lines.join('\n');
 };
 
 // ---- the window: email text on one side, the real tasks on the other ----
@@ -640,7 +629,6 @@ OL.msSend = async function() {
     const st = OL._msState;
     if (!st) return;
     const read = (id) => document.getElementById(id)?.value ?? '';
-    const readHtml = (id) => OL.sanitizeCommentHtml(document.getElementById(id)?.innerHTML || '', { images: true });
     OL.msCommitRecipient('to');
     OL.msCommitRecipient('cc');
     const to = st.to.join(', ');
@@ -648,20 +636,14 @@ OL.msSend = async function() {
     const subject = read('ms-subject').trim();
     // The next steps are rebuilt from the tasks as they are right now.
     const nextSteps = nextStepsText(msTasks(), st.client.meta?.name || '');
-    const messageHtml = readHtml('ms-message');
-    const closingHtml = readHtml('ms-closing');
-    const body = assembleBody({
-        message: OL.htmlToPlainTextWithLinks(messageHtml), nextSteps, closing: OL.htmlToPlainTextWithLinks(closingHtml)
-    });
-    const bodyHtml = [messageHtml, nextSteps ? esc(nextSteps).replace(/\n/g, '<br>') : '', closingHtml]
-        .filter(part => String(part).trim()).join('<br><br>');
+    const body = assembleBody({ message: read('ms-message'), nextSteps, closing: read('ms-closing') });
     if (!to || !subject || !body.trim()) { alert('To, subject and message are all required.'); return; }
 
     const btn = document.getElementById('ms-send-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
     const { ok } = await OL.sendGmailMessage({
-        to, cc: cc || undefined, subject, body, bodyHtml,
+        to, cc: cc || undefined, subject, body,
         linked_client_id: st.client.id, linked_event_id: st.evt.id, linked_task_id: st.task.id,
     });
     if (!ok) {
@@ -713,10 +695,10 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         people: client.projectData.teamMembers || [],
         tasks: [],                      // the window builds Next steps from the live tasks
         clientName: client.meta?.name || '',
-        recordingUrl: evt.zoom_recording_drive_url || '',
+        recordingUrl: evt.recording_url || evt.zoom_recording_url || '',
     });
 
-    OL._msState = { recordingUrl: evt.zoom_recording_drive_url || '', evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };
+    OL._msState = { evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };
 
     const html = `
         <style>
@@ -758,7 +740,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                         <label class="tiny muted" style="margin:0 !important;">Message</label>
                         <button type="button" class="btn tiny soft" onclick="OL.msRefreshGreeting()" title="Rewrites the first line to name the people in To">Update greeting from recipients</button>
                     </div>
-                    <div style="margin-bottom:10px;">${OL.renderRichTextField({ id: 'ms-message', html: messageTextToHtml(draft.message, OL._msState.recordingUrl), minHeight: 260, emailTools: true, imageMaxWidth: 600 })}</div>
+                    <textarea id="ms-message" class="modal-input" rows="14" style="margin-bottom:10px;">${esc(draft.message)}</textarea>
 
                     <div style="margin-bottom:10px;">
                         <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
@@ -766,7 +748,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                     </div>
 
                     <label class="tiny muted">Closing</label>
-                    <div style="margin-bottom:14px;">${OL.renderRichTextField({ id: 'ms-closing', html: messageTextToHtml(draft.closing, ''), minHeight: 70, emailTools: true, imageMaxWidth: 600 })}</div>
+                    <textarea id="ms-closing" class="modal-input" rows="4" style="margin-bottom:14px;">${esc(draft.closing)}</textarea>
 
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
@@ -801,7 +783,6 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         </div>
     `;
     openModal(html);
-    if (window.lucide) lucide.createIcons();
     renderMsRecipients('to');
     renderMsRecipients('cc');
     renderMsTaskRows();

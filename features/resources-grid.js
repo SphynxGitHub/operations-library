@@ -287,14 +287,8 @@ function _renderResourceGroupsImpl(container, items) {
     // Admin + Sphynx-pinned resources are references, not the working
     // library — pinned together under one "References" heading at the top,
     // rendered as small cards, rather than two separate sections.
-    // Anything typed Reference (or the old "Admin") joins the pinned ones, so there is one References section.
-    const isRef = (res) => (typeof OL.isReferenceResource === 'function')
-        ? OL.isReferenceResource(res)
-        : (res.systemPinned || res.adminPinned || res.type === 'Reference' || res.type === 'Admin');
-    const references   = items.filter(isRef).sort((a, b) =>
-        // the auto-created pinned ones first, then the rest by name
-        (!!(b.systemPinned || b.adminPinned) - !!(a.systemPinned || a.adminPinned)) || (a.name || '').localeCompare(b.name || ''));
-    const standardItems = items.filter(res => !isRef(res));
+    const references   = items.filter(res => res.systemPinned || res.adminPinned);
+    const standardItems = items.filter(res => !res.systemPinned && !res.adminPinned);
 
     const grouped = standardItems.reduce((acc, res) => {
         const type = res.type || "General";

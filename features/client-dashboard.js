@@ -165,6 +165,11 @@ export function renderClientDashboard() {
                                     <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
                                 `).join('')}
                             </select>
+                            ${window.FORCE_ADMIN === true ? `
+                                <button class="btn tiny soft" onclick="event.stopPropagation(); OL.startPreview('${client.id}')" title="Preview what ${esc(client.meta.name)} sees (read-only, opens a new tab)">
+                                    <i data-lucide="eye" style="width:11px;height:11px;"></i>
+                                </button>
+                            ` : ''}
                             ${isPartnerViewer ? `
                                 <button class="btn tiny soft" onclick="event.stopPropagation(); OL.openPartnerClientModulesModal('${client.id}')" title="Manage Access">
                                     <i data-lucide="sliders-horizontal" style="width:11px;height:11px;"></i>
@@ -266,6 +271,12 @@ export function renderClientDashboard() {
 
                         <div class="card-footer-actions" style="margin-top:20px;">
                             <button class="btn small soft flex-1">Enter Project</button>
+                            ${window.FORCE_ADMIN === true ? `
+                            <button class="btn tiny soft" style="margin-left:8px;"
+                                    onclick="event.stopPropagation(); OL.startPreview('${client.id}')"
+                                    title="Preview what ${esc(client.meta.name)} sees (read-only, opens a new tab)">
+                                <i data-lucide="eye" style="width:12px;height:12px;"></i>
+                            </button>` : ''}
                             <button class="btn tiny soft" style="margin-left:8px;"
                                     onclick="event.stopPropagation(); ${isPartnerViewer ? `OL.openPartnerClientModulesModal('${client.id}')` : `OL.openClientProfileModal('${client.id}')`}"
                                     title="${isPartnerViewer ? 'Manage Access' : 'Settings'}">
@@ -637,6 +648,13 @@ export function openClientProfileModal(clientId) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body" style="max-width:820px;">
+            ${window.FORCE_ADMIN === true ? `
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+                <button class="btn small primary" style="white-space:nowrap;" onclick="OL.startPreview('${client.id}')">
+                    <i data-lucide="eye" style="width:13px;height:13px;"></i> Preview what they see
+                </button>
+                <span class="tiny muted">Opens this ${client.meta.status === 'Partner' ? "partner's" : "client's"} portal in a new tab, the way their own login shows it. Read-only: nothing you click there is saved.</span>
+            </div>` : ''}
             ${partnerDropdownHtml}
             <label class="modal-section-label">Active Modules (Client Access)</label>
             <div id="module-selection" class="card-section" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px 16px;">

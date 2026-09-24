@@ -2,6 +2,7 @@
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 import { mirrorClientRequests } from './requests.js';
+import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } from './preview.js';
 
 // ---- small value helpers used throughout the data layer ----
 export const val = (v) => (v === undefined || v === null) ? "" : v;
@@ -12,7 +13,11 @@ export const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 // ---- Supabase client ----
 const SUPABASE_URL = 'https://kexnnpwjerrnsmifauuo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleG5ucHdqZXJybnNtaWZhdXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDcxNTEsImV4cCI6MjEwMzA4MzE1MX0.BAgC5wN4SKqfqKn0Gt7a53sGvigh_YlaMcQLdaovc08';
-export const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Every request goes through the preview guard. Outside a preview tab it does nothing and passes straight
+// through; inside one (an admin viewing as a client/partner) it refuses writes. See core/preview.js.
+export const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { fetch: (input, init) => previewFetchGuard(realFetch, input, init) }
+});
 
 // ---- state ----
 export const state = {
@@ -104,6 +109,11 @@ export function persist() {
     // Redraw the current page so the change shows everywhere right away
     // (see core/live-refresh.js — waits if you're typing in a field).
     try { window.OL?.scheduleViewRefresh?.(); } catch (e) { /* never block a save */ }
+    // Previewing as a client/partner is read-only: the screen still updates, nothing is written.
+    if (isPreviewActive()) {
+        notifyPreviewBlocked();
+        return Promise.resolve();
+    }
     // Always return a real Promise — several callers chain `.then()`
     // off this (e.g. features/apps.js handleAppTierSelection), which
     // previously crashed with "Cannot read properties of undefined
@@ -325,6 +335,12 @@ export async function sync() {
             masterErr = staffRead.error;
         }
 
+        // Previewing as a client/partner: give them the same limited registry a real login gets, even if the
+        // admin's own access made the read above return the whole row.
+        if (isPreviewActive() && masterData) {
+            masterData = { ...masterData, sphynx_team: [], automation_rules: [], sops: [] };
+        }
+
         if (masterErr) {
             console.error("❌ Master Fetch Error:", masterErr.message);
         } else if (masterData) {
@@ -402,6 +418,18 @@ export async function sync() {
         if (window.OL?.isClientLogin?.()) {
             Object.keys(state.clients).forEach((id) => {
                 if (String(id) !== String(state.loginClientId)) delete state.clients[id];
+            });
+        }
+
+        // Previewing as a client/partner: an admin's read returns every project, but a real login only ever
+        // gets its own project plus (for a partner) the clients it manages. Match that, so no screen or search
+        // in the preview can show anyone else.
+        if (isPreviewActive() && state.loginClientId) {
+            Object.keys(state.clients).forEach((id) => {
+                const mine = String(id) === String(state.loginClientId);
+                const managed = state.loginIsPartner &&
+                    String(state.clients[id].meta?.partnerOwner) === String(state.loginClientId);
+                if (!mine && !managed) delete state.clients[id];
             });
         }
 
