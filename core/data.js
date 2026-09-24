@@ -825,7 +825,7 @@ OL.convertTaskToResource = function(clientId, taskId) {
     const newResource = {
       id: "sys-" + uid(),
       name: task.name || task.title,
-      type: "Admin",
+      type: "Reference",
       description: task.description || "Converted from client task.",
       createdDate: new Date().toISOString(),
       isLocked: false,
@@ -881,7 +881,7 @@ OL.convertTaskToRequirement = function(clientId, taskId) {
     const newResource = {
       id: newResourceId,
       name: taskTitle,
-      type: "Admin",
+      type: "Reference",
       description: task.description || "Converted from client task.",
       createdDate: new Date().toISOString(),
       isRequestLine: true
