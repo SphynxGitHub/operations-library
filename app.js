@@ -95,8 +95,13 @@ window.addEventListener("load", async () => {
 });
 
 OL.goToDashboard = function(hash) {
-    state.activeClientId = null;
-    sessionStorage.removeItem('lastActiveClientId');
+    // A partner or client login stays anchored to its own project. "My Portfolio" is the partner project's
+    // own dashboard, not "no project": clearing it left the sidebar with nothing to show (just a bare Home
+    // link) and Home could not bring it back. Staff have no project of their own, so for them this clears.
+    const anchorId = window.IS_GUEST === true ? (state.loginClientId || null) : null;
+    state.activeClientId = anchorId;
+    if (anchorId) sessionStorage.setItem('lastActiveClientId', anchorId);
+    else sessionStorage.removeItem('lastActiveClientId');
     const params = new URLSearchParams(window.location.search);
     params.delete('client');
     const newSearch = params.toString();
@@ -478,6 +483,12 @@ window.buildLayout = function () {
     if (!root) {
         console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
         return; 
+    }
+
+    // Safety net: a partner/client login can never be "in no project". If something cleared it, put it back
+    // so the menu is always built (otherwise the sidebar collapses to a bare Home link and stays that way).
+    if (window.IS_GUEST === true && state.loginClientId && !state.activeClientId && state.clients[state.loginClientId]) {
+        state.activeClientId = state.loginClientId;
     }
 
     const mainEl = document.getElementById('mainContent');
