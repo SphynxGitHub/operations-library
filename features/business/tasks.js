@@ -3418,7 +3418,8 @@ OL.renderTaskTimeLogHTML = function(task) {
         return sign + (h ? `${h}h ${String(mm).padStart(2, '0')}m` : `${mm}m`);
     };
     const when = (e) => {
-        const d = new Date(e.end || e.start || 0);
+        if (!e.end && !e.start) return 'No date';
+        const d = new Date(e.end || e.start);
         if (isNaN(d)) return '';
         const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
         const time = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
