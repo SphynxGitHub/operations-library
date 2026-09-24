@@ -424,12 +424,12 @@ export function provisionSphynxTemplates(clientId) {
     ];
 
     if (client.meta.status === 'Ongoing Maintenance') {
-        systemTemplates.push({ name: "Maintenance Time Tracker and Zapier Error Log", type: "Admin", systemPinned: true });
+        systemTemplates.push({ name: "Maintenance Time Tracker and Zapier Error Log", type: "Reference", systemPinned: true });
     }
 
-    // 📂 Admin Level
+    // 📂 Reference Level
     const adminTemplates = [
-        { name: "Naming Conventions", type: "Admin", adminPinned: true,
+        { name: "Naming Conventions", type: "Reference", adminPinned: true,
           // Pre-loaded with the standard patterns; edit per client.
           data: {
             household: { individual: 'Last, First', jointSame: 'Last, First & Spouse First', jointDiff: 'Last, First & Spouse Last, Spouse First' },
@@ -438,7 +438,7 @@ export function provisionSphynxTemplates(clientId) {
         },
         // The folder tree belongs to Folder Hierarchy (it used to be put on
         // Naming Conventions, which has its own form and never showed it).
-        { name: "Folder Hierarchy", type: "Admin", adminPinned: true,
+        { name: "Folder Hierarchy", type: "Reference", adminPinned: true,
             tree: [
                 { 
                     id: "root-clients", 
