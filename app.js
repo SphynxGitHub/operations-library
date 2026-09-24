@@ -511,6 +511,9 @@ window.buildLayout = function () {
     let showHome = true;
 
     const clientLogin = OL.isClientLogin();
+    // A partner looking at its OWN project: its name in the sidebar is a way home, not a profile to open.
+    const isOwnPartnerLogin = window.IS_GUEST === true && state.loginIsPartner === true &&
+        !!client && String(client.id) === String(state.loginClientId);
 
     if (isAdmin) {
         homeLabel = "Global Registry";
@@ -672,7 +675,9 @@ window.buildLayout = function () {
                     <div class="client-nav-zone">
                         <div class="menu-category-label">Project Workspace</div>
                         <div class="client-profile-trigger" 
-                            ${(isAdmin || effectiveAdminMode || state.teamMemberMode)
+                            ${isOwnPartnerLogin
+                                ? `onclick="OL.goToDashboard('#/partner-dashboard')" style="cursor:pointer;" title="Back to your dashboard"`
+                                : (isAdmin || effectiveAdminMode || state.teamMemberMode)
                                 ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"`
                                 : (!isPublic && !clientLogin && client.meta?.partnerOwner)
                                     ? `onclick="OL.openPartnerClientModulesModal('${client.id}')" style="cursor:pointer;"`
@@ -680,7 +685,7 @@ window.buildLayout = function () {
                             <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                             <div class="client-info">
                                 <div class="client-name">${esc(client.meta.name)}</div>
-                                <div class="client-meta">${(!isPublic && !clientLogin) ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                                <div class="client-meta">${isOwnPartnerLogin ? 'Partner Portal' : (!isPublic && !clientLogin) ? 'View Profile ⚙️' : 'Project Portal'}</div>
                             </div>
                         </div>
 
