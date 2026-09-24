@@ -88,12 +88,31 @@ export async function initializeSecurityContext() {
             return true;
         }
 
-        // Not an admin — look up their client/partner project.
-        const { data: client, error } = await db
-            .from('workspace_clients')
-            .select('*')
+        // Not an admin — look up their client/partner project. A team member on a partner's or client's
+        // project has their own login in project_logins (see 2026_09e_project_member_logins.sql); the
+        // project's original single login is still workspace_clients.auth_user_id.
+        let client = null;
+        let error = null;
+        let loginMemberId = null;
+        const { data: memberLogin, error: memberErr } = await db
+            .from('project_logins')
+            .select('client_id, member_id')
             .eq('auth_user_id', session.user.id)
             .maybeSingle();
+        if (memberErr && !/project_logins/.test(memberErr.message || '')) console.warn('Member login lookup failed:', memberErr.message);
+        if (memberLogin?.client_id) {
+            const res = await db.from('workspace_clients').select('*').eq('id', memberLogin.client_id).maybeSingle();
+            client = res.data; error = res.error;
+            loginMemberId = memberLogin.member_id;
+        }
+        if (!client) {
+            const res = await db
+                .from('workspace_clients')
+                .select('*')
+                .eq('auth_user_id', session.user.id)
+                .maybeSingle();
+            client = res.data; error = res.error;
+        }
 
         if (error || !client) {
             console.error('No project or admin role is linked to this login.', error);
@@ -107,6 +126,12 @@ export async function initializeSecurityContext() {
         // their managed clients. A plain client login is locked to its own project.
         state.loginClientId = client.id;
         state.loginIsPartner = client.meta?.status === 'Partner';
+        state.loginMemberId = loginMemberId;
+        if (loginMemberId) {
+            // Name comments and "my tasks" after the person, not the project.
+            const me = (client.project_data?.teamMembers || []).find((m) => String(m.id) === String(loginMemberId));
+            state.currentUser = { id: session.user.id, name: me?.name || client.meta?.name || 'Client', role: 'Project member', authType: 'project_member' };
+        }
         state.clients[client.id] = {
             id: client.id,
             publicToken: client.public_token,

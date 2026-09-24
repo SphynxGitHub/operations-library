@@ -8,8 +8,18 @@ const form = document.getElementById('loginForm');
 const errorEl = document.getElementById('loginError');
 
 // Back from the confirmation email. If Supabase signed them in on the way back, the session check
-// above has already sent them into the app; otherwise ask them to sign in.
-if (new URLSearchParams(window.location.search).get('confirmed')) {
+// above has already sent them into the app. If the link had already been used or had expired, Supabase
+// says so in the address (#error_description=...), so show that instead of a false "confirmed".
+const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+const linkError = hashParams.get('error_description') || hashParams.get('error');
+if (linkError) {
+    const expired = /expired|invalid/i.test(linkError) || hashParams.get('error_code') === 'otp_expired';
+    errorEl.textContent = expired
+        ? 'That confirmation link has already been used or has expired. If you clicked it before, your email is probably already confirmed: try signing in below. If sign-in says the email is not confirmed, ask Sphynx for a new setup link.'
+        : `The confirmation link didn't work: ${linkError}. Try signing in below, or ask Sphynx for a new setup link.`;
+    errorEl.style.display = 'block';
+    history.replaceState(null, '', window.location.pathname);
+} else if (new URLSearchParams(window.location.search).get('confirmed')) {
     errorEl.textContent = 'Email confirmed. Sign in with the password you just created.';
     errorEl.style.color = '#22c55e';
     errorEl.style.display = 'block';
