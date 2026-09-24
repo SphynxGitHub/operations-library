@@ -160,6 +160,23 @@ export function persist() {
             // Only staff write the master row. A partner's or client's copy of it is a limited,
             // read-only view (see sync), and saving it back would overwrite the team roster,
             // automation rules and SOPs with blanks.
+            // A team member who claims their setup link writes their login onto the roster in the database.
+            // This browser's copy of the roster doesn't have it until the next live refresh, so saving it as-is
+            // would erase that login (and the next person's signup would appear to knock out the last one).
+            // Keep any login claimed in the database since this copy was loaded.
+            if (!window.IS_GUEST) {
+                try {
+                    const { data: live } = await db.from('workspace_masters').select('sphynx_team').eq('id', 'main_state').maybeSingle();
+                    const merged = keepClaimedTeamLogins(masterPayload.sphynx_team, live?.sphynx_team);
+                    if (merged.changed) {
+                        masterPayload.sphynx_team = merged.team;
+                        state.master.sphynxTeam = JSON.parse(JSON.stringify(merged.team));
+                    }
+                } catch (rosterErr) {
+                    console.warn('Could not check the team roster before saving:', rosterErr);
+                }
+            }
+
             const { error: masterErr } = window.IS_GUEST
                 ? { error: null }
                 : await db
@@ -484,6 +501,24 @@ export async function switchClient(id) {
 
     if (typeof window.buildLayout === 'function') window.buildLayout();
     if (typeof window.handleRoute === 'function') window.handleRoute();
+}
+
+// ---- keepClaimedTeamLogins: don't let a stale roster erase a claimed login ----
+// claim_team_setup (run by the new team member's browser) sets authUserId + setupUsed and removes the
+// setupToken on that card. A local copy loaded before that still shows the card unclaimed; carry the claim over.
+export function keepClaimedTeamLogins(localTeam, liveTeam) {
+    const team = Array.isArray(localTeam) ? localTeam : [];
+    const liveById = new Map((Array.isArray(liveTeam) ? liveTeam : []).filter((m) => m && m.id).map((m) => [String(m.id), m]));
+    let changed = false;
+    const out = team.map((m) => {
+        const l = m && liveById.get(String(m.id));
+        if (!l || !l.authUserId || l.setupUsed !== true || m.authUserId || m.setupUsed === true) return m;
+        changed = true;
+        const next = { ...m, authUserId: l.authUserId, setupUsed: true };
+        delete next.setupToken;
+        return next;
+    });
+    return { team: out, changed };
 }
 
 // ---- markClientDirty: flag a client for the next persist() cycle ----
