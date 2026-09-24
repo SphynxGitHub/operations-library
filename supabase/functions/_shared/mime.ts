@@ -89,42 +89,9 @@ function dispositionFor(filename: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${star}`;
 }
 
-// ---- Inline images ----
-// The app's editor puts pictures in the HTML as data: URLs. Gmail and Outlook
-// don't show those in received mail, so each one is pulled out into its own
-// message part with a Content-ID and the <img> is pointed at cid:<id>.
-export type InlineImage = { cid: string; mimeType: string; base64: string; bytes: number };
-export const MAX_INLINE_IMAGES = 20;
-export const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
-export const MAX_TOTAL_INLINE_BYTES = 12 * 1024 * 1024;
-
-export function extractInlineImages(html: string): { html: string; images: InlineImage[] } | { error: string } {
-  const images: InlineImage[] = [];
-  let total = 0;
-  let err = "";
-  const out = String(html || "").replace(
-    /(<img\b[^>]*?\ssrc\s*=\s*)(["'])data:(image\/(?:png|jpeg|jpg|gif|webp));base64,([A-Za-z0-9+/=\s]+)\2/gi,
-    (_m, pre: string, q: string, mime: string, rawB64: string) => {
-      if (err) return _m;
-      const b64 = rawB64.replace(/\s+/g, "");
-      const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-      const bytes = Math.floor(b64.length / 4) * 3 - padding;
-      if (images.length >= MAX_INLINE_IMAGES) { err = `at most ${MAX_INLINE_IMAGES} images in one email`; return _m; }
-      if (bytes > MAX_INLINE_IMAGE_BYTES) { err = "an inline image is over 5 MB"; return _m; }
-      total += bytes;
-      if (total > MAX_TOTAL_INLINE_BYTES) { err = "inline images total more than 12 MB"; return _m; }
-      const cid = `img${images.length + 1}.${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}@sphynx`;
-      images.push({ cid, mimeType: mime.toLowerCase() === "image/jpg" ? "image/jpeg" : mime.toLowerCase(), base64: b64, bytes });
-      return `${pre}${q}cid:${cid}${q}`;
-    }
-  );
-  return err ? { error: err } : { html: out, images };
-}
-
 export type MessageInput = {
   from: string; to: string; cc?: string | null; bcc?: string | null; subject: string; body: string;
   html?: string | null;   // when given, sent as multipart/alternative (plain text + HTML)
-  inlineImages?: InlineImage[];   // cid: pictures the HTML refers to (multipart/related)
   inReplyTo?: string | null; references?: string | null; attachments?: Attachment[];
   boundary?: string;
 };
@@ -136,33 +103,12 @@ function bodyPart(m: MessageInput, altBoundary: string): { header: string; conte
     return { header: `Content-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64`, content: b64(m.body) };
   }
   const html = `<!DOCTYPE html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222;">${m.html}</body></html>`;
-  const alternative = {
+  return {
     header: `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
     content:
       `--${altBoundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(m.body)}\r\n` +
       `--${altBoundary}\r\nContent-Type: text/html; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(html)}\r\n` +
       `--${altBoundary}--`
-  };
-  const images = m.inlineImages || [];
-  if (!images.length) return alternative;
-  // multipart/related: the text/HTML alternatives first, then each picture.
-  const relBoundary = `${altBoundary}-rel`;
-  const parts = [`--${relBoundary}\r\n${alternative.header}\r\n\r\n${alternative.content}`];
-  images.forEach((img, i) => {
-    const ext = img.mimeType.split("/")[1] || "png";
-    parts.push(
-      `--${relBoundary}\r\n` +
-      `Content-Type: ${img.mimeType}; name="image${i + 1}.${ext}"\r\n` +
-      `Content-Transfer-Encoding: base64\r\n` +
-      `Content-ID: <${img.cid}>\r\n` +
-      `X-Attachment-Id: ${img.cid}\r\n` +
-      `Content-Disposition: inline; filename="image${i + 1}.${ext}"\r\n\r\n` +
-      wrapBase64(img.base64)
-    );
-  });
-  return {
-    header: `Content-Type: multipart/related; boundary="${relBoundary}"`,
-    content: parts.join("\r\n") + `\r\n--${relBoundary}--`
   };
 }
 

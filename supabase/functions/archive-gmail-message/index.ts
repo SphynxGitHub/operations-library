@@ -12,13 +12,6 @@
 // READS/CHANGES:  Gmail: removes the INBOX label. Database: sets archived_in_gmail =
 //                 true on the gmail_messages row.
 //
-// MODES:          mode "message" (default): removes INBOX from this one message only.
-//                 mode "thread_if_latest" (the Archive button): looks at the whole
-//                 conversation in Gmail. If this email is the most recent message in it
-//                 (drafts, trash and spam ignored), the WHOLE thread is archived in Gmail.
-//                 If a newer message exists, Gmail is left untouched and the response
-//                 says { skipped: "not_latest" } — the email is archived in the app only.
-//
 // NEEDS:          _shared/google-token.ts (the stored Google connection),
 //                 _shared/auth.ts, _shared/gmail-errors.ts. Needs Google's
 //                 gmail.modify permission (reconnect Google after it was added).
@@ -59,7 +52,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
     }
 
-    const { id, mode } = await req.json();
+    const { id, threadId } = await req.json();
     if (!id) {
       return new Response(JSON.stringify({ error: "Missing message id" }), { status: 400, headers: corsHeaders });
     }
@@ -68,53 +61,16 @@ serve(async (req) => {
     if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(id))) {
       return new Response(JSON.stringify({ error: "Invalid message id" }), { status: 400, headers: corsHeaders });
     }
-    const accessToken = await getFreshGoogleAccessToken(supabase);
-    const gmailHeaders = { Authorization: `Bearer ${accessToken}` };
-
-    // Default is message-level: only this email loses its INBOX label.
-    // "thread_if_latest": archive the whole conversation, but ONLY when this
-    // email is the newest message in it. Gmail is the source of truth for
-    // that, not the app's copy (the app may not have every message).
-    let useThread = false;
-    let threadId: string | null = null;
-    if (mode === "thread_if_latest") {
-      const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=minimal`, { headers: gmailHeaders });
-      if (msgRes.status === 401) {
-        return new Response(JSON.stringify({ error: "reauth_required", message: "Google rejected the refreshed token. Please reconnect the account." }), { status: 401, headers: corsHeaders });
-      }
-      if (msgRes.status === 404) {
-        return new Response(JSON.stringify({ success: true, alreadyGone: true }), { status: 200, headers: corsHeaders });
-      }
-      if (!msgRes.ok) throw new Error(`Gmail message lookup failed: ${await msgRes.text()}`);
-      threadId = (await msgRes.json()).threadId || null;
-
-      if (threadId) {
-        const thrRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=minimal`, { headers: gmailHeaders });
-        if (thrRes.status === 401) {
-          return new Response(JSON.stringify({ error: "reauth_required", message: "Google rejected the refreshed token. Please reconnect the account." }), { status: 401, headers: corsHeaders });
-        }
-        if (!thrRes.ok) throw new Error(`Gmail thread lookup failed: ${await thrRes.text()}`);
-        const thread = await thrRes.json();
-        // Drafts, trashed and spam messages don't count as "a newer email".
-        const real = (thread.messages || []).filter((m: any) => {
-          const labels: string[] = m.labelIds || [];
-          return !labels.includes("DRAFT") && !labels.includes("TRASH") && !labels.includes("SPAM");
-        });
-        const latest = real.reduce((a: any, b: any) =>
-          (!a || Number(b.internalDate || 0) >= Number(a.internalDate || 0)) ? b : a, null);
-
-        if (latest && latest.id !== id) {
-          // A newer message exists: leave Gmail exactly as it is.
-          return new Response(JSON.stringify({ success: true, skipped: "not_latest" }), { status: 200, headers: corsHeaders });
-        }
-        useThread = true;
-      }
-    }
+    // Message-level ONLY: acting on one email must never change the other
+    // messages in its conversation. (threadId is accepted but ignored.)
+    const useThread = false && !!threadId;
     const target = useThread ? `threads/${threadId}` : `messages/${id}`;
+
+    const accessToken = await getFreshGoogleAccessToken(supabase);
 
     const modRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${target}/modify`, {
       method: "POST",
-      headers: { ...gmailHeaders, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ removeLabelIds: ["INBOX"] })
     });
 
@@ -137,12 +93,10 @@ serve(async (req) => {
       throw new Error(`Gmail modify failed: ${errText}`);
     }
 
-    // Only this row is marked here. The Gmail -> app reconciliation in
-    // get-gmail-messages also only archives a thread's most recent message,
-    // so older messages in this thread stay unarchived in the app.
-    await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("id", id);
+    if (useThread) await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("thread_id", threadId);
+    else await supabase.from("gmail_messages").update({ archived_in_gmail: true }).eq("id", id);
 
-    return new Response(JSON.stringify({ success: true, scope: useThread ? "thread" : "message" }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
     const isAuthErr = err instanceof GoogleAuthError;
