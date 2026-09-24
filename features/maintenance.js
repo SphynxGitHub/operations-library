@@ -100,6 +100,8 @@ export async function saveAdHoc(clientId, opts) {
 }
 
 // ---------------- Maintenance & Hours ----------------
+// Clients can read this page; managing periods and purchases is for Sphynx staff and partners.
+const canManage = () => !(window.OL?.isClientLogin && window.OL.isClientLogin());
 const slotFor = (clientId) => OL._maint[clientId] || { periods: [], grants: [], loaded: false };
 const val = (id) => document.getElementById(id)?.value ?? '';
 const checked = (id) => !!document.getElementById(id)?.checked;
@@ -132,8 +134,8 @@ function periodCardHtml(client, slot) {
         return `
             <div class="card" style="padding:16px; border-left:3px solid #f59e0b;">
                 <div class="bold">No active plan period</div>
-                <div class="tiny muted" style="margin:4px 0 10px;">Ongoing Maintenance runs in annual plan periods, each with its hours allotment. Start one to give the client its hours.</div>
-                <button class="btn primary" onclick="OL.openStartPeriodModal()">Start a plan period</button>
+                ${canManage() ? `<div class="tiny muted" style="margin:4px 0 10px;">Ongoing Maintenance runs in annual plan periods, each with its hours allotment. Start one to give the client its hours.</div>
+                <button class="btn primary" onclick="OL.openStartPeriodModal()">Start a plan period</button>` : `<div class="tiny muted" style="margin-top:4px;">Your next plan period hasn't started yet.</div>`}
             </div>`;
     }
     const pr = periodProgress(active, today);
@@ -147,13 +149,13 @@ function periodCardHtml(client, slot) {
                     <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(active.start_date))} to ${esc(niceDate(active.due_date))}</div>
                     <div class="tiny muted">${esc(hoursText(allot))} allotment</div>
                 </div>
-                <div style="display:flex; gap:8px; align-items:center;">
+                ${canManage() ? `<div style="display:flex; gap:8px; align-items:center;">
                     <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Renewing clients get a 6 month carryover instead of 3">
                         <input type="checkbox" ${active.renewing ? 'checked' : ''} onchange="OL.setPeriodRenewing('${esc(active.id)}', this.checked)"> Renewing
                     </label>
                     <button class="btn tiny soft" onclick="OL.openEditPeriodModal('${esc(active.id)}')">Edit</button>
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
-                </div>
+                </div>` : ''}
             </div>
             <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:12px 0 6px;"><div style="height:100%; width:${pr.pct}%; background:${barColor};"></div></div>
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left (${pr.pct}% through the year)`}</div>
@@ -168,7 +170,9 @@ export function renderMaintenancePage() {
     const mode = maintenanceMode(client);
     if (mode === null) {
         main.innerHTML = `<div class="section-header"><h2>🛠 Maintenance &amp; Hours</h2></div>
-            <div class="card" style="padding:20px;">This client's pipeline label is "${esc(client.meta?.status || 'not set')}". Set it to <strong>Ongoing Maintenance</strong> or <strong>Ad Hoc Maintenance</strong> to manage plan periods and hours here.</div>`;
+            <div class="card" style="padding:20px;">${canManage()
+                ? `This client's pipeline label is "${esc(client.meta?.status || 'not set')}". Set it to <strong>Ongoing Maintenance</strong> or <strong>Ad Hoc Maintenance</strong> to manage plan periods and hours here.`
+                : 'There is no maintenance plan on this project.'}</div>`;
         return;
     }
     const slot = slotFor(client.id);
@@ -182,7 +186,7 @@ export function renderMaintenancePage() {
         <div class="card" style="padding:16px; margin-top:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <h3 style="margin:0;">Hours grants</h3>
-                <button class="btn tiny soft" onclick="OL.openAdHocPurchaseModal()">+ Ad hoc purchase</button>
+                ${canManage() ? `<button class="btn tiny soft" onclick="OL.openAdHocPurchaseModal()">+ Ad hoc purchase</button>` : ''}
             </div>
             ${grantsTableHtml(slot)}
         </div>
