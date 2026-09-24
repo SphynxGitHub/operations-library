@@ -270,6 +270,11 @@ export function persist() {
                     project_data: clientCopy.projectData || {},
                     shared_master_ids: clientCopy.sharedMasterIds || []
                 };
+                // The partner Business Manager tab settings. Staff only, and only once the column exists
+                // (migrations/2026_09d_business_modules.sql), so a save can never fail on an unknown column.
+                if (!window.IS_GUEST && state.clientsHaveBusinessModules) {
+                    clientPayload.business_modules = clientCopy.businessModules || {};
+                }
 
                 const { error: clientErr } = await db
                     .from('workspace_clients')
@@ -395,6 +400,7 @@ export async function sync() {
         if (clientsErr) {
             console.error("❌ Clients Fetch Error:", clientsErr.message);
         } else if (clientsData && clientsData.length > 0) {
+            state.clientsHaveBusinessModules = Object.prototype.hasOwnProperty.call(clientsData[0], 'business_modules');
             clientsData.forEach(c => {
                 const clientId = c.id || c.client_id;
                 if (!clientId) return;
@@ -407,6 +413,7 @@ export async function sync() {
                     permissions: c.permissions || {},
                     projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] },
                     sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [],
+                    businessModules: c.business_modules || {},
                     authUserId: c.auth_user_id || null
                 };
             });
@@ -494,7 +501,8 @@ export async function loadFullClient(clientId) {
             modules: data.modules,
             permissions: data.permissions,
             projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] },
-            sharedMasterIds: data.shared_master_ids || data.sharedMasterIds || []
+            sharedMasterIds: data.shared_master_ids || data.sharedMasterIds || [],
+            businessModules: data.business_modules || state.clients[clientId]?.businessModules || {}
         };
         delete state.clients[clientId]._metaOnly;
     }
@@ -656,7 +664,8 @@ export async function exportMasterBackup() {
             modules: row.modules,
             permissions: row.permissions,
             project_data: row.project_data,
-            shared_master_ids: row.shared_master_ids || []
+            shared_master_ids: row.shared_master_ids || [],
+            business_modules: row.business_modules || {}
         }));
 
         const payload = {
@@ -743,7 +752,9 @@ export async function importMasterBackup(event) {
                     modules: clientData.modules || {},
                     permissions: clientData.permissions || {},
                     project_data: clientData.project_data ?? clientData.projectData ?? {},
-                    shared_master_ids: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? []
+                    shared_master_ids: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? [],
+                    // only once the column exists, so an older database still restores
+                    ...(state.clientsHaveBusinessModules ? { business_modules: clientData.business_modules ?? clientData.businessModules ?? {} } : {})
                 };
             });
 
@@ -762,7 +773,8 @@ export async function importMasterBackup(event) {
                     modules: clientData.modules,
                     permissions: clientData.permissions,
                     projectData: clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] },
-                    sharedMasterIds: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? []
+                    sharedMasterIds: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? [],
+                    businessModules: clientData.business_modules ?? clientData.businessModules ?? {}
                 };
             });
         }

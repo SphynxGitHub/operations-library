@@ -32,7 +32,8 @@ function setProjectSession(client, loginMemberId, userId) {
         modules: client.modules,
         permissions: client.permissions,
         projectData: client.project_data || { localResources: [], clientTasks: [] },
-        sharedMasterIds: client.shared_master_ids || []
+        sharedMasterIds: client.shared_master_ids || [],
+        businessModules: client.business_modules || {}
     };
 
     state.adminMode = false;
