@@ -13,7 +13,9 @@ import {
     maintenanceMode, ONGOING, ADHOC, periodProgress, planStartPeriod, planEditPeriod, planClosePeriod, planAdHocPurchase,
     ensureMaintenanceSheet, maintenanceSheetOf, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
+    MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, hoursUsedInPeriod,
 } from '../core/maintenance.js';
+import { isClientTask } from '../core/billable.js';
 
 export function todayIso(now = new Date()) {
     const p = (n) => String(n).padStart(2, '0');
@@ -38,6 +40,7 @@ export async function loadMaintenanceData(clientId) {
         if (p.error) throw p.error;
         if (g.error) throw g.error;
         slot.periods = p.data || []; slot.grants = g.data || []; slot.error = '';
+        slot.loadedAt = Date.now();
     } catch (err) {
         slot.error = err.message || 'Could not load';
     } finally {
@@ -140,14 +143,23 @@ function periodCardHtml(client, slot) {
     }
     const pr = periodProgress(active, today);
     const allot = slot.grants.filter((g) => g.period_id === active.id && g.source === 'plan_allotment').reduce((s, g) => s + Number(g.hours_granted), 0);
-    const barColor = pr.overdue ? '#ef4444' : pr.daysLeft <= 30 ? '#f59e0b' : '#22c55e';
+    const tier = periodTierTitle(active, allot);
+    // Hours used: time logged in this period on the client's Sphynx tasks. Client tasks and tasks marked
+    // non-billable ($ toggle off) don't draw down the allotment.
+    const used = hoursUsedInPeriod(client.projectData?.clientTasks || [], active, { counts: (t) => !isClientTask(t, client) && t.billable !== false });
+    const usedPct = allot > 0 ? Math.round((used / allot) * 100) : 0;
+    const left = Math.round((allot - used) * 100) / 100;
+    const barColor = allot > 0 && used > allot ? '#ef4444' : usedPct >= 80 ? '#f59e0b' : '#22c55e';
+    const usedLine = allot > 0
+        ? `${esc(hoursText(used))} of ${esc(hoursText(allot))} used (${usedPct}%) · ${left >= 0 ? `${esc(hoursText(left))} left` : `<strong>${esc(hoursText(-left))} over</strong>`}`
+        : `${esc(hoursText(used))} used · no hours allotment on this period`;
     return `
         <div class="card" style="padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
                 <div>
                     <div class="tiny muted uppercase bold">Current plan period</div>
                     <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(active.start_date))} to ${esc(niceDate(active.due_date))}</div>
-                    <div class="tiny muted">${esc(hoursText(allot))} allotment</div>
+                    <div class="tiny muted">${tier ? `<span class="pill tiny soft" style="margin-right:6px;">${esc(tier)}</span>` : ''}${esc(hoursText(allot))} allotment</div>
                 </div>
                 ${canManage() ? `<div style="display:flex; gap:8px; align-items:center;">
                     <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Renewing clients get a 6 month carryover instead of 3">
@@ -157,8 +169,9 @@ function periodCardHtml(client, slot) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
-            <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:12px 0 6px;"><div style="height:100%; width:${pr.pct}%; background:${barColor};"></div></div>
-            <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left (${pr.pct}% through the year)`}</div>
+            <div class="tiny bold" style="margin:12px 0 6px; color:${allot > 0 && used > allot ? '#ef4444' : 'var(--text)'};">${usedLine}</div>
+            <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:0 0 6px;" title="Hours used of the allotment"><div style="height:100%; width:${Math.min(usedPct, 100)}%; background:${barColor};"></div></div>
+            <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
 }
 
@@ -176,7 +189,10 @@ export function renderMaintenancePage() {
         return;
     }
     const slot = slotFor(client.id);
-    if (!slot.loaded && !slot.loading) loadMaintenanceData(client.id).then(() => renderMaintenancePage());
+    // Load on first view, and again when the copy on screen is over 30 s old, so hours added from
+    // another login or tab show up without a full page reload.
+    const stale = slot.loaded && Date.now() - (slot.loadedAt || 0) > 30000;
+    if ((!slot.loaded || stale) && !slot.loading) loadMaintenanceData(client.id).then(() => renderMaintenancePage());
     const periods = slot.periods;
     const history = periods.filter((p) => p.status !== 'active');
     const body = !slot.loaded ? '<div class="tiny muted">Loading...</div>' : slot.error ? `<div class="card" style="padding:16px; border-left:3px solid #ef4444;">Could not load the maintenance data: ${esc(slot.error)}</div>` : `
@@ -192,7 +208,7 @@ export function renderMaintenancePage() {
         </div>
         ${mode === ONGOING && history.length ? `
         <div class="card" style="padding:16px; margin-top:16px;"><h3 style="margin:0 0 10px;">Earlier plan periods</h3>
-            ${history.map((p) => `<div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line);" class="tiny"><span>${esc(niceDate(p.start_date))} to ${esc(niceDate(p.due_date))}</span><span class="muted">${esc(p.status)}${p.renewing ? ' · renewing' : ''}</span></div>`).join('')}
+            ${history.map((p) => `<div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line);" class="tiny"><span>${esc(niceDate(p.start_date))} to ${esc(niceDate(p.due_date))}${p.tier ? ` · ${esc(p.tier)}` : ''}</span><span class="muted">${esc(p.status)}${p.renewing ? ' · renewing' : ''}</span></div>`).join('')}
         </div>` : ''}`;
     main.innerHTML = `
         <div class="section-header"><div><h2>🛠 Maintenance &amp; Hours</h2>
@@ -206,6 +222,24 @@ async function reloadAndRedraw(clientId) { await loadMaintenanceData(clientId); 
 const modalHead = (title) => `<div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line);"><div class="modal-title-text" style="font-weight:700; font-size:16px;">${title}</div><button class="btn small soft" onclick="OL.closeModal()">Cancel</button></div>`;
 const field = (label, inner) => `<div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;"><label class="tiny muted" style="font-size:10px; font-weight:600;">${label}</label>${inner}</div>`;
 
+// Tier dropdown: picking a tier fills its hours; typing hours that match a tier selects it, anything else is Custom.
+function tierSelectHtml(selId, hoursId, current) {
+    const opts = [`<option value="">Custom (enter hours)</option>`, ...MAINTENANCE_TIERS.map((t) =>
+        `<option value="${esc(t.title)}" ${t.title === current ? 'selected' : ''}>${esc(t.title)} · ${esc(hoursText(t.hours))}</option>`)];
+    return `<select id="${selId}" class="modal-input" onchange="OL.maintTierPicked('${selId}', '${hoursId}')">${opts.join('')}</select>`;
+}
+const hoursOnInput = (selId, hoursId) => `oninput="OL.maintHoursTyped('${selId}', '${hoursId}')"`;
+export function maintTierPicked(selId, hoursId) {
+    const t = tierByTitle(val(selId)); const h = document.getElementById(hoursId);
+    if (t && h) h.value = t.hours;
+}
+export function maintHoursTyped(selId, hoursId) {
+    const sel = document.getElementById(selId); if (!sel) return;
+    const t = tierForHours(val(hoursId));
+    // A tier sold at a custom number of hours keeps its title; only switch when the hours match a different tier.
+    if (t) sel.value = t.title;
+}
+
 export function openStartPeriodModal() {
     const client = getActiveClient(); if (!client) return;
     const start = todayIso();
@@ -213,7 +247,8 @@ export function openStartPeriodModal() {
         <p class="tiny muted" style="margin-bottom:14px;">A plan period lasts one calendar year. Its hours allotment becomes an hours grant that expires when the period ends.</p>
         ${field('Start date', `<input id="pp-start" type="date" class="modal-input" value="${start}" oninput="OL.ppRecalc()">`)}
         <div id="pp-due" class="tiny muted" style="margin:-6px 0 12px;">Ends ${esc(niceDate(periodDue(start)))}</div>
-        ${field('Hours allotment', `<input id="pp-allot" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 40">`)}
+        ${field('Tier', tierSelectHtml('pp-tier', 'pp-allot', ''))}
+        ${field('Hours allotment', `<input id="pp-allot" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 24" ${hoursOnInput('pp-tier', 'pp-allot')}>`)}
         <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:16px;"><input id="pp-renew" type="checkbox"> The client is renewing</label>
         <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitStartPeriod()">Start period</button></div>`);
 }
@@ -223,7 +258,7 @@ export function ppRecalc() {
 }
 export async function submitStartPeriod() {
     const client = getActiveClient(); if (!client) return;
-    const res = await savePeriodStart(client.id, { start: val('pp-start'), allotment: val('pp-allot'), renewing: checked('pp-renew') });
+    const res = await savePeriodStart(client.id, { start: val('pp-start'), allotment: val('pp-allot'), renewing: checked('pp-renew'), tier: val('pp-tier') });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -236,13 +271,14 @@ export function openEditPeriodModal(periodId) {
     openModal(`${modalHead('Edit plan period')}<div class="modal-body" style="padding-top:14px;">
         ${field('Start date', `<input id="pe-start" type="date" class="modal-input" value="${esc(period.start_date)}">`)}
         ${field('Due date', `<input id="pe-due" type="date" class="modal-input" value="${esc(period.due_date)}">`)}
-        ${field('Hours allotment', `<input id="pe-allot" type="number" min="0" step="0.25" class="modal-input" value="${allot || ''}">`)}
+        ${field('Tier', tierSelectHtml('pe-tier', 'pe-allot', periodTierTitle(period, allot)))}
+        ${field('Hours allotment', `<input id="pe-allot" type="number" min="0" step="0.25" class="modal-input" value="${allot || ''}" ${hoursOnInput('pe-tier', 'pe-allot')}>`)}
         <div class="tiny muted" style="margin-bottom:14px;">Changing the dates or hours updates the allotment grant, and any unused carryover from this period.</div>
         <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitEditPeriod('${esc(periodId)}')">Save</button></div>`);
 }
 export async function submitEditPeriod(periodId) {
     const { client, period, grants } = findPeriod(periodId); if (!period) return;
-    const patch = { start_date: val('pe-start'), due_date: val('pe-due') };
+    const patch = { start_date: val('pe-start'), due_date: val('pe-due'), tier: val('pe-tier') };
     if (val('pe-allot') !== '') patch.allotment = val('pe-allot');
     const res = await savePeriodEdit(period, grants, patch);
     if (res.error) { alert(res.error); return; }
@@ -263,14 +299,15 @@ export function openClosePeriodModal(periodId) {
         ${field('Hours to carry over (optional)', `<input id="pc-carry" type="number" min="0" step="0.25" class="modal-input" placeholder="0">`)}
         <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:10px;"><input id="pc-next" type="checkbox" onchange="document.getElementById('pc-next-box').style.display = this.checked ? 'block' : 'none'"> Start the next period on ${esc(niceDate(next))}</label>
         <div id="pc-next-box" style="display:none; margin-bottom:12px;">
-            ${field('Next period hours allotment', `<input id="pc-allot" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 40">`)}
+            ${field('Next period tier', tierSelectHtml('pc-tier', 'pc-allot', ''))}
+            ${field('Next period hours allotment', `<input id="pc-allot" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 24" ${hoursOnInput('pc-tier', 'pc-allot')}>`)}
             <label class="tiny" style="display:flex; align-items:center; gap:6px;"><input id="pc-renew" type="checkbox"> Mark the next period as renewing</label>
         </div>
         <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitClosePeriod('${esc(periodId)}')">Close period</button></div>`);
 }
 export async function submitClosePeriod(periodId) {
     const { client, period } = findPeriod(periodId); if (!period) return;
-    const res = await savePeriodClose(period, { carryoverHours: val('pc-carry'), renewNext: checked('pc-next'), nextAllotment: val('pc-allot'), nextRenewing: checked('pc-renew') });
+    const res = await savePeriodClose(period, { carryoverHours: val('pc-carry'), renewNext: checked('pc-next'), nextAllotment: val('pc-allot'), nextRenewing: checked('pc-renew'), nextTier: val('pc-tier') });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -454,7 +491,7 @@ export async function deleteMaintenanceRequest(itemId) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderMaintenancePage, renderClientRequests, loadMaintenanceData,
-    openStartPeriodModal, ppRecalc, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
+    openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
     openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
     maintenanceTabAllowed,

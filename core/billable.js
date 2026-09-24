@@ -120,7 +120,7 @@ function eventCallType(eventId) {
 // Decided from the ASSIGNEE, not the stored isClientTask flag — that flag
 // was set on tasks assigned to Sphynx team members by some older quick-add
 // paths, which is why team tasks were being refused as "client tasks".
-function isClientTask(task, client) {
+export function isClientTask(task, client) {
     const a = String(task.assignee || '').trim();
     const al = a.toLowerCase();
     if (!a || al === 'sphynx task' || al === 'sphynx') return false;

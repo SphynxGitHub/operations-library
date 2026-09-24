@@ -66,16 +66,62 @@ export function periodProgress(period, todayIso) {
     return { totalDays: total, elapsedDays: elapsed, daysLeft: left, pct: Math.round((elapsed / total) * 100), overdue: left < 0, notStarted: todayIso < period.start_date };
 }
 
+// ---- tiers: the standard plan sizes. A period stores the tier title it was sold as (column "tier"). ----
+export const MAINTENANCE_TIERS = [
+    { title: 'Tier 1', hours: 12 },
+    { title: 'Tier 2', hours: 24 },
+    { title: 'Tier 3', hours: 36 },
+    { title: 'Tier 4', hours: 48 },
+];
+export const tierByTitle = (title) => MAINTENANCE_TIERS.find((t) => t.title === title) || null;
+export const tierForHours = (hours) => MAINTENANCE_TIERS.find((t) => t.hours === Number(hours)) || null;
+// The tier to show: the one saved on the period, or (for periods started before tiers existed) the one its hours match.
+export const periodTierTitle = (period, allotHours) => (period?.tier || tierForHours(allotHours)?.title || '');
+const cleanTier = (t) => (isBlank(t) ? null : String(t).trim());
+
+// ---- hours used in a period, from the time logged on the client's tasks ----
+// Each itemized time entry counts on the day it ended (or started). Time logged before entries were itemized
+// counts on the task's completed or created date. Tasks the caller excludes (client tasks, tasks marked
+// non-billable) are skipped.
+const dayOf = (v) => {
+    if (isBlank(v)) return '';
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;       // the local day the work happened
+};
+export function hoursUsedInPeriod(tasks, period, { counts = () => true } = {}) {
+    if (!period) return 0;
+    const inPeriod = (v) => { const d = dayOf(v); return !!d && d >= period.start_date && d <= period.due_date; };
+    let minutes = 0;
+    (tasks || []).forEach((t) => {
+        if (!t || typeof t !== 'object' || !counts(t)) return;
+        const log = Array.isArray(t.timeLog) ? t.timeLog : [];
+        let itemized = 0;
+        log.forEach((e) => {
+            const m = Number(e?.minutes) || 0;
+            itemized += m;
+            if (inPeriod(e?.end || e?.start)) minutes += m;
+        });
+        const earlier = Math.round((Number(t.loggedHours || t.hoursLogged || 0)) * 60) - itemized;
+        if (earlier > 0 && inPeriod(t.completedDate || t.completedAt || t.createdAt || t.createdDate || t.date)) minutes += earlier;
+    });
+    return Math.max(0, Math.round((minutes / 60) * 100) / 100);
+}
+
 // ---- plans: the rows to write, worked out before anything is saved ----
 const cleanHours = (v) => { const n = Math.round((parseFloat(v) || 0) * 100) / 100; return n > 0 ? n : 0; };
 
 // Start a period. The allotment is held as a grant that expires when the period ends (none if the allotment is 0).
-export function planStartPeriod({ clientId, start, allotment, renewing = false }) {
+export function planStartPeriod({ clientId, start, allotment, renewing = false, tier = null }) {
     if (!validDate(start)) return { error: 'Enter a valid start date.' };
     const hours = cleanHours(allotment);
     const due = periodDue(start);
+    const t = cleanTier(tier);
     return {
-        period: { client_id: clientId, start_date: start, due_date: due, renewing: !!renewing, status: 'active' },
+        period: { client_id: clientId, start_date: start, due_date: due, renewing: !!renewing, status: 'active', ...(t ? { tier: t } : {}) },
         grant: hours > 0 ? { client_id: clientId, source: 'plan_allotment', hours_granted: hours, granted_on: start, expires_on: due, status: 'active' } : null,
     };
 }
@@ -89,6 +135,7 @@ export function planEditPeriod({ period, grants = [], patch }) {
     if (!validDate(due) || due <= start) return { error: 'The due date must be after the start date.' };
     const renewing = patch.renewing === undefined ? !!period.renewing : !!patch.renewing;
     const periodUpdate = { start_date: start, due_date: due, renewing };
+    if (patch.tier !== undefined && cleanTier(patch.tier) !== cleanTier(period.tier)) periodUpdate.tier = cleanTier(patch.tier);   // only sent when it changes
     const grantUpdates = [];
     const allot = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active');
     if (allot) {
@@ -105,7 +152,7 @@ export function planEditPeriod({ period, grants = [], patch }) {
 }
 
 // Close a period: optionally extend unused hours as a courtesy carryover, and optionally start the next year.
-export function planClosePeriod({ period, carryoverHours = 0, renewNext = false, nextAllotment = 0, nextRenewing = false, today }) {
+export function planClosePeriod({ period, carryoverHours = 0, renewNext = false, nextAllotment = 0, nextRenewing = false, nextTier = null, today }) {
     const out = { periodUpdate: { status: 'closed' }, carryover: null, next: null };
     const hours = cleanHours(carryoverHours);
     if (hours > 0) {
@@ -113,7 +160,7 @@ export function planClosePeriod({ period, carryoverHours = 0, renewNext = false,
                           granted_on: period.due_date, expires_on: carryoverExpiry(period.due_date, !!period.renewing), status: 'active',
                           note: `Courtesy carryover from the plan period ending ${period.due_date}` };
     }
-    if (renewNext) out.next = planStartPeriod({ clientId: period.client_id, start: nextPeriodStart(period.due_date), allotment: nextAllotment, renewing: nextRenewing });
+    if (renewNext) out.next = planStartPeriod({ clientId: period.client_id, start: nextPeriodStart(period.due_date), allotment: nextAllotment, renewing: nextRenewing, tier: nextTier });
     return out;
 }
 
