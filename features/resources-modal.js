@@ -739,7 +739,7 @@ export function openResourceModal(targetId, draftObj = null) {
         </div>` : '';
     
     // --- 📖 SECTION: LINKED MASTER GUIDES ---
-    const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
+    const linkedSOPs = (OL.masterGuidesFor ? OL.masterGuidesFor(getActiveClient()) : (state.master.howToLibrary || [])).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
     
@@ -1603,7 +1603,7 @@ OL._renderCustomFieldLinker = function(res, field) {
 // search the way the Gmail linker's did).
 OL._customFieldLinkPool = function(fieldType) {
     if (fieldType === 'linked_resources') return (state.master.resources || []).map(r => ({ id: r.id, label: r.name }));
-    if (fieldType === 'linked_howto') return (state.master.howToLibrary || []).map(h => ({ id: h.id, label: h.name }));
+    if (fieldType === 'linked_howto') return (OL.masterGuidesFor ? OL.masterGuidesFor(getActiveClient()) : (state.master.howToLibrary || [])).map(h => ({ id: h.id, label: h.name }));
     if (fieldType === 'linked_tasks') {
         const client = getActiveClient();
         return (client?.projectData?.clientTasks || []).map(t => ({ id: t.id, label: t.title || t.name }));
