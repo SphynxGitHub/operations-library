@@ -140,60 +140,104 @@ const usedHoursOf = (ledger, g) => Math.round(((ledger.alloc.usedMinutes[g.id] |
 const allocatedCount = (ledger, g) => Object.values(ledger.allocations).filter((id) => String(id) === String(g.id)).length;
 
 // The tracking bar: one segment per grant available now (allotment, carryover, ad hoc), each filled by what's used.
-function hoursBarHtml(ledger, { nonBillableHours = 0 } = {}) {
+// Per grant: the tasks whose time came out of it, and how much. A task whose time was split between grants (its
+// entries ran past one grant's hours) shows in each, with only the part charged there, so nothing counts twice.
+function grantTasks(ledger) {
+    const entryByKey = new Map(ledger.entries.map((e) => [entryKey(e), e]));
+    const out = {};           // grantId -> Map(taskId -> { title, minutes, over })
+    const taskGrants = {};    // taskId -> Set(grantId)
+    Object.entries(ledger.alloc.charges).forEach(([key, list]) => {
+        const e = entryByKey.get(key); if (!e) return;
+        list.forEach((c) => {
+            const m = (out[c.grantId] = out[c.grantId] || new Map());
+            const row = m.get(e.taskId) || { taskId: e.taskId, title: e.title, minutes: 0, over: false };
+            row.minutes += c.minutes; row.over = row.over || !!c.over;
+            m.set(e.taskId, row);
+            (taskGrants[e.taskId] = taskGrants[e.taskId] || new Set()).add(String(c.grantId));
+        });
+    });
+    return { byGrant: out, taskGrants };
+}
+
+// The headline: every hour available right now (this period's allotment, plus unexpired carryovers and ad hoc
+// purchases) in one bar, with the breakdown underneath.
+function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? ' Add an ad hoc purchase or start a plan period.' : ''}</div>`;
     const total = gs.reduce((s, g) => s + Number(g.hours_granted || 0), 0);
-    const used = gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0);
+    const used = Math.round(gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 100) / 100;
     const left = Math.round((total - used) * 100) / 100;
-    const over = left < 0;
     const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-    const segs = gs.map((g) => {
-        const h = Number(g.hours_granted || 0); const u = usedHoursOf(ledger, g);
-        const fill = h > 0 ? Math.min(100, Math.round((u / h) * 100)) : 0;
-        const color = u > h ? '#ef4444' : GRANT_COLOR[g.source] || '#22c55e';
-        return `<div title="${esc(grantShort(g))}: ${esc(hoursText(u))} used" style="flex:${Math.max(h, 0.01)}; height:100%; background:rgba(148,163,184,0.25); position:relative;"><div style="height:100%; width:${fill}%; background:${color};"></div></div>`;
-    }).join('<div style="width:2px; background:var(--panel, #0b0f17);"></div>');
-    const legend = gs.map((g) => {
-        const u = usedHoursOf(ledger, g); const h = Number(g.hours_granted || 0); const n = allocatedCount(ledger, g);
-        return `<span style="display:inline-flex; align-items:center; gap:5px; margin-right:14px;"><span style="width:8px; height:8px; border-radius:2px; background:${GRANT_COLOR[g.source] || '#22c55e'};"></span>${esc(GRANT_LABEL[g.source] || g.source)} <strong style="color:${u > h ? '#ef4444' : 'var(--text)'};">${esc(hoursText(u))} of ${esc(hoursText(h))}</strong>${g.source !== 'plan_allotment' ? ` <span class="muted">· expires ${esc(niceDate(g.expires_on))}</span>` : ''}${n ? ` <span class="muted">· ${n} task${n === 1 ? '' : 's'}</span>` : ''}</span>`;
-    }).join('');
+    const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
+    const parts = gs.map((g) => `${esc(hoursText(g.hours_granted))} ${esc((GRANT_LABEL[g.source] || g.source).toLowerCase())}`).join(' + ');
     return `
-        <div class="tiny bold" style="margin:12px 0 6px; color:${over ? '#ef4444' : 'var(--text)'};">${esc(hoursText(used))} of ${esc(hoursText(total))} used (${pct}%) · ${over ? `<strong>${esc(hoursText(-left))} over</strong>` : `${esc(hoursText(left))} left`}${nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : ''}</div>
-        <div style="display:flex; height:10px; border-radius:6px; overflow:hidden; margin:0 0 6px;">${segs}</div>
-        <div class="tiny muted" style="margin-bottom:6px; line-height:1.9;">${legend}</div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin:14px 0 6px;">
+            <div class="tiny bold" style="color:${left < 0 ? '#ef4444' : 'var(--text)'};">${esc(hoursText(used))} of ${esc(hoursText(total))} used (${pct}%) · ${left < 0 ? `<strong>${esc(hoursText(-left))} over</strong>` : `${esc(hoursText(left))} left`}${nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : ''}</div>
+            <div class="tiny muted">Total available: ${parts}${gs.length > 1 ? ` = ${esc(hoursText(total))}` : ''}</div>
+        </div>
+        <div style="height:10px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-bottom:6px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
         ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
 }
 
-function grantsTableHtml(slot, ledger) {
+// One card per grant: its own bar, and the tasks charged to it.
+function grantCardHtml(client, g, ledger, gt) {
     const today = todayIso();
-    if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
-    const rows = slot.grants.map((g) => {
-        const left = daysBetween(today, g.expires_on);
-        const soon = g.status === 'active' && left >= 0 && left <= 30;
-        const statusColor = g.status === 'active' ? '#22c55e' : g.status === 'used_up' ? '#94a3b8' : '#ef4444';
-        const u = usedHoursOf(ledger, g); const h = Number(g.hours_granted || 0); const n = allocatedCount(ledger, g);
-        return `<tr>
-            <td>${esc(GRANT_LABEL[g.source] || g.source)}${g.note ? `<div class="tiny muted">${esc(g.note)}</div>` : ''}</td>
-            <td style="text-align:right;">${esc(hoursText(h))}</td>
-            <td style="text-align:right; ${u > h ? 'color:#ef4444; font-weight:600;' : ''}">${esc(hoursText(u))}</td>
-            <td>${esc(niceDate(g.granted_on))}</td>
-            <td style="${soon ? 'color:#f59e0b; font-weight:600;' : ''}">${esc(niceDate(g.expires_on))}${g.status === 'active' ? ` <span class="tiny muted">${left >= 0 ? `${left} day${left === 1 ? '' : 's'} left` : 'past'}</span>` : ''}</td>
-            <td><span class="pill tiny" style="border:1px solid ${statusColor}; color:${statusColor};">${esc(g.status.replace('_', ' '))}</span>${Number(g.hours_expired) > 0 ? `<div class="tiny muted">${esc(hoursText(g.hours_expired))} written off</div>` : ''}</td>
-            <td style="text-align:right;">${g.source === 'plan_allotment' ? '' : canManage()
-                ? `<button class="btn tiny soft" onclick="OL.openGrantTasksModal('${esc(g.id)}')" title="Tasks whose time comes out of this grant">Tasks${n ? ` (${n})` : ''}…</button>`
-                : (n ? `<span class="tiny muted">${n} task${n === 1 ? '' : 's'}</span>` : '')}</td>
-        </tr>`;
+    const h = Number(g.hours_granted || 0); const u = usedHoursOf(ledger, g);
+    const pct = h > 0 ? Math.round((u / h) * 100) : 0;
+    const daysLeft = daysBetween(today, g.expires_on);
+    const expired = g.status === 'expired' || daysLeft < 0;
+    const color = u > h ? '#ef4444' : GRANT_COLOR[g.source] || '#22c55e';
+    const n = allocatedCount(ledger, g);
+    const tasks = [...(gt.byGrant[g.id]?.values() || [])].sort((a, b) => b.minutes - a.minutes);
+    const open = OL._maintOpenGrant?.[g.id] ?? (!expired && tasks.length <= 8);
+    const taskRows = tasks.map((t) => {
+        const split = (gt.taskGrants[t.taskId]?.size || 0) > 1;
+        const pinned = String(ledger.allocations[t.taskId] || '') === String(g.id);
+        return `<div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-top:1px solid var(--line); cursor:pointer;" onclick="OL.openTaskInContext && OL.openTaskInContext('${esc(client.id)}', '${esc(t.taskId)}')">
+            <span>${esc(t.title)}${pinned ? ' <span class="pill tiny soft" title="Set aside for this grant">set aside</span>' : ''}${split ? ' <span class="muted" title="Part of this task\'s time came out of another grant; only the part charged here is shown">(split)</span>' : ''}</span>
+            <span style="white-space:nowrap; ${t.over ? 'color:#ef4444;' : ''}">${esc(durText(t.minutes))}</span>
+        </div>`;
     }).join('');
-    return `<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px; border-collapse:collapse;">
-        <thead><tr style="text-align:left;" class="tiny muted uppercase"><th>Source</th><th style="text-align:right;">Granted</th><th style="text-align:right;">Used</th><th>Granted on</th><th>Expires</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody></table></div>
-        <div class="tiny muted" style="margin-top:6px;">Billable time comes out of the plan allotment first, then other hours, soonest to expire first. A carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
+    return `
+        <div style="border:1px solid var(--line); border-left:3px solid ${GRANT_COLOR[g.source] || '#22c55e'}; border-radius:8px; padding:12px; margin-top:10px; ${expired ? 'opacity:0.7;' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+                <div>
+                    <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${g.note ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(g.note)}</span>` : ''}</div>
+                    <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="tiny bold" style="color:${u > h ? '#ef4444' : 'var(--text)'};">${esc(hoursText(u))} of ${esc(hoursText(h))}</span>
+                    ${g.source !== 'plan_allotment' && canManage() ? `<button class="btn tiny soft" onclick="OL.openGrantTasksModal('${esc(g.id)}')" title="Set tasks aside for these hours">Set aside tasks${n ? ` (${n})` : ''}…</button>` : ''}
+                </div>
+            </div>
+            <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:8px 0 4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
+            <div class="tiny muted" style="cursor:pointer; user-select:none;" onclick="OL._maintOpenGrant = OL._maintOpenGrant || {}; OL._maintOpenGrant['${esc(g.id)}'] = ${open ? 'false' : 'true'}; OL.renderMaintenancePage()">${open ? '▾' : '▸'} ${tasks.length} task${tasks.length === 1 ? '' : 's'} charged here</div>
+            ${open ? `<div class="tiny" style="margin-top:4px;">${taskRows || '<div class="muted" style="padding:4px 0;">Nothing charged yet.</div>'}</div>` : ''}
+        </div>`;
 }
 
-// Itemized log for a window (the current plan period, or for ad hoc clients the life of their active purchases).
+function grantCardsHtml(client, slot, ledger) {
+    if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
+    const gt = grantTasks(ledger);
+    const currentIds = new Set(ledger.current.map((g) => String(g.id)));
+    const earlier = slot.grants.filter((g) => !currentIds.has(String(g.id)))
+        .sort((a, b) => String(b.expires_on).localeCompare(String(a.expires_on)));
+    const showEarlier = !!OL._maintShowEarlierGrants;
+    return `${ledger.current.map((g) => grantCardHtml(client, g, ledger, gt)).join('')}
+        ${earlier.length ? `<div class="tiny muted" style="margin-top:14px; cursor:pointer;" onclick="OL._maintShowEarlierGrants = !OL._maintShowEarlierGrants; OL.renderMaintenancePage()">${showEarlier ? '▾' : '▸'} Expired and earlier grants (${earlier.length})</div>
+            ${showEarlier ? earlier.map((g) => grantCardHtml(client, g, ledger, gt)).join('') : ''}` : ''}
+        <div class="tiny muted" style="margin-top:10px;">Each hour is charged to one grant only. Billable time comes out of the plan allotment first, then other hours, soonest to expire first; a carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
+}
+
 function hoursLogHtml(client, ledger, window, heading) {
     const entries = ledger.entries.filter((e) => e.date >= window.start_date && e.date <= window.due_date);
+    // The same work on two different tasks (same name, day and time), e.g. imported from ClickUp and also
+    // logged here, would be counted twice. Flag it so one copy can be removed.
+    const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const seen = new Map();
+    entries.forEach((e) => { const k = `${norm(e.title)}|${e.date}|${e.minutes}`; (seen.get(k) || seen.set(k, new Set()).get(k)).add(String(e.taskId)); });
+    const isDup = (e) => (seen.get(`${norm(e.title)}|${e.date}|${e.minutes}`)?.size || 0) > 1;
+    const dupCount = entries.filter(isDup).length;
     const filter = OL._maintLogFilter || 'billable';
     const shown = entries.filter((e) => filter === 'all' || (filter === 'billable' ? e.billable : !e.billable));
     const { billableHours, nonBillableHours } = summarizePeriodTime(entries);
@@ -217,7 +261,7 @@ function hoursLogHtml(client, ledger, window, heading) {
     };
     const rows = shown.map((e) => `<tr style="border-top:1px solid var(--line); cursor:pointer; vertical-align:top;" onclick="OL.openTaskInContext && OL.openTaskInContext('${esc(client.id)}', '${esc(e.taskId)}')">
             <td style="white-space:nowrap; padding:6px 8px 6px 0;">${esc(niceDate(e.date))}</td>
-            <td style="padding:6px 8px 6px 0;">${esc(e.title)}${e.note ? `<div class="tiny muted">${esc(e.note)}</div>` : ''}</td>
+            <td style="padding:6px 8px 6px 0;">${esc(e.title)}${isDup(e) ? ' <span class="pill tiny" style="border:1px solid #f59e0b; color:#f59e0b;" title="Another task has the same name, date and time">possible duplicate</span>' : ''}${e.note ? `<div class="tiny muted">${esc(e.note)}</div>` : ''}</td>
             <td style="padding:6px 8px 6px 0;" class="muted">${esc(e.by)}</td>
             <td style="text-align:right; white-space:nowrap; padding:6px 8px 6px 0;">${esc(durText(e.minutes))}</td>
             <td style="padding:6px 8px 6px 0;"><span class="pill tiny" style="border:1px solid ${e.billable ? '#22c55e' : '#94a3b8'}; color:${e.billable ? '#22c55e' : '#94a3b8'};">${e.billable ? 'Billable' : 'Non-billable'}</span></td>
@@ -230,6 +274,7 @@ function hoursLogHtml(client, ledger, window, heading) {
                     <h3 style="margin:0;">${esc(heading)}</h3>
                     <div class="tiny muted">${esc(niceDate(window.start_date))} to ${esc(niceDate(window.due_date))} · <strong style="color:var(--text);">${esc(hoursText(billableHours))}</strong> billable (counted) · ${esc(hoursText(nonBillableHours))} non-billable</div>
                 </div>
+                ${dupCount ? `<div class="tiny" style="color:#f59e0b; flex-basis:100%; order:3;">${dupCount} entries look like duplicates: the same work on two tasks with the same name, date and time (for example ClickUp time that was also logged here). Both copies are counted until one is removed.</div>` : ''}
                 <div style="display:flex; gap:6px;">${btn('billable', 'Billable')}${btn('non-billable', 'Non-billable')}${btn('all', `All (${entries.length})`)}</div>
             </div>
             ${shown.length ? `<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;">
@@ -248,7 +293,7 @@ function periodCardHtml(client, slot, ledger) {
                 <div class="bold">No active plan period</div>
                 ${canManage() ? `<div class="tiny muted" style="margin:4px 0 10px;">Ongoing Maintenance runs in annual plan periods, each with its hours allotment. Start one to give the client its hours.</div>
                 <button class="btn primary" onclick="OL.openStartPeriodModal()">Start a plan period</button>` : `<div class="tiny muted" style="margin-top:4px;">Your next plan period hasn't started yet.</div>`}
-                ${ledger.current.length ? hoursBarHtml(ledger) : ''}
+                ${ledger.current.length ? totalBarHtml(ledger) : ''}
             </div>`;
     }
     const pr = periodProgress(active, today);
@@ -271,7 +316,7 @@ function periodCardHtml(client, slot, ledger) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
-            ${hoursBarHtml(ledger, { nonBillableHours })}
+            ${totalBarHtml(ledger, { nonBillableHours })}
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
 }
@@ -280,7 +325,7 @@ function adHocCardHtml(ledger) {
     return `
         <div class="card" style="padding:16px;"><div class="bold">Ad Hoc Maintenance</div>
             <div class="tiny muted" style="margin-top:4px;">There are no plan periods. Hours are bought as needed and expire one year after purchase.</div>
-            ${hoursBarHtml(ledger, { nonBillableHours: summarizePeriodTime(ledger.entries.filter((e) => e.date >= adHocWindow(ledger).start_date)).nonBillableHours })}
+            ${totalBarHtml(ledger, { nonBillableHours: summarizePeriodTime(ledger.entries.filter((e) => e.date >= adHocWindow(ledger).start_date)).nonBillableHours })}
         </div>`;
 }
 // Ad hoc clients: the log covers the life of the hours available now (earliest purchase still active, to today).
@@ -319,10 +364,10 @@ export function renderMaintenancePage() {
             : adHocCardHtml(ledger) + (ledger.current.length ? hoursLogHtml(client, ledger, adHocWindow(ledger), 'Hours log · active purchases') : '')}
         <div class="card" style="padding:16px; margin-top:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="margin:0;">Hours grants</h3>
+                <h3 style="margin:0;">Hours by grant</h3>
                 ${canManage() ? `<button class="btn tiny soft" onclick="OL.openAdHocPurchaseModal()">+ Ad hoc purchase</button>` : ''}
             </div>
-            ${grantsTableHtml(slot, ledger)}
+            ${grantCardsHtml(client, slot, ledger)}
         </div>
         ${mode === ONGOING && history.length ? `
         <div class="card" style="padding:16px; margin-top:16px;"><h3 style="margin:0 0 10px;">Earlier plan periods</h3>
