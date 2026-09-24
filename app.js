@@ -385,7 +385,13 @@ OL.renderSystemUtilityBar = function() {
 };
 
 // 📥 Export JSON Backup
+// Backup/Restore work on the whole workspace, so they are for Sphynx staff (admins and team members) only.
+function isStaffSession() {
+    return window.FORCE_ADMIN === true || state.adminMode === true || state.teamMemberMode === true;
+}
+
 OL.exportDatabaseBackup = function() {
+    if (!isStaffSession()) return;
     if (!state) return alert("System state unavailable for export.");
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
     const dlAnchor = document.createElement('a');
@@ -398,6 +404,7 @@ OL.exportDatabaseBackup = function() {
 
 // 📤 Import JSON Backup
 OL.importDatabaseBackup = function() {
+    if (!isStaffSession()) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -431,12 +438,13 @@ OL.renderSystemUtilityBar = function() {
             <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
             </button>
+            ${isStaffSession() ? `
             <button class="btn tiny soft" onclick="OL.exportDatabaseBackup()" title="Export JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="download" style="width:13px;height:13px;"></i> Backup
             </button>
             <button class="btn tiny soft" onclick="OL.importDatabaseBackup()" title="Restore JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="upload" style="width:13px;height:13px;"></i> Restore
-            </button>
+            </button>` : ''}
             <button class="btn tiny soft" onclick="if(confirm('Sign out?')) OL.signOut()" title="Sign Out" style="display:inline-flex; align-items:center; gap:4px; color:#ef4444;">
                 <i data-lucide="log-out" style="width:13px;height:13px;"></i> Sign Out
             </button>
