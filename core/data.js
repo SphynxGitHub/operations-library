@@ -370,6 +370,14 @@ export async function sync() {
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         }
 
+        // A client login keeps only its own project in memory, so no screen can list anyone else's.
+        // (UI only: the database still returns every row until the security pass locks it down.)
+        if (window.OL?.isClientLogin?.()) {
+            Object.keys(state.clients).forEach((id) => {
+                if (String(id) !== String(state.loginClientId)) delete state.clients[id];
+            });
+        }
+
         // Google connection status was previously only ever set in-memory
         // right after the OAuth redirect, so it reset to "disconnected" on
         // every page load/reload even though the tokens were still valid
