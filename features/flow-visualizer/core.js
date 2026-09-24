@@ -2348,6 +2348,17 @@ export function _fvRenderSteps(resources) {
 
   // ── Measurement pass ─────────────────────────────────────────────────────────
   requestAnimationFrame(() => {
+    // Read every card's height up front. Card heights don't depend on where they're placed, and
+    // reading a height right after moving another card forces the browser to re-lay out the whole
+    // map; interleaving the two for every card is what made this view take so long to appear.
+    const _heights = new Map();
+    canvas.querySelectorAll('.fv-step-card').forEach(el => _heights.set(el, el.offsetHeight));
+    stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ seqMeta }) => (seqMeta || []).forEach(item => {
+      if (item.type === 'consolidated' && item.el && !_heights.has(item.el)) _heights.set(item.el, item.el.offsetHeight);
+      (item.sectionCards || []).forEach(sc => { if (sc.el && !_heights.has(sc.el)) _heights.set(sc.el, sc.el.offsetHeight); });
+    })));
+    const hOf = (el) => (_heights.has(el) ? _heights.get(el) : el.offsetHeight);
+
     let curStageY = PAD_Y;
 
     stageMeta.forEach(({ stageBgEl, stageLblEl, stage, stageTop, wfMetaList }) => {
@@ -2387,7 +2398,7 @@ export function _fvRenderSteps(resources) {
             const naturalTopY = new Map(); // el → top Y from simple stacking
             byRes.forEach(cards => {
               let ry = y;
-              cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += el.offsetHeight + STEP_GAP; });
+              cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += hOf(el) + STEP_GAP; });
             });
 
             // Pass 2: for each cross-resource outbound link within this section,
@@ -2398,7 +2409,7 @@ export function _fvRenderSteps(resources) {
                 if (!link.targetId || link._implicit) return;
                 const targetCard = cardByKey.get(String(link.targetId));
                 if (!targetCard || targetCard.res === sc.res) return; // same resource, skip
-                const srcBottom = naturalTopY.get(sc.el) + sc.el.offsetHeight;
+                const srcBottom = naturalTopY.get(sc.el) + hOf(sc.el);
                 const prev = minY.get(targetCard.el) || 0;
                 minY.set(targetCard.el, Math.max(prev, srcBottom));
               });
@@ -2412,7 +2423,7 @@ export function _fvRenderSteps(resources) {
                 const constraint = minY.get(el);
                 if (constraint !== undefined && constraint > ry) ry = constraint;
                 if (!step.pinned) { el.style.top = ry + 'px'; step.coords.y = ry; }
-                ry += el.offsetHeight + STEP_GAP;
+                ry += hOf(el) + STEP_GAP;
               });
               maxBottom = Math.max(maxBottom, ry - STEP_GAP);
             });
@@ -2428,7 +2439,7 @@ export function _fvRenderSteps(resources) {
               anchor.style.left = Math.round(item.consolCenterX - 1) + 'px';
             });
             item.members.forEach(m => { m.step.coords.y = y; });
-            y += item.el.offsetHeight + STEP_GAP * 2;
+            y += hOf(item.el) + STEP_GAP * 2;
             wfBottom = Math.max(wfBottom, y - STEP_GAP);
           }
         });
@@ -2450,8 +2461,8 @@ export function _fvRenderSteps(resources) {
     });
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
-    const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
-    const maxY = Math.max(...allCards.map(el => (parseFloat(el.style.top)||0) + el.offsetHeight + 60), 600);
+    const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
+    const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + hOf(el) + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
     canvas.style.height = maxY + 'px';
 
@@ -2771,23 +2782,28 @@ export function _fvJumpToLane(stageId) {
 };
 
 // Sync rail label heights to their matching swimlane
+let _fvRailSyncPending = false;
 export function _fvSyncRailHeights() {
+  // A single render asked for this 2-3 times (each redrawing every connection); once per frame is enough.
+  if (_fvRailSyncPending) return;
+  _fvRailSyncPending = true;
   requestAnimationFrame(() => {
+    _fvRailSyncPending = false;
     const data = OL.getCurrentProjectData();
     const stages = [
       ...(data.stages || []),
       { id: '__none__', name: 'Unassigned' }
     ];
 
-    stages.forEach(stage => {
-      const lane = document.getElementById(`fv-lane-${stage.id}`);
-      const rail = document.getElementById(`fv-rail-${stage.id}`);
-      if (lane && rail) {
-        // +1 for the border-bottom
-        const h = lane.offsetHeight + 1;
-        rail.style.height    = h + 'px';
-        rail.style.minHeight = h + 'px';
-      }
+    // Read every height first, then write, so the page is laid out once instead of once per stage.
+    const pairs = stages.map(stage => ({
+      lane: document.getElementById(`fv-lane-${stage.id}`),
+      rail: document.getElementById(`fv-rail-${stage.id}`)
+    })).filter(p => p.lane && p.rail);
+    const heights = pairs.map(p => p.lane.offsetHeight + 1);   // +1 for the border-bottom
+    pairs.forEach((p, i) => {
+      p.rail.style.height    = heights[i] + 'px';
+      p.rail.style.minHeight = heights[i] + 'px';
     });
 
     // Draw connections after heights settle
@@ -2829,6 +2845,13 @@ export function _fvDrawConnections(resources) {
 
   const group = document.getElementById('fv-lines');
   const canvasRect = canvas.getBoundingClientRect();
+  // Each card is measured once and every line is added in one batch at the end. Measuring right after
+  // adding a line forced a full re-layout of the map per line, which scaled badly with big projects.
+  const rectCache = new Map();
+  const rectOf = (el) => { let r = rectCache.get(el); if (!r) { r = el.getBoundingClientRect(); rectCache.set(el, r); } return r; };
+  const cardEls = new Map();
+  document.querySelectorAll('[id^="fv-card-"]').forEach(el => cardEls.set(el.id, el));
+  const frag = document.createDocumentFragment();
   const globalIds = new Set(
     (resources || []).filter(r => r.isGlobal).map(r => String(r.id))
   );
@@ -2843,12 +2866,12 @@ export function _fvDrawConnections(resources) {
         const targetResId = outRule.targetId.substring(0, lastH);
         if (targetResId === String(sourceRes.id)) return; // skip same-card
 
-        const fromEl = document.getElementById(`fv-card-${sourceRes.id}`);
-        const toEl   = document.getElementById(`fv-card-${targetResId}`);
+        const fromEl = cardEls.get(`fv-card-${sourceRes.id}`);
+        const toEl   = cardEls.get(`fv-card-${targetResId}`);
         if (!fromEl || !toEl) return;
 
-        const fRect = fromEl.getBoundingClientRect();
-        const tRect = toEl.getBoundingClientRect();
+        const fRect = rectOf(fromEl);
+        const tRect = rectOf(toEl);
 
         const fx = fRect.left - canvasRect.left + fRect.width / 2;
         const fy = fRect.top  - canvasRect.top  + fRect.height;
@@ -2877,10 +2900,11 @@ export function _fvDrawConnections(resources) {
         path.setAttribute('data-from', sourceRes.id);
         path.setAttribute('data-to', targetResId);
         if (isCross || isGlobalLink) path.setAttribute('stroke-dasharray', '5,3');
-        group.appendChild(path);
+        frag.appendChild(path);
       });
     });
   });
+  group.appendChild(frag);
 };
 
 // Highlight global connections on hover
