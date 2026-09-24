@@ -632,6 +632,13 @@ export function getBusinessScopedClients() {
     return ids === null ? all : all.filter(c => ids.has(String(c.id)));
 }
 
+// A partner's portfolio is the clients it manages: never the partner's own project, even if that record
+// was (mistakenly) assigned to itself.
+export function getPortfolioClients(partnerId) {
+    return Object.values(state.clients || {}).filter(c =>
+        String(c.id) !== String(partnerId) && String(c.meta?.partnerOwner) === String(partnerId));
+}
+
 // Which projects' business data (emails, calendar events, errors, tasks...) this session may see.
 //   null      -> no limit (Sphynx staff)
 //   a Set     -> only these project ids (a partner's managed clients; empty for a plain client login)
@@ -640,9 +647,7 @@ export function getBusinessScopeClientIds() {
     const guest = window.IS_GUEST === true;
     const partnerId = state.businessScopePartnerId || (guest && state.loginIsPartner ? state.loginClientId : null);
     if (partnerId) {
-        return new Set(Object.values(state.clients || {})
-            .filter(c => String(c.meta?.partnerOwner) === String(partnerId))
-            .map(c => String(c.id)));
+        return new Set(getPortfolioClients(partnerId).map(c => String(c.id)));
     }
     return guest ? new Set() : null;
 }
@@ -1458,6 +1463,7 @@ window.markClientDirty = markClientDirty;
 
 Object.assign(window.OL, {
     getBusinessScopedClients,
+    getPortfolioClients,
     getCurrentUserName,
     markClientDirty,
     state, persist, sync, loadFullClient, switchClient, updateAndSync,

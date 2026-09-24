@@ -43,15 +43,17 @@ export function renderClientDashboard() {
 
     // 🤝 Apply portfolio filtering if on partner-dashboard OR in guest/access mode
     if (isPartnerRoute || window.IS_GUEST || accessToken) {
-        if (activeClient) {
-            const partnerId = activeClient.meta?.status === "Partner" 
+        // A partner login always sees ITS OWN portfolio, whatever project happens to be open.
+        const loginPartnerId = (window.IS_GUEST === true && state.loginIsPartner) ? state.loginClientId : null;
+        if (loginPartnerId || activeClient) {
+            const partnerId = loginPartnerId || (activeClient.meta?.status === "Partner" 
                 ? activeClient.id 
-                : activeClient.meta?.partnerOwner;
+                : activeClient.meta?.partnerOwner);
 
             if (partnerId) {
                 // Only clients actually managed by this partner — never the
                 // partner's own account record itself.
-                clients = clients.filter(c => String(c.meta?.partnerOwner) === String(partnerId));
+                clients = OL.getPortfolioClients(partnerId);
             } else {
                 clients = clients.filter(c => String(c.id) === String(activeClient.id));
             }
@@ -609,7 +611,8 @@ export function openClientProfileModal(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
 
-    const dynamicPartners = OL.getDynamicPartners();
+    // A partner can't be linked to its own portal (that is how a partner ended up in its own portfolio).
+    const dynamicPartners = OL.getDynamicPartners().filter(p => String(p.id) !== String(client.id));
     const currentPartnerId = client.meta.partnerOwner || "";
 
     const partnerDropdownHtml = `
