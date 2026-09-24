@@ -492,68 +492,219 @@ OL.openBillableRulesModal = function() {
 };
 
 // Inline panel used by the Automations page.
+// Each rule: applies to tasks / events / both, one or more conditions that
+// must ALL match, and the result (billable / non-billable). First match wins.
+// Value boxes are dropdowns that depend on the chosen field, with "Custom…"
+// for typing any value.
+const lower = (v) => String(v ?? '').trim().toLowerCase();
+OL._billableCustomOpen = OL._billableCustomOpen || {};   // "i-j" -> true while a Custom… box is open
+
+OL._billableRuleAt = function(i) {
+    const list = state.master.billableRules || [];
+    // Old one-condition rules are upgraded in place the first time they're edited.
+    if (list[i] && !Array.isArray(list[i].conditions)) list[i] = OL.normalizeBillableRule(list[i]);
+    return list[i];
+};
+
+OL._renderBillableValueControl = function(i, j, c) {
+    const opts = OL.billableFieldOptions ? OL.billableFieldOptions(c.field) : null;
+    const key = `${i}-${j}`;
+    const textBox = (val, handler, ph = 'value') =>
+        `<input class="modal-input tiny" style="flex:1; min-width:140px;" value="${esc(val || '')}" placeholder="${ph}"
+            onblur="${handler}" onkeydown="if(event.key==='Enter'){this.blur();}">`;
+
+    // "contains" and fields with no known values: free text.
+    if (c.op === 'contains' || !opts) {
+        if (c.op === 'in') {
+            return OL._renderBillableChips(i, j, c, null) + textBox('', `OL.addBillableCondValue(${i}, ${j}, this.value); this.value='';`, 'type a value, then Enter');
+        }
+        return textBox(c.value, `OL.setBillableCond(${i}, ${j}, 'value', this.value)`);
+    }
+
+    const labelFor = (v) => (opts.find((o) => o.value === v)?.label ?? v);
+
+    if (c.op === 'in') {
+        const chosen = c.values || [];
+        const remaining = opts.filter((o) => !chosen.includes(o.value));
+        return `
+            ${OL._renderBillableChips(i, j, c, labelFor)}
+            <select class="modal-input tiny" style="width:auto;" onchange="OL.onBillableMultiSelect(${i}, ${j}, this.value)">
+                <option value="">+ Add value…</option>
+                ${remaining.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
+                <option value="__custom__">Custom…</option>
+            </select>
+            ${OL._billableCustomOpen[key] ? textBox('', `OL.addBillableCondValue(${i}, ${j}, this.value); OL._billableCustomOpen['${key}'] = false; OL._saveBillableRules(false);`, 'custom value, then Enter') : ''}`;
+    }
+
+    const isCustom = OL._billableCustomOpen[key] || (!!c.value && !opts.some((o) => lower(o.value) === lower(c.value)));
+    return `
+        <select class="modal-input tiny" style="width:auto; max-width:240px;" onchange="OL.onBillableValueSelect(${i}, ${j}, this.value)">
+            <option value="" ${!c.value && !isCustom ? 'selected' : ''}>Select…</option>
+            ${opts.map((o) => `<option value="${esc(o.value)}" ${!isCustom && lower(o.value) === lower(c.value) ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+            <option value="__custom__" ${isCustom ? 'selected' : ''}>Custom…</option>
+        </select>
+        ${isCustom ? textBox(c.value, `OL.setBillableCond(${i}, ${j}, 'value', this.value)`, 'custom value') : ''}`;
+};
+OL._renderBillableChips = function(i, j, c, labelFor) {
+    return (c.values || []).map((v, k) => `
+        <span class="pill tiny" style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--line); border-radius:10px;">
+            ${esc(labelFor ? labelFor(v) : v)}
+            <span style="cursor:pointer; color:var(--muted);" title="Remove" onclick="OL.removeBillableCondValue(${i}, ${j}, ${k})">✕</span>
+        </span>`).join('');
+};
+
 OL.renderBillableRulesPanel = function() {
     if (!state.master.billableRules) state.master.billableRules = [];
-    const rules = state.master.billableRules;
-    const fields = OL.BILLABLE_RULE_FIELDS || {};
+    const rules = state.master.billableRules.map((r) => OL.normalizeBillableRule(r));
+    const defs = OL.BILLABLE_FIELD_DEFS || {};
+    const ops = OL.BILLABLE_RULE_OPS || {};
     const canSave = !!state.masterHasBillableRules;
+    const appliesLabel = { tasks: 'Tasks', events: 'Calendar events', both: 'Tasks & events' };
+
     return `
         <div class="card" style="padding:16px; margin-top:16px;">
             <div class="small" style="line-height:1.6; margin-bottom:12px;">
-                How a task's billable status is decided, in order:
+                How billable status is decided, in order:
                 <ol style="margin:6px 0 0 18px; padding:0;">
                     <li><strong>Client tasks are never billable</strong> (assigned to "Client Task" or one of the client's people).</li>
-                    <li>A manual <strong>$</strong> toggle on the task wins over everything below.</li>
-                    <li>The first matching rule in the list below.</li>
-                    <li>Built-in defaults: tasks on <strong>Ongoing Maintenance</strong> projects and tasks from <strong>coaching calls</strong> are billable.</li>
+                    <li>A manual <strong>$</strong> toggle on a task or event wins over everything below.</li>
+                    <li>The first rule below that applies and whose conditions <strong>all</strong> match.</li>
                     <li>Everything else is non-billable.</li>
                 </ol>
-                <div class="tiny muted" style="margin-top:6px;">Calendar events: Coaching Calls are billable by default; any event can be toggled.</div>
+                <div class="tiny muted" style="margin-top:6px;">For tasks, <em>Meeting category</em> is the category of the meeting the task came from.</div>
             </div>
             ${canSave ? '' : `<div class="tiny" style="padding:8px 10px; margin-bottom:12px; border:1px solid #f59e0b; color:#f59e0b; border-radius:6px;">Run the <code>billable_rules</code> migration first — rules can't be saved until that column exists.</div>`}
-            <div style="display:grid; gap:6px; margin-bottom:12px;">
-                ${rules.length ? rules.map((r, i) => `
-                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px; border:1px solid var(--line); border-radius:6px;">
-                        <span class="tiny muted" style="width:18px;">${i + 1}.</span>
-                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'field', this.value)">
-                            ${Object.entries(fields).map(([k, l]) => `<option value="${k}" ${r.field === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-                        </select>
-                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'op', this.value)">
-                            <option value="equals" ${r.op !== 'contains' ? 'selected' : ''}>is</option>
-                            <option value="contains" ${r.op === 'contains' ? 'selected' : ''}>contains</option>
-                        </select>
-                        <input class="modal-input tiny" style="flex:1; min-width:140px;" value="${esc(r.value || '')}" placeholder="value" onblur="OL.updateBillableRule(${i}, 'value', this.value)">
-                        <span class="tiny muted">→</span>
-                        <select class="modal-input tiny" style="width:auto;" onchange="OL.updateBillableRule(${i}, 'billable', this.value === 'true')">
-                            <option value="true" ${r.billable !== false ? 'selected' : ''}>Billable</option>
-                            <option value="false" ${r.billable === false ? 'selected' : ''}>Non-billable</option>
-                        </select>
-                        <button class="btn tiny soft" title="Move up" ${i === 0 ? 'disabled' : ''} onclick="OL.moveBillableRule(${i}, -1)">↑</button>
-                        <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.removeBillableRule(${i})">✕</button>
-                    </div>
-                `).join('') : `<div class="tiny muted">No custom rules — only the built-in defaults above apply.</div>`}
+            <div style="display:grid; gap:8px; margin-bottom:12px;">
+                ${rules.length ? rules.map((r, i) => {
+                    const allowed = OL.billableFieldsForAppliesTo(r.appliesTo);
+                    return `
+                    <div style="padding:10px; border:1px solid var(--line); border-radius:6px; display:grid; gap:6px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span class="tiny muted" style="width:18px;">${i + 1}.</span>
+                            <span class="tiny muted">For</span>
+                            <select class="modal-input tiny" style="width:auto;" onchange="OL.setBillableRuleProp(${i}, 'appliesTo', this.value)">
+                                ${Object.entries(appliesLabel).map(([k, l]) => `<option value="${k}" ${r.appliesTo === k ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                            <span class="tiny muted">→</span>
+                            <select class="modal-input tiny" style="width:auto;" onchange="OL.setBillableRuleProp(${i}, 'billable', this.value === 'true')">
+                                <option value="true" ${r.billable ? 'selected' : ''}>Billable</option>
+                                <option value="false" ${!r.billable ? 'selected' : ''}>Non-billable</option>
+                            </select>
+                            <span style="flex:1;"></span>
+                            <button class="btn tiny soft" title="Move up" ${i === 0 ? 'disabled' : ''} onclick="OL.moveBillableRule(${i}, -1)">↑</button>
+                            <button class="btn tiny soft" title="Move down" ${i === rules.length - 1 ? 'disabled' : ''} onclick="OL.moveBillableRule(${i}, 1)">↓</button>
+                            <button class="btn tiny soft" style="color:#ef4444;" title="Delete rule" onclick="OL.removeBillableRule(${i})">✕</button>
+                        </div>
+                        ${r.conditions.map((c, j) => {
+                            const fieldKeys = allowed.includes(c.field) ? allowed : [...allowed, c.field];
+                            const notApplicable = !allowed.includes(c.field);
+                            return `
+                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-left:24px;">
+                                <span class="tiny muted" style="width:30px;">${j === 0 ? 'If' : 'and'}</span>
+                                <select class="modal-input tiny" style="width:auto;" onchange="OL.setBillableCond(${i}, ${j}, 'field', this.value)">
+                                    ${fieldKeys.map((k) => `<option value="${k}" ${c.field === k ? 'selected' : ''}>${esc(defs[k]?.label || k)}${allowed.includes(k) ? '' : ' (tasks only)'}</option>`).join('')}
+                                </select>
+                                <select class="modal-input tiny" style="width:auto;" onchange="OL.setBillableCond(${i}, ${j}, 'op', this.value)">
+                                    ${Object.entries(ops).map(([k, l]) => `<option value="${k}" ${(c.op || 'equals') === k ? 'selected' : ''}>${l}</option>`).join('')}
+                                </select>
+                                ${OL._renderBillableValueControl(i, j, c)}
+                                ${r.conditions.length > 1 ? `<button class="btn tiny soft" title="Remove condition" onclick="OL.removeBillableCond(${i}, ${j})">✕</button>` : ''}
+                            </div>
+                            ${notApplicable ? `<div class="tiny" style="padding-left:60px; color:#f59e0b;">This field only exists on tasks, so this rule will never match an event.</div>` : ''}
+                            ${defs[c.field]?.hint ? `<div class="tiny muted" style="padding-left:60px;">${esc(defs[c.field].hint)}</div>` : ''}`;
+                        }).join('')}
+                        <div style="padding-left:24px;"><button class="btn tiny soft" onclick="OL.addBillableCond(${i})">+ And…</button></div>
+                    </div>`;
+                }).join('') : `<div class="tiny muted">No rules — everything is non-billable unless toggled by hand.</div>`}
             </div>
             <button class="btn tiny primary" onclick="OL.addBillableRule()"><i data-lucide="plus" style="width:11px;height:11px;"></i> Add Rule</button>
-            <div class="tiny muted" style="margin-top:14px;">Examples: <em>Request type is build → Billable</em> · <em>Task title contains internal → Non-billable</em> · <em>Project is General / Business Ops → Non-billable</em></div>
+            <div class="tiny muted" style="margin-top:14px;">Examples: <em>Tasks & events · Meeting category is Coaching Call → Billable</em> · <em>Tasks · Task type is Sphynx Task and Project status is any of Ongoing Maintenance, Ad Hoc Maintenance → Billable</em> · <em>Tasks · Title contains internal → Non-billable</em></div>
         </div>`;
 };
 
-OL._saveBillableRules = function() {
-    OL.persist();
+// rulesChanged=false for UI-only re-renders (opening a Custom… box).
+OL._saveBillableRules = function(rulesChanged = true) {
+    if (rulesChanged) {
+        OL.persist();
+        if (OL.scheduleEventBillableSweep) OL.scheduleEventBillableSweep();
+    }
     if (typeof OL.renderAutomationBuilder === 'function' && location.hash.includes('automations')) OL.renderAutomationBuilder();
 };
 OL.addBillableRule = function() {
-    state.master.billableRules.push({ id: 'br-' + Date.now(), field: 'requestType', op: 'equals', value: '', billable: true });
+    state.master.billableRules.push({ id: 'br-' + Date.now(), appliesTo: 'tasks', billable: true, conditions: [{ field: 'taskType', op: 'equals', value: '' }] });
     OL._saveBillableRules();
 };
-OL.updateBillableRule = function(i, key, value) {
-    const r = state.master.billableRules[i];
+OL.setBillableRuleProp = function(i, key, value) {
+    const r = OL._billableRuleAt(i);
     if (!r || r[key] === value) return;
-    r[key] = typeof value === 'string' ? value.trim() : value;
+    r[key] = value;
+    OL._saveBillableRules();
+};
+OL.addBillableCond = function(i) {
+    const r = OL._billableRuleAt(i);
+    if (!r) return;
+    const field = OL.billableFieldsForAppliesTo(r.appliesTo)[0] || 'title';
+    r.conditions.push({ field, op: 'equals', value: '' });
+    OL._saveBillableRules();
+};
+OL.removeBillableCond = function(i, j) {
+    const r = OL._billableRuleAt(i);
+    if (!r || r.conditions.length <= 1) return;
+    r.conditions.splice(j, 1);
+    OL._billableCustomOpen = {};
+    OL._saveBillableRules();
+};
+OL.setBillableCond = function(i, j, key, value) {
+    const r = OL._billableRuleAt(i);
+    const c = r?.conditions?.[j];
+    if (!c) return;
+    value = typeof value === 'string' ? value.trim() : value;
+    if (c[key] === value) return;
+    c[key] = value;
+    if (key === 'field') {                       // new field: its old value no longer fits
+        c.value = ''; c.values = [];
+        OL._billableCustomOpen[`${i}-${j}`] = false;
+    }
+    if (key === 'op') {                          // carry the value(s) across is / is any of
+        if (value === 'in') { c.values = c.values?.length ? c.values : (c.value ? [c.value] : []); }
+        else if (!c.value && c.values?.length) c.value = c.values[0];
+    }
+    OL._saveBillableRules();
+};
+OL.onBillableValueSelect = function(i, j, value) {
+    if (value === '__custom__') {
+        OL._billableCustomOpen[`${i}-${j}`] = true;
+        const c = OL._billableRuleAt(i)?.conditions?.[j];
+        if (c) c.value = '';
+        OL._saveBillableRules(false);
+        return;
+    }
+    OL._billableCustomOpen[`${i}-${j}`] = false;
+    OL.setBillableCond(i, j, 'value', value);
+};
+OL.onBillableMultiSelect = function(i, j, value) {
+    if (!value) return;
+    if (value === '__custom__') { OL._billableCustomOpen[`${i}-${j}`] = true; OL._saveBillableRules(false); return; }
+    OL.addBillableCondValue(i, j, value);
+};
+OL.addBillableCondValue = function(i, j, value) {
+    const c = OL._billableRuleAt(i)?.conditions?.[j];
+    const v = String(value || '').trim();
+    if (!c || !v) return;
+    c.values = c.values || [];
+    if (c.values.some((x) => lower(x) === lower(v))) return;
+    c.values.push(v);
+    OL._saveBillableRules();
+};
+OL.removeBillableCondValue = function(i, j, k) {
+    const c = OL._billableRuleAt(i)?.conditions?.[j];
+    if (!c?.values) return;
+    c.values.splice(k, 1);
     OL._saveBillableRules();
 };
 OL.removeBillableRule = function(i) {
     state.master.billableRules.splice(i, 1);
+    OL._billableCustomOpen = {};
     OL._saveBillableRules();
 };
 OL.moveBillableRule = function(i, dir) {
@@ -561,5 +712,6 @@ OL.moveBillableRule = function(i, dir) {
     const j = i + dir;
     if (j < 0 || j >= list.length) return;
     [list[i], list[j]] = [list[j], list[i]];
+    OL._billableCustomOpen = {};
     OL._saveBillableRules();
 };

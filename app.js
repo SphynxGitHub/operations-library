@@ -44,9 +44,14 @@ window.addEventListener("load", async () => {
     const allowed = await OL.initializeSecurityContext();
     if (!allowed) return;
 
-    // 2. Recall Client
+    // 2. Recall Client (a client login always stays on its own project)
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
-    if (savedClientId) state.activeClientId = savedClientId;
+    if (OL.isClientLogin()) {
+        state.activeClientId = state.loginClientId;
+        sessionStorage.setItem('lastActiveClientId', state.loginClientId);
+    } else if (savedClientId) {
+        state.activeClientId = savedClientId;
+    }
 
     // 3. Recall Visualizer depth
     state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
@@ -380,7 +385,13 @@ OL.renderSystemUtilityBar = function() {
 };
 
 // 📥 Export JSON Backup
+// Backup/Restore work on the whole workspace, so they are for Sphynx staff (admins and team members) only.
+function isStaffSession() {
+    return window.FORCE_ADMIN === true || state.adminMode === true || state.teamMemberMode === true;
+}
+
 OL.exportDatabaseBackup = function() {
+    if (!isStaffSession()) return;
     if (!state) return alert("System state unavailable for export.");
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
     const dlAnchor = document.createElement('a');
@@ -393,6 +404,7 @@ OL.exportDatabaseBackup = function() {
 
 // 📤 Import JSON Backup
 OL.importDatabaseBackup = function() {
+    if (!isStaffSession()) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -426,12 +438,13 @@ OL.renderSystemUtilityBar = function() {
             <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
             </button>
+            ${isStaffSession() ? `
             <button class="btn tiny soft" onclick="OL.exportDatabaseBackup()" title="Export JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="download" style="width:13px;height:13px;"></i> Backup
             </button>
             <button class="btn tiny soft" onclick="OL.importDatabaseBackup()" title="Restore JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="upload" style="width:13px;height:13px;"></i> Restore
-            </button>
+            </button>` : ''}
             <button class="btn tiny soft" onclick="if(confirm('Sign out?')) OL.signOut()" title="Sign Out" style="display:inline-flex; align-items:center; gap:4px; color:#ef4444;">
                 <i data-lucide="log-out" style="width:13px;height:13px;"></i> Sign Out
             </button>
@@ -486,9 +499,15 @@ window.buildLayout = function () {
     let homeAction = `OL.goToDashboard('#/business/dashboard')`;
     let showHome = true;
 
+    const clientLogin = OL.isClientLogin();
+
     if (isAdmin) {
         homeLabel = "Global Registry";
         homeAction = `OL.goToDashboard('#/business/dashboard')`;
+    } else if (clientLogin) {
+        // A client's home is their own project, never a dashboard or a partner's portfolio.
+        homeLabel = "Home";
+        homeAction = `window.location.hash='#/client-tasks'`;
     } else if (client && client.meta?.status === "Partner") {
         homeLabel = "My Portfolio";
         homeAction = `OL.goToDashboard('#/partner-dashboard')`;
@@ -644,13 +663,13 @@ window.buildLayout = function () {
                         <div class="client-profile-trigger" 
                             ${(isAdmin || effectiveAdminMode || state.teamMemberMode)
                                 ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"`
-                                : (!isPublic && client.meta?.partnerOwner)
+                                : (!isPublic && !clientLogin && client.meta?.partnerOwner)
                                     ? `onclick="OL.openPartnerClientModulesModal('${client.id}')" style="cursor:pointer;"`
                                     : `style="cursor:default;"`}>
                             <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                             <div class="client-info">
                                 <div class="client-name">${esc(client.meta.name)}</div>
-                                <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                                <div class="client-meta">${(!isPublic && !clientLogin) ? 'View Profile ⚙️' : 'Project Portal'}</div>
                             </div>
                         </div>
 
@@ -711,7 +730,7 @@ window.buildLayout = function () {
                                 if (item.key !== 'client-requests' && typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';
                         
                                 // 1. Always allow Client Requests OR check module flag
-                                const isModuleEnabled = item.key === 'client-requests' || effectiveAdminMode || state.teamMemberMode || (client.modules && client.modules[item.key] === true);
+                                const isModuleEnabled = effectiveAdminMode || state.teamMemberMode || OL.isClientModuleOn(client, item.key);
                                 if (!isModuleEnabled) return '';
                         
                                 // 2. Read-only / permission level check (view vs full edit)
@@ -791,6 +810,21 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
+    // A client login only ever sees its own project workspace.
+    if (OL.isClientLogin()) {
+        state.activeClientId = state.loginClientId;
+        const h = window.location.hash || "#/";
+        const staffOnly = h === "#/" || h === "#" || h === "#/clients" ||
+            h.includes("partner-dashboard") || h.startsWith("#/business") || h.startsWith("#/vault");
+        // A tab switched off in the project's profile can't be reached by URL either.
+        const own = state.clients[state.loginClientId];
+        const hiddenRequests = h.includes("client-requests") && !OL.isClientModuleOn(own, 'client-requests');
+        if (staffOnly || hiddenRequests) {
+            // replaceState so Back doesn't bounce them straight into the redirect again
+            history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/client-tasks`);
+        }
+    }
+
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
     

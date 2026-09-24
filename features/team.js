@@ -3,7 +3,97 @@
 // Owns: the team roster grid, the team member modal (roles, signature,
 // contact details, access section trigger), and team-to-scoping-item assignment.
 
-import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, db } from '../core/data.js';
+
+// ---------------- portal logins for this project's team members ----------------
+// Each team member on a partner's or client's project can have their own login (table project_logins,
+// see supabase/migrations/2026_09e_project_member_logins.sql). Every login on a project sees what the
+// project's View Profile settings allow. Only Sphynx staff invite or remove logins.
+const isStaff = () => !window.IS_GUEST && (window.FORCE_ADMIN === true || state.teamMemberMode === true || state.adminMode === true);
+OL._projectLogins = OL._projectLogins || {};
+
+async function loadProjectLogins(clientId) {
+    const slot = OL._projectLogins[clientId] = OL._projectLogins[clientId] || { rows: [], loaded: false };
+    slot.loading = true;
+    const { data, error } = await db.from('project_logins').select('id, member_id, setup_email, setup_token, auth_user_id, claimed_at').eq('client_id', clientId);
+    slot.rows = data || [];
+    slot.error = error ? (/project_logins/.test(error.message || '') ? 'Run 2026_09e_project_member_logins.sql in Supabase to turn on team member logins.' : error.message) : '';
+    slot.loaded = true; slot.loading = false;
+    return slot;
+}
+const loginFor = (clientId, memberId) => (OL._projectLogins[clientId]?.rows || []).find((r) => String(r.member_id) === String(memberId)) || null;
+
+function loginBadgeHtml(clientId, memberId) {
+    if (!isStaff()) return '';
+    const row = loginFor(clientId, memberId);
+    if (row?.auth_user_id) return '<span class="tiny bold" style="color:#48bb78;" title="Has a portal login">✅ Portal login</span>';
+    if (row?.setup_token) return '<span class="tiny bold" style="color:#fbbf24;" title="Setup link made, not used yet">⏳ Link sent</span>';
+    return '<span class="tiny muted">— No login</span>';
+}
+
+function memberLoginSectionHtml(client, member) {
+    if (!isStaff()) return '';
+    const slot = OL._projectLogins[client.id];
+    const row = loginFor(client.id, member.id);
+    const body = !slot?.loaded ? '<div class="tiny muted">Loading…</div>'
+        : slot.error ? `<div class="tiny" style="color:#f59e0b;">${esc(slot.error)}</div>`
+        : row?.auth_user_id ? `
+            <div class="tiny" style="color:#48bb78; margin-bottom:8px;">✅ ${esc(member.name)} has a login${row.claimed_at ? ` (since ${esc(new Date(row.claimed_at).toLocaleDateString())})` : ''}${row.setup_email ? ` · ${esc(row.setup_email)}` : ''}.</div>
+            <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.removeMemberLogin('${esc(client.id)}', '${esc(member.id)}')">Remove login</button>
+            <div class="tiny muted" style="margin-top:6px;">Removing it signs them out of this project for good; you can invite them again later.</div>`
+        : `
+            <div class="tiny ${row?.setup_token ? '' : 'muted'}" style="margin-bottom:8px; ${row?.setup_token ? 'color:#fbbf24;' : ''}">${row?.setup_token ? `⏳ Setup link made for ${esc(row.setup_email || '')}, not used yet.` : 'No login yet.'}</div>
+            <button class="btn tiny primary" style="width:100%;" onclick="OL.copyMemberSetupLink('${esc(client.id)}', '${esc(member.id)}')">${row?.setup_token ? 'Regenerate & Copy Setup Link' : 'Generate & Copy Setup Link'}</button>
+            <div id="member-link-${esc(member.id)}" class="tiny muted" style="margin-top:6px; word-break:break-all;">Uses the email above. They'll see everything this project's View Profile settings allow${client.meta?.status === 'Partner' ? ', including the clients this partner manages' : ''}.</div>`;
+    return `
+        <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);">
+                <i data-lucide="key-round" style="width:14px; height:14px;"></i> Portal Login
+            </label>
+            ${body}
+        </div>`;
+}
+
+export async function copyMemberSetupLink(clientId, memberId) {
+    if (!isStaff()) return;
+    const client = state.clients[clientId];
+    const member = client?.projectData?.teamMembers?.find((m) => String(m.id) === String(memberId));
+    if (!member) return;
+    const email = (document.getElementById(`tm-email-${memberId}`)?.value || member.email || '').trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { alert('Add an email address for this person first. The setup link is made for that email.'); return; }
+    if (email !== member.email) { member.email = email; persist(); }
+    const existing = loginFor(clientId, memberId);
+    if (existing?.auth_user_id) { alert('They already have a login.'); return; }
+    const token = crypto.randomUUID();
+    const { error } = await db.from('project_logins').upsert(
+        { client_id: clientId, member_id: String(memberId), setup_email: email, setup_token: token },
+        { onConflict: 'client_id,member_id' });
+    if (error) { alert(/project_logins/.test(error.message || '') ? 'Run 2026_09e_project_member_logins.sql in Supabase first.' : 'Could not make the link: ' + error.message); return; }
+    const url = new URL(`setup.html?login=${token}`, window.location.href).toString();
+    try { await navigator.clipboard.writeText(url); } catch (e) { /* shown below to copy by hand */ }
+    await loadProjectLogins(clientId);
+    openTeamMemberModal(memberId);
+    const el = document.getElementById(`member-link-${memberId}`);
+    if (el) el.innerHTML = `Copied. Send this to ${esc(email)} (it only works once, for that email):<br><span style="user-select:all; color:var(--text);">${esc(url)}</span>`;
+    renderTeamManagerQuietly();
+}
+
+export async function removeMemberLogin(clientId, memberId) {
+    if (!isStaff()) return;
+    const member = state.clients[clientId]?.projectData?.teamMembers?.find((m) => String(m.id) === String(memberId));
+    if (!confirm(`Remove ${member?.name || 'this person'}'s portal login? They'll no longer be able to open this project.`)) return;
+    const { error } = await db.from('project_logins').delete().eq('client_id', clientId).eq('member_id', String(memberId));
+    if (error) { alert('Could not remove the login: ' + error.message); return; }
+    await loadProjectLogins(clientId);
+    openTeamMemberModal(memberId);
+    renderTeamManagerQuietly();
+}
+
+function renderTeamManagerQuietly() {
+    if (String(window.location.hash).includes('team') && document.getElementById('mainContent')) {
+        try { renderTeamManager(); } catch (e) { /* the page moved on */ }
+    }
+}
 
 export function renderTeamManager() {
     if (typeof OL.registerView === 'function') OL.registerView(renderTeamManager);
@@ -13,6 +103,9 @@ export function renderTeamManager() {
 
     if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
     const members = client.projectData.teamMembers;
+    if (isStaff() && !OL._projectLogins[client.id]?.loaded && !OL._projectLogins[client.id]?.loading) {
+        loadProjectLogins(client.id).then(() => renderTeamManagerQuietly());
+    }
 
     const memberCardsHtml = members
         .map((m) => {
@@ -64,6 +157,7 @@ export function renderTeamManager() {
                       </div>` : ''}
                   </div>
               </div>
+              ${isStaff() ? `<div style="border-top:1px solid var(--line); padding-top:8px;">${loginBadgeHtml(client.id, m.id)}</div>` : ''}
           </div>
       `;
         })
@@ -104,6 +198,7 @@ export function renderTeamManager() {
                         <div class="pills-row" style="margin:0;gap:4px;">
                             ${(m.roles||[]).map(r=>`<span class="pill tiny soft" style="font-size:9px;">${esc(r)}</span>`).join('')}
                         </div>
+                        ${loginBadgeHtml(client.id, m.id)}
                         <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.removeTeamMember('${m.id}')">
                             <i data-lucide="x" style="width:12px;height:12px;"></i>
                         </button>
@@ -187,8 +282,13 @@ export function updateTeamMember(memberId, field, value) {
 }
 
 export function removeTeamMember(memberId) {
-    if (!confirm("Remove this team member?")) return;
     const client = getActiveClient();
+    const hasLogin = !!loginFor(client?.id, memberId)?.auth_user_id;
+    if (!confirm(hasLogin ? "Remove this team member? Their portal login will be removed too." : "Remove this team member?")) return;
+    if (isStaff() && client) {
+        db.from('project_logins').delete().eq('client_id', client.id).eq('member_id', String(memberId))
+            .then(({ error }) => { if (error && !/project_logins/.test(error.message || '')) console.warn('Could not remove their login:', error.message); loadProjectLogins(client.id); });
+    }
     client.projectData.teamMembers = client.projectData.teamMembers.filter(
         (m) => m.id !== memberId,
     );
@@ -297,6 +397,9 @@ export function openTeamMemberModal(memberId, draftObj = null) {
                 </div>
             </div>
 
+            <!-- PORTAL LOGIN (staff only) -->
+            ${client ? memberLoginSectionHtml(client, member) : ''}
+
             <!-- SYSTEM ACCESS & CREDENTIALS SECTION -->
             ${typeof OL.renderAccessSection === 'function' ? OL.renderAccessSection(memberId, "member") : ''} 
         </div>
@@ -304,6 +407,9 @@ export function openTeamMemberModal(memberId, draftObj = null) {
 
     if (typeof openModal === 'function') openModal(html);
     else if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(html);
+    if (client && isStaff() && !OL._projectLogins[client.id]?.loaded) {
+        loadProjectLogins(client.id).then(() => { if (document.getElementById(`tm-email-${member.id}`)) openTeamMemberModal(memberId, draftObj); });
+    }
 
     if (window.lucide) {
         window.lucide.createIcons();
@@ -474,7 +580,8 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
     openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
-    removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap
+    removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap,
+    copyMemberSetupLink, removeMemberLogin
 });
 
 window.renderTeamManager = renderTeamManager;

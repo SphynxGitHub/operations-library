@@ -15,7 +15,10 @@
 // export), so the dead first definition was dropped — this changes
 // nothing about actual behavior, since it never ran anyway.
 
-import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, loadFullClient, markClientDirty } from '../core/data.js';
+import {
+    parseClickUpMinutes, parseClickUpDate, parseClickUpAssignees, parseClickUpBillable, applyImportedTime, guessClientFromFileName,
+} from '../core/clickup-import.js';
 import { importFrom, secureEntry } from '../core/secrets.js';
 
 //======================= CLICKUP CSV IMPORT =======================//
@@ -39,38 +42,7 @@ function guessColumn(fields, candidates) {
     return '';
 }
 
-function parseClickUpTimeToHours(raw) {
-    if (!raw) return 0;
-    const s = String(raw).trim();
-    if (!s) return 0;
-    let m = s.match(/(\d+)\s*h(?:ours?)?\s*(?:(\d+)\s*m)?/i);
-    if (m) {
-        const h = parseInt(m[1], 10) || 0;
-        const min = parseInt(m[2], 10) || 0;
-        return +(h + min / 60).toFixed(2);
-    }
-    m = s.match(/^(\d+):(\d{2})$/);
-    if (m) return +(parseInt(m[1], 10) + parseInt(m[2], 10) / 60).toFixed(2);
-    const n = Number(s.replace(/,/g, ''));
-    // ClickUp's raw/unformatted time fields are milliseconds.
-    if (!isNaN(n)) return +(n / 3600000).toFixed(2);
-    return 0;
-}
-
-function parseClickUpDate(raw) {
-    if (!raw) return '';
-    const s = String(raw).trim();
-    if (!s) return '';
-    if (/^\d+$/.test(s)) {
-        const n = Number(s);
-        const ms = s.length <= 10 ? n * 1000 : n; // seconds vs ms epoch
-        const d = new Date(ms);
-        if (!isNaN(d)) return d.toISOString().slice(0, 10);
-    }
-    const d = new Date(s);
-    if (!isNaN(d)) return d.toISOString().slice(0, 10);
-    return '';
-}
+// Time, date, assignee and billable parsing live in core/clickup-import.js.
 
 function parseClickUpComments(raw) {
     if (!raw) return [];
@@ -192,7 +164,10 @@ export function handleClickUpCSVFile(inputEl) {
                     status: guessColumn(fields, ['Status']),
                     assignee: guessColumn(fields, ['Assignees', 'Assignee']),
                     dueDate: guessColumn(fields, ['Due Date']),
-                    timeSpent: guessColumn(fields, ['Time Spent', 'Time Tracked', 'Time Logged']),
+                    startDate: guessColumn(fields, ['Start Date']),
+                    // The task's own time, never the "Rolled Up" column (that repeats the subtasks' time on the parent).
+                    timeSpent: fields.find(f => /^(time spent|time tracked|time logged)$/i.test(f.trim())) || guessColumn(fields.filter(f => !/rolled/i.test(f)), ['Time Spent', 'Time Tracked', 'Time Logged']),
+                    billable: guessColumn(fields, ['Billable']),
                     comments: guessColumn(fields, ['Comments']),
                     description: guessColumn(fields, ['Description', 'Task Content', 'Content']),
                     parentId: guessColumn(fields, ['Parent ID', 'Parent'])
@@ -200,7 +175,10 @@ export function handleClickUpCSVFile(inputEl) {
                 routingColumn: '',
                 routingMap: {},
                 targetMode: 'single',
-                targetClientId: state.activeClientId || ''
+                // A per-client export is named after the client (e.g. "..._Mason_Associates_LLC.csv").
+                targetClientId: guessClientFromFileName(file.name, Object.values(state.clients || {})) || state.activeClientId || '',
+                onlyWithTime: true,
+                markNewDone: true
             };
             OL.renderClickUpImportStep();
         },
@@ -224,7 +202,9 @@ export function renderClickUpImportStep() {
                 ${fieldSelectHTML(st, 'status', 'Status')}
                 ${fieldSelectHTML(st, 'assignee', 'Assignee')}
                 ${fieldSelectHTML(st, 'dueDate', 'Due Date')}
-                ${fieldSelectHTML(st, 'timeSpent', 'Time Spent (Tracked Time)')}
+                ${fieldSelectHTML(st, 'startDate', 'Start Date (dates the time if no due date)')}
+                ${fieldSelectHTML(st, 'timeSpent', 'Time Spent (own time, not Rolled Up)')}
+                ${fieldSelectHTML(st, 'billable', 'Billable')}
                 ${fieldSelectHTML(st, 'comments', 'Comments')}
                 ${fieldSelectHTML(st, 'description', 'Description')}
                 ${fieldSelectHTML(st, 'parentId', 'Parent Task ID (subtasks)')}
@@ -232,6 +212,18 @@ export function renderClickUpImportStep() {
         </div>
 
         ${renderTargetSection(st)}
+
+        <div class="card" style="padding:14px; margin-top:16px;">
+            <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                <input type="checkbox" ${st.onlyWithTime ? 'checked' : ''} onchange="OL._clickupImportState.onlyWithTime = this.checked; OL.renderClickUpImportStep()">
+                Only import rows that have time logged
+            </label>
+            <label class="tiny" style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" ${st.markNewDone ? 'checked' : ''} onchange="OL._clickupImportState.markNewDone = this.checked">
+                Mark new tasks as Done when the file has no status (historical work)
+            </label>
+            <div id="clickup-time-summary" class="tiny" style="margin-top:10px;">${clickUpTimeSummaryHTML(st)}</div>
+        </div>
 
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
@@ -244,6 +236,28 @@ export function renderClickUpImportStep() {
 export function setClickUpMapping(key, value) {
     if (!OL._clickupImportState) return;
     OL._clickupImportState.mapping[key] = value;
+    const el = document.getElementById('clickup-time-summary');
+    if (el) el.innerHTML = clickUpTimeSummaryHTML(OL._clickupImportState);
+}
+
+// What the time mapping will bring in, so it can be checked against ClickUp before running.
+function rowDate(st, row) {
+    const m = st.mapping;
+    return (m.dueDate ? parseClickUpDate(row[m.dueDate]) : '') || (m.startDate ? parseClickUpDate(row[m.startDate]) : '');
+}
+function clickUpTimeSummaryHTML(st) {
+    const m = st.mapping;
+    if (!m.timeSpent) return '<span class="muted">No time column mapped: tasks import without time.</span>';
+    const timed = st.rows.filter(r => parseClickUpMinutes(r[m.timeSpent]) > 0);
+    const total = timed.reduce((sum, r) => sum + parseClickUpMinutes(r[m.timeSpent]), 0);
+    const undated = timed.filter(r => !rowDate(st, r));
+    const undatedMin = undated.reduce((sum, r) => sum + parseClickUpMinutes(r[m.timeSpent]), 0);
+    const fmt = (min) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
+    const dates = timed.map(r => rowDate(st, r)).filter(Boolean).sort();
+    return `<strong>${timed.length}</strong> row${timed.length === 1 ? '' : 's'} with time, <strong>${fmt(total)}</strong> total`
+        + (dates.length ? ` <span class="muted">(${esc(dates[0])} to ${esc(dates[dates.length - 1])})</span>` : '')
+        + (undated.length ? `<div class="muted" style="margin-top:4px;">${undated.length} of them (${fmt(undatedMin)}) have no due or start date, so their time won't count toward any maintenance plan period: ${undated.slice(0, 5).map(r => esc(r[m.title] || '')).join(', ')}${undated.length > 5 ? '…' : ''}</div>` : '')
+        + (st.onlyWithTime ? `<div class="muted" style="margin-top:4px;">${st.rows.length - timed.length} rows without time will be skipped.</div>` : '');
 }
 
 export function setClickUpTargetMode(mode) {
@@ -279,9 +293,15 @@ export async function runClickUpImport() {
     if (st.targetMode === 'single' && !st.targetClientId) { alert('Please select a target client project.'); return; }
     if (st.targetMode === 'auto' && !st.routingColumn) { alert('Please select a routing column.'); return; }
 
-    let created = 0, updated = 0, skipped = 0;
+    let created = 0, updated = 0, skipped = 0, noTime = 0, minutesIn = 0;
     const idMapByClient = {};      // clientId -> { clickupTaskId -> ourTaskId }
     const pendingParents = [];     // { clientId, ourTaskId, clickupParentId }
+    const touched = new Set();
+
+    // Make sure every target project is fully loaded first, so the import adds to its tasks instead of
+    // starting from an empty list.
+    const targets = st.targetMode === 'single' ? [st.targetClientId] : [...new Set(Object.values(st.routingMap || {}).filter(Boolean))];
+    for (const id of targets) await loadFullClient(id);
 
     st.rows.forEach(row => {
         let clientId = st.targetClientId;
@@ -291,46 +311,58 @@ export async function runClickUpImport() {
         }
         if (!clientId || !state.clients[clientId]) { skipped++; return; }
 
+        const title = (row[m.title] || '').trim();
+        if (!title) { skipped++; return; }
+
+        const minutes = m.timeSpent ? parseClickUpMinutes(row[m.timeSpent]) : 0;
+        if (st.onlyWithTime && m.timeSpent && minutes <= 0) { noTime++; return; }
+
         const client = state.clients[clientId];
         if (!client.projectData) client.projectData = {};
         if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
 
-        const title = (row[m.title] || '').trim();
-        if (!title) { skipped++; return; }
-
         const clickupId = m.taskId ? (row[m.taskId] || '').trim() : '';
         const externalId = clickupId ? `cu-${clickupId}` : '';
+        const assignees = m.assignee ? parseClickUpAssignees(row[m.assignee]) : [];
+        const dueDate = m.dueDate ? parseClickUpDate(row[m.dueDate]) : '';
+        const startDate = m.startDate ? parseClickUpDate(row[m.startDate]) : '';
 
         const taskData = {
             title, name: title,
-            assignee: m.assignee ? ((row[m.assignee] || '').split(',')[0].trim() || 'Sphynx Task') : 'Sphynx Task',
-            dueDate: m.dueDate ? parseClickUpDate(row[m.dueDate]) : '',
-            loggedHours: m.timeSpent ? parseClickUpTimeToHours(row[m.timeSpent]) : 0,
-            clickupComments: m.comments ? parseClickUpComments(row[m.comments]) : [],
+            assignee: assignees[0] || 'Sphynx Task',
+            dueDate,
             description: m.description ? (row[m.description] || '').trim() : '',
             source: 'clickup'
         };
+        if (m.comments) taskData.clickupComments = parseClickUpComments(row[m.comments]);
+        if (startDate) taskData.startDate = startDate;
         const statusVal = m.status ? (row[m.status] || '').trim() : '';
         if (statusVal) taskData.status = statusVal;
+        const billable = m.billable ? parseClickUpBillable(row[m.billable]) : null;
+        if (billable !== null) taskData.billable = billable;
         if (externalId) taskData.externalId = externalId;
 
-        let taskObj;
-        if (externalId) {
-            const existingIdx = client.projectData.clientTasks.findIndex(t => t.externalId === externalId);
-            if (existingIdx > -1) {
-                taskObj = client.projectData.clientTasks[existingIdx];
-                Object.assign(taskObj, taskData);
-                updated++;
-            } else {
-                taskObj = { id: uid(), createdAt: new Date().toISOString(), isClientTask: false, ...taskData };
-                client.projectData.clientTasks.push(taskObj);
-                created++;
-            }
+        let taskObj = externalId ? client.projectData.clientTasks.find(t => t.externalId === externalId) : null;
+        if (taskObj) {
+            Object.assign(taskObj, taskData);
+            updated++;
         } else {
-            taskObj = { id: uid(), createdAt: new Date().toISOString(), isClientTask: false, ...taskData };
+            // Dated from ClickUp so reports filtered by date put it in the right month, not the import day.
+            const when = startDate || dueDate;
+            taskObj = {
+                id: uid(), createdAt: when ? `${when}T12:00:00` : new Date().toISOString(), isClientTask: false,
+                ...(st.markNewDone && !statusVal ? { status: 'Done', ...(when ? { completedAt: `${dueDate || startDate}T12:00:00` } : {}) } : {}),
+                ...taskData
+            };
             client.projectData.clientTasks.push(taskObj);
             created++;
         }
+
+        if (m.timeSpent) {
+            applyImportedTime(taskObj, { clickupId: clickupId || taskObj.id, minutes, date: dueDate || startDate, by: assignees.join(', ') });
+            minutesIn += minutes;
+        }
+        touched.add(clientId);
 
         if (clickupId) {
             if (!idMapByClient[clientId]) idMapByClient[clientId] = {};
@@ -351,10 +383,13 @@ export async function runClickUpImport() {
         }
     });
 
+    touched.forEach(id => markClientDirty(id));      // persist() only saves the open project unless told otherwise
     await OL.persist();
     OL.closeModal();
     if (typeof window.renderClientTaskManager === 'function' && state.activeClientId) window.renderClientTaskManager();
-    alert(`✅ ClickUp Import Complete\nCreated: ${created}\nUpdated: ${updated}\nSkipped (unmapped/blank): ${skipped}`);
+    const h = Math.floor(minutesIn / 60), mm = minutesIn % 60;
+    alert(`✅ ClickUp Import Complete\nCreated: ${created}\nUpdated: ${updated}\nTime imported: ${h}h ${String(mm).padStart(2, '0')}m`
+        + (noTime ? `\nSkipped (no time logged): ${noTime}` : '') + (skipped ? `\nSkipped (unmapped/blank): ${skipped}` : ''));
 }
 
 export function processZapLogic(zap, isMaster = false) {

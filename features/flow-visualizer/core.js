@@ -221,14 +221,17 @@ export function initWBMotion(e, id) {
 };
     
 // Add this near your other event listeners
+// Resizing only moves things on screen, so it redraws once the resize settles. It used to save the
+// whole workspace and rebuild the map on EVERY resize event (the debounce timer name had a typo, so
+// nothing was ever cancelled): dragging a window edge or opening DevTools queued dozens of full
+// saves + redraws and froze the page.
 window.addEventListener('resize', () => {
-    if (window.location.hash.includes('visualizer')) {
-        // Debounce this if you want to be extra performant
-        clearTimeout(window.resizeSnapTimer);
-        window.resizeSnapSnapTimer = setTimeout(() => {
-            OL.autoAlignNodes();
-        }, 200);
-    }
+    if (!window.location.hash.includes('visualizer')) return;
+    clearTimeout(window.resizeSnapTimer);
+    window.resizeSnapTimer = setTimeout(() => {
+        if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+        if (typeof OL.drawConnections === 'function') OL.drawConnections();
+    }, 250);
 });
 
 export async function handleCanvasDrop(e) {
@@ -348,7 +351,7 @@ export async function autoAlignNodes() {
         if (depth === 'step') {
             // Flatten all steps into a single list for this stage
             stageResources.forEach(res => {
-                res.steps.forEach((step, idx) => {
+                (res.steps || []).forEach((step, idx) => {
                     nodesToAlign.push({
                         ...step,
                         parentId: res.id,
@@ -1560,11 +1563,11 @@ export function _fvComputeLayout(resources, stageFilter) {
   const workflows = OL.getWorkflows() || [];
   const orderedIds = workflows.flatMap(w => w.resourceIds || []);
 
+  const resById = new Map(resources.map(r => [String(r.id), r]));
+  const orderedSet = new Set(orderedIds.map(String));
   const sortedResources = [
-    ...orderedIds
-        .map(id => resources.find(r => String(r.id) === String(id)))
-        .filter(Boolean),
-    ...resources.filter(r => !orderedIds.map(String).includes(String(r.id)))
+    ...[...orderedSet].map(id => resById.get(id)).filter(Boolean),
+    ...resources.filter(r => !orderedSet.has(String(r.id)))
   ];
 
   sortedResources.forEach(res => {
@@ -1595,11 +1598,8 @@ export function _fvComputeLayout(resources, stageFilter) {
       if (lastH === -1) return;
       const tResId  = out.targetId.substring(0, lastH);
       const tStepId = out.targetId.substring(lastH + 1);
-      // Find matching step
-      const toEntry = allSteps.find(e =>
-        String(e.res.id) === String(tResId) &&
-        String(e.step.id) === String(tStepId)
-      );
+      // Find matching step (map lookup; scanning every step for every link was O(steps x links))
+      const toEntry = stepMap[`${tResId}-${tStepId}`];
       if (toEntry && outEdges[fromId]) {
         outEdges[fromId].push(toEntry.fullId);
         inDegree[toEntry.fullId] = (inDegree[toEntry.fullId] || 0) + 1;
@@ -1613,8 +1613,8 @@ export function _fvComputeLayout(resources, stageFilter) {
     .map(e => ({ id: e.fullId, col: 0 }));
 
   const visited = new Set();
-  while (queue.length > 0) {
-    const { id, col } = queue.shift();
+  for (let qi = 0; qi < queue.length; qi++) {   // index walk: shift() re-copies the whole queue each time
+    const { id, col } = queue[qi];
     if (visited.has(id)) continue;
     visited.add(id);
     const entry = stepMap[id];
@@ -1969,6 +1969,10 @@ export function _fvToggleCardSteps(resId) {
   OL._fvSyncRailHeights();
 };
 
+// Heights of step cards, measured once per render. Card positions are set by the code itself (style
+// left/top), so lines can be placed from these numbers without asking the browser to lay the page out.
+const _fvStepHeights = new WeakMap();
+
 export function _fvRenderSteps(resources) {
   const canvas    = document.getElementById('fv-content');
   const svg       = document.getElementById('fv-svg-layer');
@@ -1979,6 +1983,8 @@ export function _fvRenderSteps(resources) {
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
+  // Everything is built off-page and added in one step just before measuring.
+  const frag = document.createDocumentFragment();
 
   // Persist which consolidated cards are open across re-renders
   if (!OL._fv.expandedGroups) OL._fv.expandedGroups = new Set();
@@ -2117,7 +2123,7 @@ export function _fvRenderSteps(resources) {
         width:200px;height:100px;border-radius:14px;
         background:rgba(255,255,255,0.016);border:1px solid rgba(255,255,255,0.05);
         pointer-events:none;`;
-      canvas.appendChild(stageBgEl);
+      frag.appendChild(stageBgEl);
 
       stageLblEl = document.createElement('div');
       stageLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${stageTop + 10}px;
@@ -2126,7 +2132,7 @@ export function _fvRenderSteps(resources) {
         text-overflow:ellipsis;max-width:260px;cursor:default;`;
       stageLblEl.textContent = stage.name;
       stageLblEl.title = stage.name;
-      canvas.appendChild(stageLblEl);
+      frag.appendChild(stageLblEl);
     }
 
     const stageContentTop = stageTop + ZONE_PAD + (stage ? ZONE_HDR : 0);
@@ -2156,7 +2162,7 @@ export function _fvRenderSteps(resources) {
         width:${wfWidth + 4}px;height:100px;border-radius:10px;
         background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.038);
         pointer-events:none;`;
-      canvas.appendChild(wfBgEl);
+      frag.appendChild(wfBgEl);
 
       const wfLblEl = document.createElement('div');
       wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;
@@ -2165,7 +2171,7 @@ export function _fvRenderSteps(resources) {
         text-overflow:ellipsis;max-width:${wfWidth - 10}px;cursor:default;`;
       wfLblEl.textContent = workflow.name;
       wfLblEl.title = workflow.name;
-      canvas.appendChild(wfLblEl);
+      frag.appendChild(wfLblEl);
 
       const wfContentTop = wfY + WF_PAD + WF_HDR;
 
@@ -2184,7 +2190,7 @@ export function _fvRenderSteps(resources) {
                 style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                        letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
                        text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
-        canvas.appendChild(hdrEl);
+        frag.appendChild(hdrEl);
         resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
       });
 
@@ -2242,16 +2248,10 @@ export function _fvRenderSteps(resources) {
                     </div>
                   </div>
                 </div>
-                <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
-                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
-                <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
-                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
-                <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
-                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
-                <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
-                     onmousedown="event.stopPropagation();OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>`;
+                <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
+                     showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
               OL._fvSetupCardDrag(div, res.id, step.id);
-              canvas.appendChild(div);
+              frag.appendChild(div);
               sectionCards.push({ res, step, el: div, idx });
             });
           });
@@ -2317,7 +2317,7 @@ export function _fvRenderSteps(resources) {
                 </div>`;
               }).join('')}
             </div>`;
-          canvas.appendChild(consolEl);
+          frag.appendChild(consolEl);
 
           // Invisible anchor divs so _fvDrawStepConnections can find consolidated member steps.
           // data-consol-card-id lets drawConnections use the real card rect when this is the SOURCE.
@@ -2327,7 +2327,7 @@ export function _fvRenderSteps(resources) {
             anchor.id = `fv-step-${m.res.id}-${m.step.id}`;
             anchor.dataset.consolCardId = consolEl.id;
             anchor.style.cssText = `position:absolute;left:${Math.round(consolCenterX - 1)}px;top:${cardY}px;width:2px;height:1px;pointer-events:none;opacity:0;`;
-            canvas.appendChild(anchor);
+            frag.appendChild(anchor);
             consolAnchors.push(anchor);
           });
 
@@ -2346,8 +2346,22 @@ export function _fvRenderSteps(resources) {
     currentY = wfY + STAGE_GAP;
   });
 
+  canvas.appendChild(frag);
+
   // ── Measurement pass ─────────────────────────────────────────────────────────
   requestAnimationFrame(() => {
+    // Read every card's height up front. Card heights don't depend on where they're placed, and
+    // reading a height right after moving another card forces the browser to re-lay out the whole
+    // map; interleaving the two for every card is what made this view take so long to appear.
+    const _heights = new Map();
+    canvas.querySelectorAll('.fv-step-card').forEach(el => _heights.set(el, el.offsetHeight));
+    stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ seqMeta }) => (seqMeta || []).forEach(item => {
+      if (item.type === 'consolidated' && item.el && !_heights.has(item.el)) _heights.set(item.el, item.el.offsetHeight);
+      (item.sectionCards || []).forEach(sc => { if (sc.el && !_heights.has(sc.el)) _heights.set(sc.el, sc.el.offsetHeight); });
+    })));
+    const hOf = (el) => (_heights.has(el) ? _heights.get(el) : el.offsetHeight);
+    _heights.forEach((h, el) => _fvStepHeights.set(el, h));   // the line drawer reuses these
+
     let curStageY = PAD_Y;
 
     stageMeta.forEach(({ stageBgEl, stageLblEl, stage, stageTop, wfMetaList }) => {
@@ -2387,7 +2401,7 @@ export function _fvRenderSteps(resources) {
             const naturalTopY = new Map(); // el → top Y from simple stacking
             byRes.forEach(cards => {
               let ry = y;
-              cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += el.offsetHeight + STEP_GAP; });
+              cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += hOf(el) + STEP_GAP; });
             });
 
             // Pass 2: for each cross-resource outbound link within this section,
@@ -2398,7 +2412,7 @@ export function _fvRenderSteps(resources) {
                 if (!link.targetId || link._implicit) return;
                 const targetCard = cardByKey.get(String(link.targetId));
                 if (!targetCard || targetCard.res === sc.res) return; // same resource, skip
-                const srcBottom = naturalTopY.get(sc.el) + sc.el.offsetHeight;
+                const srcBottom = naturalTopY.get(sc.el) + hOf(sc.el);
                 const prev = minY.get(targetCard.el) || 0;
                 minY.set(targetCard.el, Math.max(prev, srcBottom));
               });
@@ -2412,7 +2426,7 @@ export function _fvRenderSteps(resources) {
                 const constraint = minY.get(el);
                 if (constraint !== undefined && constraint > ry) ry = constraint;
                 if (!step.pinned) { el.style.top = ry + 'px'; step.coords.y = ry; }
-                ry += el.offsetHeight + STEP_GAP;
+                ry += hOf(el) + STEP_GAP;
               });
               maxBottom = Math.max(maxBottom, ry - STEP_GAP);
             });
@@ -2428,7 +2442,7 @@ export function _fvRenderSteps(resources) {
               anchor.style.left = Math.round(item.consolCenterX - 1) + 'px';
             });
             item.members.forEach(m => { m.step.coords.y = y; });
-            y += item.el.offsetHeight + STEP_GAP * 2;
+            y += hOf(item.el) + STEP_GAP * 2;
             wfBottom = Math.max(wfBottom, y - STEP_GAP);
           }
         });
@@ -2450,8 +2464,8 @@ export function _fvRenderSteps(resources) {
     });
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
-    const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
-    const maxY = Math.max(...allCards.map(el => (parseFloat(el.style.top)||0) + el.offsetHeight + 60), 600);
+    const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
+    const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + hOf(el) + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
     canvas.style.height = maxY + 'px';
 
@@ -2491,7 +2505,10 @@ export function _fvDrawStepConnections(resources) {
   const canvas = document.getElementById('fv-content');
   if (!svg || !canvas) return;
 
-  const cRect = canvas.getBoundingClientRect();
+  // Card boxes come from the positions/sizes the view itself set, in the same coordinates the SVG
+  // uses. (Reading them from the browser forced a full layout of ~24k elements, and at zoom levels
+  // other than 100% the scaled numbers didn't match the SVG's coordinates anyway.)
+  const cRect = { left: 0, top: 0 };
 
   svg.innerHTML = `
     <defs>
@@ -2512,6 +2529,26 @@ export function _fvDrawStepConnections(resources) {
 
   const group = document.getElementById('fv-lines');
 
+  // Measure each card once and add every line in one batch at the end. Measuring right after adding a
+  // line forced the browser to re-lay out the whole map per line; with every step linked, that was one
+  // full re-layout per step and the step view froze on larger projects.
+  const frag = document.createDocumentFragment();
+  const rectCache = new Map();
+  const rectOf = (el) => {
+    let r = rectCache.get(el);
+    if (!r) {
+      const left = parseFloat(el.style.left) || 0, top = parseFloat(el.style.top) || 0;
+      const width = parseFloat(el.style.width) || (el.classList.contains('fv-step-card') ? 180 : 0);
+      let height = _fvStepHeights.get(el);
+      if (height === undefined) height = parseFloat(el.style.height) || el.offsetHeight;
+      r = { left, top, width, height, right: left + width, bottom: top + height };
+      rectCache.set(el, r);
+    }
+    return r;
+  };
+  const elById = new Map();
+  canvas.querySelectorAll('[id^="fv-step-"], [id^="fv-consol-"]').forEach(el => elById.set(el.id, el));
+
   resources.forEach(sourceRes => {
     (sourceRes.steps || []).forEach((sourceStep, sourceIdx) => {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
@@ -2525,20 +2562,15 @@ export function _fvDrawStepConnections(resources) {
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
 
-        const fromElRaw = document.getElementById(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        const fromElRaw = elById.get(`fv-step-${sourceRes.id}-${sourceStep.id}`);
         // If fromEl is a consolidated anchor (tiny proxy div), use the real card for exit coords
-        const fromEl = (fromElRaw?.dataset.consolCardId && document.getElementById(fromElRaw.dataset.consolCardId)) || fromElRaw;
-        const toEl   = document.getElementById(
-          `fv-step-${tResId}-${tStepId}` ||
-          // fallback: find by resId + step index if id-based lookup fails
-          Array.from(document.querySelectorAll(`[data-res-id="${tResId}"]`))
-            .find(el => el.dataset.stepId === tStepId)?.id
-        );
+        const fromEl = (fromElRaw?.dataset.consolCardId && elById.get(fromElRaw.dataset.consolCardId)) || fromElRaw;
+        const toEl   = elById.get(`fv-step-${tResId}-${tStepId}`);
 
         if (!fromEl || !toEl) return;
 
-        const fRect = fromEl.getBoundingClientRect();
-        const tRect = toEl.getBoundingClientRect();
+        const fRect = rectOf(fromEl);
+        const tRect = rectOf(toEl);
 
         // Determine best anchor based on relative positions
         const fx_center = fRect.left - cRect.left + fRect.width / 2;
@@ -2608,7 +2640,7 @@ export function _fvDrawStepConnections(resources) {
         path.setAttribute('marker-end', isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
         if (isImplicit) path.setAttribute('stroke-dasharray', '4,4');
         else if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
-        group.appendChild(path);
+        frag.appendChild(path);
 
         // Logic icon on line midpoint (implicit links get no icon)
         const hasRule  = !isImplicit && outRule.rule?.trim();
@@ -2624,7 +2656,7 @@ export function _fvDrawStepConnections(resources) {
           bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
           bg.setAttribute('fill', '#fff');
           bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
-          group.appendChild(bg);
+          frag.appendChild(bg);
 
           const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
@@ -2635,7 +2667,7 @@ export function _fvDrawStepConnections(resources) {
           txt.setAttribute('font-family', 'DM Sans, sans-serif');
           txt.setAttribute('pointer-events', 'none');
           txt.textContent = iconChar;
-          group.appendChild(txt);
+          frag.appendChild(txt);
 
           // Tooltip on hover showing the rule/delay
           if (hasRule || hasDelay) {
@@ -2649,6 +2681,7 @@ export function _fvDrawStepConnections(resources) {
       });
     });
   });
+  group.appendChild(frag);
 };
 
 export function _fvSetupCardDrag(el, resId, stepId) {
@@ -2694,10 +2727,15 @@ export function _fvSetupCardDrag(el, resId, stepId) {
       el.style.left = newX + 'px';
       el.style.top  = newY + 'px';
 
-      // Redraw connections live
-      const data = OL.getCurrentProjectData();
-      const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-      OL._fvDrawStepConnections(resources);
+      // Redraw connections live (at most once per frame; mousemove fires far more often)
+      if (!el._fvLineFrame) {
+        el._fvLineFrame = requestAnimationFrame(() => {
+          el._fvLineFrame = null;
+          const data = OL.getCurrentProjectData();
+          const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
+          OL._fvDrawStepConnections(resources);
+        });
+      }
     };
 
     const onUp = async () => {
@@ -2771,23 +2809,28 @@ export function _fvJumpToLane(stageId) {
 };
 
 // Sync rail label heights to their matching swimlane
+let _fvRailSyncPending = false;
 export function _fvSyncRailHeights() {
+  // A single render asked for this 2-3 times (each redrawing every connection); once per frame is enough.
+  if (_fvRailSyncPending) return;
+  _fvRailSyncPending = true;
   requestAnimationFrame(() => {
+    _fvRailSyncPending = false;
     const data = OL.getCurrentProjectData();
     const stages = [
       ...(data.stages || []),
       { id: '__none__', name: 'Unassigned' }
     ];
 
-    stages.forEach(stage => {
-      const lane = document.getElementById(`fv-lane-${stage.id}`);
-      const rail = document.getElementById(`fv-rail-${stage.id}`);
-      if (lane && rail) {
-        // +1 for the border-bottom
-        const h = lane.offsetHeight + 1;
-        rail.style.height    = h + 'px';
-        rail.style.minHeight = h + 'px';
-      }
+    // Read every height first, then write, so the page is laid out once instead of once per stage.
+    const pairs = stages.map(stage => ({
+      lane: document.getElementById(`fv-lane-${stage.id}`),
+      rail: document.getElementById(`fv-rail-${stage.id}`)
+    })).filter(p => p.lane && p.rail);
+    const heights = pairs.map(p => p.lane.offsetHeight + 1);   // +1 for the border-bottom
+    pairs.forEach((p, i) => {
+      p.rail.style.height    = heights[i] + 'px';
+      p.rail.style.minHeight = heights[i] + 'px';
     });
 
     // Draw connections after heights settle
@@ -2829,6 +2872,13 @@ export function _fvDrawConnections(resources) {
 
   const group = document.getElementById('fv-lines');
   const canvasRect = canvas.getBoundingClientRect();
+  // Each card is measured once and every line is added in one batch at the end. Measuring right after
+  // adding a line forced a full re-layout of the map per line, which scaled badly with big projects.
+  const rectCache = new Map();
+  const rectOf = (el) => { let r = rectCache.get(el); if (!r) { r = el.getBoundingClientRect(); rectCache.set(el, r); } return r; };
+  const cardEls = new Map();
+  document.querySelectorAll('[id^="fv-card-"]').forEach(el => cardEls.set(el.id, el));
+  const frag = document.createDocumentFragment();
   const globalIds = new Set(
     (resources || []).filter(r => r.isGlobal).map(r => String(r.id))
   );
@@ -2843,12 +2893,12 @@ export function _fvDrawConnections(resources) {
         const targetResId = outRule.targetId.substring(0, lastH);
         if (targetResId === String(sourceRes.id)) return; // skip same-card
 
-        const fromEl = document.getElementById(`fv-card-${sourceRes.id}`);
-        const toEl   = document.getElementById(`fv-card-${targetResId}`);
+        const fromEl = cardEls.get(`fv-card-${sourceRes.id}`);
+        const toEl   = cardEls.get(`fv-card-${targetResId}`);
         if (!fromEl || !toEl) return;
 
-        const fRect = fromEl.getBoundingClientRect();
-        const tRect = toEl.getBoundingClientRect();
+        const fRect = rectOf(fromEl);
+        const tRect = rectOf(toEl);
 
         const fx = fRect.left - canvasRect.left + fRect.width / 2;
         const fy = fRect.top  - canvasRect.top  + fRect.height;
@@ -2877,10 +2927,11 @@ export function _fvDrawConnections(resources) {
         path.setAttribute('data-from', sourceRes.id);
         path.setAttribute('data-to', targetResId);
         if (isCross || isGlobalLink) path.setAttribute('stroke-dasharray', '5,3');
-        group.appendChild(path);
+        frag.appendChild(path);
       });
     });
   });
+  group.appendChild(frag);
 };
 
 // Highlight global connections on hover
@@ -3058,7 +3109,7 @@ export function _fvPopulateWb(tab, resources) {
 
     const client       = getActiveClient();
     const data         = OL.getCurrentProjectData();
-    const masterGuides = state.master?.howToLibrary || [];
+    const masterGuides = OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || []);
     const localGuides  = client?.projectData?.localHowTo || [];
     const datapoints   = state.master?.datapoints || [];
 
@@ -3201,7 +3252,7 @@ export function _fvFilterWb(tab) {
             !r.isArchived && (!r.stageId || r.isGlobal)
         );
     } else if (tab === 'guides') {
-        items = [...(state.master?.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+        items = [...(OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || [])), ...(client?.projectData?.localHowTo || [])];
     } else if (tab === 'data') {
         items = state.master?.datapoints || [];
     }
@@ -4609,7 +4660,7 @@ export function renderWorkbenchItemsOnly() {
     } else if (activeTab === 'assets') {
         items = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords);
     } else if (activeTab === 'guides') {
-        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
+        items = [...(OL.masterGuidesFor ? OL.masterGuidesFor(getActiveClient()) : (state.master.howToLibrary || [])), ...(getActiveClient()?.projectData?.localHowTo || [])];
     } else if (activeTab === 'data') {
         const client = getActiveClient();
         items = client?.projectData?.localDatapoints?.length 
@@ -5742,7 +5793,7 @@ export function showSubMenu(subType, filterQuery = "") {
         case 'links': // 📖 Guides & Assets
             const clientData = getActiveClient();
             const allRes = [...(state.master.resources || []), ...(clientData?.projectData?.localResources || [])];
-            const allSOPs = [...(state.master.howToLibrary || []), ...(clientData?.projectData?.localHowTo || [])];
+            const allSOPs = [...(OL.masterGuidesFor ? OL.masterGuidesFor(clientData) : (state.master.howToLibrary || [])), ...(clientData?.projectData?.localHowTo || [])];
             
             // Combine and filter
             const linkMatches = [...allRes, ...allSOPs].filter(item => item.name.toLowerCase().includes(q));
@@ -7430,7 +7481,7 @@ export function filterResourceSearch(resId, stepId, query) {
     
     const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
     const filteredRes = allResources.filter(r => r.id !== resId && r.name.toLowerCase().includes(q));
-    const allHowTos = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+    const allHowTos = [...(OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master.howToLibrary || [])), ...(client?.projectData?.localHowTo || [])];
     const filteredHowTos = allHowTos.filter(h => h.name.toLowerCase().includes(q));
 
     if (!filteredRes.length && !filteredHowTos.length) {
@@ -8545,10 +8596,15 @@ export function drawConnections() {
 };
 
 // 🚀 THE FIX: Attach to document so it works even if the element is rendered later
+let _fvScrollFramePending = false;
 document.addEventListener('scroll', (e) => {
     if (e.target && e.target.id === 'v2-canvas-scroll-wrap') {
-        // Use requestAnimationFrame to keep the lines buttery smooth during scroll
+        // At most one redraw per frame: a fast scroll fires many events per frame, and each one
+        // used to queue its own full redraw of every line.
+        if (_fvScrollFramePending) return;
+        _fvScrollFramePending = true;
         requestAnimationFrame(() => {
+            _fvScrollFramePending = false;
             if (typeof OL.drawConnections === 'function') {
                 OL.drawConnections();
             }

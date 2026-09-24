@@ -225,10 +225,11 @@ export function installBuildStateControls() {
     if (typeof OL.openEditResourceStatusDropdown === 'function' && !OL.openEditResourceStatusDropdown.__buildState) {
         const original = OL.openEditResourceStatusDropdown;
         const wrapped = function (event, resourceId) {
-            original.call(this, event, resourceId);
-            const pop = document.getElementById('task-popover-dropdown');
             const data = typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null;
             const res = (data?.resources || []).find((r) => String(r.id) === String(resourceId));
+            if (OL.isReferenceResource?.(res)) return;   // references have no status
+            original.call(this, event, resourceId);
+            const pop = document.getElementById('task-popover-dropdown');
             if (pop && res) pop.innerHTML += buildStateSectionHtml(res);
         };
         wrapped.__buildState = true;
@@ -238,7 +239,7 @@ export function installBuildStateControls() {
         const original = OL.renderResourceStatusPill;
         const wrapped = function (res) {
             const base = original.call(this, res);
-            if (!res || !res.isShell) return base;
+            if (!res || !res.isShell || OL.isReferenceResource?.(res)) return base;
             return base + `<span class="pill tiny" style="font-size:8px; font-weight:bold; padding:2px 6px; border:1px solid #f59e0b; color:#f59e0b; cursor:pointer; white-space:nowrap;" title="Planned: not built yet. Click to change." onclick="event.stopPropagation(); OL.openEditResourceStatusDropdown(event, '${esc(res.id)}')">PLANNED</span>`;
         };
         wrapped.__buildState = true;

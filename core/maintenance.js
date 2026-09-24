@@ -66,16 +66,132 @@ export function periodProgress(period, todayIso) {
     return { totalDays: total, elapsedDays: elapsed, daysLeft: left, pct: Math.round((elapsed / total) * 100), overdue: left < 0, notStarted: todayIso < period.start_date };
 }
 
+// ---- tiers: the standard plan sizes. A period stores the tier title it was sold as (column "tier"). ----
+export const MAINTENANCE_TIERS = [
+    { title: 'Tier 1', hours: 12 },
+    { title: 'Tier 2', hours: 24 },
+    { title: 'Tier 3', hours: 36 },
+    { title: 'Tier 4', hours: 48 },
+];
+export const tierByTitle = (title) => MAINTENANCE_TIERS.find((t) => t.title === title) || null;
+export const tierForHours = (hours) => MAINTENANCE_TIERS.find((t) => t.hours === Number(hours)) || null;
+// The tier to show: the one saved on the period, or (for periods started before tiers existed) the one its hours match.
+export const periodTierTitle = (period, allotHours) => (period?.tier || tierForHours(allotHours)?.title || '');
+const cleanTier = (t) => (isBlank(t) ? null : String(t).trim());
+
+// ---- time logged in a period, from the time entries on the client's tasks ----
+// Each itemized time entry is dated by the day it ended (or started). Time logged before entries were itemized
+// shows as one "earlier time" line dated by the task's completed or created date. Only billable time draws down
+// the allotment; non-billable time is listed but not counted.
+const dayOf = (v) => {
+    if (isBlank(v)) return '';
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;       // the local day the work happened
+};
+
+// include(task): whether the task's time belongs here at all (client tasks don't).
+// isBillable(task): whether its time counts against the allotment.
+export function periodTimeEntries(tasks, period, { include = () => true, isBillable = () => false } = {}) {
+    if (!period) return [];
+    const inPeriod = (d) => !!d && d >= period.start_date && d <= period.due_date;
+    const out = [];
+    (tasks || []).forEach((t) => {
+        if (!t || typeof t !== 'object' || !include(t)) return;
+        const billable = !!isBillable(t);
+        const base = { taskId: t.id, title: t.title || t.name || 'Untitled task', billable };
+        const log = Array.isArray(t.timeLog) ? t.timeLog : [];
+        let itemized = 0;
+        log.forEach((e) => {
+            const m = Number(e?.minutes) || 0;
+            itemized += m;
+            const day = dayOf(e?.end || e?.start);
+            if (m && inPeriod(day)) out.push({ ...base, id: e.id || `${t.id}-${out.length}`, date: day, minutes: m, by: e.by || '', note: e.note || '', source: e.source || '' });
+        });
+        const earlier = Math.round((Number(t.loggedHours || t.hoursLogged || 0)) * 60) - itemized;
+        const day = dayOf(t.completedAt || t.completedDate || t.createdAt || t.createdDate || t.date);
+        if (earlier > 0 && inPeriod(day)) out.push({ ...base, id: `${t.id}-earlier`, date: day, minutes: earlier, by: '', note: 'Earlier time (not itemized)', source: 'earlier' });
+    });
+    return out.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+}
+
+export function summarizePeriodTime(entries) {
+    const min = (list) => list.reduce((s, e) => s + e.minutes, 0);
+    const toH = (m) => Math.max(0, Math.round((m / 60) * 100) / 100);
+    return { billableHours: toH(min(entries.filter((e) => e.billable))), nonBillableHours: toH(min(entries.filter((e) => !e.billable))) };
+}
+
+// Hours drawn from the allotment: billable time logged in the period.
+export function hoursUsedInPeriod(tasks, period, opts = {}) {
+    return summarizePeriodTime(periodTimeEntries(tasks, period, opts)).billableHours;
+}
+
+// ---- which grant each billable hour comes out of ----
+// entries: from periodTimeEntries (only billable ones are charged). grants: hours_grant rows.
+// allocations: { taskId: grantId } — tasks set aside for a specific grant (e.g. work identified before a period
+// closed, to come out of its courtesy carryover).
+//   1. Time on an allocated task comes out of that grant, when the entry falls inside the grant's dates (it can go
+//      over; that shows as over).
+//   2. Other time comes out of the plan allotment covering its date first, then, once that is used up, the other
+//      grants covering the date, soonest to expire first. A carryover or purchase with tasks allocated to it is
+//      held for those tasks and never takes other time.
+//   3. Anything left over is charged to the first grant it could have used (showing as over), or, if no grant
+//      covers the date, reported as unfunded.
+// Entries are charged oldest first, so earlier work uses up hours first.
+const gDay = (v) => String(v || '').slice(0, 10);
+export const grantCovers = (g, day) => !!day && day >= gDay(g.granted_on) && day <= gDay(g.expires_on);
+export const entryKey = (e) => `${e.taskId}|${e.id}`;
+
+export function allocateHours({ entries = [], grants = [], allocations = {} }) {
+    const cap = {}, used = {};
+    grants.forEach((g) => { cap[g.id] = Math.round(Number(g.hours_granted || 0) * 60); used[g.id] = 0; });
+    const byId = new Map(grants.map((g) => [String(g.id), g]));
+    const reserved = new Set(Object.values(allocations).filter(Boolean).map(String)
+        .filter((id) => byId.get(id) && byId.get(id).source !== 'plan_allotment'));
+    const charges = {};
+    let unfunded = 0;
+    const charge = (key, g, minutes, over = false) => { used[g.id] += minutes; charges[key].push({ grantId: g.id, minutes, ...(over ? { over: true } : {}) }); };
+
+    entries.filter((e) => e.billable).slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((e) => {
+        const key = entryKey(e);
+        charges[key] = [];
+        const pinned = byId.get(String(allocations[e.taskId] || ''));
+        if (pinned && grantCovers(pinned, e.date)) {
+            charge(key, pinned, e.minutes, used[pinned.id] + e.minutes > cap[pinned.id]);
+            return;
+        }
+        const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
+            .sort((a, b) => (a.source === 'plan_allotment' ? 0 : 1) - (b.source === 'plan_allotment' ? 0 : 1) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
+        if (!pool.length) { unfunded += e.minutes; return; }
+        if (e.minutes <= 0) { charge(key, pool[0], e.minutes); return; }      // a correction goes back where time goes
+        let left = e.minutes;
+        for (const g of pool) {
+            const room = cap[g.id] - used[g.id];
+            if (room <= 0) continue;
+            const take = Math.min(room, left);
+            charge(key, g, take);
+            left -= take;
+            if (!left) break;
+        }
+        if (left > 0) charge(key, pool[0], left, true);
+    });
+    return { usedMinutes: used, charges, unfundedMinutes: unfunded };
+}
+
 // ---- plans: the rows to write, worked out before anything is saved ----
 const cleanHours = (v) => { const n = Math.round((parseFloat(v) || 0) * 100) / 100; return n > 0 ? n : 0; };
 
 // Start a period. The allotment is held as a grant that expires when the period ends (none if the allotment is 0).
-export function planStartPeriod({ clientId, start, allotment, renewing = false }) {
+export function planStartPeriod({ clientId, start, allotment, renewing = false, tier = null }) {
     if (!validDate(start)) return { error: 'Enter a valid start date.' };
     const hours = cleanHours(allotment);
     const due = periodDue(start);
+    const t = cleanTier(tier);
     return {
-        period: { client_id: clientId, start_date: start, due_date: due, renewing: !!renewing, status: 'active' },
+        period: { client_id: clientId, start_date: start, due_date: due, renewing: !!renewing, status: 'active', ...(t ? { tier: t } : {}) },
         grant: hours > 0 ? { client_id: clientId, source: 'plan_allotment', hours_granted: hours, granted_on: start, expires_on: due, status: 'active' } : null,
     };
 }
@@ -89,6 +205,7 @@ export function planEditPeriod({ period, grants = [], patch }) {
     if (!validDate(due) || due <= start) return { error: 'The due date must be after the start date.' };
     const renewing = patch.renewing === undefined ? !!period.renewing : !!patch.renewing;
     const periodUpdate = { start_date: start, due_date: due, renewing };
+    if (patch.tier !== undefined && cleanTier(patch.tier) !== cleanTier(period.tier)) periodUpdate.tier = cleanTier(patch.tier);   // only sent when it changes
     const grantUpdates = [];
     const allot = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active');
     if (allot) {
@@ -105,7 +222,7 @@ export function planEditPeriod({ period, grants = [], patch }) {
 }
 
 // Close a period: optionally extend unused hours as a courtesy carryover, and optionally start the next year.
-export function planClosePeriod({ period, carryoverHours = 0, renewNext = false, nextAllotment = 0, nextRenewing = false, today }) {
+export function planClosePeriod({ period, carryoverHours = 0, renewNext = false, nextAllotment = 0, nextRenewing = false, nextTier = null, today }) {
     const out = { periodUpdate: { status: 'closed' }, carryover: null, next: null };
     const hours = cleanHours(carryoverHours);
     if (hours > 0) {
@@ -113,7 +230,7 @@ export function planClosePeriod({ period, carryoverHours = 0, renewNext = false,
                           granted_on: period.due_date, expires_on: carryoverExpiry(period.due_date, !!period.renewing), status: 'active',
                           note: `Courtesy carryover from the plan period ending ${period.due_date}` };
     }
-    if (renewNext) out.next = planStartPeriod({ clientId: period.client_id, start: nextPeriodStart(period.due_date), allotment: nextAllotment, renewing: nextRenewing });
+    if (renewNext) out.next = planStartPeriod({ clientId: period.client_id, start: nextPeriodStart(period.due_date), allotment: nextAllotment, renewing: nextRenewing, tier: nextTier });
     return out;
 }
 
@@ -123,6 +240,24 @@ export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '' }) {
     if (h <= 0) return { error: 'Enter the number of hours.' };
     if (!validDate(purchasedOn)) return { error: 'Enter a valid purchase date.' };
     return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: adHocExpiry(purchasedOn), status: 'active', note: String(note || '').trim() || null } };
+}
+
+// Edit an ad hoc purchase or a courtesy carryover. (A plan allotment is edited through its plan period.)
+export const GRANT_STATUSES = ['active', 'used_up', 'expired'];
+export function planEditGrant({ grant, patch }) {
+    if (!grant) return { error: 'That grant no longer exists. Reload and try again.' };
+    if (grant.source === 'plan_allotment') return { error: 'Edit the plan period to change its allotment.' };
+    const h = cleanHours(patch.hours ?? grant.hours_granted);
+    if (h <= 0) return { error: 'Enter the number of hours.' };
+    const granted = patch.granted_on ?? String(grant.granted_on).slice(0, 10);
+    if (!validDate(granted)) return { error: grant.source === 'ad_hoc_purchase' ? 'Enter a valid purchase date.' : 'Enter a valid start date.' };
+    const expires = patch.expires_on ?? String(grant.expires_on).slice(0, 10);
+    if (!validDate(expires) || expires <= granted) return { error: 'The expiry date must be after the ' + (grant.source === 'ad_hoc_purchase' ? 'purchase date.' : 'start date.') };
+    const status = patch.status ?? grant.status;
+    if (!GRANT_STATUSES.includes(status)) return { error: 'Pick a status.' };
+    const update = { hours_granted: h, granted_on: granted, expires_on: expires, status };
+    if (patch.note !== undefined) update.note = String(patch.note || '').trim() || null;
+    return { update };
 }
 
 // ---- Client Requests: plain requests kept on a second sheet ----
