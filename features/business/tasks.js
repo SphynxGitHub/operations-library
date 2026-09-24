@@ -1620,7 +1620,24 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
     OL.refreshTaskView();
 };
 
-OL.logTaskHours = function(clientId, taskId, additionalHours) {
+// Every change to a task's time also records an itemized entry in task.timeLog
+// ({ id, by, minutes, start, end, note, source }), which the task modal lists for clients and staff.
+OL.recordTaskTimeEntry = function(task, hours, meta = {}) {
+    if (!task || !Number(hours)) return;
+    if (!Array.isArray(task.timeLog)) task.timeLog = [];
+    const end = meta.end || new Date().toISOString();
+    task.timeLog.push({
+        id: 'tl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        by: meta.by || (OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team'),
+        minutes: Math.round(Number(hours) * 60),
+        start: meta.start || null,
+        end,
+        note: meta.note || '',
+        source: meta.source || 'manual'
+    });
+};
+
+OL.logTaskHours = function(clientId, taskId, additionalHours, meta = {}) {
     updateAndSync(() => {
         const client = state.clients[clientId];
         if (!client || !client.projectData?.clientTasks) return;
@@ -1630,6 +1647,7 @@ OL.logTaskHours = function(clientId, taskId, additionalHours) {
             const current = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = current + Number(additionalHours);
             task.hoursLogged = task.loggedHours;
+            OL.recordTaskTimeEntry(task, additionalHours, meta);
         }
     }, clientId);
     OL.refreshTaskView();
@@ -1752,7 +1770,7 @@ OL.stopLiveTaskTimer = function() {
     const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
 
     if (hoursEarned > 0) {
-        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);
+        OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned, { start: new Date(timer.startTime).toISOString(), source: 'timer' });
     }
 
     OL._clearPersistedTimer();
@@ -2111,6 +2129,8 @@ OL.renderInContextTaskModal = function(client, task) {
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
                         <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
                     </div>
+
+                    ${OL.renderTaskTimeLogHTML ? OL.renderTaskTimeLogHTML(task) : ''}
 
                     ${task.timeAuditNote ? `
                         <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
@@ -3381,6 +3401,58 @@ OL.updateTaskDescription = function(clientId, taskId, newDescription) {
 // description — anything that used to narrate itself into the description
 // (guide links, etc.) should call this instead. Not yet wired into status/
 // assignee/due-date changes; just the how-to guide linking for now.
+// Itemized time on a task: who, when, how long. Shown to clients and staff.
+// Time logged before itemizing existed has no entries; it shows as one "earlier time" line.
+OL.renderTaskTimeLogHTML = function(task) {
+    const entries = (Array.isArray(task.timeLog) ? task.timeLog : []).slice()
+        .sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0));
+    const totalMin = Math.round(Number(task.loggedHours || task.hoursLogged || 0) * 60);
+    const itemizedMin = entries.reduce((s, e) => s + Number(e.minutes || 0), 0);
+    const earlierMin = totalMin - itemizedMin;
+    if (!entries.length && totalMin <= 0) return '';
+
+    const dur = (m) => {
+        const sign = m < 0 ? '−' : '';
+        const a = Math.abs(Math.round(m));
+        const h = Math.floor(a / 60), mm = a % 60;
+        return sign + (h ? `${h}h ${String(mm).padStart(2, '0')}m` : `${mm}m`);
+    };
+    const when = (e) => {
+        const d = new Date(e.end || e.start || 0);
+        if (isNaN(d)) return '';
+        const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        const time = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        return e.start && e.end ? `${day}, ${time(e.start)} – ${time(e.end)}` : day;
+    };
+    const SOURCE = { timer: 'Timer', manual: 'Added', adjustment: 'Adjusted', automation: 'From meeting', chrome_extension: 'Timer (extension)' };
+    const row = (left, sub, right, muted) => `
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--line);${muted ? ' opacity:0.75;' : ''}">
+            <div style="min-width:0;">
+                <div class="tiny" style="font-weight:600;">${left}</div>
+                ${sub ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis;">${sub}</div>` : ''}
+            </div>
+            <div class="tiny monospace bold" style="flex-shrink:0; color:var(--accent);">${right}</div>
+        </div>`;
+
+    return `
+        <div style="margin-bottom:20px; background:rgba(255,255,255,0.02); padding:14px; border-radius:6px; border:1px solid var(--line);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label class="bold tiny uppercase muted" style="margin:0;">
+                    <i data-lucide="clock" style="width:12px;height:12px;vertical-align:sub;"></i> Time Log
+                </label>
+                <span class="tiny bold" style="color:var(--accent);">Total ${dur(totalMin)}</span>
+            </div>
+            <div style="max-height:220px; overflow:auto;">
+                ${entries.map(e => row(
+                    `${esc(e.by || 'Sphynx Team')} <span class="muted" style="font-weight:400;">· ${esc(SOURCE[e.source] || 'Logged')}</span>`,
+                    [esc(when(e)), e.note ? esc(e.note) : ''].filter(Boolean).join(' · '),
+                    dur(e.minutes)
+                )).join('')}
+                ${earlierMin > 0 ? row('Earlier time', 'Logged before itemized entries were recorded', dur(earlierMin), true) : ''}
+            </div>
+        </div>`;
+};
+
 OL.logTaskActivity = function(clientId, taskId, text) {
     updateAndSync(() => {
         const client = state.clients?.[clientId];
@@ -3778,9 +3850,13 @@ OL.saveTaskTimeEdit = function(clientId, taskId) {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId || t.key === taskId);
         if (task) {
+            const before = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = hoursVal;
             task.hoursLogged = hoursVal;
             task.timeAuditNote = noteVal || '';
+            if (Math.round((hoursVal - before) * 60) !== 0) {
+                OL.recordTaskTimeEntry(task, hoursVal - before, { source: 'adjustment', note: noteVal || 'Total adjusted' });
+            }
         }
     }, clientId);
 
