@@ -914,6 +914,11 @@ window.handleRoute = function () {
     // Null/cleared for the real Sphynx admin view, which still sees everything.
     state.businessScopePartnerId = (client && client.meta?.status === 'Partner') ? client.id : null;
 
+    // A partner's library is the whole master library (every master app and function), wherever they are in it.
+    if (client && client.meta?.status === 'Partner' && !isVault && typeof OL.reconcileProjectLibrary === 'function') {
+        OL.reconcileProjectLibrary(client);
+    }
+
     // 1. Root / Default Home Landing -> Daily Dashboard
     if (hash === "#/" || hash === "" || hash === "#/business/dashboard" || hash === "#/business") {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');

@@ -17,6 +17,9 @@ export function renderFunctionsGrid() {
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
 
+    // Partners get the whole master library; any app's functions that are missing get added (saves only if needed).
+    if (!isMasterMode && client && OL.reconcileProjectLibrary) OL.reconcileProjectLibrary(client);
+
     let displayFunctions = [];
     if (isMasterMode) {
         displayFunctions = state.master.functions || [];

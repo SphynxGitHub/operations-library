@@ -21,6 +21,8 @@ export function renderAppsGrid() {
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
 
+    if (!isVaultMode && client) reconcileProjectLibrary(client);   // partners get the whole master library; apps get their functions
+
     const masterApps = state.master.apps || [];
     const localApps = client ? (client.projectData.localApps || []) : [];
 
@@ -838,38 +840,34 @@ export function promoteAppToMaster(clientId, localAppId) {
     renderAppsGrid();
 };
 
-export async function pushAppToClient(appId, clientId) {
-    const client = state.clients[clientId];
-    const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
-    if (!client || !masterApp) return;
+// Adds a master app to a project and shares the master functions it performs, so the project's Functions tab
+// has them too. No saving and no screen refresh here: callers (the Import button, the partner library, the
+// onboarding wizard) do that. Returns the new local copy of the app.
+export function provisionMasterAppInto(client, masterApp) {
+    if (!client.projectData) client.projectData = {};
+    if (!client.projectData.localApps) client.projectData.localApps = [];
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
 
     // 1. Standard Provisioning for the selected App
     const localMappings = (masterApp.functionIds || []).map(m => {
         const fnId = String(typeof m === 'string' ? m : m.id);
-        if (!client.sharedMasterIds?.includes(fnId)) {
-            if (!client.sharedMasterIds) client.sharedMasterIds = [];
-            client.sharedMasterIds.push(fnId);
-        }
+        if (!client.sharedMasterIds.includes(fnId)) client.sharedMasterIds.push(fnId);
         return { id: fnId, status: 'available' };
     });
 
     const localInstance = {
-        id: 'local-app-' + Date.now(),
-        masterRefId: appId, 
+        id: 'local-app-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        masterRefId: masterApp.id,
         name: masterApp.name,
         notes: masterApp.notes || "",
         functionIds: localMappings,
-        capabilities: [] 
+        capabilities: []
     };
-
-    if (!client.projectData.localApps) client.projectData.localApps = [];
     client.projectData.localApps.push(localInstance);
 
-    // 🚀 2. THE ZAPIER SUITE AUTO-PROVISIONER
+    // 2. THE ZAPIER SUITE AUTO-PROVISIONER
     // If the app being added is "Zapier", automatically add the utilities as hidden
     if (masterApp.name === "Zapier") {
-        console.log("⚡ Zapier detected. Provisioning Hidden Utility Suite...");
-        
         const utilities = [
             { name: "Zapier Filter", key: "filter" },
             { name: "Zapier Formatter", key: "formatter" },
@@ -880,7 +878,6 @@ export async function pushAppToClient(appId, clientId) {
             { name: "Zapier Webhooks", key: "webhook" },
             { name: "Zapier Email", key: "mail" },
             { name: "Zapier Scheduler", key: "scheduler" },
-            { name: "Zapier Formatter", key: "formatter" },
             { name: "Zapier Storage", key: "storage" },
             { name: "Zapier Table", key: "table" },
             { name: "Zapier SMS", key: "sms" },
@@ -890,12 +887,12 @@ export async function pushAppToClient(appId, clientId) {
             { name: "SubZap", key: "subzap" },
         ];
 
-        utilities.forEach(util => {
+        utilities.forEach((util, i) => {
             // Check if already exists to prevent duplicates
             const exists = client.projectData.localApps.some(a => a.name === util.name);
             if (!exists) {
                 client.projectData.localApps.push({
-                    id: `local-util-${util.key}-${Date.now()}`,
+                    id: `local-util-${util.key}-${Date.now()}-${i}`,
                     name: util.name,
                     isHidden: true, // 🔒 THE SECRET FLAG
                     notes: "System Utility (Auto-added with Zapier)",
@@ -905,6 +902,15 @@ export async function pushAppToClient(appId, clientId) {
             }
         });
     }
+    return localInstance;
+}
+
+export async function pushAppToClient(appId, clientId) {
+    const client = state.clients[clientId];
+    const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
+    if (!client || !masterApp) return;
+
+    provisionMasterAppInto(client, masterApp);
 
     await OL.persist();
     buildLayout();
@@ -915,6 +921,98 @@ export async function pushAppToClient(appId, clientId) {
         if (modal) modal.style.display = "none";
     }, 50);
 };
+
+// ---- Keep a project's Functions in step with its Apps ----------------------------------------------------
+// An app "performs" master functions (the master app's functionIds). A project that has the app should have
+// those functions in its library, and the app should show them as mapped. Several paths used to add an app
+// without doing that (template imports, older projects, functions added to a master app later), leaving
+// apps with no matching functions. This is safe to run any number of times: it only ever ADDS what is missing,
+// and never changes an existing mapping's status.
+function findMasterAppFor(localApp) {
+    const apps = state.master.apps || [];
+    if (localApp.masterRefId) return apps.find(ma => String(ma.id) === String(localApp.masterRefId)) || null;
+    if (localApp.originMasterId) return null;   // a private clone: it no longer follows the master
+    const name = String(localApp.name || '').trim().toLowerCase();
+    return name ? (apps.find(ma => String(ma.name || '').trim().toLowerCase() === name) || null) : null;
+}
+
+export function syncProjectFunctionsFromApps(client) {
+    const result = { shares: 0, mappings: 0 };
+    if (!client) return result;
+    const masterFnIds = new Set((state.master.functions || []).map(f => String(f.id)));
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    const shared = new Set(client.sharedMasterIds.map(String));
+    const share = (fnId) => {
+        if (!masterFnIds.has(fnId) || shared.has(fnId)) return;
+        client.sharedMasterIds.push(fnId); shared.add(fnId); result.shares++;
+    };
+
+    (client.projectData?.localApps || []).forEach(localApp => {
+        if (localApp.isHidden) return;
+        if (!localApp.functionIds) localApp.functionIds = [];
+
+        // What this app already maps to must be in the project's library.
+        localApp.functionIds.forEach(m => share(String(typeof m === 'string' ? m : m.id)));
+
+        // What the master says this app performs.
+        const source = findMasterAppFor(localApp);
+        (source?.functionIds || []).forEach(m => {
+            const fnId = String(typeof m === 'string' ? m : m.id);
+            if (!masterFnIds.has(fnId)) return;
+            share(fnId);
+            const mapped = localApp.functionIds.some(x => String(typeof x === 'string' ? x : x.id) === fnId);
+            if (!mapped) { localApp.functionIds.push({ id: fnId, status: 'available' }); result.mappings++; }
+        });
+    });
+    return result;
+}
+
+// A partner's library is the whole master library: every master app and every master function.
+const partnerLibrarySeen = new Map();
+export function ensurePartnerLibrary(client) {
+    if (!client || client.meta?.status !== 'Partner') return { apps: 0, functions: 0 };
+    const masterApps = state.master.apps || [];
+    const masterFns = state.master.functions || [];
+    const signature = `${masterApps.length}:${masterFns.length}:${(client.projectData?.localApps || []).length}`;
+    if (partnerLibrarySeen.get(client.id) === signature) return { apps: 0, functions: 0 };
+
+    if (!client.projectData) client.projectData = {};
+    if (!client.projectData.localApps) client.projectData.localApps = [];
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+
+    const haveRef = new Set(client.projectData.localApps.map(a => String(a.masterRefId)).filter(Boolean));
+    const haveName = new Set(client.projectData.localApps.map(a => String(a.name || '').trim().toLowerCase()));
+    let apps = 0;
+    masterApps.forEach(ma => {
+        if (haveRef.has(String(ma.id)) || haveName.has(String(ma.name || '').trim().toLowerCase())) return;
+        provisionMasterAppInto(client, ma);
+        apps++;
+    });
+
+    const shared = new Set(client.sharedMasterIds.map(String));
+    let functions = 0;
+    masterFns.forEach(f => {
+        if (!shared.has(String(f.id))) { client.sharedMasterIds.push(String(f.id)); functions++; }
+    });
+
+    syncProjectFunctionsFromApps(client);
+    partnerLibrarySeen.set(client.id, `${masterApps.length}:${masterFns.length}:${client.projectData.localApps.length}`);
+    return { apps, functions };
+}
+
+// Run by the Apps and Functions tabs (and anything else that opens a project's library).
+// Saves only when something was actually added.
+export function reconcileProjectLibrary(client) {
+    if (!client || !client.projectData) return false;
+    const partner = ensurePartnerLibrary(client);
+    const fromApps = syncProjectFunctionsFromApps(client);
+    const changed = partner.apps + partner.functions + fromApps.shares + fromApps.mappings > 0;
+    if (changed) {
+        if (OL.markClientDirty) OL.markClientDirty(client.id);
+        OL.persist();
+    }
+    return changed;
+}
 
 export function cloneMasterToLocal(masterAppId, clientId) {
     const client = state.clients[clientId];
@@ -1615,6 +1713,7 @@ Object.assign(window.OL, {
     handleAppTierSelection, addMasterAppTier, updateMasterAppTier,
     removeMasterAppTier, pushLocalAppToMaster, updateMasterApp,
     promoteAppToMaster, pushAppToClient, cloneMasterToLocal,
+    provisionMasterAppInto, syncProjectFunctionsFromApps, ensurePartnerLibrary, reconcileProjectLibrary,
     addAppCapability, getEffectiveCapabilities, sortMappings,
     toggleCapabilityType, updateAppCapability, updateLocalCapability,
     removeAppCapability, removeLocalCapability, removeMasterCapabilityFromApp,

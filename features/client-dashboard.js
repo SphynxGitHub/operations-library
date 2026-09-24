@@ -1137,8 +1137,21 @@ export function pushFeaturesToAllClients() {
         }
     });
 
+    // Every project: partners get the whole master library, and every app gets the functions it performs.
+    let fnShares = 0, fnMappings = 0, partnerApps = 0, touched = 0;
+    clientIds.forEach(id => {
+        const client = state.clients[id];
+        if (!client?.projectData) return;
+        const partner = OL.ensurePartnerLibrary ? OL.ensurePartnerLibrary(client) : { apps: 0, functions: 0 };
+        const r = OL.syncProjectFunctionsFromApps ? OL.syncProjectFunctionsFromApps(client) : { shares: 0, mappings: 0 };
+        partnerApps += partner.apps;
+        fnShares += partner.functions + r.shares;
+        fnMappings += r.mappings;
+        if (partner.apps + partner.functions + r.shares + r.mappings > 0) { touched++; OL.markClientDirty(id); }
+    });
+
     OL.persist();
-    alert("System Migration Complete. You can now enable 'Flow Map' in individual Client Profiles.");
+    alert(`System Migration Complete. You can now enable 'Flow Map' in individual Client Profiles.\n\nApps & functions: ${fnShares} functions added to project libraries, ${fnMappings} app-to-function links added, ${partnerApps} master apps added to partner libraries (${touched} projects updated).`);
     location.reload();
 };
 

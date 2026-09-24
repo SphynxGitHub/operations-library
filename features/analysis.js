@@ -318,6 +318,7 @@ export async function executeAnalysisImportById(templateId) {
                         notes: `(Auto-deployed via ${template.name} Import)`
                     };
                     client.projectData.localApps.push(localApp);
+                    if (OL.syncProjectFunctionsFromApps) OL.syncProjectFunctionsFromApps(client);   // bring its functions too
                 }
             }
 
