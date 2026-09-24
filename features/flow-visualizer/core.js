@@ -3109,7 +3109,7 @@ export function _fvPopulateWb(tab, resources) {
 
     const client       = getActiveClient();
     const data         = OL.getCurrentProjectData();
-    const masterGuides = state.master?.howToLibrary || [];
+    const masterGuides = OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || []);
     const localGuides  = client?.projectData?.localHowTo || [];
     const datapoints   = state.master?.datapoints || [];
 
@@ -3252,7 +3252,7 @@ export function _fvFilterWb(tab) {
             !r.isArchived && (!r.stageId || r.isGlobal)
         );
     } else if (tab === 'guides') {
-        items = [...(state.master?.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+        items = [...(OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || [])), ...(client?.projectData?.localHowTo || [])];
     } else if (tab === 'data') {
         items = state.master?.datapoints || [];
     }
@@ -4660,7 +4660,7 @@ export function renderWorkbenchItemsOnly() {
     } else if (activeTab === 'assets') {
         items = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords);
     } else if (activeTab === 'guides') {
-        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
+        items = [...(OL.masterGuidesFor ? OL.masterGuidesFor(getActiveClient()) : (state.master.howToLibrary || [])), ...(getActiveClient()?.projectData?.localHowTo || [])];
     } else if (activeTab === 'data') {
         const client = getActiveClient();
         items = client?.projectData?.localDatapoints?.length 
@@ -5793,7 +5793,7 @@ export function showSubMenu(subType, filterQuery = "") {
         case 'links': // 📖 Guides & Assets
             const clientData = getActiveClient();
             const allRes = [...(state.master.resources || []), ...(clientData?.projectData?.localResources || [])];
-            const allSOPs = [...(state.master.howToLibrary || []), ...(clientData?.projectData?.localHowTo || [])];
+            const allSOPs = [...(OL.masterGuidesFor ? OL.masterGuidesFor(clientData) : (state.master.howToLibrary || [])), ...(clientData?.projectData?.localHowTo || [])];
             
             // Combine and filter
             const linkMatches = [...allRes, ...allSOPs].filter(item => item.name.toLowerCase().includes(q));
@@ -7481,7 +7481,7 @@ export function filterResourceSearch(resId, stepId, query) {
     
     const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
     const filteredRes = allResources.filter(r => r.id !== resId && r.name.toLowerCase().includes(q));
-    const allHowTos = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+    const allHowTos = [...(OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master.howToLibrary || [])), ...(client?.projectData?.localHowTo || [])];
     const filteredHowTos = allHowTos.filter(h => h.name.toLowerCase().includes(q));
 
     if (!filteredRes.length && !filteredHowTos.length) {
