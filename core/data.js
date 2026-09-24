@@ -189,6 +189,16 @@ export function persist() {
                     console.warn('Request activation rules failed:', activationErr);
                 }
 
+                // Staff save each task's resolved billable status with it, so client logins count the
+                // same maintenance hours without needing the billing rules.
+                try {
+                    if (!window.IS_GUEST && window.OL && typeof window.OL.stampBillableFor === 'function') {
+                        window.OL.stampBillableFor(client);
+                    }
+                } catch (stampErr) {
+                    console.warn('Billable stamp failed:', stampErr);
+                }
+
                 // A repeating task that was just closed gets its next occurrence
                 // before this save captures the client.
                 try {

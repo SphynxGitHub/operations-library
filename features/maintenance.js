@@ -13,9 +13,10 @@ import {
     maintenanceMode, ONGOING, ADHOC, periodProgress, planStartPeriod, planEditPeriod, planClosePeriod, planAdHocPurchase,
     ensureMaintenanceSheet, maintenanceSheetOf, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
-    MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, hoursUsedInPeriod,
+    MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
 } from '../core/maintenance.js';
-import { isClientTask } from '../core/billable.js';
+import { isClientTask, isTaskBillableForHours, stampBillableFor } from '../core/billable.js';
+import { markClientDirty } from '../core/data.js';
 
 export function todayIso(now = new Date()) {
     const p = (n) => String(n).padStart(2, '0');
@@ -130,6 +131,45 @@ function grantsTableHtml(slot) {
         <div class="tiny muted" style="margin-top:6px;">Hours used against each grant will show here once time is logged against maintenance.</div>`;
 }
 
+// The time logged in a period on the client's own Sphynx work (client tasks excluded). Billable time counts
+// against the allotment; staff resolve billable status live, a client login uses what staff saved.
+const periodEntries = (client, period) => periodTimeEntries(client.projectData?.clientTasks || [], period, {
+    include: (t) => !isClientTask(t, client),
+    isBillable: (t) => isTaskBillableForHours(t, client),
+});
+
+const durText = (min) => { const a = Math.abs(Math.round(min)); const h = Math.floor(a / 60), m = a % 60; return (min < 0 ? '−' : '') + (h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`); };
+
+// Itemized log of every time entry in the current period, billable and non-billable.
+function periodLogHtml(client, period) {
+    const entries = periodEntries(client, period);
+    const filter = OL._maintLogFilter || 'all';
+    const shown = entries.filter((e) => filter === 'all' || (filter === 'billable' ? e.billable : !e.billable));
+    const { billableHours, nonBillableHours } = summarizePeriodTime(entries);
+    const btn = (key, label) => `<button class="btn tiny ${filter === key ? 'primary' : 'soft'}" onclick="OL._maintLogFilter='${key}'; OL.renderMaintenancePage()">${label}</button>`;
+    const rows = shown.map((e) => `<tr style="border-top:1px solid var(--line); cursor:pointer;" onclick="OL.openTaskInContext && OL.openTaskInContext('${esc(client.id)}', '${esc(e.taskId)}')">
+            <td style="white-space:nowrap; padding:6px 8px 6px 0;">${esc(niceDate(e.date))}</td>
+            <td style="padding:6px 8px 6px 0;">${esc(e.title)}${e.note ? `<div class="tiny muted">${esc(e.note)}</div>` : ''}</td>
+            <td style="padding:6px 8px 6px 0;" class="muted">${esc(e.by)}</td>
+            <td style="text-align:right; white-space:nowrap; padding:6px 8px 6px 0;">${esc(durText(e.minutes))}</td>
+            <td style="padding:6px 0;"><span class="pill tiny" style="border:1px solid ${e.billable ? '#22c55e' : '#94a3b8'}; color:${e.billable ? '#22c55e' : '#94a3b8'};">${e.billable ? 'Billable' : 'Non-billable'}</span></td>
+        </tr>`).join('');
+    return `
+        <div class="card" style="padding:16px; margin-top:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                <div>
+                    <h3 style="margin:0;">Hours log · this period</h3>
+                    <div class="tiny muted">${esc(niceDate(period.start_date))} to ${esc(niceDate(period.due_date))} · <strong style="color:var(--text);">${esc(hoursText(billableHours))}</strong> billable (counted) · ${esc(hoursText(nonBillableHours))} non-billable</div>
+                </div>
+                <div style="display:flex; gap:6px;">${btn('all', `All (${entries.length})`)}${btn('billable', 'Billable')}${btn('non-billable', 'Non-billable')}</div>
+            </div>
+            ${shown.length ? `<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;">
+                <thead><tr style="text-align:left;" class="tiny muted uppercase"><th>Date</th><th>Task</th><th>By</th><th style="text-align:right;">Time</th><th></th></tr></thead>
+                <tbody>${rows}</tbody></table></div>`
+            : `<div class="tiny muted">${entries.length ? 'Nothing in this filter.' : 'No time logged in this period yet.'}</div>`}
+        </div>`;
+}
+
 function periodCardHtml(client, slot) {
     const active = slot.periods.find((p) => p.status === 'active');
     const today = todayIso();
@@ -144,15 +184,15 @@ function periodCardHtml(client, slot) {
     const pr = periodProgress(active, today);
     const allot = slot.grants.filter((g) => g.period_id === active.id && g.source === 'plan_allotment').reduce((s, g) => s + Number(g.hours_granted), 0);
     const tier = periodTierTitle(active, allot);
-    // Hours used: time logged in this period on the client's Sphynx tasks. Client tasks and tasks marked
-    // non-billable ($ toggle off) don't draw down the allotment.
-    const used = hoursUsedInPeriod(client.projectData?.clientTasks || [], active, { counts: (t) => !isClientTask(t, client) && t.billable !== false });
+    // Hours used: billable time logged in this period on the client's Sphynx tasks (see periodEntries).
+    const { billableHours: used, nonBillableHours } = summarizePeriodTime(periodEntries(client, active));
     const usedPct = allot > 0 ? Math.round((used / allot) * 100) : 0;
     const left = Math.round((allot - used) * 100) / 100;
     const barColor = allot > 0 && used > allot ? '#ef4444' : usedPct >= 80 ? '#f59e0b' : '#22c55e';
     const usedLine = allot > 0
         ? `${esc(hoursText(used))} of ${esc(hoursText(allot))} used (${usedPct}%) · ${left >= 0 ? `${esc(hoursText(left))} left` : `<strong>${esc(hoursText(-left))} over</strong>`}`
         : `${esc(hoursText(used))} used · no hours allotment on this period`;
+    const nonBillLine = nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : '';
     return `
         <div class="card" style="padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
@@ -169,7 +209,7 @@ function periodCardHtml(client, slot) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
-            <div class="tiny bold" style="margin:12px 0 6px; color:${allot > 0 && used > allot ? '#ef4444' : 'var(--text)'};">${usedLine}</div>
+            <div class="tiny bold" style="margin:12px 0 6px; color:${allot > 0 && used > allot ? '#ef4444' : 'var(--text)'};">${usedLine}${nonBillLine}</div>
             <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin:0 0 6px;" title="Hours used of the allotment"><div style="height:100%; width:${Math.min(usedPct, 100)}%; background:${barColor};"></div></div>
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
@@ -189,6 +229,9 @@ export function renderMaintenancePage() {
         return;
     }
     const slot = slotFor(client.id);
+    const activePeriod = slot.periods.find((p) => p.status === 'active');
+    // Staff: save each task's current billable status so the client's view of this tab counts the same hours.
+    if (canManage() && !window.IS_GUEST && stampBillableFor(client)) { markClientDirty(client.id); OL.persist?.(); }
     // Load on first view, and again when the copy on screen is over 30 s old, so hours added from
     // another login or tab show up without a full page reload.
     const stale = slot.loaded && Date.now() - (slot.loadedAt || 0) > 30000;
@@ -196,7 +239,7 @@ export function renderMaintenancePage() {
     const periods = slot.periods;
     const history = periods.filter((p) => p.status !== 'active');
     const body = !slot.loaded ? '<div class="tiny muted">Loading...</div>' : slot.error ? `<div class="card" style="padding:16px; border-left:3px solid #ef4444;">Could not load the maintenance data: ${esc(slot.error)}</div>` : `
-        ${mode === ONGOING ? periodCardHtml(client, slot) : `
+        ${mode === ONGOING ? periodCardHtml(client, slot) + (activePeriod ? periodLogHtml(client, activePeriod) : '') : `
             <div class="card" style="padding:16px;"><div class="bold">Ad Hoc Maintenance</div>
             <div class="tiny muted" style="margin-top:4px;">There are no plan periods. Hours are bought as needed and expire one year after purchase.</div></div>`}
         <div class="card" style="padding:16px; margin-top:16px;">

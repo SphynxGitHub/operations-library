@@ -79,10 +79,10 @@ export const tierForHours = (hours) => MAINTENANCE_TIERS.find((t) => t.hours ===
 export const periodTierTitle = (period, allotHours) => (period?.tier || tierForHours(allotHours)?.title || '');
 const cleanTier = (t) => (isBlank(t) ? null : String(t).trim());
 
-// ---- hours used in a period, from the time logged on the client's tasks ----
-// Each itemized time entry counts on the day it ended (or started). Time logged before entries were itemized
-// counts on the task's completed or created date. Tasks the caller excludes (client tasks, tasks marked
-// non-billable) are skipped.
+// ---- time logged in a period, from the time entries on the client's tasks ----
+// Each itemized time entry is dated by the day it ended (or started). Time logged before entries were itemized
+// shows as one "earlier time" line dated by the task's completed or created date. Only billable time draws down
+// the allotment; non-billable time is listed but not counted.
 const dayOf = (v) => {
     if (isBlank(v)) return '';
     const s = String(v);
@@ -92,23 +92,41 @@ const dayOf = (v) => {
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;       // the local day the work happened
 };
-export function hoursUsedInPeriod(tasks, period, { counts = () => true } = {}) {
-    if (!period) return 0;
-    const inPeriod = (v) => { const d = dayOf(v); return !!d && d >= period.start_date && d <= period.due_date; };
-    let minutes = 0;
+
+// include(task): whether the task's time belongs here at all (client tasks don't).
+// isBillable(task): whether its time counts against the allotment.
+export function periodTimeEntries(tasks, period, { include = () => true, isBillable = () => false } = {}) {
+    if (!period) return [];
+    const inPeriod = (d) => !!d && d >= period.start_date && d <= period.due_date;
+    const out = [];
     (tasks || []).forEach((t) => {
-        if (!t || typeof t !== 'object' || !counts(t)) return;
+        if (!t || typeof t !== 'object' || !include(t)) return;
+        const billable = !!isBillable(t);
+        const base = { taskId: t.id, title: t.title || t.name || 'Untitled task', billable };
         const log = Array.isArray(t.timeLog) ? t.timeLog : [];
         let itemized = 0;
         log.forEach((e) => {
             const m = Number(e?.minutes) || 0;
             itemized += m;
-            if (inPeriod(e?.end || e?.start)) minutes += m;
+            const day = dayOf(e?.end || e?.start);
+            if (m && inPeriod(day)) out.push({ ...base, id: e.id || `${t.id}-${out.length}`, date: day, minutes: m, by: e.by || '', note: e.note || '', source: e.source || '' });
         });
         const earlier = Math.round((Number(t.loggedHours || t.hoursLogged || 0)) * 60) - itemized;
-        if (earlier > 0 && inPeriod(t.completedDate || t.completedAt || t.createdAt || t.createdDate || t.date)) minutes += earlier;
+        const day = dayOf(t.completedAt || t.completedDate || t.createdAt || t.createdDate || t.date);
+        if (earlier > 0 && inPeriod(day)) out.push({ ...base, id: `${t.id}-earlier`, date: day, minutes: earlier, by: '', note: 'Earlier time (not itemized)', source: 'earlier' });
     });
-    return Math.max(0, Math.round((minutes / 60) * 100) / 100);
+    return out.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+}
+
+export function summarizePeriodTime(entries) {
+    const min = (list) => list.reduce((s, e) => s + e.minutes, 0);
+    const toH = (m) => Math.max(0, Math.round((m / 60) * 100) / 100);
+    return { billableHours: toH(min(entries.filter((e) => e.billable))), nonBillableHours: toH(min(entries.filter((e) => !e.billable))) };
+}
+
+// Hours drawn from the allotment: billable time logged in the period.
+export function hoursUsedInPeriod(tasks, period, opts = {}) {
+    return summarizePeriodTime(periodTimeEntries(tasks, period, opts)).billableHours;
 }
 
 // ---- plans: the rows to write, worked out before anything is saved ----

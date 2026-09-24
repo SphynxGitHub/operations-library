@@ -220,6 +220,28 @@ export function isTaskBillable(task, client) {
     return rule ? rule.billable : false;
 }
 
+// Staff resolve each task's billable status (rules need the team roster, calendar events and the rules
+// themselves, which a client login doesn't load) and save it on the task as billableResolved, so a client's
+// Maintenance & Hours tab counts the same hours staff see. Returns true if anything changed.
+export function stampBillableFor(client) {
+    if (!client?.projectData?.clientTasks || window.IS_GUEST) return false;
+    let changed = false;
+    client.projectData.clientTasks.forEach((t) => {
+        if (!t || typeof t !== 'object') return;
+        const b = isTaskBillable(t, client);
+        if (t.billableResolved !== b) { t.billableResolved = b; changed = true; }
+    });
+    return changed;
+}
+
+// Billable for counting hours: staff work it out live; a client login reads what staff last saved.
+export function isTaskBillableForHours(task, client) {
+    if (!task) return false;
+    if (!window.IS_GUEST) return isTaskBillable(task, client);
+    if (task.billable === true || task.billable === false) return task.billable;
+    return task.billableResolved === true;
+}
+
 // What an event's billable flag should be when nobody has set it by hand.
 export function eventBillableFromRules(evt) {
     const rule = matchingEventRule(evt);
@@ -331,7 +353,7 @@ if (typeof window !== 'undefined') {
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    loadCoachingEventTypes, loadEventCallTypes, isTaskBillable, isItemBillable, billableReason, matchingBillableRule,
+    loadCoachingEventTypes, loadEventCallTypes, isTaskBillable, isItemBillable, stampBillableFor, isTaskBillableForHours, billableReason, matchingBillableRule,
     matchingEventRule, eventBillableFromRules, syncEventBillableFromRules, scheduleEventBillableSweep,
     isClientTaskForBilling: isClientTask, describeBillableRule: describeRule, normalizeBillableRule: normalizeRule,
     billableFieldOptions, billableFieldsForAppliesTo: fieldsForAppliesTo,
