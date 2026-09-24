@@ -583,12 +583,25 @@ window.buildLayout = function () {
         { key: "clients", label: "Clients", icon: "users", href: "#/business/clients" }
     ];
 
-    const partnerCoreTabs = [
+    // Partner sidebar, in two groups.
+    //   Partner Portal: their own work.     Templates: the library they draw from (every master app and function).
+    const partnerPortalTabs = [
         { key: "tasks", label: "Tasks", icon: "check-square", href: "#/business/tasks" },
-        { key: "resources", label: "Resource Templates", icon: "database", href: "#/resources" },
-        { key: "analysis", label: "Analysis Templates", icon: "trending-up", href: "#/analyze" },
-        { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+        { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports", business: true },
         { key: "team", label: "Team Members", icon: "users", href: "#/team" }
+    ];
+    const partnerTemplateTabs = [
+        { key: "resources", label: "Resources", icon: "database", href: "#/resources" },
+        { key: "analysis", label: "Analysis", icon: "trending-up", href: "#/analyze" },
+        { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+        { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
+        { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" }
+    ];
+    // Other business tabs a partner can be given (Business Manager Access in their profile), shown after the main three.
+    const partnerExtraBusinessTabs = [
+        { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
+        { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
+        { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" }
     ];
 
     const clientTabs = [
@@ -697,47 +710,33 @@ window.buildLayout = function () {
                             </button>
                         ` : ''}
 
-                        ${isPartnerProject ? `
+                        ${isPartnerProject ? (() => {
+                            const link = (item) => `
+                                        <a href="${item.href}" class="${hash.startsWith(item.href) ? 'active' : ''}">
+                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
+                                            <span class="menu-item">${item.label}</span>
+                                        </a>`;
+                            const businessOn = (item) => !!(client.businessModules && client.businessModules[item.key] === true);
+                            const taken = new Set([...partnerPortalTabs, ...partnerTemplateTabs].map(t => t.key));
+                            // Any other project tab an admin has switched on for this partner (Flow Map, Scoping, Data...).
+                            const otherModuleTabs = clientTabs.filter(item => !taken.has(item.key) && item.key !== 'checklist').filter(item => {
+                                if (typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return false;   // maintenance tabs only for maintenance clients
+                                return effectiveAdminMode || (client.modules && client.modules[item.key] === true);
+                            });
+                            return `
                             <div class="menu-category-label" style="margin-top:14px;">Partner Portal</div>
                             <nav class="menu">
-                                ${partnerCoreTabs.map(item => {
-                                    const isActive = hash.startsWith(item.href);
-                                    return `
-                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
-                                            <span class="menu-item">${item.label}</span>
-                                        </a>
-                                    `;
-                                }).join('')}
-                                ${clientTabs.filter(item => !partnerCoreTabs.some(core => core.key === item.key) && item.key !== 'checklist').map(item => {
-                                    if (typeof OL.maintenanceTabAllowed === 'function' && !OL.maintenanceTabAllowed(client, item.key)) return '';   // maintenance tabs only for maintenance clients
-                                    const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                                    if (!isModuleEnabled) return '';
-                                    const isActive = hash.startsWith(item.href);
-                                    return `
-                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
-                                            <span class="menu-item">${item.label}</span>
-                                        </a>
-                                    `;
-                                }).join('')}
-                                ${[
-                                    { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
-                                    { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
-                                    { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
-                                    { key: "financials", label: "Financials", icon: "circle-dollar-sign", href: "#/business/financials" }
-                                ].filter(item => client.businessModules && client.businessModules[item.key] === true).map(item => {
-                                    const isActive = hash.startsWith(item.href);
-                                    return `
-                                        <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>
-                                            <span class="menu-item">${item.label}</span>
-                                        </a>
-                                    `;
-                                }).join('')}
+                                ${partnerPortalTabs.filter(item => !item.business || businessOn(item)).map(link).join('')}
+                                ${partnerExtraBusinessTabs.filter(businessOn).map(link).join('')}
+                                ${otherModuleTabs.map(link).join('')}
                             </nav>
-                            <div class="divider" style="margin: 15px 0;"></div>
-                        ` : ''}
+
+                            <div class="menu-category-label" style="margin-top:6px;">Templates</div>
+                            <nav class="menu">
+                                ${partnerTemplateTabs.map(link).join('')}
+                            </nav>
+                            <div class="divider" style="margin: 15px 0;"></div>`;
+                        })() : ''}
 
                        ${!isPartnerProject ? `
                         <nav class="menu" style="margin-top:10px;">
