@@ -129,6 +129,58 @@ export function hoursUsedInPeriod(tasks, period, opts = {}) {
     return summarizePeriodTime(periodTimeEntries(tasks, period, opts)).billableHours;
 }
 
+// ---- which grant each billable hour comes out of ----
+// entries: from periodTimeEntries (only billable ones are charged). grants: hours_grant rows.
+// allocations: { taskId: grantId } — tasks set aside for a specific grant (e.g. work identified before a period
+// closed, to come out of its courtesy carryover).
+//   1. Time on an allocated task comes out of that grant, when the entry falls inside the grant's dates (it can go
+//      over; that shows as over).
+//   2. Other time comes out of the plan allotment covering its date first, then, once that is used up, the other
+//      grants covering the date, soonest to expire first. A carryover or purchase with tasks allocated to it is
+//      held for those tasks and never takes other time.
+//   3. Anything left over is charged to the first grant it could have used (showing as over), or, if no grant
+//      covers the date, reported as unfunded.
+// Entries are charged oldest first, so earlier work uses up hours first.
+const gDay = (v) => String(v || '').slice(0, 10);
+export const grantCovers = (g, day) => !!day && day >= gDay(g.granted_on) && day <= gDay(g.expires_on);
+export const entryKey = (e) => `${e.taskId}|${e.id}`;
+
+export function allocateHours({ entries = [], grants = [], allocations = {} }) {
+    const cap = {}, used = {};
+    grants.forEach((g) => { cap[g.id] = Math.round(Number(g.hours_granted || 0) * 60); used[g.id] = 0; });
+    const byId = new Map(grants.map((g) => [String(g.id), g]));
+    const reserved = new Set(Object.values(allocations).filter(Boolean).map(String)
+        .filter((id) => byId.get(id) && byId.get(id).source !== 'plan_allotment'));
+    const charges = {};
+    let unfunded = 0;
+    const charge = (key, g, minutes, over = false) => { used[g.id] += minutes; charges[key].push({ grantId: g.id, minutes, ...(over ? { over: true } : {}) }); };
+
+    entries.filter((e) => e.billable).slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((e) => {
+        const key = entryKey(e);
+        charges[key] = [];
+        const pinned = byId.get(String(allocations[e.taskId] || ''));
+        if (pinned && grantCovers(pinned, e.date)) {
+            charge(key, pinned, e.minutes, used[pinned.id] + e.minutes > cap[pinned.id]);
+            return;
+        }
+        const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
+            .sort((a, b) => (a.source === 'plan_allotment' ? 0 : 1) - (b.source === 'plan_allotment' ? 0 : 1) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
+        if (!pool.length) { unfunded += e.minutes; return; }
+        if (e.minutes <= 0) { charge(key, pool[0], e.minutes); return; }      // a correction goes back where time goes
+        let left = e.minutes;
+        for (const g of pool) {
+            const room = cap[g.id] - used[g.id];
+            if (room <= 0) continue;
+            const take = Math.min(room, left);
+            charge(key, g, take);
+            left -= take;
+            if (!left) break;
+        }
+        if (left > 0) charge(key, pool[0], left, true);
+    });
+    return { usedMinutes: used, charges, unfundedMinutes: unfunded };
+}
+
 // ---- plans: the rows to write, worked out before anything is saved ----
 const cleanHours = (v) => { const n = Math.round((parseFloat(v) || 0) * 100) / 100; return n > 0 ? n : 0; };
 
