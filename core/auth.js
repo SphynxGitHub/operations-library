@@ -103,6 +103,10 @@ export async function initializeSecurityContext() {
         }
 
         state.activeClientId = client.id;
+        // Who is logged in — kept separate from activeClientId, which changes as a partner opens
+        // their managed clients. A plain client login is locked to its own project.
+        state.loginClientId = client.id;
+        state.loginIsPartner = client.meta?.status === 'Partner';
         state.clients[client.id] = {
             id: client.id,
             publicToken: client.public_token,
@@ -348,6 +352,11 @@ export function copyTeamSetupLink(memberId) {
     if (typeof window.OL?.renderSphynxTeamPage === 'function') window.OL.renderSphynxTeamPage();
 }
 
+// A logged-in client (not staff, not a partner): locked to their own project.
+export function isClientLogin() {
+    return window.IS_GUEST === true && !!state.loginClientId && !state.loginIsPartner;
+}
+
 /*===================== SETUP LINKS (replaces old share-link) ==================*/
 
 // Generates a one-time setup link for a client/partner project and saves
@@ -385,7 +394,7 @@ export function copySetupLink(clientId) {
 // ---- bridge: keep OL.* calls working until callers import directly ----
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    initializeSecurityContext, checkPermission, isAdmin, getAdminQuery,
+    initializeSecurityContext, checkPermission, isAdmin, getAdminQuery, isClientLogin,
     signOut, generateSetupLink, copySetupLink, renderClientAccessList,
     hasTeamPermission, reconcileCurrentUserPermissions, getCurrentUserName, generateTeamSetupLink, copyTeamSetupLink,
     TEAM_PERMISSION_TABS
