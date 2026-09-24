@@ -60,6 +60,7 @@ export function clearPreviewTarget() {
 const ALLOWED_NON_READS = [
     /\/auth\/v1\/token/,                          // session refresh
     /\/rest\/v1\/rpc\/ol_master_for_clients/,     // the limited master registry a client/partner gets
+    /\/rest\/v1\/rpc\/ol_sphynx_team_names/,       // names-only Sphynx team list a client/partner gets
 ];
 
 // Tables the database only lets STAFF read (row-level security: ol_is_staff()). A real partner or client login

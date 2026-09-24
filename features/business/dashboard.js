@@ -72,12 +72,9 @@ OL.getDashboardMasterTasks = function() {
         (c.projectData?.clientTasks || []).map(t => {
             const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
 
-            let taskType = "Sphynx Task";
-            if (OL.thirdPartyAssignees.includes(t.assignee)) {
-                taskType = "Developer / 3rd Party Task";
-            } else if (t.isClientTask || (t.assignee && t.assignee !== 'Sphynx Task' && t.assignee !== 'Sphynx')) {
-                taskType = "Client Task";
-            }
+            // Sphynx staff, the partner's team, the client's team or a vendor, judged by name (a named Sphynx
+            // team member used to count as a Client Task here).
+            const taskType = OL.classifyTask(t, c).label;
 
             return {
                 ...t,

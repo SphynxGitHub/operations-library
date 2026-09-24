@@ -267,11 +267,150 @@ OL.bulkDeleteTasks = function() {
     OL.refreshTaskView();
 };
 
+// ---------------------------------------------------------------
+// WHO IS AN ASSIGNEE: Sphynx staff, a partner's team, or a client's team.
+// One classifier so every screen (Task Manager, dashboard, filters, quick
+// creator) gives the same answer. A task is one of:
+//   Sphynx Task | Client Task | {Partner name} Task | Developer / 3rd Party Task
+// ---------------------------------------------------------------
+const lc = (v) => String(v || '').trim().toLowerCase();
+
+// Real Sphynx staff names. Staff read them off the team roster. A partner or client login never receives the
+// roster (it holds emails and rates), only a names-only list from the database (ol_sphynx_team_names). Until
+// that function exists we fall back to names already on tasks that no client or partner team member explains.
+OL.getSphynxNames = function({ realOnly = false } = {}) {
+    if (window.IS_GUEST !== true) {
+        return (state.master?.sphynxTeam || []).map(m => m.name).filter(Boolean);
+    }
+    const fromDb = state.master?.sphynxTeamNames;
+    if (Array.isArray(fromDb) && fromDb.length) return fromDb.map(m => m.name).filter(Boolean);
+    if (realOnly) return [];
+    const signature = Object.values(state.clients || {}).reduce((n, c) => n + 1 + (c.projectData?.clientTasks || []).length, 0);
+    if (OL._inferredSphynxNames && OL._inferredSphynxNamesFor === signature) return OL._inferredSphynxNames;
+
+    const generic = new Set(['sphynx task', 'sphynx', 'client task', 'client']);
+    const vendors = new Set((OL.thirdPartyAssignees || []).map(lc));
+    const found = new Map();
+    // Anyone who is on ANY project's team is not Sphynx staff.
+    const known = new Set();
+    Object.values(state.clients || {}).forEach(c => {
+        OL.getClientTeamOptions(c.id).forEach(m => known.add(lc(m.name)));
+        if (c.meta?.status === 'Partner') known.add(lc(OL.getPartnerTaskLabel(c)));
+    });
+    Object.values(state.clients || {}).forEach(c => {
+        (c.projectData?.clientTasks || []).forEach(t => {
+            const a = String(t.assignee || '').trim();
+            if (!a || generic.has(lc(a)) || vendors.has(lc(a)) || known.has(lc(a))) return;
+            found.set(lc(a), a);
+        });
+    });
+    OL._inferredSphynxNames = [...found.values()].sort();
+    OL._inferredSphynxNamesFor = signature;
+    return OL._inferredSphynxNames;
+};
+
+// The partner a project belongs to: the project itself if it IS a partner, else the partner that manages it.
+OL.getPartnerFor = function(client) {
+    if (!client) return null;
+    if (client.meta?.status === 'Partner') return client;
+    const owner = client.meta?.partnerOwner;
+    return owner ? (state.clients?.[owner] || null) : null;
+};
+OL.getPartnerTaskLabel = function(partner) {
+    return `${partner?.meta?.name || 'Partner'} Task`;
+};
+
+OL.classifyTask = function(task, client) {
+    const SPHYNX = { key: 'sphynx', label: 'Sphynx Task' };
+    const CLIENT = { key: 'client', label: 'Client Task' };
+    const a = String(task?.assignee || task?.responsibleParty || '').trim();
+    const al = a.toLowerCase();
+    if (!a) return task?.isClientTask === true ? CLIENT : SPHYNX;
+    if (al === 'sphynx task' || al === 'sphynx') return SPHYNX;
+    if ((OL.thirdPartyAssignees || []).some(x => lc(x) === al)) return { key: 'thirdparty', label: 'Developer / 3rd Party Task' };
+    if (al === 'client task' || al === 'client') return CLIENT;
+    if (OL.getSphynxNames({ realOnly: true }).some(n => lc(n) === al)) return SPHYNX;
+
+    const c = client || state.clients?.[task?.clientId] || null;
+    const partner = OL.getPartnerFor(c);
+    if (c && partner && c.id !== partner.id && OL.getClientTeamOptions(c.id).some(m => lc(m.name) === al)) return CLIENT;
+    if (partner && (lc(OL.getPartnerTaskLabel(partner)) === al || OL.getClientTeamOptions(partner.id).some(m => lc(m.name) === al))) {
+        return { key: 'partner', label: OL.getPartnerTaskLabel(partner), partnerId: partner.id };
+    }
+    if (OL.getSphynxNames().some(n => lc(n) === al)) return SPHYNX;   // (guess used only before the database list exists)
+    return CLIENT;   // any other named person on a project is the client's
+};
+
+// Kept for callers that only need "is this Sphynx staff?"
 OL.isSphynxAssignee = function(assignee) {
     if (!assignee) return true;
-    if (assignee === 'Sphynx Task' || assignee === 'Sphynx') return true;
-    const sphynxTeam = state.master?.sphynxTeam || [];
-    return sphynxTeam.some(m => m.name === assignee);
+    return OL.classifyTask({ assignee }).key === 'sphynx';
+};
+
+// Option lists shared by the quick creator. `clientId` blank = no project chosen yet.
+OL.buildQuickTaskAssigneeOptions = function(clientId) {
+    const client = clientId ? state.clients?.[clientId] : null;
+    const partner = client
+        ? OL.getPartnerFor(client)
+        : (window.IS_GUEST === true && state.loginIsPartner ? state.clients?.[state.loginClientId] : null);
+    const seen = new Set(['sphynx task', 'client task']);
+    const group = (label, names) => {
+        const fresh = [...new Set(names.filter(Boolean))].filter(n => { const k = lc(n); if (seen.has(k)) return false; seen.add(k); return true; });
+        return fresh.length ? `<optgroup label="${esc(label)}">${fresh.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>` : '';
+    };
+
+    let html = `<option value="Sphynx Task" selected>Sphynx Task (unassigned)</option><option value="Client Task">Client Task</option>`;
+    if (partner) {
+        const label = OL.getPartnerTaskLabel(partner);
+        seen.add(lc(label));
+        html += `<option value="${esc(label)}">${esc(label)}</option>`;
+    }
+    html += group('Sphynx Team', OL.getSphynxNames());
+    if (partner) html += group(`${partner.meta?.name || 'Partner'} Team`, OL.getClientTeamOptions(partner.id).map(m => m.name));
+    if (client && (!partner || client.id !== partner.id)) html += group(`${client.meta?.name || 'Client'} Team`, OL.getClientTeamOptions(client.id).map(m => m.name));
+    html += group('Third-Party / Vendors', OL.thirdPartyAssignees || []);
+    return html;
+};
+
+// Assignee filter on the Task Manager: the groups of tasks, then the people.
+OL.buildTaskFilterAssigneeOptions = function(tasks, selected) {
+    const sel = (v) => (selected === v ? ' selected' : '');
+    const opt = (v, label) => `<option value="${esc(v)}"${sel(v)}>${esc(label)}</option>`;
+
+    // Partners in view: a partner login sees its own; staff see every partner that has clients or a team.
+    const partners = (window.IS_GUEST === true && state.loginIsPartner)
+        ? [state.clients?.[state.loginClientId]].filter(Boolean)
+        : Object.values(state.clients || {}).filter(c => c.meta?.status === 'Partner' &&
+            (OL.getClientTeamOptions(c.id).length || Object.values(state.clients).some(x => x.meta?.partnerOwner === c.id)));
+
+    const seen = new Set();
+    const group = (label, names) => {
+        const fresh = [...new Set(names.filter(Boolean))].filter(n => { const k = lc(n); if (seen.has(k)) return false; seen.add(k); return true; });
+        return fresh.length ? `<optgroup label="${esc(label)}">${fresh.map(n => opt(n, n)).join('')}</optgroup>` : '';
+    };
+
+    let html = opt('All', 'All Assignees') + opt('Sphynx', 'All Sphynx Tasks') + opt('Client', 'All Client Tasks');
+    partners.forEach(pt => { html += opt(`partner:${pt.id}`, `All ${pt.meta?.name || 'Partner'} Tasks`); });
+    html += opt('3rdParty', 'All 3rd Party / Developer Tasks');
+
+    html += group('Sphynx Team', OL.getSphynxNames());
+    partners.forEach(pt => { html += group(`${pt.meta?.name || 'Partner'} Team`, OL.getClientTeamOptions(pt.id).map(m => m.name)); });
+
+    // Client people: only those with a task in view, grouped by project, so no option ever matches nothing.
+    const byClient = new Map();
+    (tasks || []).forEach(t => {
+        if (t.taskClass !== 'client') return;
+        const a = String(t.assignee || '').trim();
+        if (!a || ['client task', 'client'].includes(lc(a))) return;
+        if (!byClient.has(t.clientName)) byClient.set(t.clientName, []);
+        byClient.get(t.clientName).push(a);
+    });
+    [...byClient.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0]))).forEach(([name, people]) => {
+        html += group(`${name} Team`, people.sort());
+    });
+
+    html += group('3rd Party Vendors', OL.thirdPartyAssignees || []);
+    return html;
 };
 
 OL.renderBusinessTaskManager = function() {
@@ -285,18 +424,9 @@ OL.renderBusinessTaskManager = function() {
         (c.projectData?.clientTasks || []).map(t => {
             const teamMembers = c.projectData?.team || c.projectData?.teamMembers || [];
             
-            let taskType = "Sphynx Task";
-            if (OL.thirdPartyAssignees.includes(t.assignee)) {
-                taskType = "Developer / 3rd Party Task";
-            } else if (!OL.isSphynxAssignee(t.assignee)) {
-                // Derived straight from the assignee name (via the roster
-                // check in OL.isSphynxAssignee) rather than trusting the
-                // stored t.isClientTask flag, since existing tasks already
-                // assigned to a named team member before this fix have that
-                // flag stuck at the wrong value — this self-heals the
-                // display without needing a data migration.
-                taskType = "Client Task";
-            }
+            // Derived from the assignee's name (Sphynx staff / partner team / client team / vendor), never from
+            // the stored t.isClientTask flag, which older tasks have stuck at the wrong value.
+            const cls = OL.classifyTask(t, c);
 
             return {
                 ...t,
@@ -304,7 +434,9 @@ OL.renderBusinessTaskManager = function() {
                 clientId: c.id,
                 teamMembers: teamMembers,
                 assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
-                taskType: taskType,
+                taskType: cls.label,
+                taskClass: cls.key,
+                taskPartnerId: cls.partnerId || null,
                 resourceName: t.resourceName || t.category || 'General Resource',
                 loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
             };
@@ -378,16 +510,7 @@ OL.renderBusinessTaskManager = function() {
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
                     <select id="quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
-                        <option value="Sphynx Task" selected>Sphynx Task (unassigned)</option>
-                        ${(state.master?.sphynxTeam || []).length ? `
-                            <optgroup label="Sphynx Team">
-                                ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
-                            </optgroup>
-                        ` : ''}
-                        <option value="Client Task">Client Task</option>
-                        <optgroup label="Third-Party / Vendors">
-                            ${OL.thirdPartyAssignees.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join('')}
-                        </optgroup>
+                        ${OL.buildQuickTaskAssigneeOptions('')}
                     </select>
                 </div>
         
@@ -447,22 +570,7 @@ OL.renderBusinessTaskManager = function() {
                     <i data-lucide="user-check" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Assignee:</span>
                     <select class="modal-input tiny" style="width: auto;" onchange="OL.setGlobalTaskFilter('assignee', this.value)">
-                        <option value="All" ${OL.globalTaskFilterState.assignee === 'All' ? 'selected' : ''}>All Assignees</option>
-                        <option value="Sphynx" ${OL.globalTaskFilterState.assignee === 'Sphynx' ? 'selected' : ''}>All Sphynx Tasks</option>
-                        <option value="Client" ${OL.globalTaskFilterState.assignee === 'Client' ? 'selected' : ''}>All Client Tasks</option>
-                        <option value="3rdParty" ${OL.globalTaskFilterState.assignee === '3rdParty' ? 'selected' : ''}>All 3rd Party / Developer Tasks</option>
-                
-                        <!-- SPHYNX TEAM MEMBERS -->
-                        <optgroup label="Sphynx Team">
-                            ${((state.master?.sphynxTeam?.length) ? state.master.sphynxTeam : [{ name: 'Admin Owner' }, { name: 'Lead Developer' }]).map(member => `
-                                <option value="${esc(member.name)}" ${OL.globalTaskFilterState.assignee === member.name ? 'selected' : ''}>${esc(member.name)}</option>
-                            `).join('')}
-                        </optgroup>
-                
-                        <!-- 3RD PARTY VENDORS -->
-                        <optgroup label="3rd Party Vendors">
-                            ${OL.thirdPartyAssignees.map(tp => `<option value="${esc(tp)}" ${OL.globalTaskFilterState.assignee === tp ? 'selected' : ''}>${esc(tp)}</option>`).join('')}
-                        </optgroup>
+                        ${OL.buildTaskFilterAssigneeOptions(masterTasks, OL.globalTaskFilterState.assignee)}
                     </select>
                 </div>
                 
@@ -627,9 +735,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         else if (status !== 'All') statusMatch = (t.status || 'Pending Sphynx Action') === status;
 
         let assigneeMatch = true;
-        if (assignee === 'Sphynx') assigneeMatch = t.assignee === 'Sphynx Task' || (!t.isClientTask && !OL.thirdPartyAssignees.includes(t.assignee));
-        else if (assignee === 'Client') assigneeMatch = t.assignee !== 'Sphynx Task' && !OL.thirdPartyAssignees.includes(t.assignee);
-        else if (assignee === '3rdParty') assigneeMatch = OL.thirdPartyAssignees.includes(t.assignee);
+        const cls = t.taskClass ? { key: t.taskClass, partnerId: t.taskPartnerId } : OL.classifyTask(t);
+        if (assignee === 'Sphynx') assigneeMatch = cls.key === 'sphynx';
+        else if (assignee === 'Client') assigneeMatch = cls.key === 'client';
+        else if (assignee === '3rdParty') assigneeMatch = cls.key === 'thirdparty';
+        else if (String(assignee).startsWith('partner:')) assigneeMatch = cls.key === 'partner' && String(cls.partnerId) === String(assignee).slice(8);
         else if (assignee !== 'All') assigneeMatch = t.assignee === assignee;
 
         let dateMatch = true;
@@ -1201,9 +1311,9 @@ OL.renderBulkTaskToolbar = function() {
                 <option value="">Set Assignee...</option>
                 <option value="Sphynx Task">Sphynx Task</option>
                 <option value="Client Task">Client Task</option>
-                ${(state.master?.sphynxTeam || []).length ? `
+                ${OL.getSphynxNames().length ? `
                     <optgroup label="Sphynx Team">
-                        ${state.master.sphynxTeam.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                        ${OL.getSphynxNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
                     </optgroup>
                 ` : ''}
                 ${clientTeamOptions.length ? `
@@ -1794,34 +1904,8 @@ OL.formatSecondsDisplay = function(totalSeconds) {
 OL.updateQuickTaskTeamDropdown = function(clientId) {
     const assigneeSelect = document.getElementById('quick-task-assignee');
     if (!assigneeSelect) return;
-
-    const teamOptions = OL.getClientTeamOptions(clientId);
-    const sphynxTeam = state.master?.sphynxTeam || [];
-
-    let html = `<option value="Sphynx Task" selected>Sphynx Task (unassigned)</option>`;
-    if (sphynxTeam.length > 0) {
-        html += `<optgroup label="Sphynx Team">`;
-        sphynxTeam.forEach(m => {
-            html += `<option value="${esc(m.name)}">${esc(m.name)}</option>`;
-        });
-        html += `</optgroup>`;
-    }
-    if (teamOptions.length > 0) {
-        html += `<optgroup label="Client Team Members">`;
-        teamOptions.forEach(m => {
-            html += `<option value="${esc(m.name)}">${esc(m.name)}</option>`;
-        });
-        html += `</optgroup>`;
-    } else if (sphynxTeam.length === 0) {
-        html += `<option value="Client Task">Client Task</option>`;
-    }
-    html += `<optgroup label="Third-Party / Vendors">`;
-    OL.thirdPartyAssignees.forEach(tp => {
-        html += `<option value="${esc(tp)}">${esc(tp)}</option>`;
-    });
-    html += `</optgroup>`;
-
-    assigneeSelect.innerHTML = html;
+    // Picking a project first adds that project's own team (and its partner's) to the list.
+    assigneeSelect.innerHTML = OL.buildQuickTaskAssigneeOptions(clientId);
 };
 
 OL.navigateToClientProject = function(clientId) {

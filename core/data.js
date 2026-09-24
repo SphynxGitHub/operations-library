@@ -440,6 +440,16 @@ export async function sync() {
             });
         }
 
+        // Partners and clients never receive the Sphynx team roster (emails, rates). They do get a names-only list
+        // so tasks can be told apart (Sphynx / partner / client) and assignee lists show real names.
+        // Until migrations/2026_09f_sphynx_team_names.sql is run the call fails quietly and the app falls back.
+        if (window.IS_GUEST) {
+            try {
+                const { data: teamNames, error: teamNamesErr } = await db.rpc('ol_sphynx_team_names');
+                if (!teamNamesErr && Array.isArray(teamNames)) state.master.sphynxTeamNames = teamNames;
+            } catch (e) { /* function not installed yet */ }
+        }
+
         // Google connection status was previously only ever set in-memory
         // right after the OAuth redirect, so it reset to "disconnected" on
         // every page load/reload even though the tokens were still valid
