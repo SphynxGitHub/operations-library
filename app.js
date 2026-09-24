@@ -669,7 +669,7 @@ window.buildLayout = function () {
                             <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                             <div class="client-info">
                                 <div class="client-name">${esc(client.meta.name)}</div>
-                                <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                                <div class="client-meta">${(!isPublic && !clientLogin) ? 'View Profile ⚙️' : 'Project Portal'}</div>
                             </div>
                         </div>
 
