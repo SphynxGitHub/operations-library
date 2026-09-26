@@ -3,8 +3,9 @@
 // no database, no page. Used by the requests sync (core/requests.js) and the
 // scoping sheet.
 //
-// Tasks link to a request through two fields on the task (client project JSON):
-//   requestLineItemId  the scoping line item the task belongs to
+// Tasks link to a request through task.links[] (core/task-links.js) — or,
+// for tasks that predate it, the legacy requestLineItemId field, which
+// taskAppliesToRequest() below still honors — plus:
 //   isBlocker          true if work on the request cannot continue without it
 //   askKind            'review' | 'document' | 'feedback' | 'third_party' for something
 //                      asked of the client or a third party, 'follow_up' for the
@@ -18,6 +19,8 @@
 //                                              in which case there is nothing left for
 //                                              Sphynx to do and it waits
 //   * Waiting is "on Client" if any open ask is for the client, else "on Third Party"
+
+import { taskAppliesToRequest } from './task-links.js';
 
 export const WORK_STATUS = {
     PENDING: 'pending_sphynx_action',
@@ -54,8 +57,7 @@ export function isTaskClosed(task, closedNames) {
 }
 
 export function tasksForItem(tasks, itemId) {
-    return (tasks || []).filter(t => t && t.requestLineItemId !== undefined && t.requestLineItemId !== null
-        && String(t.requestLineItemId) === String(itemId));
+    return (tasks || []).filter(t => t && taskAppliesToRequest(t, itemId));
 }
 
 // Which testing phase a request is in, from the client project: 'review' while its round is in the client's
