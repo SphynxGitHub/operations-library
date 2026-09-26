@@ -1,18 +1,18 @@
 //======================= CORE / REQUEST LINKS =======================//
-// Finds the request (scoping line) a task belongs to. A task points at its request with requestLineItemId, which
-// is set for step tasks, client asks, testing and fix tasks, and client-review tasks. Pure functions.
+// Finds the request(s) (scoping line) a task belongs to. A task points at its request(s) via task.links[] (see
+// core/task-links.js); requestLineItemId is the legacy single-request field, still read as a fallback for any
+// task that predates links[]. Pure functions.
+
+import { linksForTask } from './task-links.js';
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 
-// resourceFor(id) -> { name, type } | null. It defaults to the project's own resources, then the master list.
-export function findRequestForTask(client, task, resourceFor) {
-    const pd = client?.projectData;
-    if (!pd || !task || isBlank(task.requestLineItemId)) return null;
-    const lookup = resourceFor || ((id) => (pd.localResources || []).find((r) => r.id === id) || null);
+function findOneRequest(pd, lookup, requestId) {
+    if (isBlank(requestId)) return null;
 
     // 1. Search across Scoping Sheets first
     for (const sheet of pd.scopingSheets || []) {
-        const item = (sheet?.lineItems || []).find((i) => i && !isBlank(i.id) && String(i.id) === String(task.requestLineItemId));
+        const item = (sheet?.lineItems || []).find((i) => i && !isBlank(i.id) && String(i.id) === String(requestId));
         if (!item) continue;
         const resource = isBlank(item.resourceId) ? null : lookup(item.resourceId);
         const title = !isBlank(item.name) ? String(item.name).trim() : (resource?.name || '');
@@ -26,7 +26,7 @@ export function findRequestForTask(client, task, resourceFor) {
     }
 
     // 2. Fallback: Search standalone Client Requests (for requests not currently on a scoping sheet)
-    const standaloneItem = (pd.clientRequests || []).find((r) => r && !isBlank(r.id) && String(r.id) === String(task.requestLineItemId));
+    const standaloneItem = (pd.clientRequests || []).find((r) => r && !isBlank(r.id) && String(r.id) === String(requestId));
     if (standaloneItem) {
         const resource = isBlank(standaloneItem.resourceId) ? null : lookup(standaloneItem.resourceId);
         const title = !isBlank(standaloneItem.name || standaloneItem.title) ? String(standaloneItem.name || standaloneItem.title).trim() : (resource?.name || '');
@@ -40,6 +40,30 @@ export function findRequestForTask(client, task, resourceFor) {
     }
 
     return null;
+}
+
+// resourceFor(id) -> { name, type } | null. It defaults to the project's own resources, then the master list.
+// Returns one request object per link on the task (each carrying that link's resourceIds), in link order,
+// skipping any link whose request can no longer be found. A task with no links at all returns [].
+export function findRequestsForTask(client, task, resourceFor) {
+    const pd = client?.projectData;
+    if (!pd || !task) return [];
+    const lookup = resourceFor || ((id) => (pd.localResources || []).find((r) => r.id === id) || null);
+
+    return linksForTask(task)
+        .map((link) => {
+            const request = findOneRequest(pd, lookup, link.requestId);
+            return request ? { ...request, resourceIds: link.resourceIds || [] } : null;
+        })
+        .filter(Boolean);
+}
+
+// Back-compat: the request a task belongs to, when it belongs to exactly one (or the first, for a task that
+// now spans several). New code that needs to handle a multi-request task correctly should call
+// findRequestsForTask instead — this wrapper exists so every existing single-request call site keeps working
+// unchanged while each is moved over individually (see the call-site list in core/task-links.js).
+export function findRequestForTask(client, task, resourceFor) {
+    return findRequestsForTask(client, task, resourceFor)[0] || null;
 }
 
 // The name for the "resource" tag on a task row. Callers fill in "General Resource" when a task has none, which
