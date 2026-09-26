@@ -1,25 +1,27 @@
 //======================= FEATURES / REQUEST TAG =======================//
 // A task that belongs to a request shows a tag for it (next to its resource tag), and clicking the tag jumps to
-// that request on the client's scoping sheet. The logic is in core/request-links.js.
+// that request on the client's scoping sheet. A task can belong to more than one request (task.links[] —
+// core/task-links.js), e.g. a shared login ask that gates several requests at once, so this renders one tag
+// per link, not just the first. The logic is in core/request-links.js.
 
 import { state, esc, getActiveClient, loadFullClient } from '../core/data.js';
-import { findRequestForTask, resourceLabelForTask } from '../core/request-links.js';
+import { findRequestsForTask, resourceLabelForTask } from '../core/request-links.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
 
-function requestOf(task) {
+function requestsOf(task) {
     const client = state.clients?.[task?.clientId] || getActiveClient();
-    return findRequestForTask(client, task, resourceLookup(client));
+    return findRequestsForTask(client, task, resourceLookup(client));
 }
 
 export function taskResourceLabel(task) {
-    return resourceLabelForTask(task, requestOf(task));
+    // Resource label still reflects a single request for display purposes (the tag row below shows every
+    // request separately) — the first linked request's resource is the best single answer here.
+    return resourceLabelForTask(task, requestsOf(task)[0] || null);
 }
 
-export function renderRequestTagHTML(task) {
-    const req = requestOf(task);
-    if (!req) return '';
+function oneTagHTML(task, req) {
     const clientId = task.clientId || "";
     const label = req.title.length > 38 ? req.title.slice(0, 37) + '…' : req.title;
     const typeLabel = req.requestType.charAt(0).toUpperCase() + req.requestType.slice(1);
@@ -28,6 +30,12 @@ export function renderRequestTagHTML(task) {
                   onclick="event.stopPropagation(); OL.openRequestFromTask('${esc(clientId)}', '${esc(req.itemId)}')">
                 <i data-lucide="git-pull-request" style="width:11px;height:11px; pointer-events:none;"></i>${esc(label)}
             </span>`;
+}
+
+export function renderRequestTagHTML(task) {
+    const reqs = requestsOf(task);
+    if (!reqs.length) return '';
+    return reqs.map((req) => oneTagHTML(task, req)).join(' ');
 }
 
 // Jump to the client's scoping sheet and open the request there.
