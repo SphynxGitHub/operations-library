@@ -8,6 +8,7 @@
 // Pure functions on the client project JSON.
 
 import { isTaskClosed } from './work-status.js';
+import { taskAppliesToRequest } from './task-links.js';
 
 export const PHASES = ['before', 'implementation', 'after'];
 export const PHASE_LABELS = { before: 'Before', implementation: 'Implementation', after: 'After' };
@@ -17,12 +18,13 @@ const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 const sameId = (a, b) => !isBlank(a) && !isBlank(b) && String(a) === String(b);
 const dayOf = (v) => (/^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : '');
 
-// Tasks that belong to the request: linked by requestLineItemId, plus the action items of its meeting when a
-// meeting has been linked to it (the meeting summary makes those with the event's id).
+// Tasks that belong to the request: linked via task.links[] (or the legacy requestLineItemId, for tasks that
+// predate links[] — taskAppliesToRequest covers both), plus the action items of its meeting when a meeting
+// has been linked to it (the meeting summary makes those with the event's id).
 export function tasksForRequest(client, item) {
     const tasks = client?.projectData?.clientTasks || [];
     if (!item) return [];
-    return tasks.filter((t) => t && (sameId(t.requestLineItemId, item.id)
+    return tasks.filter((t) => t && (taskAppliesToRequest(t, item.id)
         || (!isBlank(item.linkedEventId) && (sameId(t.parentEventId, item.linkedEventId) || sameId(t.linkedEventId, item.linkedEventId)))));
 }
 
@@ -32,7 +34,7 @@ export function taskPhase(task, item) {
     if (task && PHASES.includes(task.phase)) return task.phase;
     if (!task) return 'implementation';
     if (task.askKind) return 'before';
-    const fromMeeting = item && !isBlank(item.linkedEventId) && !sameId(task.requestLineItemId, item.id)
+    const fromMeeting = item && !isBlank(item.linkedEventId) && !taskAppliesToRequest(task, item.id)
         && (sameId(task.parentEventId, item.linkedEventId) || sameId(task.linkedEventId, item.linkedEventId));
     return fromMeeting ? 'after' : 'implementation';
 }
