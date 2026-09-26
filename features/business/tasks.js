@@ -1,5 +1,6 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
 import { findRequestForTask } from '../../core/request-links.js';
+import { requestIdsForTask, taskAppliesToRequest, addLink, removeLink } from '../../core/task-links.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -3252,47 +3253,52 @@ OL.renderCommentTextWithMentions = function(text, html) {
 // as a minor tag rather than the task's actual place in the hierarchy.
 // This also lists sibling tasks under the same request, so you can see
 // where this task sits among the request's other steps without leaving
-// the modal.
+// the modal. A task can belong to more than one request (task.links[]),
+// so this renders one banner per link, not just the first.
 OL.renderTaskParentRequestBanner = function(client, task) {
     const pd = client?.projectData;
-    if (!pd || !task.requestLineItemId) return '';
+    const requestIds = requestIdsForTask(task);
+    if (!pd || !requestIds.length) return '';
 
-    const item = OL.findRequestItem(client, task.requestLineItemId);
-    if (!item) return '';
-
-    const resourceLookup = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
-    const resource = item.resourceId ? resourceLookup(item.resourceId) : null;
-    const title = (item.name && String(item.name).trim()) || resource?.name || 'Request';
-    const requestType = item.requestType || 'build';
-    const round = Math.max(parseInt(item.round, 10) || 1, 1);
-
-    const siblingTasks = (pd.clientTasks || []).filter(t => t.requestLineItemId === task.requestLineItemId);
     const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
     const dotColorFor = (statusName) => (masterStatuses.find(s => s.name === statusName) || {}).color || '#94a3b8';
 
-    return `
-        <div style="margin:0 24px 0 24px; padding:12px 14px; background:rgba(100,198,162,0.06); border:1px solid rgba(100,198,162,0.25); border-radius:8px;">
-            <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(item.id)}')" title="Open this request on the scoping sheet">
-                <i data-lucide="git-pull-request" style="width:14px;height:14px;color:#64c6a2; flex-shrink:0;"></i>
-                <span class="tiny bold uppercase muted">Request (parent)</span>
-                <span style="font-weight:700; color:#64c6a2;">${esc(title)}</span>
-                <span class="pill tiny soft" style="font-size:9px;">${esc(requestType.charAt(0).toUpperCase() + requestType.slice(1))} · Round ${round}</span>
-            </div>
-            ${siblingTasks.length ? `
-                <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(100,198,162,0.2); display:grid; gap:4px;">
-                    <span class="tiny muted uppercase bold" style="margin-bottom:2px;">Tasks under this request (${siblingTasks.length})</span>
-                    ${siblingTasks.map(t => `
-                        <div style="display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; ${String(t.id) === String(task.id) ? 'background:rgba(100,198,162,0.12);' : ''}"
-                             onclick="event.stopPropagation(); ${String(t.id) === String(task.id) ? '' : `OL.openTaskInContext('${esc(client?.id || '')}', '${esc(t.id)}')`}">
-                            <span style="width:8px; height:8px; border-radius:50%; background:${dotColorFor(t.status)}; flex-shrink:0;"></span>
-                            <span class="tiny" style="${String(t.id) === String(task.id) ? 'font-weight:700;' : ''}">${esc(t.title || t.name)}</span>
-                            ${String(t.id) === String(task.id) ? '<span class="tiny muted">(this task)</span>' : ''}
-                        </div>
-                    `).join('')}
+    return requestIds.map((requestId) => {
+        const item = OL.findRequestItem(client, requestId);
+        if (!item) return '';
+
+        const resourceLookup = (id) => (pd.localResources || []).find(r => r.id === id) || (state.master?.resources || []).find(r => r.id === id) || null;
+        const resource = item.resourceId ? resourceLookup(item.resourceId) : null;
+        const title = (item.name && String(item.name).trim()) || resource?.name || 'Request';
+        const requestType = item.requestType || 'build';
+        const round = Math.max(parseInt(item.round, 10) || 1, 1);
+
+        const siblingTasks = (pd.clientTasks || []).filter(t => taskAppliesToRequest(t, requestId));
+
+        return `
+            <div style="margin:0 24px 8px 24px; padding:12px 14px; background:rgba(100,198,162,0.06); border:1px solid rgba(100,198,162,0.25); border-radius:8px;">
+                <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(item.id)}')" title="Open this request on the scoping sheet">
+                    <i data-lucide="git-pull-request" style="width:14px;height:14px;color:#64c6a2; flex-shrink:0;"></i>
+                    <span class="tiny bold uppercase muted">Request (parent)</span>
+                    <span style="font-weight:700; color:#64c6a2;">${esc(title)}</span>
+                    <span class="pill tiny soft" style="font-size:9px;">${esc(requestType.charAt(0).toUpperCase() + requestType.slice(1))} · Round ${round}</span>
                 </div>
-            ` : ''}
-        </div>
-    `;
+                ${siblingTasks.length ? `
+                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(100,198,162,0.2); display:grid; gap:4px;">
+                        <span class="tiny muted uppercase bold" style="margin-bottom:2px;">Tasks under this request (${siblingTasks.length})</span>
+                        ${siblingTasks.map(t => `
+                            <div style="display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; ${String(t.id) === String(task.id) ? 'background:rgba(100,198,162,0.12);' : ''}"
+                                 onclick="event.stopPropagation(); ${String(t.id) === String(task.id) ? '' : `OL.openTaskInContext('${esc(client?.id || '')}', '${esc(t.id)}')`}">
+                                <span style="width:8px; height:8px; border-radius:50%; background:${dotColorFor(t.status)}; flex-shrink:0;"></span>
+                                <span class="tiny" style="${String(t.id) === String(task.id) ? 'font-weight:700;' : ''}">${esc(t.title || t.name)}</span>
+                                ${String(t.id) === String(task.id) ? '<span class="tiny muted">(this task)</span>' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
 };
 
 // A request can live on a scoping sheet or in the standalone client
@@ -3326,9 +3332,14 @@ OL.listProjectRequests = function(client) {
 
 OL.getTaskParentLabel = function(client, task) {
     // A request is the task's real parent in the lifecycle model, so it wins.
-    if (task.requestLineItemId) {
-        const item = OL.findRequestItem(client, task.requestLineItemId);
-        if (item) return 'Request · ' + esc(OL.requestItemTitle(client, item));
+    const requestIds = requestIdsForTask(task);
+    if (requestIds.length) {
+        const titles = requestIds.map((id) => {
+            const item = OL.findRequestItem(client, id);
+            return item ? OL.requestItemTitle(client, item) : null;
+        }).filter(Boolean);
+        if (titles.length === 1) return 'Request · ' + esc(titles[0]);
+        if (titles.length > 1) return 'Requests (' + titles.length + ') · ' + esc(titles.join(', '));
     }
     if (task.parentResourceId) {
         const res = client?.projectData?.localResources?.find(r => r.id === task.parentResourceId);
@@ -3371,26 +3382,33 @@ OL.renderTaskParentPickerStep = function() {
     const query = (st.query || '').trim().toLowerCase();
     const resources = (client.projectData?.localResources || []).filter(r => (r.name || '').toLowerCase().includes(query));
     const events = (st.events || []).filter(e => (e.title || '').toLowerCase().includes(query));
+    const linkedRequestIds = requestIdsForTask(task);
     const requests = OL.listProjectRequests(client)
-        .filter(i => !['Done', "Don't Do"].includes(i.status) || String(i.id) === String(task.requestLineItemId))
+        .filter(i => !['Done', "Don't Do"].includes(i.status) || linkedRequestIds.includes(String(i.id)))
         .filter(i => OL.requestItemTitle(client, i).toLowerCase().includes(query));
 
     const content = `
         <div style="padding: 20px; max-width: 420px; width: 100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;">
-                <h3 style="margin:0; font-size:15px;">Set Parent</h3>
+                <h3 style="margin:0; font-size:15px;">Manage Links</h3>
                 <button class="btn tiny soft" onclick="OL.closeModal(); OL.openTaskInContext('${st.clientId}', '${st.taskId}')">✕</button>
             </div>
             <input type="text" class="modal-input tiny" placeholder="Search resources or events..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
                    oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._taskParentPickerState.query = v; OL.renderTaskParentPickerStep(); })" id="task-parent-search">
-            <button class="btn tiny soft" style="width:100%; margin-bottom:10px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">None</button>
-            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Requests</div>
+            <div class="tiny bold uppercase muted" style="margin-bottom:2px;">Requests</div>
+            <div class="tiny muted" style="margin-bottom:6px;">A task can apply to more than one — check every request it belongs to.</div>
             <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
-                ${requests.length ? requests.map(r => `
-                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${String(task.requestLineItemId) === String(r.id) ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'request', '${esc(String(r.id))}')"><i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}</div>
-                `).join('') : `<div class="tiny muted">No open requests.</div>`}
+                ${requests.length ? requests.map(r => {
+                    const checked = linkedRequestIds.includes(String(r.id));
+                    return `
+                    <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${checked ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.toggleTaskRequestLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}')">
+                        <input type="checkbox" ${checked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
+                        <i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}
+                    </div>`;
+                }).join('') : `<div class="tiny muted">No open requests.</div>`}
             </div>
             <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Resources</div>
+            <button class="btn tiny soft" style="width:100%; margin-bottom:6px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">Clear resource / event</button>
             <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
                 ${resources.length ? resources.map(r => `
                     <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentResourceId === r.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'resource', '${r.id}')">${esc(r.name)}</div>
@@ -3409,24 +3427,36 @@ OL.renderTaskParentPickerStep = function() {
     document.getElementById('task-parent-search')?.focus();
 };
 
+// Toggles this task's link to a request on/off — resourceIds stays empty
+// (request-level) here; scoping a link to specific resources within a
+// multi-resource request isn't exposed in this picker yet (see BUILD_NOTES).
+// Re-renders the picker in place rather than closing it, so several requests
+// can be checked in one sitting.
+OL.toggleTaskRequestLink = function(clientId, taskId, requestId) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        if (requestIdsForTask(task).includes(String(requestId))) removeLink(task, requestId);
+        else addLink(task, requestId, []);
+    }, clientId);
+    OL.reRenderPreservingFocus(() => OL.renderTaskParentPickerStep());
+};
+
 OL.setTaskParent = function(clientId, taskId, type, id) {
     updateAndSync(() => {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
         if (!task) return;
-        if (type === 'request') {
-            // Request is a separate axis: a task can sit under a request AND
-            // be about a resource, so picking a request keeps the others.
-            task.requestLineItemId = id;
-            return;
-        }
-        if (type === null) task.requestLineItemId = null;
+        // Request links are handled by toggleTaskRequestLink above — this
+        // function now only ever touches the resource/event axes, which
+        // stay single-select (a task is about at most one resource or
+        // event at a time, unlike requests).
         task.parentResourceId = type === 'resource' ? id : null;
         task.parentEventId = type === 'event' ? id : null;
     }, clientId);
 
-    OL.closeModal();
-    OL.openTaskInContext(clientId, taskId);
+    OL.reRenderPreservingFocus(() => OL.renderTaskParentPickerStep());
 };
 
 OL.setTaskRecurrence = function(clientId, taskId, presetKey) {
