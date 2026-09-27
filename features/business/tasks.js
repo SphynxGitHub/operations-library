@@ -1,6 +1,7 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
 import { findRequestForTask } from '../../core/request-links.js';
-import { requestIdsForTask, taskAppliesToRequest, addLink, removeLink } from '../../core/task-links.js';
+import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
+import { requestResourceIds } from '../../core/request-pricing.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -3416,10 +3417,31 @@ OL.renderTaskParentPickerStep = function() {
                     <div style="display:grid; gap:4px; max-height:320px; overflow:auto;">
                         ${requests.length ? requests.map(r => {
                             const checked = linkedRequestIds.includes(String(r.id));
+                            const resIds = requestResourceIds(r);
+                            const linkedResourceIds = (linksForTask(task).find(l => l.requestId === String(r.id))?.resourceIds || []).map(String);
+                            const showResourceScoping = checked && resIds.length > 1;
+                            const resourceLookup = (id) => (client.projectData?.localResources || []).find(res => res.id === id) || (state.master?.resources || []).find(res => res.id === id) || null;
+
                             return `
-                            <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${checked ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.toggleTaskRequestLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}')">
-                                <input type="checkbox" ${checked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
-                                <i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}
+                            <div>
+                                <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${checked ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.toggleTaskRequestLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}')">
+                                    <input type="checkbox" ${checked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
+                                    <i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}
+                                </div>
+                                ${showResourceScoping ? `
+                                    <div style="margin:4px 0 2px 20px; padding-left:8px; border-left:2px solid rgba(100,198,162,0.25); display:grid; gap:3px;">
+                                        <span class="tiny muted" style="font-size:9px;">Scope to specific resource(s) — leave unchecked for the whole request</span>
+                                        ${resIds.map(resId => {
+                                            const res = resourceLookup(resId);
+                                            const resChecked = linkedResourceIds.includes(String(resId));
+                                            return `
+                                            <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:5px; cursor:pointer; ${resChecked ? 'background:rgba(100,198,162,0.08);' : ''}" onclick="event.stopPropagation(); OL.toggleTaskResourceLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}', '${esc(String(resId))}')">
+                                                <input type="checkbox" ${resChecked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
+                                                ${esc(res?.name || 'Resource')}
+                                            </div>`;
+                                        }).join('')}
+                                    </div>
+                                ` : ''}
                             </div>`;
                         }).join('') : `<div class="tiny muted">No open requests.</div>`}
                     </div>
@@ -3462,6 +3484,25 @@ OL.toggleTaskRequestLink = function(clientId, taskId, requestId) {
         if (!task) return;
         if (requestIdsForTask(task).includes(String(requestId))) removeLink(task, requestId);
         else addLink(task, requestId, []);
+    }, clientId);
+    OL.reRenderPreservingFocus(() => OL.renderTaskParentPickerStep());
+};
+
+// Narrows (or widens) an already-checked request link to specific
+// resource(s) within it — only shown/reachable for requests with more than
+// one resource (see the "Scope to specific resource(s)" sub-list above).
+// Unchecking the last scoped resource falls back to request-level
+// (resourceIds: []) rather than deleting the link, since the request itself
+// is still checked — dropToRequestLevel:true on removeResourceFromLink.
+OL.toggleTaskResourceLink = function(clientId, taskId, requestId, resourceId) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        const link = linksForTask(task).find((l) => l.requestId === String(requestId));
+        const alreadyScoped = (link?.resourceIds || []).map(String).includes(String(resourceId));
+        if (alreadyScoped) removeResourceFromLink(task, requestId, resourceId, true);
+        else addLink(task, requestId, [resourceId]);
     }, clientId);
     OL.reRenderPreservingFocus(() => OL.renderTaskParentPickerStep());
 };
