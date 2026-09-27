@@ -369,7 +369,7 @@ export function renderScopingSheet() {
         <div class="grid-row grid-header">
             <div class="col-expand">Deliverable</div>
             <div class="col-status">Status</div>
-            <div class="col-team">Versions Multiplier</div>
+            <div class="col-team">Multiplier</div>
             <div class="col-gross" style="text-align:center;">Gross</div>
             <div class="col-discount" style="text-align:center;">Disc</div> 
             <div class="col-numeric" style="text-align:right;">Net</div>
@@ -702,13 +702,13 @@ function renderScopingRowBase(item, idx, showUnits) {
                 ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
-            ${clientTestHtml ? `<div class="tiny" style="margin-top:4px;">${clientTestHtml}</div>` : ''}
             ${unitsHtml}
             ${isAdmin ? `
                 <div class="tiny" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
                     ${typeSelectHtml}
                     ${requestHoursHtml}
                     ${staffWorkHtml}
+                    ${clientTestHtml}
                 </div>
             ` : ''}
         </div>
