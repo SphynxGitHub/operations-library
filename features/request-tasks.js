@@ -109,7 +109,6 @@ export function requestTasksRowHtml(client, item, opts = {}) {
                 : ''}
             <span style="flex:1;"></span>
             ${covers}
-            <button type="button" class="btn tiny soft" style="font-size:10px; padding:1px 8px;" onclick="event.stopPropagation(); ${opts.editAction ? esc(opts.editAction) : 'OL.openRequestLineModal'}('${esc(item.id)}')">Edit request</button>
         </div>
         ${open ? requestTasksPanelHtml(client, item) : ''}`;
 }
