@@ -264,6 +264,18 @@ export function planEditGrant({ grant, patch }) {
 export function ensureMaintenanceSheet(pd) {
     if (!pd) return null;
     if (!Array.isArray(pd.scopingSheets)) pd.scopingSheets = [];
+    // Almost everywhere else in the app (openRequestLineModal,
+    // openRequestFromTask, confirmExcerptCreateRequest, etc.) hardcodes
+    // scopingSheets[0] as "the" main build-requests sheet. If this is the
+    // very first sheet a client ever gets — e.g. their first-ever request
+    // came in through Client Requests/Maintenance before anyone touched
+    // the normal scoping sheet — the maintenance sheet would otherwise
+    // become that [0] slot itself, and every one of those other lookups
+    // would silently miss real requests from then on. Guarantee a real
+    // main sheet exists first so the maintenance sheet never lands there.
+    if (!pd.scopingSheets.some((s) => s && s.id !== MAINTENANCE_SHEET_ID && s.kind !== 'maintenance')) {
+        pd.scopingSheets.unshift({ id: 'initial', lineItems: [] });
+    }
     let sheet = pd.scopingSheets.find((s) => s && s.id === MAINTENANCE_SHEET_ID);
     if (!sheet) {
         sheet = { id: MAINTENANCE_SHEET_ID, kind: 'maintenance', status: 'Approved', lineItems: [] };
