@@ -462,9 +462,12 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
             <div class="round-section" style="border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
-                    <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
-                    ${isCurrentRound ? '<span class="pill tiny accent" style="margin-left:8px;">Current</span>' : ''}
-                    ${collapsed ? `<span class="tiny muted" style="margin-left:8px;">${items.length} item${items.length === 1 ? '' : 's'}</span>` : ''}
+                    <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                        <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
+                        ${isCurrentRound ? '<span class="pill tiny accent">Current</span>' : ''}
+                    </div>
+                    ${collapsed ? `<span class="tiny muted" style="margin-top:2px;">${items.length} item${items.length === 1 ? '' : 's'}</span>` : ''}
+                    ${typeof OL.roundStatusHtml === 'function' ? `<div style="margin-top:2px;">${OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound)}</div>` : ''}
                 </div>
                 <div class="col-status">
                     ${roundIsAdmin ? `
@@ -474,7 +477,6 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                             ${SHEET_STATUSES.map(st => `<option value="${esc(st)}" ${roundApprovalStatus === st ? 'selected' : ''}>${esc(st)}</option>`).join('')}
                         </select>
                     ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}">${esc(roundApprovalStatus)}</span>` : '')}
-                    ${typeof OL.roundStatusHtml === 'function' ? OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound) : ''}
                 </div>
                 <div class="col-team"></div>
                 
@@ -703,7 +705,7 @@ function renderScopingRowBase(item, idx, showUnits) {
             ${clientTestHtml ? `<div class="tiny" style="margin-top:4px;">${clientTestHtml}</div>` : ''}
             ${unitsHtml}
             ${isAdmin ? `
-                <div class="tiny" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div class="tiny" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
                     ${typeSelectHtml}
                     ${requestHoursHtml}
                     ${staffWorkHtml}
