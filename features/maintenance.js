@@ -754,12 +754,17 @@ export async function deleteMaintenanceRequest(itemId) {
 // the main scoping sheet's Backlog section. Console-only, not wired to any
 // button — run once per affected client:
 //   OL.migrateClientRequestsToBacklog(['client-id-1', 'client-id-2'])
+// Pulls from BOTH places an open request can currently live: the
+// maintenance-kind sheet's lineItems (the current model), and the legacy
+// standalone projectData.clientRequests array (pre-dates the sheet model —
+// same fallback renderClientRequests/findRequestItem already read from).
 // Only moves items whose status isn't Done/Don't Do; preserves each item's
 // id (so any task already linked to it via requestLineItemId/links[] keeps
 // working — findRequestItem/findRequestsForTask search every sheet, so the
-// link doesn't care which sheet the item lives on). Leaves the maintenance
-// sheet's plan/hours tracking (grants, periods) completely untouched —
-// this only moves the request line items themselves, not billing.
+// link doesn't care which sheet the item lives on) and resourceIds (a
+// request covering real resources, not just a resource-less "reqline").
+// Leaves the maintenance sheet's plan/hours tracking (grants, periods)
+// completely untouched — this only moves the request line items.
 export async function migrateClientRequestsToBacklog(clientIds) {
     const results = [];
     for (const clientId of clientIds || []) {
@@ -773,10 +778,16 @@ export async function migrateClientRequestsToBacklog(clientIds) {
             if (!Array.isArray(pd.scopingSheets)) pd.scopingSheets = [{ id: 'initial', lineItems: [] }];
             const mSheet = maintenanceSheetOf(pd);
             const mainSheet = pd.scopingSheets.find((s) => !isMaintenanceSheet(s));
-            if (!mSheet || !mainSheet) { results.push({ clientId, clientName: client.meta?.name, moved: [] }); return; }
+            if (!mainSheet) { results.push({ clientId, clientName: client.meta?.name, moved: [] }); return; }
 
             const isOpen = (i) => i && String(i.status || '') !== 'Done' && !/^Don.t Do$/i.test(String(i.status || ''));
-            const moving = (mSheet.lineItems || []).filter(isOpen);
+            const fromSheet = (mSheet?.lineItems || []).filter(isOpen);
+            // Same de-dupe renderClientRequests already does: a standalone
+            // item whose id also shows up on some scoping sheet is the
+            // same request, not a second one.
+            const scopedIds = new Set((pd.scopingSheets || []).flatMap((s) => s?.lineItems || []).map((i) => String(i.id)));
+            const fromStandalone = (pd.clientRequests || []).filter((i) => isOpen(i) && !scopedIds.has(String(i.id)));
+            const moving = [...fromSheet, ...fromStandalone];
 
             moving.forEach((item) => {
                 const extras = [
@@ -784,6 +795,8 @@ export async function migrateClientRequestsToBacklog(clientIds) {
                     item.reporter ? `Reported by: ${item.reporter}` : '',
                     item.receivedAt ? `Received: ${item.receivedAt}` : '',
                 ].filter(Boolean).join(' · ');
+                const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds
+                    : (item.resourceId && !String(item.resourceId).startsWith('reqline-')) ? [item.resourceId] : undefined;
                 if (!Array.isArray(mainSheet.lineItems)) mainSheet.lineItems = [];
                 mainSheet.lineItems.push({
                     id: item.id,
@@ -798,10 +811,15 @@ export async function migrateClientRequestsToBacklog(clientIds) {
                     manualHours: item.manualHours || 0,
                     dependencies: item.dependencies || [],
                     notes: [item.notes, extras].filter(Boolean).join('\n\n'),
+                    ...(resourceIds ? { resourceIds } : {}),
                 });
             });
 
-            mSheet.lineItems = (mSheet.lineItems || []).filter((i) => !isOpen(i));
+            if (mSheet) mSheet.lineItems = (mSheet.lineItems || []).filter((i) => !isOpen(i));
+            if (Array.isArray(pd.clientRequests)) {
+                const movingIds = new Set(fromStandalone.map((i) => String(i.id)));
+                pd.clientRequests = pd.clientRequests.filter((i) => !movingIds.has(String(i?.id)));
+            }
             results.push({ clientId, clientName: client.meta?.name, moved: moving.map((i) => i.name || i.id) });
         }, clientId);
     }
