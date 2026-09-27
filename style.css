@@ -485,7 +485,7 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
 .scoping-grid, .grid-row, .round-header-row, .grid-header { width: 100% !important; }
 .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
     display: grid !important;
-    grid-template-columns: minmax(200px,2fr) minmax(150px,1fr) 140px 75px 75px 95px 30px !important;
+    grid-template-columns: minmax(260px,3fr) minmax(120px,0.8fr) 130px 60px 55px 80px 30px !important;
     gap: 8px 12px !important; align-items: start !important; padding: 10px 16px !important;
 }
 .col-multiplier, .col-gross, .col-discount { text-align: center !important; }
@@ -493,6 +493,7 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
 .col-numeric { text-align: right !important; font-variant-numeric: tabular-nums !important; font-weight: 700; }
 .col-actions { text-align: right !important; display: flex !important; justify-content: flex-end !important; }
 .row-title { white-space: normal !important; word-wrap: break-word; line-height: 1.4; font-weight: bold; color: var(--accent); }
+.row-title > svg, .row-title > i { flex-shrink: 0 !important; }
 .row-note { white-space: normal !important; font-size: 11px; margin-top: 4px; display: block; }
 .col-expand { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; overflow: visible !important; }
 .unit-badge-container { display: flex !important; flex-wrap: wrap !important; gap: 4px; margin-top: 6px; height: auto !important; min-height: 10px; }
@@ -502,11 +503,23 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
     border: 1px solid rgba(56,189,248,0.3); margin-top: 4px; margin-right: 4px;
     white-space: nowrap; visibility: visible !important; opacity: 1 !important;
 }
+/* Round grouping gutter — a spreadsheet-style +/- outline toggle to the
+   left of the round's own bordered box, with a vertical line running down
+   alongside its rows while expanded, instead of a text "Collapse" button
+   living inside the header row itself. */
+.round-outer { display: flex; align-items: stretch; gap: 10px; margin-bottom: 25px; }
+.round-gutter { flex-shrink: 0; width: 20px; display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
+.round-gutter-toggle {
+    width: 16px; height: 16px; flex-shrink: 0; border: 1px solid var(--panel-border); border-radius: 3px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-size: 12px; line-height: 1; font-weight: 700; color: var(--muted); background: transparent;
+}
+.round-gutter-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.round-gutter-line { flex: 1; width: 1px; background: var(--panel-border); margin-top: 6px; }
+.round-section { flex: 1; min-width: 0; }
 .grand-totals-bar {
-    display: grid !important;
-    grid-template-columns: minmax(200px,2fr) 1minmax(150px,1fr) 140px 65px 75px 75px 95px 30px !important;
-    gap: 8px 12px !important; align-items: center !important; padding: 20px 16px !important;
     background: rgba(0,0,0,0.05); border-top: 2px solid var(--accent); margin-top: 10px;
+    padding: 20px 16px !important; align-items: center !important;
 }
 .total-item-gross { grid-column: 4; text-align: center; }
 .total-item-disc { grid-column: 5; text-align: center; }
