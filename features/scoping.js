@@ -491,8 +491,11 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                 <div class="col-numeric bold" style="font-size: 12px; text-align:right; line-height: 1.1;">
                     $${finalRoundNet.toLocaleString()}
                 </div>
-                
-                <div class="col-actions"></div>
+                <div class="col-actions">
+                    <button class="btn tiny soft" onclick="OL.openRoundRoleAssignmentsModal('${client.id}', '${sheet.id}', ${Number(roundNum)})" title="Role Assignments & Comp for this round">
+                        <i data-lucide="percent" style="width:11px;height:11px;"></i>
+                    </button>
+                </div>
             </div>
             <div class="round-grid">${rows}</div>
             </div>

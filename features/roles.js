@@ -1,10 +1,33 @@
 //======================= FEATURES / ROLES & COMP =======================//
 // A master, editable list of roles (Sales, Scoping, Implementation,
-// Testing, Communication by default) each carrying a default % of the
-// project fee. Roles can be assigned to a team member at the PROJECT
-// level (client.projectData.roleAssignments) and at the individual
-// RESOURCE level (res.roleAssignment on a localResources entry) — both
-// use the role's defaultPercent unless overridden for that assignment.
+// Testing, Communication by default), each carrying a default % of a
+// working round's approved fee.
+//
+// Two distinct things live here, kept separate on purpose:
+//
+//   1. ROLE DEFAULTS (client.projectData.roleAssignments) — one default
+//      person per role, project-wide. This is NOT comp — it's the
+//      suggestion mechanism several other features read from (who to
+//      auto-assign a "Communication" task to, who a meeting's follow-up
+//      goes to, etc. — see core/testing.js's assigneeForRole and its
+//      callers in core/conclusion.js, features/scoping.js, and
+//      features/business/meeting-summary.js). Left untouched here.
+//
+//   2. ROUND-LEVEL COMP TRACKING (this file's new part) — for one working
+//      round, an internal-only, auto-tracked view of who's actually doing
+//      the work, by role bucket, and what share of that round's approved
+//      fee each person's cut works out to. Nothing here is editable per
+//      task — it's a rollup of task assignments that already exist:
+//        - Communication and Testing tasks are identified by how the app
+//          itself tags them when it generates them (see taskCompRoleId).
+//        - Everything else Sphynx-side counts as Implementation.
+//        - Sales and Scoping have no task trail to roll up (that work
+//          happens before a round exists), so those two still show the
+//          single project-level default person at 100% — worth a second
+//          pass once there's a way to track that work too.
+//      The role's cut of the round's fee is still governed by that
+//      role's default % (state.master.roles) — splitting THAT more
+//      finely is a later step (see openRoundRoleAssignmentsModal's note).
 //
 // state.master.roles is a NEW master-level field. Unlike client-level
 // data (which rides inside the generic project_data JSONB blob and needs
@@ -14,6 +37,7 @@
 // migration; this file assumes that column exists.
 
 import { esc, uid, state, getActiveClient } from '../core/data.js';
+import { tasksForItem } from '../core/work-status.js';
 
 const DEFAULT_ROLES = [
     { id: 'role-sales', name: 'Sales', defaultPercent: 10 },
@@ -22,6 +46,9 @@ const DEFAULT_ROLES = [
     { id: 'role-testing', name: 'Testing', defaultPercent: 10 },
     { id: 'role-communication', name: 'Communication', defaultPercent: 15 }
 ];
+
+// Roles with no task trail to auto-track yet — see file header.
+const MANUAL_ONLY_ROLES = ['role-sales', 'role-scoping'];
 
 export function getRoles() {
     if (!state.master) state.master = {};
@@ -46,8 +73,8 @@ export function openRolesManagerModal() {
         </div>
         <div class="modal-body">
             <p class="tiny muted" style="margin-bottom:12px;">
-                Roles available to assign on any project or resource. The % is the default cut of the project
-                fee for that role — it can be overridden per assignment.
+                Roles available across the app. The % is that role's default cut of a working round's
+                approved fee, shown on that round's Role Assignments &amp; Comp view.
             </p>
             <div id="roles-manager-rows">
                 ${roles.map(r => `
@@ -62,7 +89,7 @@ export function openRolesManagerModal() {
                 `).join('')}
             </div>
             <button class="btn small soft ob-add-more-btn" onclick="OL.addRole()">+ Add role</button>
-            <div class="tiny muted" style="margin-top:12px;">Default allocation totals ${total}%${total !== 100 ? ' (doesn\'t need to add to 100 — just the starting point for new assignments)' : ''}.</div>
+            <div class="tiny muted" style="margin-top:12px;">Default allocation totals ${total}%${total !== 100 ? ' (doesn\'t need to add to 100 — just the starting point)' : ''}.</div>
         </div>
     `;
     openModal(html);
@@ -90,103 +117,32 @@ export function removeRole(roleId) {
 }
 
 // ---------------------------------------------------------------
-// PROJECT-LEVEL DEFAULTS — one default person per role, at that role's
-// % of the project fee. This is what "auto-applies" to every resource in
-// the project: a resource with no role override of its own is counted
-// under its role's project-level default person.
-//
-// RESOURCE-LEVEL OVERRIDE — a resource can be tagged with a role + a
-// specific person, overriding the project default for that one resource.
-// When more than one person ends up covering the same role (the project
-// default plus one or more resource-level overrides pointing at someone
-// else), the role's % of the fee is split between them, weighted by how
-// many resources each of them is covering for that role — two people
-// each covering one resource under "Sales" split that role's cut 50/50;
-// someone covering 3 resources to another's 1 splits it 75/25.
+// ROLE DEFAULTS — one default person per role, project-wide. Used only
+// as a suggestion source elsewhere in the app (see file header) — this
+// is deliberately NOT where comp dollars are figured anymore.
 // ---------------------------------------------------------------
-function computeFee(client) {
-    return Number(client.meta?.projectFee || 0);
-}
-
-// The actual rollup: for every role, who's covering it and what share of
-// that role's dollar amount each of them earns.
-export function computeRoleCompSplits(client) {
-    const roles = getRoles();
-    const fee = computeFee(client);
-    const defaults = client.projectData?.roleAssignments || [];
-    const resources = client.projectData?.localResources || [];
-
-    return roles.map(role => {
-        const defaultAssignment = defaults.find(a => a.roleId === role.id);
-        const percent = defaultAssignment ? Number(defaultAssignment.percent) : Number(role.defaultPercent || 0);
-        const roleResources = resources.filter(r => r.roleAssignment?.roleId === role.id);
-
-        // Units = resource count per person. A resource with no
-        // resource-level override still counts as one unit for the
-        // project default person, so an unmodified role still resolves
-        // to "one person, 100% of the role's cut."
-        const units = {};
-        if (roleResources.length) {
-            roleResources.forEach(r => {
-                const name = r.roleAssignment.memberName || defaultAssignment?.memberName || '';
-                if (!name) return;
-                units[name] = (units[name] || 0) + 1;
-            });
-        } else if (defaultAssignment?.memberName) {
-            units[defaultAssignment.memberName] = 1;
-        }
-
-        const totalUnits = Object.values(units).reduce((s, n) => s + n, 0);
-        const roleAmount = fee ? fee * percent / 100 : null;
-        const people = Object.entries(units).map(([name, n]) => {
-            const share = totalUnits ? n / totalUnits : 0;
-            return {
-                name, resourceCount: n, share,
-                amount: roleAmount !== null ? roleAmount * share : null
-            };
-        }).sort((a, b) => b.share - a.share);
-
-        return { role, percent, defaultName: defaultAssignment?.memberName || '', amount: roleAmount, people };
-    });
-}
-
-export function openProjectRoleAssignmentsModal(clientId) {
+export function openRoleDefaultsModal(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
     if (!client.projectData.roleAssignments) client.projectData.roleAssignments = [];
 
     const roles = getRoles();
     const team = state.master.sphynxTeam || [];
-    const fee = computeFee(client);
-    const splits = computeRoleCompSplits(client);
-    const totalPercent = splits.reduce((s, x) => s + Number(x.percent || 0), 0);
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">Role Assignments & Comp — ${esc(client.meta?.name || 'Project')}</div>
+            <div class="modal-title-text">Role Defaults — ${esc(client.meta?.name || 'Project')}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <div class="ob-field" style="max-width:220px; margin-bottom:16px;">
-                <label>Project Total Fee</label>
-                <input type="number" class="modal-input" min="0" value="${fee}" onchange="OL.updateProjectFee('${clientId}', this.value)">
-            </div>
-
             <p class="tiny muted" style="margin-bottom:10px;">
-                Set a default person per role — this auto-applies to every resource in the project.
-                Override it on a specific resource (from that resource's card) if someone else covers it instead;
-                when more than one person ends up covering a role, its cut splits between them by how many
-                resources each of them has.
+                Who this project auto-suggests for each role's work (communication follow-ups, etc.).
+                This isn't comp — for the round-by-round breakdown of who's actually doing the work and their
+                cut of the fee, open a working round's Role Assignments &amp; Comp from the Scoping tab.
             </p>
-
-            <label class="modal-section-label">Role Defaults</label>
-            <div id="role-assignment-rows">
-                ${roles.map(role => renderProjectRoleRow(client, role, team, fee, splits)).join('')}
-            </div>
-
-            <div class="tiny muted" style="margin-top:14px;">
-                Default allocation totals ${totalPercent}%${totalPercent > 100 ? ' — over 100%, double check the role %s below.' : ''}
+            <div id="role-defaults-rows">
+                ${roles.map(role => renderRoleDefaultRow(client, role, team)).join('')}
             </div>
         </div>
     `;
@@ -194,157 +150,213 @@ export function openProjectRoleAssignmentsModal(clientId) {
     if (window.lucide) window.lucide.createIcons();
 }
 
-function renderProjectRoleRow(client, role, team, fee, splits) {
+function renderRoleDefaultRow(client, role, team) {
     const assignment = (client.projectData.roleAssignments || []).find(a => a.roleId === role.id);
-    const percent = assignment ? assignment.percent : role.defaultPercent;
-    const split = splits.find(s => s.role.id === role.id);
-    const amount = fee ? (fee * Number(percent || 0) / 100) : null;
-
-    const splitHtml = split && split.people.length > 1 ? `
-        <div class="tiny muted" style="flex-basis:100%; padding-left:2px; margin-top:-2px;">
-            Split: ${split.people.map(p => `${esc(p.name)} ${(p.share * 100).toFixed(0)}%${amount !== null ? ` ($${p.amount.toFixed(2)})` : ''}`).join(', ')}
-        </div>
-    ` : '';
-
     return `
-        <div class="ob-row ob-row-flex" style="flex-wrap:wrap;">
+        <div class="ob-row ob-row-flex">
             <div class="tiny bold" style="flex:0 0 140px; align-self:center;">${esc(role.name)}</div>
-            <select class="modal-input" style="flex:1 1 160px;" onchange="OL.updateProjectRoleDefault('${client.id}', '${role.id}', 'memberName', this.value)">
+            <select class="modal-input" style="flex:1 1 160px;" onchange="OL.updateRoleDefault('${client.id}', '${role.id}', this.value)">
                 <option value="">Unassigned</option>
                 ${team.map(m => `<option value="${esc(m.name)}" ${assignment?.memberName === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
             </select>
-            <div style="position:relative; flex:0 0 90px;">
-                <input type="number" class="modal-input" min="0" max="100" value="${percent}" style="padding-right:22px; width:100%;" onchange="OL.updateProjectRoleDefault('${client.id}', '${role.id}', 'percent', this.value)">
-                <span class="tiny muted" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none;">%</span>
-            </div>
-            ${amount !== null ? `<span class="tiny muted" style="flex:0 0 80px; align-self:center;">$${amount.toFixed(2)}</span>` : ''}
-            ${splitHtml}
         </div>
     `;
 }
 
-export function updateProjectFee(clientId, value) {
-    const client = state.clients[clientId];
-    if (!client) return;
-    client.meta.projectFee = Number(value) || 0;
-    OL.markClientDirty(clientId);
-    OL.persist();
-    openProjectRoleAssignmentsModal(clientId);
-}
-
-// Upserts the project-level default for one role (there's exactly one
-// default assignment per role, not a free-form list).
-export function updateProjectRoleDefault(clientId, roleId, field, value) {
+// Upserts the project-level default person for one role (there's exactly
+// one default assignment per role, not a free-form list).
+export function updateRoleDefault(clientId, roleId, memberName) {
     const client = state.clients[clientId];
     if (!client) return;
     if (!client.projectData.roleAssignments) client.projectData.roleAssignments = [];
 
     let a = client.projectData.roleAssignments.find(x => x.roleId === roleId);
     if (!a) {
-        const role = getRoles().find(r => r.id === roleId);
-        a = { id: uid(), roleId, memberName: '', percent: role?.defaultPercent || 0 };
+        a = { id: uid(), roleId, memberName: '' };
         client.projectData.roleAssignments.push(a);
     }
-
-    if (field === 'percent') a.percent = Number(value) || 0;
-    else a[field] = value;
+    a.memberName = memberName;
 
     OL.markClientDirty(clientId);
     OL.persist();
-    openProjectRoleAssignmentsModal(clientId);
+    openRoleDefaultsModal(clientId);
 }
 
 // ---------------------------------------------------------------
-// RESOURCE-LEVEL OVERRIDE — role + person on one resource. No % here:
-// the % lives on the project-level role and gets split automatically
-// across whoever ends up covering that role (see computeRoleCompSplits).
+// ROUND-LEVEL COMP TRACKING — see file header.
 // ---------------------------------------------------------------
-export function openResourceRoleAssignmentModal(resourceId) {
-    const client = getActiveClient();
-    if (!client) return;
-    const res = (client.projectData.localResources || []).find(r => r.id === resourceId);
-    if (!res) return;
 
+const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+const roundOf = (item) => { const r = parseInt(item?.round, 10); return Number.isFinite(r) && r >= 1 ? r : 1; };
+
+// The request lines that are actually in this round and approved to happen.
+function roundLineItems(sheet, round) {
+    return (sheet?.lineItems || []).filter(i => i && !isBlank(i.id) && String(i.status || '') === 'Do Now' && roundOf(i) === Number(round));
+}
+
+// The round's approved fee: Do Now, Sphynx/Joint responsibility, minus
+// that round's discount — the same math the scoping sheet's own round
+// total (finalRoundNet) uses, so this always matches what's on the sheet.
+export function roundApprovedFee(client, sheet, round) {
+    const rKey = String(round);
+    let billableSubtotal = 0;
+    (sheet?.lineItems || []).forEach(item => {
+        if (!item || roundOf(item) !== Number(round)) return;
+        const status = String(item.status || '').toLowerCase().trim();
+        const party = String(item.responsibleParty || '').toLowerCase().trim();
+        if (status !== 'do now' || !(party === 'sphynx' || party === 'joint')) return;
+        const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
+        billableSubtotal += (typeof OL.calculateRowFee === 'function' ? OL.calculateRowFee(item, res) : 0) || 0;
+    });
+
+    let deduction = 0;
+    const rDisc = sheet?.roundDiscounts?.[rKey];
+    if (rDisc) {
+        const discVal = parseFloat(rDisc.value) || 0;
+        deduction = rDisc.type === '%' ? Math.round(billableSubtotal * (discVal / 100)) : discVal;
+    }
+    return billableSubtotal - deduction;
+}
+
+// Which comp-role bucket an internal (non-client) task belongs to, based
+// on how the app itself created it — not a field anyone sets by hand.
+//   - the round's own "notify client" / review follow-up tasks -> Communication
+//   - a client-facing ask (review/document/feedback/third-party) is the
+//     CLIENT's homework, not Sphynx labor, so it isn't counted at all
+//   - a task generated off a failed testing step -> Testing
+//   - everything else Sphynx-side (the SOP/blueprint build steps that
+//     make up most of a round) -> Implementation
+const ASK_KIND_KEYS = ['review', 'document', 'feedback', 'third_party', 'follow_up'];
+export function taskCompRoleId(task) {
+    if (!task || task.isClientTask) return null;
+    if (ASK_KIND_KEYS.includes(task.askKind)) return null;
+    if (task.reviewNotifyKey || task.reviewFollowUpKey) return 'role-communication';
+    if (task.createdBy === 'testing' || task.testRunId) return 'role-testing';
+    return 'role-implementation';
+}
+
+// Every internal task linked to one of this round's approved requests.
+function tasksInRound(client, sheet, round) {
+    const pd = client?.projectData || {};
+    const tasks = pd.clientTasks || [];
+    const items = roundLineItems(sheet, round);
+    const seen = new Set();
+    const out = [];
+    items.forEach(item => {
+        tasksForItem(tasks, item.id).forEach(t => {
+            if (!t || seen.has(t.id)) return;
+            seen.add(t.id);
+            out.push(t);
+        });
+    });
+    return out;
+}
+
+// The actual rollup: for every role, who's covering it this round and
+// what share of that role's dollar cut each of them earns.
+export function computeRoundRoleTracking(client, sheet, round) {
     const roles = getRoles();
-    const team = state.master.sphynxTeam || [];
-    const current = res.roleAssignment || {};
+    const fee = roundApprovedFee(client, sheet, round);
+    const tasks = tasksInRound(client, sheet, round);
+    const defaults = client.projectData?.roleAssignments || [];
+
+    return roles.map(role => {
+        const amount = fee ? fee * Number(role.defaultPercent || 0) / 100 : null;
+
+        if (MANUAL_ONLY_ROLES.includes(role.id)) {
+            const defaultAssignment = defaults.find(a => a.roleId === role.id);
+            const name = defaultAssignment?.memberName || '';
+            return {
+                role, amount, autoTracked: false,
+                people: name ? [{ name, count: 0, share: 1, amount }] : [],
+            };
+        }
+
+        const roleTasks = tasks.filter(t => taskCompRoleId(t) === role.id);
+        const counts = {};
+        let unassigned = 0;
+        roleTasks.forEach(t => {
+            const name = (t.assignee || '').trim();
+            if (!name) { unassigned++; return; }
+            counts[name] = (counts[name] || 0) + 1;
+        });
+        const total = roleTasks.length;
+        const people = Object.entries(counts).map(([name, count]) => {
+            const share = total ? count / total : 0;
+            return { name, count, share, amount: amount !== null ? amount * share : null };
+        }).sort((a, b) => b.share - a.share);
+
+        return { role, amount, autoTracked: true, totalTasks: total, unassigned, people };
+    });
+}
+
+export function openRoundRoleAssignmentsModal(clientId, sheetId, round) {
+    const client = state.clients[clientId];
+    if (!client) return;
+    const sheet = (client.projectData?.scopingSheets || []).find(s => String(s.id ?? '') === String(sheetId));
+    if (!sheet) return;
+
+    const fee = roundApprovedFee(client, sheet, round);
+    const tracking = computeRoundRoleTracking(client, sheet, round);
+    const totalPercent = getRoles().reduce((s, r) => s + Number(r.defaultPercent || 0), 0);
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">Role — ${esc(res.name || 'Resource')}</div>
+            <div class="modal-title-text">Role Assignments & Comp — Round ${esc(String(round))}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <p class="tiny muted" style="margin-bottom:10px;">
-                Leave "Assigned To" as the role's project default unless someone else specifically covered this resource.
+            <div class="tiny muted" style="margin-bottom:12px;">
+                Approved round total: <span class="bold" style="color:var(--text-main);">$${fee.toLocaleString()}</span>
+                — Do Now items, Sphynx/Joint responsibility, minus this round's discount.
+            </div>
+            <p class="tiny muted" style="margin-bottom:14px;">
+                Internal view only — not shown to the client or partner. Communication, Implementation and
+                Testing are auto-tracked from who's actually assigned to this round's tasks; Sales and Scoping
+                still show the project's default person until there's a way to track that work too. Each role's
+                % of the round is still the master default for now (Comp Roles) — splitting that more finely per
+                round is a later step.
             </p>
-            <div class="ob-field-grid">
-                <div class="ob-field">
-                    <label>Role</label>
-                    <select id="res-role-select" class="modal-input" onchange="OL.onResourceRoleSelectChange('${resourceId}', this.value)">
-                        <option value="">None</option>
-                        ${roles.map(r => `<option value="${r.id}" ${current.roleId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="ob-field">
-                    <label>Assigned To</label>
-                    <select id="res-role-member" class="modal-input">
-                        <option value="">Project default</option>
-                        ${team.map(m => `<option value="${esc(m.name)}" ${current.memberName === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
-                    </select>
-                </div>
-            </div>
-            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-                <button class="btn small primary" onclick="OL.saveResourceRoleAssignment('${resourceId}')">Save</button>
-            </div>
+            ${tracking.map(t => renderRoundRoleSection(t)).join('')}
+            <div class="tiny muted" style="margin-top:10px;">Role allocation totals ${totalPercent}%${totalPercent > 100 ? ' — over 100%, double check Comp Roles.' : ''}.</div>
         </div>
     `;
     openModal(html);
     if (window.lucide) window.lucide.createIcons();
 }
 
-// When the role dropdown changes, pre-select that role's project-default
-// person in the "Assigned To" field (just a UI convenience — saving with
-// the "Project default" option keeps it unset either way).
-export function onResourceRoleSelectChange(resourceId, roleId) {
-    const client = getActiveClient();
-    const memberSelect = document.getElementById('res-role-member');
-    if (!client || !memberSelect) return;
-    const defaultAssignment = (client.projectData.roleAssignments || []).find(a => a.roleId === roleId);
-    if (defaultAssignment?.memberName) {
-        const opt = Array.from(memberSelect.options).find(o => o.value === defaultAssignment.memberName);
-        if (opt) memberSelect.value = defaultAssignment.memberName;
+function renderRoundRoleSection(t) {
+    const amountText = t.amount !== null ? `$${t.amount.toFixed(2)}` : '—';
+    let body;
+    if (!t.autoTracked) {
+        body = t.people.length
+            ? `<div class="tiny">${esc(t.people[0].name)} — 100% (${amountText}) <span class="tiny muted">— project default, not yet auto-tracked</span></div>`
+            : `<div class="tiny muted">No default person set for this role.</div>`;
+    } else if (!t.totalTasks) {
+        body = `<div class="tiny muted">No ${esc(t.role.name.toLowerCase())} tasks in this round yet.</div>`;
+    } else {
+        body = t.people.map(p => `
+            <div class="tiny" style="display:flex; justify-content:space-between; gap:8px;">
+                <span>${esc(p.name)} — ${p.count}/${t.totalTasks} tasks (${(p.share * 100).toFixed(0)}%)</span>
+                <span class="muted">${p.amount !== null ? `$${p.amount.toFixed(2)}` : ''}</span>
+            </div>
+        `).join('') + (t.unassigned ? `<div class="tiny muted" style="margin-top:2px;">${t.unassigned} unassigned task${t.unassigned === 1 ? '' : 's'} not counted.</div>` : '');
     }
-}
 
-export function saveResourceRoleAssignment(resourceId) {
-    const client = getActiveClient();
-    if (!client) return;
-    const res = (client.projectData.localResources || []).find(r => r.id === resourceId);
-    if (!res) return;
-
-    const roleId = document.getElementById('res-role-select')?.value || '';
-    const memberName = document.getElementById('res-role-member')?.value || '';
-
-    res.roleAssignment = roleId ? { roleId, memberName } : null;
-    OL.markClientDirty(client.id);
-    OL.persist();
-    OL.closeModal();
-    if (typeof window.renderResourceManager === 'function') window.renderResourceManager();
-};
-
-export function getResourceRoleLabel(res) {
-    if (!res.roleAssignment) return 'Assign role';
-    const role = getRoles().find(r => r.id === res.roleAssignment.roleId);
-    const roleName = role?.name || 'Role';
-    return res.roleAssignment.memberName ? `${roleName} — ${res.roleAssignment.memberName}` : `${roleName} — project default`;
+    return `
+        <div class="card-section" style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <div class="tiny bold">${esc(t.role.name)} <span class="muted" style="font-weight:400;">(${t.role.defaultPercent}% — ${amountText})</span></div>
+            </div>
+            <div style="margin-top:6px;">${body}</div>
+        </div>
+    `;
 }
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getRoles, openRolesManagerModal, updateRoleField, addRole, removeRole,
-    computeRoleCompSplits, openProjectRoleAssignmentsModal, updateProjectFee,
-    updateProjectRoleDefault, openResourceRoleAssignmentModal,
-    onResourceRoleSelectChange, saveResourceRoleAssignment, getResourceRoleLabel
+    openRoleDefaultsModal, updateRoleDefault,
+    roundApprovedFee, taskCompRoleId, computeRoundRoleTracking, openRoundRoleAssignmentsModal,
 });

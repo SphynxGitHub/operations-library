@@ -9,6 +9,14 @@ import { state, esc, uid, getActiveClient, persist, updateAndSync, switchClient,
 
 //======================= CLIENT DASHBOARD SECTION =======================//
 
+// A partner has full control (status, modules, delete) over a client project
+// only when that partner created it themselves. A client assigned TO their
+// portfolio by an admin is "Sphynx-owned" — the partner can view it and use
+// the Sphynx-defined options, but can't customize or override it.
+export function isPartnerCreatedClient(client, viewer) {
+    return !!client?.meta?.createdByPartner && String(client?.meta?.partnerOwner) === String(viewer?.id);
+}
+
 // 1. CLIENT DASHBOARD & CORE MODULES
 export function renderClientDashboard() {
     const container = document.getElementById("mainContent");
@@ -30,6 +38,11 @@ export function renderClientDashboard() {
     const DEFAULT_PIPELINE_STATUSES = ['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'];
     const partnerRecord = isPartnerViewer ? getActiveClient() : null;
     const pipelineStatuses = (partnerRecord?.meta?.pipelineStatuses?.length ? partnerRecord.meta.pipelineStatuses : DEFAULT_PIPELINE_STATUSES);
+    // Custom statuses only apply to clients the partner created themselves.
+    // A client assigned to them by an admin (Sphynx-owned) always uses the
+    // real Sphynx status list, so a partner can't relabel it into something
+    // the rest of the system won't recognize.
+    const statusOptionsFor = (client) => (isPartnerViewer && !isPartnerCreatedClient(client, partnerRecord)) ? DEFAULT_PIPELINE_STATUSES : pipelineStatuses;
     
     // 🚀 FILTER LOGIC & PARTNER ISOLATION
     const activeFilter = state.dashboardFilter || 'All';
@@ -163,7 +176,7 @@ export function renderClientDashboard() {
                                     onclick="event.stopPropagation()"
                                     onchange="event.stopPropagation(); OL.updateClientStatus('${client.id}', this.value)"
                                     style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
-                                ${pipelineStatuses.map(status => `
+                                ${statusOptionsFor(client).map(status => `
                                     <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
                                 `).join('')}
                             </select>
@@ -257,7 +270,7 @@ export function renderClientDashboard() {
                                 onclick="event.stopPropagation()" 
                                 onchange="OL.updateClientStatus('${client.id}', this.value)"
                                 style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
-                            ${pipelineStatuses.map(status => `
+                            ${statusOptionsFor(client).map(status => `
                                 <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
                             `).join('')}
                         </select>
@@ -777,13 +790,15 @@ export function openClientProfileModal(clientId) {
                 </div>
 
                 <div>
-                    <label class="modal-section-label">Role Assignments &amp; Comp</label>
+                    <label class="modal-section-label">Role Defaults</label>
                     <div class="card-section">
                         <p class="tiny muted" style="margin:0;">
-                            Who covers each role on this project, and their cut of the fee. Overridable per resource from that resource's card.
+                            Who this project auto-suggests for each role's work (e.g. client follow-ups). Comp and
+                            actual task assignments are tracked per working round instead — see that round's
+                            Role Assignments & Comp button on the Scoping tab.
                         </p>
-                        <button class="btn tiny soft full-width" style="margin-top:8px;" onclick="OL.closeModal(); OL.openProjectRoleAssignmentsModal('${clientId}')">
-                            <i data-lucide="percent" style="width:12px;height:12px;"></i> Open Role Assignments & Comp
+                        <button class="btn tiny soft full-width" style="margin-top:8px;" onclick="OL.closeModal(); OL.openRoleDefaultsModal('${clientId}')">
+                            <i data-lucide="percent" style="width:12px;height:12px;"></i> Open Role Defaults
                         </button>
                     </div>
                 </div>
@@ -885,8 +900,8 @@ export function openPartnerClientModulesModal(clientId) {
     if (!client) return;
 
     const viewer = getActiveClient();
-    const canDelete = !!client.meta.createdByPartner &&
-        String(client.meta.partnerOwner) === String(viewer?.id);
+    const canDelete = isPartnerCreatedClient(client, viewer);
+    const ownedBySphynx = !canDelete;
 
     const html = `
         <div class="modal-head">
@@ -897,6 +912,7 @@ export function openPartnerClientModulesModal(clientId) {
         <div class="modal-body">
             <p class="tiny muted" style="margin-bottom:10px;">Choose which tabs ${esc(client.meta.name)} can see in their project workspace.</p>
             <label class="modal-section-label">Active Modules (Client Access)</label>
+            ${ownedBySphynx ? `<p class="tiny muted" style="margin:0 0 8px;">This client is managed by Sphynx — Sphynx's tab selections apply here and can't be changed from your portfolio. You have full control over the modules for clients you create yourself.</p>` : ''}
             <div class="card-section">
                 ${[
                     { id: 'checklist', label: 'Tasks' },
@@ -912,10 +928,10 @@ export function openPartnerClientModulesModal(clientId) {
                     { id: 'client-requests', label: 'Client Requests' },
                     { id: 'maintenance', label: 'Maintenance & Hours' }
                 ].map(m => `
-                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:${ownedBySphynx ? 'default' : 'pointer'}; ${ownedBySphynx ? 'opacity:0.6;' : ''}">
                         <input type="checkbox" 
                             ${isClientModuleOn(client, m.id) ? 'checked' : ''} 
-                            onchange="OL.toggleClientModule('${clientId}', '${m.id}')">
+                            ${ownedBySphynx ? 'disabled' : `onchange="OL.toggleClientModule('${clientId}', '${m.id}')"`}>
                         ${m.label}
                     </label>
                 `).join('')}
@@ -1034,8 +1050,18 @@ export function isClientModuleOn(client, moduleId) {
 }
 
 export function toggleClientModule(clientId, moduleId) {
+    const client = state.clients[clientId];
+    const viewer = getActiveClient();
+    const isPartnerViewer = viewer?.meta?.status === 'Partner' && !(window.FORCE_ADMIN === true);
+    if (isPartnerViewer && !isPartnerCreatedClient(client, viewer)) {
+        // Sphynx-owned client: Sphynx's module selection overrides — a
+        // partner can see it, but can't change it. Re-render so the
+        // checkbox snaps back if it was optimistically toggled in the DOM.
+        alert("This client's tabs are managed by Sphynx. You can only turn modules on or off for clients you created yourself.");
+        openPartnerClientModulesModal(clientId);
+        return;
+    }
     OL.updateAndSync(() => {
-        const client = state.clients[clientId];
         const wasOn = isClientModuleOn(client, moduleId);
         if (!client.modules) client.modules = {};
         client.modules[moduleId] = !wasOn;
@@ -1062,9 +1088,19 @@ export function setDashboardFilter(filterName) {
     window.renderClientDashboard();
 };
 
+const DEFAULT_PIPELINE_STATUSES = ['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'];
+
 export function updateClientStatus(clientId, newStatus) {
     const client = state.clients[clientId];
     if (!client) return;
+
+    const viewer = getActiveClient();
+    const isPartnerViewer = viewer?.meta?.status === 'Partner' && !(window.FORCE_ADMIN === true);
+    if (isPartnerViewer && !isPartnerCreatedClient(client, viewer) && !DEFAULT_PIPELINE_STATUSES.includes(newStatus)) {
+        alert("This client is managed by Sphynx — only Sphynx's standard statuses can be used here. Custom statuses are only available on clients you created yourself.");
+        renderClientDashboard();
+        return;
+    }
 
     client.meta.status = newStatus;
     
@@ -1149,21 +1185,7 @@ export function deleteClient(clientId) {
     handleRoute(); 
 };
 
-// 4. SET PERMISSIONS OR PUSH FEATURES TO CLIENT
-export function setAllPermissions(clientId, level) {
-    const client = state.clients[clientId];
-    if (!client) return;
-
-    // Update every permission key to the new level
-    Object.keys(client.permissions).forEach(key => {
-        client.permissions[key] = level;
-    });
-
-    OL.markClientDirty(clientId);
-    OL.persist();
-    OL.closeModal();
-    handleRoute(); // Refresh the sidebar and view immediately
-};
+// 4. PUSH FEATURES TO CLIENT
 
 export function pushFeaturesToAllClients() {
     const clientIds = Object.keys(state.clients);
@@ -1357,7 +1379,7 @@ Object.assign(window.OL, {
     openClientProfileModal, toggleClientModule, isClientModuleOn, toggleClientBusinessModule, copyShareLink,
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
-    deleteClient, setAllPermissions, pushFeaturesToAllClients,
+    deleteClient, pushFeaturesToAllClients,
     toggleGmailLabelForClient, updateGmailLabelName, updateErrorSheetId,
     editPipelineStatuses
 });

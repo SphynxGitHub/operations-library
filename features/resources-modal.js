@@ -105,11 +105,6 @@ export function renderResourceCard(res, opts = {}) {
                             <i data-lucide="send" style="width:11px;height:11px;"></i>
                         </button>
                     ` : ''}
-                    ${!isMaster ? `
-                        <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openResourceRoleAssignmentModal('${res.id}')" title="${esc(OL.getResourceRoleLabel(res))}" style="position:static; padding:2px; ${res.roleAssignment ? 'color:var(--accent);' : ''}">
-                            <i data-lucide="percent" style="width:11px;height:11px;"></i>
-                        </button>
-                    ` : ''}
                     <button class="card-delete-btn" 
                             onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                             title="${res.isArchived ? 'Unarchive' : 'Archive'}"
