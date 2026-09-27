@@ -1,4 +1,5 @@
 import { esc, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { getRequestTypes } from '../../core/requests.js';
 
 const GMAIL_FEED_LIMIT = 150;
 
@@ -1259,7 +1260,7 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
 
 // ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
 OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt', attachmentPath = null) {
-    OL._excerptLinkState = { messageId, excerptText, kind, attachmentPath, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '' };
+    OL._excerptLinkState = { messageId, excerptText, kind, attachmentPath, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '', creatingNewRequest: false, newRequestTitle: '', newRequestType: 'build' };
     OL.renderExcerptLinkPicker();
 };
 
@@ -1283,7 +1284,7 @@ OL.renderExcerptLinkPicker = function() {
     const pick = (type, id, label) => { OL._excerptLinkState.targetType = type; OL._excerptLinkState.targetId = id; OL._excerptLinkState.targetLabel = label; OL.renderExcerptLinkPicker(); };
 
     const content = `
-        <div style="padding:20px; max-width:640px; width:90vw;" onclick="event.stopPropagation()">
+        <div style="padding:24px 36px 24px 24px; box-sizing:border-box; max-width:900px; width:90vw;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:14px;">
                 <div>
                     <h3 style="margin:0; font-size:15px;">Link this ${st.kind}</h3>
@@ -1306,6 +1307,22 @@ OL.renderExcerptLinkPicker = function() {
                     <div style="display:flex; gap:8px;">
                         <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewTask=false; OL.renderExcerptLinkPicker();">Back to search</button>
                         <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
+                    </div>
+                </div>
+            ` : st.creatingNewRequest ? `
+                <div style="padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:12px;">
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">New request title</label>
+                    <input type="text" id="excerpt-new-request-title" class="modal-input tiny" style="width:100%; margin-bottom:8px;" value="${esc(st.newRequestTitle || '')}"
+                           oninput="OL._excerptLinkState.newRequestTitle=this.value">
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Type</label>
+                    <select class="modal-input tiny" style="width:100%; margin-bottom:8px;" onchange="OL._excerptLinkState.newRequestType=this.value">
+                        ${(typeof getRequestTypes === 'function' ? getRequestTypes() : [{key:'build',label:'Build'},{key:'revision',label:'Revision'}]).map((t) => `<option value="${esc(t.key)}" ${st.newRequestType === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
+                    </select>
+                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a request.</div>` : ''}
+                    <div class="tiny muted" style="margin-bottom:8px;">Created as "Considering" — sits on the scoping sheet, not yet scheduled into a round or activated.</div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewRequest=false; OL.renderExcerptLinkPicker();">Back to search</button>
+                        <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">Create & link</button>
                     </div>
                 </div>
             ` : `
@@ -1331,7 +1348,7 @@ OL.renderExcerptLinkPicker = function() {
                         </div>
                     </div>
                 </div>
-                <div class="tiny muted" style="margin-bottom:12px;">Not finding it? <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateTask();">Create a new task instead</a>${!clientId ? ' (link this email to a project first)' : ''}.</div>
+                <div class="tiny muted" style="margin-bottom:12px;">Not finding it? <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateTask();">Create a new task</a> or <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateRequest();">create a new request</a> instead${!clientId ? ' (link this email to a project first)' : ''}.</div>
             `}
 
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Note (optional — a refined summary, not the raw excerpt)</label>
@@ -1395,6 +1412,61 @@ OL.confirmExcerptCreateTask = async function() {
 
     st.targetType = 'task'; st.targetId = newTaskId; st.targetLabel = title;
     st.creatingNewTask = false;
+    await OL.confirmExcerptLink();
+};
+
+// ---- "or create a new request instead" — same picker, same reasoning as the task path ----
+OL.startExcerptCreateRequest = function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    st.creatingNewRequest = true;
+    st.newRequestTitle = st.excerptText.length > 80 ? st.excerptText.slice(0, 80) : st.excerptText;
+    OL.renderExcerptLinkPicker();
+    setTimeout(() => document.getElementById('excerpt-new-request-title')?.focus(), 0);
+};
+
+// Creates a resource-less request line ("reqline-" id, matching the
+// existing isRequestLine convention read elsewhere — see
+// core/request-links.js) directly on the client's first scoping sheet,
+// status "Considering". That status is deliberate: isActive in
+// core/requests.js only ever triggers for status === "Do Now", so this can
+// never accidentally activate or generate tasks on its own — someone has
+// to deliberately move it to Do Now and approve its round first, same as
+// any other request. It does NOT go through the backlog/"Add to scoping
+// sheet" flow designed earlier (never built as code) — it lands straight
+// on the sheet as a Considering line, same as manual entry does today.
+OL.confirmExcerptCreateRequest = async function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    const clientId = OL._gmailLinkState?.clientId;
+    const title = (st.newRequestTitle || '').trim();
+    if (!title || !clientId) return;
+
+    let newItemId;
+    await updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{ id: 'initial', lineItems: [] }];
+        newItemId = 'reqline-' + Date.now();
+        client.projectData.scopingSheets[0].lineItems.push({
+            id: newItemId,
+            name: title,
+            requestType: st.newRequestType || 'build',
+            status: 'Considering',
+            responsibleParty: 'Sphynx',
+            round: 1,
+            teamMode: 'everyone',
+            teamIds: [],
+            data: {},
+            manualHours: 0,
+            dependencies: [],
+        });
+    }, clientId);
+    if (!newItemId) return;
+
+    st.targetType = 'request'; st.targetId = newItemId; st.targetLabel = title;
+    st.creatingNewRequest = false;
     await OL.confirmExcerptLink();
 };
 
