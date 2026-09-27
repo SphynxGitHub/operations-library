@@ -5,13 +5,13 @@
 // Plan periods and grants are rows in the database; client requests are lines on a second, always-approved
 // scoping sheet, so their tasks, statuses, tags and the dashboard work as for any request.
 
-import { state, esc, uid, db, getActiveClient, persist } from '../core/data.js';
+import { state, esc, uid, db, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
 import { getRequestTypes } from '../core/requests.js';
 import { deriveWorkStatus, WORK_STATUS_LABELS } from '../core/work-status.js';
 import { assigneeForRole } from '../core/testing.js';
 import {
     maintenanceMode, ONGOING, ADHOC, periodProgress, planStartPeriod, planEditPeriod, planClosePeriod, planAdHocPurchase,
-    ensureMaintenanceSheet, maintenanceSheetOf, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
+    ensureMaintenanceSheet, maintenanceSheetOf, isMaintenanceSheet, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
     allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
@@ -750,6 +750,65 @@ export async function deleteMaintenanceRequest(itemId) {
     renderClientRequests();
 }
 
+// ---- ONE-TIME MIGRATION: move a client's open Client Requests items onto
+// the main scoping sheet's Backlog section. Console-only, not wired to any
+// button — run once per affected client:
+//   OL.migrateClientRequestsToBacklog(['client-id-1', 'client-id-2'])
+// Only moves items whose status isn't Done/Don't Do; preserves each item's
+// id (so any task already linked to it via requestLineItemId/links[] keeps
+// working — findRequestItem/findRequestsForTask search every sheet, so the
+// link doesn't care which sheet the item lives on). Leaves the maintenance
+// sheet's plan/hours tracking (grants, periods) completely untouched —
+// this only moves the request line items themselves, not billing.
+export async function migrateClientRequestsToBacklog(clientIds) {
+    const results = [];
+    for (const clientId of clientIds || []) {
+        await loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client) { results.push({ clientId, error: 'Client not found' }); continue; }
+
+        await updateAndSync(() => {
+            const pd = client.projectData;
+            if (!pd) return;
+            if (!Array.isArray(pd.scopingSheets)) pd.scopingSheets = [{ id: 'initial', lineItems: [] }];
+            const mSheet = maintenanceSheetOf(pd);
+            const mainSheet = pd.scopingSheets.find((s) => !isMaintenanceSheet(s));
+            if (!mSheet || !mainSheet) { results.push({ clientId, clientName: client.meta?.name, moved: [] }); return; }
+
+            const isOpen = (i) => i && String(i.status || '') !== 'Done' && !/^Don.t Do$/i.test(String(i.status || ''));
+            const moving = (mSheet.lineItems || []).filter(isOpen);
+
+            moving.forEach((item) => {
+                const extras = [
+                    item.source ? `Source: ${item.source}` : '',
+                    item.reporter ? `Reported by: ${item.reporter}` : '',
+                    item.receivedAt ? `Received: ${item.receivedAt}` : '',
+                ].filter(Boolean).join(' · ');
+                if (!Array.isArray(mainSheet.lineItems)) mainSheet.lineItems = [];
+                mainSheet.lineItems.push({
+                    id: item.id,
+                    name: item.name,
+                    requestType: item.requestType || 'build',
+                    status: 'Backlog',
+                    responsibleParty: item.responsibleParty || 'Sphynx',
+                    round: null,
+                    teamMode: item.teamMode || 'everyone',
+                    teamIds: item.teamIds || [],
+                    data: item.data || {},
+                    manualHours: item.manualHours || 0,
+                    dependencies: item.dependencies || [],
+                    notes: [item.notes, extras].filter(Boolean).join('\n\n'),
+                });
+            });
+
+            mSheet.lineItems = (mSheet.lineItems || []).filter((i) => !isOpen(i));
+            results.push({ clientId, clientName: client.meta?.name, moved: moving.map((i) => i.name || i.id) });
+        }, clientId);
+    }
+    console.log('Migration complete:', results);
+    return results;
+}
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderMaintenancePage, renderClientRequests, loadMaintenanceData,
@@ -757,5 +816,5 @@ Object.assign(window.OL, {
     openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
     openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
-    maintenanceTabAllowed,
+    maintenanceTabAllowed, migrateClientRequestsToBacklog,
 });
