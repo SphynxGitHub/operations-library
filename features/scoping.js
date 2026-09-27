@@ -56,6 +56,40 @@ export function getScopingWorkflowContext() {
 };
 
 // 1. RENDER SCOPING SHEET TABLE
+// Requests that just became Do Now in an approved round and haven't had
+// their activation plan reviewed yet (core/requests.js listNewActivations,
+// via OL.pendingRequestActivations). Admin-only — this is where
+// OL.openActivationReview gets its entry point; see BUILD_NOTES.
+function renderPendingActivationsBanner(client) {
+    if (state.adminMode !== true) return '';
+    if (typeof OL.pendingRequestActivations !== 'function') return '';
+
+    const pending = OL.pendingRequestActivations(client, state.master?.resources || []);
+    if (!pending.length) return '';
+
+    return `
+        <div class="filter-banner"
+             style="background: rgba(245, 158, 11, 0.08); border: 1px solid #f59e0b; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom: ${pending.length ? '10px' : '0'};">
+                <i data-lucide="rocket" style="width:16px; height:16px; color:#f59e0b;"></i>
+                <span style="color: white; font-weight: bold;">
+                    ${pending.length} request${pending.length === 1 ? '' : 's'} awaiting activation review
+                </span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                ${pending.map(({ item, title, round }) => `
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background: rgba(0,0,0,0.15); padding:6px 10px; border-radius:6px;">
+                        <span class="tiny">${esc(title)} <span class="muted">· Round ${round}</span></span>
+                        <button class="btn tiny primary" onclick="OL.openActivationReview('${client.id}', '${item.id}')">
+                            Review &amp; Activate
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
 export function renderScopingSheet() {
     if (typeof OL.registerView === 'function') {
         OL.registerView(() => renderScopingSheet());
@@ -150,6 +184,8 @@ export function renderScopingSheet() {
             ` : ''}
         </div>
     </div>
+
+    ${renderPendingActivationsBanner(client)}
 
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
