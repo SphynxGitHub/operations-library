@@ -1031,6 +1031,7 @@ OL.openGmailMessageModal = async function(id) {
                 `}
 
                 <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
+                    <div id="gmail-suggestions"></div>
                     <div id="gmail-open-client-asks"></div>
                     <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
                         <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event
@@ -1049,6 +1050,15 @@ OL.openGmailMessageModal = async function(id) {
     OL.renderGmailPieceLinks(m);
     OL.attachExcerptSelectionHandler(m.id);
     OL.loadThreadLinkSuggestion(m);
+    if (m.classified_at) {
+        OL.renderGmailSuggestions(m);
+    } else {
+        // Fire-and-forget — the heuristic decides in-function whether this
+        // is even worth an API call; renderGmailSuggestions gets called
+        // again from inside classifyEmailCandidates once a result is in,
+        // only if this same email is still the one open.
+        OL.classifyEmailCandidates(m.id);
+    }
 
     if (m.body_html) {
         const frame = document.getElementById('gmail-body-html-frame');
@@ -1329,7 +1339,7 @@ OL.confirmExcerptLink = async function() {
     const st = OL._excerptLinkState;
     if (!st || !st.targetId) return;
 
-    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links').eq('id', st.messageId).single();
+    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links, suggestions').eq('id', st.messageId).single();
     if (fetchErr) { alert('Could not load this email to link it.'); return; }
 
     const pieceLinks = Array.isArray(m.piece_links) ? m.piece_links.slice() : [];
@@ -1339,10 +1349,19 @@ OL.confirmExcerptLink = async function() {
         createdAt: new Date().toISOString(),
     });
 
-    const { error } = await db.from('gmail_messages').update({ piece_links: pieceLinks }).eq('id', st.messageId);
+    const updatePayload = { piece_links: pieceLinks };
+    // If this picker was opened from a suggestion's "Choose target..."
+    // button, resolve that suggestion too so it drops out of the pending list.
+    const pending = OL._pendingSuggestionLink;
+    if (pending && pending.messageId === st.messageId) {
+        updatePayload.suggestions = (m.suggestions || []).map((s) => s.id === pending.suggestionId ? { ...s, status: 'linked' } : s);
+    }
+
+    const { error } = await db.from('gmail_messages').update(updatePayload).eq('id', st.messageId);
     if (error) { alert('Could not save that link.'); return; }
 
     OL._excerptLinkState = null;
+    OL._pendingSuggestionLink = null;
     OL.closeModal();
     OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
 };
@@ -1386,6 +1405,179 @@ OL.unlinkGmailPiece = async function(messageId, pieceLinkId) {
     if (fetchErr) return;
     const pieceLinks = (Array.isArray(m.piece_links) ? m.piece_links : []).filter((l) => l.id !== pieceLinkId);
     await db.from('gmail_messages').update({ piece_links: pieceLinks }).eq('id', messageId);
+    OL.openGmailMessageModal(messageId);
+};
+
+// -------------------------------------------------------------
+// EMAIL CANDIDATE CLASSIFICATION (fuzzy-match suggestions)
+// -------------------------------------------------------------
+// Two stages, cost-gated: a free local heuristic decides whether an email
+// is even worth sending to the model at all; only emails that pass it hit
+// the actual Claude call (supabase/functions/classify-email-candidates —
+// see that file's own header for the required ANTHROPIC_API_KEY secret).
+// Results cache on the row (classified_at) so re-opening an email, or a
+// future re-sync, never re-classifies it.
+//
+// NOT YET WIRED INTO SYNC: ideally this runs during the Gmail sync job so
+// a badge is already there by the time someone opens the inbox — that
+// file isn't something this pass has visibility into. For now it runs
+// lazily the first time an unclassified email is opened (see the call in
+// openGmailMessageModal below), which still respects the cost-gating, just
+// classifies on first view instead of on arrival. See BUILD_NOTES.
+
+// Cheap, free, local — patterns that suggest an actual ask rather than
+// scheduling chatter or a pleasantry. Intentionally permissive (a false
+// positive just costs one API call; a false negative means a real ask
+// never gets suggested at all, which is the worse failure).
+OL._EMAIL_CANDIDATE_PATTERNS = [
+    /could you( also)?\b/i, /can you\b/i, /would (it be possible|you|love)\b/i,
+    /please (add|update|change|fix|build|set up|create)\b/i,
+    /(need|needs|needed) (to|a|an)\b/i, /one more thing\b/i, /also,? \b/i,
+    /(is|are) (going out|still)\b/i, /wrong\b/i, /doesn'?t work\b/i, /not working\b/i,
+    /can we\b/i, /I think I mentioned\b/i, /wanted to flag\b/i,
+];
+OL._emailLooksLikeCandidate = function(bodyText) {
+    const text = String(bodyText || '');
+    if (text.trim().length < 20) return false;   // too short to contain a real ask
+    return OL._EMAIL_CANDIDATE_PATTERNS.some((p) => p.test(text));
+};
+
+// The client's open requests/resources/tasks, as context for the classifier
+// (so "existing_match" suggestions can name something real) — capped and
+// kept to titles/ids only, never internal notes or pricing.
+OL._openItemsForClassification = function(clientId) {
+    const client = state.clients?.[clientId];
+    if (!client) return [];
+    const out = [];
+    OL.listProjectRequests ? OL.listProjectRequests(client).forEach((r) => {
+        if (r.status === 'Done' || r.status === "Don't Do") return;
+        out.push({ id: String(r.id), type: 'request', label: OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title || 'Request') });
+    }) : null;
+    (client.projectData?.localResources || []).forEach((res) => {
+        if (res.isArchived || res.archived) return;
+        out.push({ id: String(res.id), type: 'resource', label: res.name });
+    });
+    return out.slice(0, 60);
+};
+
+// Runs the two-stage classification for one email, if it hasn't already
+// been classified. Writes suggestions + classified_at to the row and
+// re-renders the panel if that email's modal is still open. Safe to call
+// speculatively — no-ops instantly if already classified or the heuristic
+// says skip.
+OL.classifyEmailCandidates = async function(messageId) {
+    const { data: m, error: fetchErr } = await db.from('gmail_messages')
+        .select('id, body, snippet, linked_client_id, classified_at').eq('id', messageId).single();
+    if (fetchErr || !m || m.classified_at) return;
+
+    const bodyText = OL._stripHtmlForPreview ? (OL._stripHtmlForPreview(m.body) || m.snippet || '') : (m.body || m.snippet || '');
+    if (!OL._emailLooksLikeCandidate(bodyText)) {
+        // Still mark classified — no candidates, but no need to re-check
+        // this same email's heuristic again on every future open.
+        await db.from('gmail_messages').update({ classified_at: new Date().toISOString(), suggestions: [] }).eq('id', messageId);
+        return;
+    }
+
+    const openItems = OL._openItemsForClassification(m.linked_client_id);
+    let candidates = [];
+    try {
+        const { data, error } = await db.functions.invoke('classify-email-candidates', {
+            body: { emailBody: bodyText, openItems },
+        });
+        if (error) throw error;
+        candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+    } catch (e) {
+        console.error('Email classification failed:', e);
+        return;   // don't mark classified_at on a failed call — worth retrying later, not a permanent "no candidates"
+    }
+
+    const suggestions = candidates.map((c) => ({
+        id: 'sg-' + uid(), text: c.text, suggestedType: c.suggestedType,
+        matchTargetId: c.matchTargetId || null, matchTargetLabel: c.matchTargetLabel || null,
+        confidence: c.confidence, status: 'pending', classifiedAt: new Date().toISOString(),
+    }));
+
+    await db.from('gmail_messages').update({
+        suggestions, classified_at: new Date().toISOString(),
+    }).eq('id', messageId);
+
+    // Re-render only if this email is still the one open.
+    if (OL._gmailLinkState?.emailId === messageId) {
+        const { data: fresh } = await db.from('gmail_messages').select('*').eq('id', messageId).single();
+        if (fresh) OL.renderGmailSuggestions(fresh);
+    }
+};
+
+OL.renderGmailSuggestions = function(m) {
+    const container = document.getElementById('gmail-suggestions');
+    if (!container) return;
+    const pending = (Array.isArray(m.suggestions) ? m.suggestions : []).filter((s) => s.status === 'pending');
+    if (!pending.length) { container.innerHTML = ''; return; }
+
+    const confidenceColor = { high: 'var(--accent, #64c6a2)', medium: '#eab308', low: 'var(--text-muted, #94a3b8)' };
+    const typeLabel = { new_request: 'Possible new request', revision: 'Possible revision', existing_match: 'Matches existing item' };
+
+    container.innerHTML = `
+        <div style="margin-bottom:16px;">
+            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Suggested (${pending.length})</label>
+            <div style="display:grid; gap:6px;">
+                ${pending.map((s) => `
+                    <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+                        <div class="tiny" style="margin-bottom:4px;">"${esc(s.text.length > 120 ? s.text.slice(0, 120) + '…' : s.text)}"</div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                            <span class="tiny" style="color:${confidenceColor[s.confidence] || confidenceColor.low};">${esc(typeLabel[s.suggestedType] || 'Suggested')}${s.matchTargetLabel ? ` · ${esc(s.matchTargetLabel)}` : ''}</span>
+                            <div style="display:flex; gap:4px; flex-shrink:0;">
+                                ${s.suggestedType === 'existing_match' && s.matchTargetId
+                                    ? `<button class="btn tiny primary" onclick="OL.linkGmailSuggestion('${m.id}', '${s.id}')">Link</button>`
+                                    : `<button class="btn tiny soft" onclick="OL.openExcerptLinkPickerForSuggestion('${m.id}', '${s.id}')">Choose target…</button>`}
+                                <button class="btn tiny soft" onclick="OL.dismissGmailSuggestion('${m.id}', '${s.id}')">Dismiss</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+};
+
+// Quick path — a high-confidence existing-item match links in one click,
+// same underlying storage (piece_links) as manual excerpt linking.
+OL.linkGmailSuggestion = async function(messageId, suggestionId) {
+    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('suggestions, piece_links').eq('id', messageId).single();
+    if (fetchErr) return;
+    const suggestion = (m.suggestions || []).find((s) => s.id === suggestionId);
+    if (!suggestion) return;
+
+    const pieceLinks = Array.isArray(m.piece_links) ? m.piece_links.slice() : [];
+    pieceLinks.push({
+        id: 'pl-' + uid(), kind: 'excerpt', text: suggestion.text, note: '',
+        targetType: 'resource', targetId: suggestion.matchTargetId, targetLabel: suggestion.matchTargetLabel,
+        createdAt: new Date().toISOString(),
+    });
+    const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'linked' } : s);
+
+    await db.from('gmail_messages').update({ piece_links: pieceLinks, suggestions }).eq('id', messageId);
+    OL.openGmailMessageModal(messageId);
+};
+
+// For a suggestion with no ready-made match (new_request/revision, or a
+// low-confidence existing_match) — opens the same picker excerpt-linking
+// uses, pre-filled with the suggested text, so a human decides where it
+// actually goes rather than the system guessing.
+OL.openExcerptLinkPickerForSuggestion = function(messageId, suggestionId) {
+    OL._pendingSuggestionLink = { messageId, suggestionId };
+    OL.openExcerptLinkPicker(messageId, '');   // filled in below once we have the suggestion's text
+    db.from('gmail_messages').select('suggestions').eq('id', messageId).single().then(({ data }) => {
+        const s = (data?.suggestions || []).find((x) => x.id === suggestionId);
+        if (s && OL._excerptLinkState) { OL._excerptLinkState.excerptText = s.text; OL.renderExcerptLinkPicker(); }
+    });
+};
+
+OL.dismissGmailSuggestion = async function(messageId, suggestionId) {
+    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('suggestions').eq('id', messageId).single();
+    if (fetchErr) return;
+    const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'dismissed' } : s);
+    await db.from('gmail_messages').update({ suggestions }).eq('id', messageId);
     OL.openGmailMessageModal(messageId);
 };
 
