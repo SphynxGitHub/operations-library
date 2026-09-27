@@ -4,7 +4,7 @@
 // Rule shape (stored in state.master.automationRules):
 // {
 //   id, name, enabled: true,
-//   trigger: 'task_status_change' | 'scoping_status_change' | 'scoping_sheet_status_change' | 'scoping_request_activated',
+//   trigger: 'task_status_change' | 'scoping_status_change' | 'scoping_sheet_status_change',
 //   conditions: [ { field, op: 'equals'|'not_equals', value } ],  // AND'd
 //   action: {
 //     type: 'create_task',
@@ -20,10 +20,17 @@
 //   task_status_change:    newStatus, previousStatus, assignee, title, resourceName
 //   scoping_status_change:  field, newValue, previousValue, status, party, resourceName
 //   scoping_sheet_status_change: sheetStatus, previousSheetStatus
-//   scoping_request_activated:   requestType, requestTitle, round (resourceName = the request title)
+//
+// RETIRED: 'scoping_request_activated' no longer fires here — a request
+// activating now goes through the activation-review screen and
+// core/activation.js's commitActivationPlan (see OL.commitRequestActivation
+// below) instead of automation rules. Any existing rule still configured
+// with this trigger (including ones installed by installStarterRequestSops)
+// is now dead — it will never match again. See BUILD_NOTES.
 
 import { esc, uid, state, updateAndSync } from '../../core/data.js';
 import { SHEET_STATUSES, getRequestTypes, listNewActivations } from '../../core/requests.js';
+import { commitActivationPlan, recordAskTemplateOverrides, DEFAULT_ASK_TEMPLATES } from '../../core/activation.js';
 import './meeting-summary.js';   // registers the meeting summary email feature
 
 const TASK_STATUS_FIELDS = [
@@ -228,29 +235,60 @@ OL.executeAutomationAction = function(rule, ctx) {
     console.log(`🤖 Automation "${rule.name}" created task "${title}" for ${client.meta?.name || client.id}`);
 };
 
-// ---- ACTIVATION: run the rules for requests that just became active ----
-// Called from persist() just before a client saves. A request activates when its sheet is
-// Approved and it is a Do Now line in the current round. activatedAt marks it as done,
-// so a request never fires twice, even if the sheet goes back to Revising and is approved again.
+// ---- ACTIVATION: requests that just became active, awaiting review ----
+// Called from persist() just before a client saves — same call site as
+// before, but this no longer creates anything or stamps activatedAt. A
+// request activating (round approved + Do Now, see core/requests.js
+// listNewActivations) now surfaces for the activation-review screen instead
+// of silently firing automation rules; task creation happens only once a
+// human commits the plan, via OL.commitRequestActivation below.
+//
+// REPLACED: this used to auto-fire 'scoping_request_activated' automation
+// rules (apply_blueprint / apply_sop / create_task) with zero review. That
+// trigger no longer fires from here — see BUILD_NOTES for what that means
+// for any automation rules already built on it.
 OL.fireRequestActivations = function(client, masterResources) {
     const pending = listNewActivations(client, masterResources);
-    if (!pending.length) return 0;
+    return pending.length;   // count only, for a "N requests awaiting activation review" badge — nothing is created or stamped here anymore
+};
+
+// The list itself, for the activation-review screen / a badge to render from.
+OL.pendingRequestActivations = function(client, masterResources) {
+    return listNewActivations(client, masterResources);
+};
+
+// ---- ACTIVATION: commit a reviewed plan (called by the activation-review screen) ----
+// plan = whatever core/activation.js's buildActivationPlan produced, after a human has
+// edited it (toggled rows, added/removed asks). Creates the real tasks, stamps
+// item.activatedAt so it never activates twice, and logs any SOP deviations for the
+// periodic ask_templates review. Must run inside an updateAndSync mutationFn, same as
+// every other function on this page that touches client.projectData.
+OL.commitRequestActivation = function(client, item, plan, { requestType, resourceType, round } = {}) {
+    if (!client || !item || item.activatedAt) return null;   // already activated — never fire twice
+    if (!client.projectData) client.projectData = {};
+    if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
 
     const now = new Date().toISOString();
-    pending.forEach(({ item, title, round }) => {
-        item.activatedAt = now;
-        OL.runAutomationRules('scoping_request_activated', {
-            clientId: client.id,
-            client,
-            requestType: item.requestType || 'build',
-            requestTitle: title,
-            resourceName: title,
-            title,
-            round: String(round),
-            requestLineItemId: item.id
-        });
+    const result = commitActivationPlan(plan, {
+        requestId: item.id,
+        requestType: requestType || item.requestType || 'build',
+        resourceType,
+        askTemplates: (state.master.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES,
+        uid, now,
+        clientTasks: client.projectData.clientTasks,
     });
-    return pending.length;
+
+    item.activatedAt = now;
+
+    if (result.overrides.length) {
+        if (!state.master.askTemplateOverrides) state.master.askTemplateOverrides = [];
+        recordAskTemplateOverrides(state.master.askTemplateOverrides, result.overrides, {
+            requestType: requestType || item.requestType || 'build', resourceType, requestId: item.id, uid, now,
+        });
+    }
+
+    console.log(`✅ Activated "${item.name || item.id}" — ${result.createdTaskIds.length} task(s) created for ${client.meta?.name || client.id}`);
+    return result;
 };
 
 // ---- STARTER SOPs: a draft set of steps per request type, editable afterwards ----
@@ -264,13 +302,18 @@ const STARTER_REQUEST_SOPS = [
 ];
 
 OL.installStarterRequestSops = function() {
-    if (!confirm('Install starter steps for each request type?\n\nThis adds Task Templates, one SOP per request type, and a rule for each that applies the SOP when a request of that type becomes active. Nothing existing is changed, and you can edit or delete all of it afterwards.')) return;
+    // NOTE: this used to also install a 'scoping_request_activated' rule per
+    // type, so the SOP applied itself automatically when a request went
+    // live. That trigger is retired (see the header note) — request
+    // activation now goes through core/activation.js's askTemplates and the
+    // activation-review screen instead. This still seeds Task Templates and
+    // SOPs, which remain useful to apply manually or from other triggers.
+    if (!confirm('Install starter steps for each request type?\n\nThis adds Task Templates and one SOP per request type, which you can apply manually or wire to other automation triggers. Nothing existing is changed, and you can edit or delete all of it afterwards.')) return;
 
-    const summary = { templates: 0, sops: 0, rules: 0 };
+    const summary = { templates: 0, sops: 0 };
     updateAndSync(() => {
         if (!state.master.taskBlueprints) state.master.taskBlueprints = [];
         if (!state.master.sops) state.master.sops = [];
-        if (!state.master.automationRules) state.master.automationRules = [];
         const now = new Date().toISOString();
 
         STARTER_REQUEST_SOPS.forEach(def => {
@@ -294,21 +337,11 @@ OL.installStarterRequestSops = function() {
                 state.master.sops.push(sop);
                 summary.sops++;
             }
-
-            const ruleName = `When a ${def.label.toLowerCase()} request becomes active, apply ${sopName}`;
-            if (!state.master.automationRules.some(r => r.name === ruleName)) {
-                state.master.automationRules.push({
-                    id: uid(), name: ruleName, enabled: true, trigger: 'scoping_request_activated',
-                    conditions: [{ field: 'requestType', op: 'equals', value: def.type }],
-                    action: { type: 'apply_sop', sopId: sop.id, dueInDays: null, asSubtask: false }
-                });
-                summary.rules++;
-            }
         });
     });
 
-    alert(`Installed ${summary.templates} Task Templates, ${summary.sops} SOPs and ${summary.rules} rules.` +
-          (summary.templates + summary.sops + summary.rules === 0 ? ' (They were already there.)' : ''));
+    alert(`Installed ${summary.templates} Task Templates and ${summary.sops} SOPs.` +
+          (summary.templates + summary.sops === 0 ? ' (They were already there.)' : ''));
     OL.renderAutomationBuilder();
 };
 
@@ -368,7 +401,7 @@ OL.renderAutomationBuilder = function() {
                             <strong style="font-size:13px;">${esc(rule.name || 'Untitled Rule')}</strong>
                         </div>
                         <div class="tiny muted" style="margin-top:4px;">
-                            When <b>${rule.trigger === 'scoping_request_activated' ? 'a request becomes active' : rule.trigger === 'scoping_sheet_status_change' ? 'the scoping sheet status changes' : (rule.trigger === 'scoping_status_change' ? 'a scoping item changes' : (rule.trigger === 'calendar_event_synced' ? 'a calendar event syncs' : 'a task status changes'))}</b>
+                            When <b>${rule.trigger === 'scoping_request_activated' ? 'a request becomes active (retired — no longer fires)' : rule.trigger === 'scoping_sheet_status_change' ? 'the scoping sheet status changes' : (rule.trigger === 'scoping_status_change' ? 'a scoping item changes' : (rule.trigger === 'calendar_event_synced' ? 'a calendar event syncs' : 'a task status changes'))}</b>
                             ${(rule.conditions || []).length ? ' and ' + rule.conditions.map(c => `<code>${esc(c.field)} ${c.op === 'not_equals' ? '≠' : (c.op === 'contains' ? 'contains' : '=')} ${esc(c.value)}</code>`).join(' and ') : ''}
                             → ${rule.action?.type === 'apply_blueprint'
                                 ? `apply blueprint <code>${esc((state.master.taskBlueprints || []).find(b => b.id === rule.action.blueprintId)?.title || '(deleted blueprint)')}</code>`
@@ -430,7 +463,7 @@ OL.openAutomationRuleModal = function(ruleId) {
                 <option value="task_status_change" ${trigger === 'task_status_change' ? 'selected' : ''}>Task status changes</option>
                 <option value="scoping_status_change" ${trigger === 'scoping_status_change' ? 'selected' : ''}>Scoping line item status/party changes</option>
                 <option value="scoping_sheet_status_change" ${trigger === 'scoping_sheet_status_change' ? 'selected' : ''}>Scoping sheet status changes</option>
-                <option value="scoping_request_activated" ${trigger === 'scoping_request_activated' ? 'selected' : ''}>A request becomes active</option>
+                <option value="scoping_request_activated" disabled ${trigger === 'scoping_request_activated' ? 'selected' : ''}>A request becomes active — retired, no longer fires</option>
                 <option value="calendar_event_synced" ${trigger === 'calendar_event_synced' ? 'selected' : ''}>Calendar event syncs</option>
             </select>
 
