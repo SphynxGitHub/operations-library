@@ -7,7 +7,7 @@
 // dependency management.
 
 import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
-import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, SHEET_STATUSES } from '../core/requests.js';
+import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 
@@ -90,6 +90,113 @@ function renderPendingActivationsBanner(client) {
     `;
 }
 
+// Requests worth tracking but not scheduled into a round yet — a new
+// explicit status ('Backlog') rather than just a blank round, since a blank
+// round would otherwise fall through getCurrentRound/buildDesired's
+// round-1 fallback and get silently swept into Round 1's pricing/approval
+// math as if already scheduled. See core/requests.js's buildDesired and
+// nextOpenRound.
+function renderBacklogSection(client, sheet) {
+    const items = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog');
+    if (!items.length) return '';
+    const isAdmin = state.adminMode === true;
+
+    return `
+        <div class="card-section" style="margin-bottom:20px; border:1px solid var(--line); border-radius:8px; overflow:hidden;">
+            <div style="padding:10px 14px; background:rgba(148,163,184,0.08); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px;">
+                <i data-lucide="inbox" style="width:14px; height:14px; color:var(--muted);"></i>
+                <span class="tiny bold uppercase muted">Pending / Backlog</span>
+                <span class="tiny muted">(${items.length})</span>
+            </div>
+            <div>
+                ${items.map((item, i) => {
+                    const res = OL.getResourceById(item.resourceId);
+                    const title = (item.name && String(item.name).trim()) || res?.name || 'Request';
+                    const typeLabel = (getRequestTypes().find((t) => t.key === (item.requestType || 'build')) || {}).label || (item.requestType || 'Build');
+                    return `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; ${i < items.length - 1 ? 'border-bottom:1px solid var(--line);' : ''}">
+                            <div class="tiny is-clickable" style="cursor:pointer; min-width:0;" onclick="OL.openRequestLineModal('${esc(item.id)}')">
+                                <strong>${esc(title)}</strong> <span class="muted">· ${esc(typeLabel)}</span>
+                                ${item.notes ? `<div class="tiny muted" style="margin-top:2px;">${esc(item.notes)}</div>` : ''}
+                            </div>
+                            ${isAdmin ? `<button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Pulls a backlog item onto the sheet: gives it the next open round
+// (core/requests.js nextOpenRound — the current draft round, or a new one
+// after the last existing round) and moves it to 'Considering', the normal
+// starting status for a manually entered request. From here it behaves
+// exactly like any other line — Do Now, round approval, activation.
+export async function addBacklogItemToSheet(itemId) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!client || !sheet) return;
+    const item = sheet.lineItems.find((i) => String(i.id) === String(itemId));
+    if (!item) return;
+
+    await OL.updateAndSync(() => {
+        item.round = nextOpenRound(sheet);
+        item.status = 'Considering';
+    });
+
+    renderScopingSheet();
+}
+
+// Nudges a line item into an earlier/later round without opening the edit
+// modal. Blocked from moving into an already-approved round — this would
+// let someone retroactively reopen finished work by relabeling it as a
+// different, unapproved round.
+export async function moveItemRound(itemId, delta) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!client || !sheet) return;
+    const item = sheet.lineItems.find((i) => String(i.id) === String(itemId));
+    if (!item) return;
+
+    const current = Math.max(parseInt(item.round, 10) || 1, 1);
+    const target = current + delta;
+    if (target < 1) return;
+    if (isRoundApproved(sheet, target)) return;   // UI already disables this case; guard against a stale click
+
+    await OL.updateAndSync(() => { item.round = target; });
+    renderScopingSheet();
+}
+
+// Whether a round is currently shown collapsed — explicit state wins if
+// set; otherwise an approved round defaults to collapsed (see
+// toggleRoundCollapse) and everything else defaults open.
+function isRoundCollapsed(sheet, round) {
+    const entry = sheet.roundApprovals?.[String(round)] || {};
+    if (entry.collapsed === true) return true;
+    if (entry.collapsed === false) return false;
+    return (entry.status || sheet.status || '') === 'Approved';
+}
+
+// Closed/approved rounds collapse out of the default view once done — not
+// deleted, just visually tucked away; pricing/totals still compute over
+// their line items either way (see renderRoundGroup), only the row list
+// itself is hidden.
+export async function toggleRoundCollapse(round) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!client || !sheet) return;
+    const key = String(round);
+    const nowCollapsed = isRoundCollapsed(sheet, round);
+
+    await OL.updateAndSync(() => {
+        if (!sheet.roundApprovals) sheet.roundApprovals = {};
+        sheet.roundApprovals[key] = { ...(sheet.roundApprovals[key] || {}), collapsed: !nowCollapsed };
+    });
+
+    renderScopingSheet();
+}
+
 export function renderScopingSheet() {
     if (typeof OL.registerView === 'function') {
         OL.registerView(() => renderScopingSheet());
@@ -149,7 +256,7 @@ export function renderScopingSheet() {
     const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
 
     const roundGroups = {};
-    filteredItems.forEach((item) => {
+    filteredItems.filter((item) => String(item.status || '') !== 'Backlog').forEach((item) => {
         const r = parseInt(item.round, 10) || 1;
         if (!roundGroups[r]) roundGroups[r] = [];
         roundGroups[r].push(item);
@@ -186,6 +293,7 @@ export function renderScopingSheet() {
     </div>
 
     ${renderPendingActivationsBanner(client)}
+    ${renderBacklogSection(client, sheet)}
 
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -327,7 +435,8 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
     finalRoundNet = billableSubtotal - roundDeductionAmt;
     totalRoundSavings = roundGrossValue - finalRoundNet;
 
-    const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
+    const collapsed = isRoundCollapsed(sheet, roundNum);
+    const rows = collapsed ? '' : items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
     // getCurrentRound now gates on each round's own approval (isRoundApproved)
     // internally, so the old "&& sheet.status === 'Approved'" prefix here
@@ -351,6 +460,9 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                         </select>
                     ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}" style="margin-left:8px;">${esc(roundApprovalStatus)}</span>` : '')}
                     ${typeof OL.roundStatusHtml === 'function' ? OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound) : ''}
+                    <button class="btn tiny soft" style="margin-left:8px;" onclick="OL.toggleRoundCollapse(${Number(roundNum)})" title="${collapsed ? 'Show this round\'s items' : 'Tuck this round away'}">
+                        ${collapsed ? `Expand (${items.length})` : 'Collapse'}
+                    </button>
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
@@ -488,6 +600,9 @@ function renderScopingRowBase(item, idx, showUnits) {
         : "";
 
     const sheetForStatus = client?.projectData?.scopingSheets?.[0];
+    const currentRoundNum = Math.max(parseInt(item.round, 10) || 1, 1);
+    const upBlocked = currentRoundNum <= 1 || isRoundApproved(sheetForStatus, currentRoundNum - 1);
+    const downBlocked = isRoundApproved(sheetForStatus, currentRoundNum + 1);
     const isActiveRow = isActiveItem(sheetForStatus, item, i => !!OL.getResourceById(i.resourceId));
     let workHtml = '';
     if (isActiveRow) {
@@ -627,6 +742,12 @@ function renderScopingRowBase(item, idx, showUnits) {
 
         <div class="col-actions">
             ${isAdmin ? `
+                <button class="card-delete-btn" style="opacity:${upBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${currentRoundNum <= 1 ? "Already in the first round" : upBlocked ? "Can't move into an already-approved round" : 'Move to an earlier round'}" ${upBlocked ? 'disabled' : ''} onclick="OL.moveItemRound('${item.id}', -1)">
+                    <i data-lucide="chevron-up" style="width:12px; height:12px;"></i>
+                </button>
+                <button class="card-delete-btn" style="opacity:${downBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${downBlocked ? "Can't move into an already-approved round" : 'Move to a later round'}" ${downBlocked ? 'disabled' : ''} onclick="OL.moveItemRound('${item.id}', 1)">
+                    <i data-lucide="chevron-down" style="width:12px; height:12px;"></i>
+                </button>
                 <button class="card-delete-btn" style="opacity: 0.3; display:flex; align-items:center; justify-content:center;" onclick="OL.removeFromScopeByID('${item.id}')">
                     <i data-lucide="x" style="width:14px; height:14px;"></i>
                 </button>
@@ -1795,8 +1916,8 @@ export function openRequestLineModal(itemId) {
                 </div>
                 <div style="display:flex; flex-direction:column; gap:4px;">
                     <label class="tiny muted" style="font-size:10px; font-weight:600;">Client decision</label>
-                    <select id="rq-status" class="modal-input">
-                        ${['Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
+                    <select id="rq-status" class="modal-input" onchange="const r=document.getElementById('rq-round'); if(r) r.disabled = (this.value === 'Backlog');">
+                        ${['Backlog', 'Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
                         ${status === 'Done' || status === "Don't Do" ? opt(status, status, status) : ''}
                     </select>
                 </div>
@@ -1810,7 +1931,7 @@ export function openRequestLineModal(itemId) {
                 </div>
                 <div style="display:flex; flex-direction:column; gap:4px;">
                     <label class="tiny muted" style="font-size:10px; font-weight:600;">Round</label>
-                    <input id="rq-round" type="number" min="1" step="1" class="modal-input"
+                    <input id="rq-round" type="number" min="1" step="1" class="modal-input" ${status === 'Backlog' ? 'disabled' : ''}
                            value="${parseInt(item?.round, 10) || 1}">
                 </div>
             </div>
@@ -1842,13 +1963,16 @@ export function applyRequestFormToItem(item) {
     if (!document.getElementById('rq-title')) return item;
     const read = (id) => document.getElementById(id)?.value ?? '';
     const title = read('rq-title').trim();
+    const status = read('rq-status') || item.status || 'Do Now';
     Object.assign(item, {
         ...(title ? { name: title } : {}),
         requestType: read('rq-type') || item.requestType || 'meeting',
         notes: read('rq-notes').trim(),
-        status: read('rq-status') || item.status || 'Do Now',
+        status,
         responsibleParty: read('rq-party') || item.responsibleParty || 'Sphynx',
-        round: Math.max(1, parseInt(read('rq-round'), 10) || 1),
+        // A backlog item's round stays null — see core/requests.js buildDesired
+        // and nextOpenRound for why a blank round can't just fall back to 1.
+        round: status === 'Backlog' ? null : Math.max(1, parseInt(read('rq-round'), 10) || 1),
         manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
     });
     return item;
@@ -2136,7 +2260,7 @@ Object.assign(window.OL, {
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
     openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
-    setRoundApprovalStatus,
+    setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest
 });
