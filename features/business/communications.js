@@ -1011,6 +1011,8 @@ OL.openGmailMessageModal = async function(id) {
                 <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.deleteGmailMessage('${m.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i> Delete</button>
             </div>
 
+            <div id="gmail-attachments"></div>
+
             <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:24px; align-items:start;">
                 ${m.body_html ? `
                     <!-- Rendered in a fully sandboxed iframe (sandbox="" — no
@@ -1048,6 +1050,7 @@ OL.openGmailMessageModal = async function(id) {
     OL.renderGmailLinkStep();
     OL.renderGmailOpenClientAsks(m);
     OL.renderGmailPieceLinks(m);
+    OL.renderGmailAttachments(m);
     OL.attachExcerptSelectionHandler(m.id);
     OL.loadThreadLinkSuggestion(m);
     if (m.classified_at) {
@@ -1255,8 +1258,8 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
 };
 
 // ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
-OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt') {
-    OL._excerptLinkState = { messageId, excerptText, kind, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '' };
+OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt', attachmentPath = null) {
+    OL._excerptLinkState = { messageId, excerptText, kind, attachmentPath, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '' };
     OL.renderExcerptLinkPicker();
 };
 
@@ -1406,6 +1409,7 @@ OL.confirmExcerptLink = async function() {
     pieceLinks.push({
         id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
         targetType: st.targetType, targetId: st.targetId, targetLabel: st.targetLabel,
+        attachmentPath: st.attachmentPath || null,
         createdAt: new Date().toISOString(),
     });
 
@@ -1427,7 +1431,51 @@ OL.confirmExcerptLink = async function() {
 };
 
 // ---- showing what's already linked, with jump-to-target and unlink ----
-OL.renderGmailPieceLinks = function(m) {
+// ---- attachments (populated by get-gmail-messages' collectAttachmentParts
+// / fetchAndStoreAttachments — see gmail_attachments.sql) ----
+// The bucket is private, so viewing/downloading one always goes through a
+// short-lived signed URL generated on demand, never a permanent public link.
+OL.getGmailAttachmentUrl = async function(storagePath) {
+    const { data, error } = await db.storage.from('gmail-attachments').createSignedUrl(storagePath, 3600);
+    if (error) { alert('Could not open that attachment: ' + error.message); return null; }
+    return data?.signedUrl || null;
+};
+
+OL.openGmailAttachment = async function(storagePath) {
+    const url = await OL.getGmailAttachmentUrl(storagePath);
+    if (url) window.open(url, '_blank');
+};
+
+OL.renderGmailAttachments = function(m) {
+    const container = document.getElementById('gmail-attachments');
+    if (!container) return;
+    const attachments = Array.isArray(m.attachments) ? m.attachments : [];
+    if (!attachments.length) { container.innerHTML = ''; return; }
+
+    const sizeLabel = (bytes) => bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    const alreadyLinked = (path) => (Array.isArray(m.piece_links) ? m.piece_links : []).some((l) => l.kind === 'attachment' && l.attachmentPath === path);
+
+    container.innerHTML = `
+        <div style="margin-bottom:16px;">
+            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Attachments (${attachments.length})</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                ${attachments.map((a) => `
+                    <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px;">
+                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" onclick="OL.openGmailAttachment('${esc(a.storagePath)}')" title="View / download">
+                            <i data-lucide="paperclip" style="width:11px;height:11px;vertical-align:sub;"></i> ${esc(a.filename)} <span class="tiny muted">(${sizeLabel(a.size || 0)})</span>
+                        </span>
+                        ${alreadyLinked(a.storagePath)
+                            ? `<span class="tiny" style="color:var(--accent);">Linked</span>`
+                            : `<button class="btn tiny soft" onclick="OL.openExcerptLinkPicker('${m.id}', ${JSON.stringify('📎 ' + a.filename)}, 'attachment', '${esc(a.storagePath)}')">Link this attachment</button>`}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+};
+
+
     const container = document.getElementById('gmail-piece-links');
     if (!container) return;
     const links = Array.isArray(m.piece_links) ? m.piece_links : [];
