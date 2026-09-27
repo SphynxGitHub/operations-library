@@ -342,10 +342,11 @@ export function renderMaintenancePage() {
     if (!client) { main.innerHTML = '<div class="card" style="padding:20px;">Pick a client first.</div>'; return; }
     const mode = maintenanceMode(client);
     if (mode === null) {
-        main.innerHTML = `<div class="section-header"><h2>🛠 Maintenance &amp; Hours</h2></div>
+        main.innerHTML = `<div class="section-header"><h2><i data-lucide="wrench" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Maintenance &amp; Hours</h2></div>
             <div class="card" style="padding:20px;">${canManage()
                 ? `This client's pipeline label is "${esc(client.meta?.status || 'not set')}". Set it to <strong>Ongoing Maintenance</strong> or <strong>Ad Hoc Maintenance</strong> to manage plan periods and hours here.`
                 : 'There is no maintenance plan on this project.'}</div>`;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
     const slot = slotFor(client.id);
@@ -375,7 +376,7 @@ export function renderMaintenancePage() {
             ${history.map((p) => `<div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line);" class="tiny"><span>${esc(niceDate(p.start_date))} to ${esc(niceDate(p.due_date))}${p.tier ? ` · ${esc(p.tier)}` : ''}</span><span class="muted">${esc(p.status)}${p.renewing ? ' · renewing' : ''}</span></div>`).join('')}
         </div>` : ''}`;
     main.innerHTML = `
-        <div class="section-header"><div><h2>🛠 Maintenance &amp; Hours</h2>
+        <div class="section-header"><div><h2><i data-lucide="wrench" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Maintenance &amp; Hours</h2>
             <div class="small muted">${esc(client.meta?.name || '')} · <span class="pill tiny soft">${mode === ONGOING ? 'Ongoing Maintenance' : 'Ad Hoc Maintenance'}</span></div></div></div>
         ${body}`;
     if (window.lucide) window.lucide.createIcons();
@@ -656,7 +657,7 @@ export function renderClientRequests() {
 
     main.innerHTML = `
         <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div><h2>📥 Client Requests</h2><div class="small muted">${esc(client.meta?.name || '')} · served first come, first served</div></div>
+            <div><h2><i data-lucide="inbox" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Client Requests</h2><div class="small muted">${esc(client.meta?.name || '')} · served first come, first served</div></div>
             <button class="btn primary" onclick="OL.openMaintenanceRequestModal()">+ Add request</button>
         </div>
         <div class="card" style="padding:0; overflow:hidden;">
