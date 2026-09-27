@@ -3399,7 +3399,7 @@ OL.renderTaskParentPickerStep = function() {
         .filter(i => OL.requestItemTitle(client, i).toLowerCase().includes(query));
 
     const content = `
-        <div style="padding: 24px; max-width: 900px; width: 90vw;" onclick="event.stopPropagation()">
+        <div style="padding: 24px 36px 24px 24px; box-sizing: border-box; max-width: 900px; width: 90vw;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;">
                 <div>
                     <h3 style="margin:0; font-size:15px;">Manage Links</h3>
