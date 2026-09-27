@@ -175,7 +175,89 @@ async function fetchAndConvertCidImages(
   return updatedHtml;
 }
 
-// Same traversal as extractPlainTextBody, but keeps the HTML instead of
+// ---- Real attachments (distinct from the inline cid: images handled above) ----
+// A part counts as an attachment when it has a filename — Gmail sets this
+// for anything the sender attached, whether or not it ALSO happens to be
+// referenced inline via a cid (some senders double up). Capturing it here
+// even if fetchAndConvertCidImages already inlined the same bytes is fine:
+// one copy renders inline in the HTML, a separate copy gets stored so the
+// app can offer it as a real, linkable, downloadable file.
+function collectAttachmentParts(payload: any): { filename: string; mimeType: string; attachmentId: string; size: number }[] {
+  const out: { filename: string; mimeType: string; attachmentId: string; size: number }[] = [];
+  function walk(node: any) {
+    if (!node) return;
+    if (node.filename && node.body?.attachmentId) {
+      out.push({
+        filename: node.filename,
+        mimeType: node.mimeType || "application/octet-stream",
+        attachmentId: node.body.attachmentId,
+        size: node.body.size || 0
+      });
+    }
+    if (Array.isArray(node.parts)) node.parts.forEach(walk);
+  }
+  walk(payload);
+  return out;
+}
+
+function base64UrlToBytes(data: string): Uint8Array {
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Caps guard the same resource-limit problem the comment near
+// FETCH_CONCURRENCY below already describes for embedded images — an
+// attachment can be much bigger than an inline image, so this is more
+// conservative. A skipped attachment just doesn't get stored; the email
+// itself still imports normally.
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // 15MB
+
+async function fetchAndStoreAttachments(
+  supabase: any,
+  messageId: string,
+  accessToken: string,
+  parts: { filename: string; mimeType: string; attachmentId: string; size: number }[]
+): Promise<{ id: string; filename: string; mimeType: string; size: number; storagePath: string }[]> {
+  const out: { id: string; filename: string; mimeType: string; size: number; storagePath: string }[] = [];
+
+  for (const part of parts.slice(0, MAX_ATTACHMENTS_PER_MESSAGE)) {
+    if (part.size && part.size > MAX_ATTACHMENT_BYTES) {
+      console.warn(`Skipping oversized attachment "${part.filename}" (${part.size} bytes) on message ${messageId}`);
+      continue;
+    }
+    try {
+      const res = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.attachmentId}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!res.ok) { console.error(`Failed to fetch attachment "${part.filename}" on ${messageId}:`, await res.text()); continue; }
+      const data = await res.json();
+      if (!data?.data) continue;
+
+      const bytes = base64UrlToBytes(data.data);
+      if (bytes.byteLength > MAX_ATTACHMENT_BYTES) continue; // the size header above can be missing/wrong — the real thing is the final check
+
+      // attachmentId in the path so two attachments with the same filename
+      // on the same message (rare, but it happens) never collide.
+      const storagePath = `${messageId}/${part.attachmentId}-${part.filename}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("gmail-attachments")
+        .upload(storagePath, bytes, { contentType: part.mimeType, upsert: true });
+      if (uploadErr) { console.error(`Failed to store attachment "${part.filename}" on ${messageId}:`, uploadErr.message); continue; }
+
+      out.push({ id: part.attachmentId, filename: part.filename, mimeType: part.mimeType, size: bytes.byteLength, storagePath });
+    } catch (e) {
+      console.error(`Error processing attachment "${part.filename}" on ${messageId}:`, e);
+    }
+  }
+  return out;
+}
+
+
 // stripping it — this is what lets the app render actual formatting
 // (bold, links, lists, etc.) instead of the flattened plain-text version.
 // Returns "" for plain-text-only messages, which is the normal/expected
@@ -557,6 +639,10 @@ serve(async (req) => {
         const parsedDate = dateHeader ? new Date(dateHeader) : null;
         const body = extractPlainTextBody(detail.payload);
         const bodyHtml = await extractHtmlBody(detail.payload, id, accessToken);
+        const attachmentParts = collectAttachmentParts(detail.payload);
+        const attachments = attachmentParts.length
+          ? await fetchAndStoreAttachments(supabase, id, accessToken, attachmentParts)
+          : [];
 
         const participantEmails = new Set([
           ...extractEmails(getHeader("From")),
@@ -610,7 +696,8 @@ serve(async (req) => {
           body_html: bodyHtml ? bodyHtml.slice(0, 100000) : null,
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
           participants: Array.from(participantEmails),
-          linked_client_id: primaryLinkedClientId
+          linked_client_id: primaryLinkedClientId,
+          attachments
         });
 
         if (matchedLabelNames.length > 0) {
