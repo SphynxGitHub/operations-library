@@ -33,6 +33,9 @@ export const state = {
         automationRules: [],
         sops: [], // Standard Operating Procedures — named groups of taskBlueprints applied together
         testTemplates: [], // The steps a tester works through for each kind of request (see features/testing.js)
+        askTemplates: [], // Client-ask templates used at request activation (see core/activation.js) — default empty until an org saves its own (DEFAULT_ASK_TEMPLATES is the fallback)
+        askTemplateOverrides: [], // Log of activation-time deviations from the ask-template SOP defaults, for periodic fold-back review (core/activation.js's recordAskTemplateOverrides)
+        assigneeByType: {}, // Flat { [requestType]: assigneeName } lookup, checked before role-based assignment (core/activation.js's suggestAssignee)
         reviewDefaults: { days: 30, followUpEveryDays: 10 }, // Client review length and check-in spacing (see features/review.js)
         datapoints: [
             { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
@@ -162,6 +165,12 @@ export function persist() {
                 team_prompt_suppressions: masterCopy.teamPromptSuppressions || []
             };
             if (state.masterHasTestTemplates) masterPayload.test_templates = masterCopy.testTemplates || [];
+            // ask_templates/ask_template_overrides come from ask_templates.sql. Same
+            // gating as test_templates — do not save until the column exists.
+            if (state.masterHasAskTemplates) masterPayload.ask_templates = masterCopy.askTemplates || [];
+            if (state.masterHasAskTemplateOverrides) masterPayload.ask_template_overrides = masterCopy.askTemplateOverrides || [];
+            // assignee_by_type comes from assignee_by_type.sql.
+            if (state.masterHasAssigneeByType) masterPayload.assignee_by_type = masterCopy.assigneeByType || {};
             // billable_rules comes from migrations/billable_rules.sql; only saved once the column exists.
             if (state.masterHasBillableRules) masterPayload.billable_rules = masterCopy.billableRules || [];
             if (state.masterHasEmailTemplates) masterPayload.email_templates = masterCopy.emailTemplates || [];
@@ -371,6 +380,15 @@ export async function sync() {
             // (an unknown column would make every master save fail).
             state.masterHasTestTemplates = Object.prototype.hasOwnProperty.call(masterData, 'test_templates');
             if (Array.isArray(masterData.test_templates)) state.master.testTemplates = masterData.test_templates;
+            // ask_templates/ask_template_overrides come from ask_templates.sql. Until they
+            // exist, do not try to save them (an unknown column would fail every master save).
+            state.masterHasAskTemplates = Object.prototype.hasOwnProperty.call(masterData, 'ask_templates');
+            if (Array.isArray(masterData.ask_templates)) state.master.askTemplates = masterData.ask_templates;
+            state.masterHasAskTemplateOverrides = Object.prototype.hasOwnProperty.call(masterData, 'ask_template_overrides');
+            if (Array.isArray(masterData.ask_template_overrides)) state.master.askTemplateOverrides = masterData.ask_template_overrides;
+            // assignee_by_type comes from assignee_by_type.sql — same gating.
+            state.masterHasAssigneeByType = Object.prototype.hasOwnProperty.call(masterData, 'assignee_by_type');
+            if (masterData.assignee_by_type && typeof masterData.assignee_by_type === 'object' && !Array.isArray(masterData.assignee_by_type)) state.master.assigneeByType = masterData.assignee_by_type;
             state.masterHasReviewDefaults = Object.prototype.hasOwnProperty.call(masterData, 'review_defaults');
             if (masterData.review_defaults && typeof masterData.review_defaults === 'object' && !Array.isArray(masterData.review_defaults)) state.master.reviewDefaults = masterData.review_defaults;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
