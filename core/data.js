@@ -2,6 +2,7 @@
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 import { mirrorClientRequests } from './requests.js';
+import { isMaintenanceSheet } from './maintenance.js';
 import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } from './preview.js';
 
 // ---- small value helpers used throughout the data layer ----
@@ -533,6 +534,23 @@ export async function loadFullClient(clientId) {
             businessModules: data.business_modules || state.clients[clientId]?.businessModules || {}
         };
         delete state.clients[clientId]._metaOnly;
+
+        // Repair: everywhere else in the app hardcodes scopingSheets[0] as
+        // the main (non-maintenance) sheet. A client whose very first-ever
+        // request came in through Client Requests/Maintenance before the
+        // normal scoping sheet existed could end up with the maintenance
+        // sheet sitting at [0] instead — silently breaking every one of
+        // those lookups (e.g. Edit Request opening blank instead of
+        // populated). ensureMaintenanceSheet no longer lets this happen
+        // going forward; this reorders it back for any client already in
+        // that state, in memory only — saved back to the DB the next time
+        // this client's projectData is written by anything else.
+        const sheets = state.clients[clientId].projectData?.scopingSheets;
+        if (Array.isArray(sheets) && sheets.length > 1 && isMaintenanceSheet(sheets[0]) && sheets.some((s) => !isMaintenanceSheet(s))) {
+            const mainIdx = sheets.findIndex((s) => !isMaintenanceSheet(s));
+            const [mainSheet] = sheets.splice(mainIdx, 1);
+            sheets.unshift(mainSheet);
+        }
     }
     return state.clients[clientId];
 }
