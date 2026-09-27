@@ -1185,7 +1185,7 @@ OL.renderGmailOpenClientAsks = function(m) {
                         <span class="tiny">${esc(t.title || t.name)}</span>
                         ${String(m.linked_task_id) === String(t.id)
                             ? `<span class="tiny" style="color:var(--accent); flex-shrink:0;">Linked</span>`
-                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink().then(() => OL.openGmailMessageModal('${m.id}'));">This answers it</button>`}
+                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink({ skipArchive: true }).then(() => OL.openGmailMessageModal('${m.id}'));">This answers it</button>`}
                     </div>
                 `).join('')}
             </div>
@@ -2665,7 +2665,7 @@ OL.createAndLinkGmailTask = async function() {
     await OL.saveGmailLink();
 };
 
-OL.saveGmailLink = async function() {
+OL.saveGmailLink = async function({ skipArchive = false } = {}) {
     const st = OL._gmailLinkState;
     if (!st) return;
     // Everything cleared on a previously linked email → that's an unlink.
@@ -2722,9 +2722,12 @@ OL.saveGmailLink = async function() {
         }
     }
 
-    // 4. Archive THIS email if the link is specific enough. Only this
-    // message — the rest of the conversation is left exactly as it is.
-    if (st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
+    // 4. Archive THIS email if the link is specific enough AND this wasn't
+    // a quick, partial link (skipArchive — see the "This answers it"
+    // button, and note below on the fuller suggested-items rule). Only
+    // this message — the rest of the conversation is left exactly as it
+    // is.
+    if (!skipArchive && st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
         OL.closeModal();
         await OL.archiveGmailMessage(st.emailId, true, { wholeThread: false, skipClose: true });
     } else {
