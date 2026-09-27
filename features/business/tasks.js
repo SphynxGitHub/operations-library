@@ -2081,10 +2081,6 @@ OL.renderInContextTaskModal = function(client, task) {
                                   onclick="OL.closeModal(); OL.navigateToClientProject('${client?.id}')" title="Jump to Workspace">
                                 <i data-lucide="folder" style="width:12px;height:12px; pointer-events:none;"></i> ${esc(client?.meta?.name || 'Workspace')}
                             </span>
-                            <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
-                                  onclick="OL.openTaskParentPicker('${client?.id}', '${task.id}')">
-                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Parent: ${OL.getTaskParentLabel(client, task)}
-                            </span>
                         </div>
 
                         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -3248,22 +3244,29 @@ OL.renderCommentTextWithMentions = function(text, html) {
 // single source of truth for its own comments.
 // -------------------------------------------------------------
 // Prominent "Request (parent) > Task" banner at the top of the task
-// detail modal — the small request-tag pill further down (next to the
-// comment thread) still exists for that context, but on its own it read
-// as a minor tag rather than the task's actual place in the hierarchy.
-// This also lists sibling tasks under the same request, so you can see
-// where this task sits among the request's other steps without leaving
-// the modal. A task can belong to more than one request (task.links[]),
-// so this renders one banner per link, not just the first.
+// detail modal — this used to be paired with a separate "Parent: ..." pencil
+// pill elsewhere in the header row, which duplicated what's shown here; that
+// pill is gone now and this section's own "Parent Requests" header + pencil
+// is the one entry point into Manage Links. A task can belong to more than
+// one request (task.links[]), so this renders one row per link — each
+// collapsed by default (just the title/type/round), expanding in place on
+// click to show its sibling tasks, so a task linked to several requests
+// doesn't turn into a wall of expanded sibling lists.
 OL.renderTaskParentRequestBanner = function(client, task) {
     const pd = client?.projectData;
     const requestIds = requestIdsForTask(task);
-    if (!pd || !requestIds.length) return '';
+    const clientId = esc(client?.id || '');
+    const pencilBtn = `<button class="btn tiny soft" style="padding:2px 6px; display:inline-flex; align-items:center;" title="Manage links" onclick="OL.openTaskParentPicker('${clientId}', '${esc(task.id)}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>`;
+    const header = `<div style="display:flex; align-items:center; gap:6px; margin:0 24px 8px 24px;"><span class="tiny bold uppercase muted">Parent Requests</span>${pencilBtn}</div>`;
+
+    if (!pd || !requestIds.length) {
+        return `${header}<div style="margin:0 24px 8px 24px;" class="tiny muted">No request linked yet.</div>`;
+    }
 
     const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
     const dotColorFor = (statusName) => (masterStatuses.find(s => s.name === statusName) || {}).color || '#94a3b8';
 
-    return requestIds.map((requestId) => {
+    const rows = requestIds.map((requestId) => {
         const item = OL.findRequestItem(client, requestId);
         if (!item) return '';
 
@@ -3274,31 +3277,39 @@ OL.renderTaskParentRequestBanner = function(client, task) {
         const round = Math.max(parseInt(item.round, 10) || 1, 1);
 
         const siblingTasks = (pd.clientTasks || []).filter(t => taskAppliesToRequest(t, requestId));
+        const bodyId = 'reqbanner-' + esc(String(item.id)) + '-' + esc(String(task.id));
 
         return `
-            <div style="margin:0 24px 8px 24px; padding:12px 14px; background:rgba(100,198,162,0.06); border:1px solid rgba(100,198,162,0.25); border-radius:8px;">
-                <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(item.id)}')" title="Open this request on the scoping sheet">
-                    <i data-lucide="git-pull-request" style="width:14px;height:14px;color:#64c6a2; flex-shrink:0;"></i>
-                    <span class="tiny bold uppercase muted">Request (parent)</span>
-                    <span style="font-weight:700; color:#64c6a2;">${esc(title)}</span>
+            <div style="margin:0 24px 8px 24px; border:1px solid rgba(100,198,162,0.25); border-radius:8px; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 14px; background:rgba(100,198,162,0.06);"
+                     onclick="const b=document.getElementById('${bodyId}'); const open=b.style.display!=='none'; b.style.display=open?'none':'block'; this.querySelector('.chev').style.transform=open?'rotate(-90deg)':'rotate(0deg)';">
+                    <i class="chev" data-lucide="chevron-down" style="width:12px;height:12px;color:#64c6a2; flex-shrink:0; transition:transform .15s; transform:rotate(-90deg);"></i>
+                    <span style="display:flex; align-items:center; gap:8px;" onclick="event.stopPropagation(); OL.openRequestFromTask('${clientId}', '${esc(item.id)}')" title="Open this request on the scoping sheet">
+                        <i data-lucide="git-pull-request" style="width:14px;height:14px;color:#64c6a2; flex-shrink:0;"></i>
+                        <span style="font-weight:700; color:#64c6a2;">${esc(title)}</span>
+                    </span>
                     <span class="pill tiny soft" style="font-size:9px;">${esc(requestType.charAt(0).toUpperCase() + requestType.slice(1))} · Round ${round}</span>
                 </div>
-                ${siblingTasks.length ? `
-                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(100,198,162,0.2); display:grid; gap:4px;">
-                        <span class="tiny muted uppercase bold" style="margin-bottom:2px;">Tasks under this request (${siblingTasks.length})</span>
-                        ${siblingTasks.map(t => `
-                            <div style="display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; ${String(t.id) === String(task.id) ? 'background:rgba(100,198,162,0.12);' : ''}"
-                                 onclick="event.stopPropagation(); ${String(t.id) === String(task.id) ? '' : `OL.openTaskInContext('${esc(client?.id || '')}', '${esc(t.id)}')`}">
-                                <span style="width:8px; height:8px; border-radius:50%; background:${dotColorFor(t.status)}; flex-shrink:0;"></span>
-                                <span class="tiny" style="${String(t.id) === String(task.id) ? 'font-weight:700;' : ''}">${esc(t.title || t.name)}</span>
-                                ${String(t.id) === String(task.id) ? '<span class="tiny muted">(this task)</span>' : ''}
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : ''}
+                <div id="${bodyId}" style="display:none; padding:12px 14px; background:rgba(100,198,162,0.06); border-top:1px solid rgba(100,198,162,0.2);">
+                    ${siblingTasks.length ? `
+                        <div style="display:grid; gap:4px;">
+                            <span class="tiny muted uppercase bold" style="margin-bottom:2px;">Tasks under this request (${siblingTasks.length})</span>
+                            ${siblingTasks.map(t => `
+                                <div style="display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; ${String(t.id) === String(task.id) ? 'background:rgba(100,198,162,0.12);' : ''}"
+                                     onclick="event.stopPropagation(); ${String(t.id) === String(task.id) ? '' : `OL.openTaskInContext('${clientId}', '${esc(t.id)}')`}">
+                                    <span style="width:8px; height:8px; border-radius:50%; background:${dotColorFor(t.status)}; flex-shrink:0;"></span>
+                                    <span class="tiny" style="${String(t.id) === String(task.id) ? 'font-weight:700;' : ''}">${esc(t.title || t.name)}</span>
+                                    ${String(t.id) === String(task.id) ? '<span class="tiny muted">(this task)</span>' : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<span class="tiny muted">No other tasks under this request yet.</span>'}
+                </div>
             </div>
         `;
     }).join('');
+
+    return header + rows;
 };
 
 // A request can live on a scoping sheet or in the standalone client
@@ -3388,37 +3399,49 @@ OL.renderTaskParentPickerStep = function() {
         .filter(i => OL.requestItemTitle(client, i).toLowerCase().includes(query));
 
     const content = `
-        <div style="padding: 20px; max-width: 420px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;">
-                <h3 style="margin:0; font-size:15px;">Manage Links</h3>
+        <div style="padding: 24px; max-width: 900px; width: 90vw;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;">
+                <div>
+                    <h3 style="margin:0; font-size:15px;">Manage Links</h3>
+                    <div class="tiny muted" style="margin-top:2px;">For <strong>${esc(task.title || task.name || 'this task')}</strong> · ${esc(client?.meta?.name || 'Workspace')}</div>
+                </div>
                 <button class="btn tiny soft" onclick="OL.closeModal(); OL.openTaskInContext('${st.clientId}', '${st.taskId}')">✕</button>
             </div>
-            <input type="text" class="modal-input tiny" placeholder="Search resources or events..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
+            <input type="text" class="modal-input tiny" placeholder="Search resources or events..." value="${esc(st.query)}" style="width:100%; margin-bottom:14px;"
                    oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._taskParentPickerState.query = v; OL.renderTaskParentPickerStep(); })" id="task-parent-search">
-            <div class="tiny bold uppercase muted" style="margin-bottom:2px;">Requests</div>
-            <div class="tiny muted" style="margin-bottom:6px;">A task can apply to more than one — check every request it belongs to.</div>
-            <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
-                ${requests.length ? requests.map(r => {
-                    const checked = linkedRequestIds.includes(String(r.id));
-                    return `
-                    <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${checked ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.toggleTaskRequestLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}')">
-                        <input type="checkbox" ${checked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
-                        <i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}
-                    </div>`;
-                }).join('') : `<div class="tiny muted">No open requests.</div>`}
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px;">
+                <div>
+                    <div class="tiny bold uppercase muted" style="margin-bottom:2px;">Requests</div>
+                    <div class="tiny muted" style="margin-bottom:6px;">A task can apply to more than one — check every request it belongs to.</div>
+                    <div style="display:grid; gap:4px; max-height:320px; overflow:auto;">
+                        ${requests.length ? requests.map(r => {
+                            const checked = linkedRequestIds.includes(String(r.id));
+                            return `
+                            <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:#64c6a2; ${checked ? 'border-color:#64c6a2; background:rgba(100,198,162,0.1);' : ''}" onclick="OL.toggleTaskRequestLink('${st.clientId}', '${st.taskId}', '${esc(String(r.id))}')">
+                                <input type="checkbox" ${checked ? 'checked' : ''} style="pointer-events:none;" tabindex="-1">
+                                <i data-lucide="git-pull-request" style="width:10px;height:10px;"></i> ${esc(OL.requestItemTitle(client, r))}
+                            </div>`;
+                        }).join('') : `<div class="tiny muted">No open requests.</div>`}
+                    </div>
+                </div>
+                <div>
+                    <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Resources</div>
+                    <button class="btn tiny soft" style="width:100%; margin-bottom:6px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">Clear resource / event</button>
+                    <div style="display:grid; gap:4px; max-height:320px; overflow:auto;">
+                        ${resources.length ? resources.map(r => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentResourceId === r.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'resource', '${r.id}')">${esc(r.name)}</div>
+                        `).join('') : `<div class="tiny muted">No resources.</div>`}
+                    </div>
+                </div>
+                <div>
+                    <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Events</div>
+                    <div style="display:grid; gap:4px; max-height:320px; overflow:auto;">
+                        ${events.length ? events.map(e => `
+                            <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentEventId === e.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'event', '${e.id}')">${esc(e.title)} <span class="muted">${e.start ? new Date(e.start).toLocaleDateString() : ''}</span></div>
+                        `).join('') : `<div class="tiny muted">No events for this project yet.</div>`}
+                    </div>
+                </div>
             </div>
-            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Resources</div>
-            <button class="btn tiny soft" style="width:100%; margin-bottom:6px;" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', null, null)">Clear resource / event</button>
-            <div style="display:grid; gap:4px; max-height:140px; overflow:auto; margin-bottom:12px;">
-                ${resources.length ? resources.map(r => `
-                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentResourceId === r.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'resource', '${r.id}')">${esc(r.name)}</div>
-                `).join('') : `<div class="tiny muted">No resources.</div>`}
-            </div>
-            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Events</div>
-            <div style="display:grid; gap:4px; max-height:140px; overflow:auto;">
-                ${events.length ? events.map(e => `
-                    <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; ${task.parentEventId === e.id ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}" onclick="OL.setTaskParent('${st.clientId}', '${st.taskId}', 'event', '${e.id}')">${esc(e.title)} <span class="muted">${e.start ? new Date(e.start).toLocaleDateString() : ''}</span></div>
-                `).join('') : `<div class="tiny muted">No events for this project yet.</div>`}
             </div>
         </div>
     `;
