@@ -1450,9 +1450,15 @@ OL.confirmExcerptCreateRequest = async function() {
             id: newItemId,
             name: title,
             requestType: st.newRequestType || 'build',
-            status: 'Considering',
+            // Backlog, not Considering/round 1 — lands in the scoping
+            // sheet's "Pending / Backlog" section (renderBacklogSection)
+            // for someone to actively promote with "Add to scoping sheet",
+            // rather than silently appearing already scheduled into the
+            // current round. Round stays null to match — see
+            // core/requests.js buildDesired/nextOpenRound.
+            status: 'Backlog',
             responsibleParty: 'Sphynx',
-            round: 1,
+            round: null,
             teamMode: 'everyone',
             teamIds: [],
             data: {},
