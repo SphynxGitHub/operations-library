@@ -2040,8 +2040,9 @@ OL.renderGmailLinkStep = function() {
     const canLink = !!(st.clientId || st.resourceId || st.taskId || st.requestId || st.eventId || st.hadLinks);
 
     container.innerHTML = `
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px 20px; margin-bottom:16px;">
         <!-- Project Section -->
-        <div style="margin-bottom:14px;">
+        <div>
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
             ${selectedClient ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
@@ -2052,7 +2053,7 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-client-search" class="modal-input tiny" placeholder="Search projects..." value="${esc(st.clientQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('clientFocused', true)" oninput="OL.setGmailLinkClientQuery(this.value)">
                 ${st.clientFocused ? `
-                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredClients.length ? filteredClients.map(c => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkClient('${c.id}')">${esc(c.meta?.name || 'Unnamed')}</div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching projects.</div>`}
@@ -2062,7 +2063,7 @@ OL.renderGmailLinkStep = function() {
         </div>
 
         <!-- Resource Section -->
-        <div style="margin-bottom:14px;">
+        <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <label class="tiny muted bold">Resource / Deliverable</label>
                 <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showArchived = !OL._gmailLinkState.showArchived; OL.renderGmailLinkStep();">
@@ -2078,7 +2079,7 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-resource-search" class="modal-input tiny" placeholder="Search resources...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.resourceQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('resourceFocused', true)" oninput="OL.setGmailLinkResourceQuery(this.value)">
                 ${st.resourceFocused ? `
-                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredResources.length ? filteredResources.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
                                 <span>${esc(r.name)}${(r.isArchived || r.archived) ? `<span class="pill tiny danger">Archived</span>` : ''}</span>
@@ -2091,7 +2092,7 @@ OL.renderGmailLinkStep = function() {
         </div>
 
         <!-- Task Section -->
-        <div style="margin-bottom:14px;">
+        <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <label class="tiny muted bold">Task</label>
                 <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showCompletedTasks = !OL._gmailLinkState.showCompletedTasks; OL.renderGmailLinkStep();">
@@ -2107,7 +2108,7 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-task-search" class="modal-input tiny" placeholder="Search tasks...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.taskQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('taskFocused', true)" oninput="OL.setGmailLinkTaskQuery(this.value)">
                 ${st.taskFocused ? `
-                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredTasks.length ? filteredTasks.map(t => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
                                 <span>${esc(t.title || t.name)}${(t.status === 'Done' || t.status === 'Completed' || t.completed) ? `<span class="pill tiny">Done</span>` : ''}</span>
@@ -2120,7 +2121,7 @@ OL.renderGmailLinkStep = function() {
         </div>
 
         <!-- Request Section -->
-        <div style="margin-bottom:14px;">
+        <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <label class="tiny muted bold">Request</label>
                 <button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._gmailLinkState.showClosedRequests = !OL._gmailLinkState.showClosedRequests; OL.renderGmailLinkStep();">
@@ -2136,7 +2137,7 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-request-search" class="modal-input tiny" placeholder="Search requests...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.requestQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('requestFocused', true)" oninput="OL.setGmailLinkRequestQuery(this.value)">
                 ${st.requestFocused ? `
-                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredRequests.length ? filteredRequests.map(r => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkRequest('${r.id}', '${r._clientId}')">
                                 <span>${esc(r.name || r.title)}${(r.status === 'Done' || r.status === "Don't Do") ? `<span class="pill tiny">${esc(r.status)}</span>` : ''}</span>
@@ -2149,7 +2150,7 @@ OL.renderGmailLinkStep = function() {
         </div>
 
         <!-- Events Section (Constrained to -7 to +7 days) -->
-        <div style="margin-bottom:16px;">
+        <div>
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Event (±7 Days)</label>
             ${selectedEvent ? `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px;">
@@ -2160,7 +2161,7 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-event-search" class="modal-input tiny" placeholder="Search calendar events..." value="${esc(st.eventQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('eventFocused', true)" oninput="OL.setGmailLinkEventQuery(this.value)">
                 ${st.eventFocused ? `
-                    <div style="max-height:140px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
+                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${eventPool.length ? eventPool.map(e => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setGmailLinkEvent('${esc(e.id).replace(/'/g, "\\'")}')">
                                 <div>${esc(e.title)}</div>${e.start ? `<div class="tiny muted" style="margin-top:1px;">${esc(new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</div>` : ''}
@@ -2169,6 +2170,7 @@ OL.renderGmailLinkStep = function() {
                     </div>
                 ` : ''}
             `}
+        </div>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:10px;">
