@@ -454,24 +454,28 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
     const roundIsAdmin = state.adminMode === true;
 
     return `
-        <div class="round-section" style="margin-bottom: 25px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
+        <div class="round-outer">
+            <div class="round-gutter">
+                <div class="round-gutter-toggle" onclick="OL.toggleRoundCollapse(${Number(roundNum)})" title="${collapsed ? 'Show this round\'s items' : 'Tuck this round away'}">${collapsed ? '+' : '\u2212'}</div>
+                ${collapsed ? '' : '<div class="round-gutter-line"></div>'}
+            </div>
+            <div class="round-section" style="border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
                     <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
                     ${isCurrentRound ? '<span class="pill tiny accent" style="margin-left:8px;">Current</span>' : ''}
+                    ${collapsed ? `<span class="tiny muted" style="margin-left:8px;">${items.length} item${items.length === 1 ? '' : 's'}</span>` : ''}
+                </div>
+                <div class="col-status">
                     ${roundIsAdmin ? `
-                        <select class="tiny-select" style="width:auto; margin-left:8px;" title="Approval status for this round"
+                        <select class="tiny-select" title="Approval status for this round"
                                 onchange="OL.setRoundApprovalStatus(${Number(roundNum)}, this.value)">
                             <option value="">Round status…</option>
                             ${SHEET_STATUSES.map(st => `<option value="${esc(st)}" ${roundApprovalStatus === st ? 'selected' : ''}>${esc(st)}</option>`).join('')}
                         </select>
-                    ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}" style="margin-left:8px;">${esc(roundApprovalStatus)}</span>` : '')}
+                    ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}">${esc(roundApprovalStatus)}</span>` : '')}
                     ${typeof OL.roundStatusHtml === 'function' ? OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound) : ''}
-                    <button class="btn tiny soft" style="margin-left:8px;" onclick="OL.toggleRoundCollapse(${Number(roundNum)})" title="${collapsed ? 'Show this round\'s items' : 'Tuck this round away'}">
-                        ${collapsed ? `Expand (${items.length})` : 'Collapse'}
-                    </button>
                 </div>
-                <div class="col-status"></div>
                 <div class="col-team"></div>
                 
                 <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
@@ -489,6 +493,7 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                 <div class="col-actions"></div>
             </div>
             <div class="round-grid">${rows}</div>
+            </div>
         </div>
     `;
     if (window.lucide) {
@@ -611,21 +616,28 @@ function renderScopingRowBase(item, idx, showUnits) {
     const upBlocked = currentRoundNum <= 1 || isRoundApproved(sheetForStatus, currentRoundNum - 1);
     const downBlocked = isRoundApproved(sheetForStatus, currentRoundNum + 1);
     const isActiveRow = isActiveItem(sheetForStatus, item, i => !!OL.getResourceById(i.resourceId));
-    let workHtml = '';
+    // staffWorkHtml (internal status pill, steps/asks counts, "Ask
+    // client…") is Sphynx-only — folded into the staff-only summary row
+    // below, alongside Build/estimated hours. clientTestHtml is kept
+    // separate and shown to everyone: testBadgeHtml already shows real
+    // test-run progress to a client once testing has started, only
+    // gating its own "Ready for testing" starter button to admins — that
+    // existing self-gating is left as-is, not hidden further.
+    let staffWorkHtml = '';
+    let clientTestHtml = '';
     if (isActiveRow) {
         const round = Math.max(parseInt(item.round, 10) || 1, 1);
         const phase = testingPhaseFor(client?.projectData, sheetForStatus.id, item, round);
         const w = deriveWorkStatus(item, client?.projectData?.clientTasks || [], { closedNames: closedStatusNames(), phase });
         const waiting = w.status !== 'pending_sphynx_action';
         const color = w.status === 'in_testing' ? '#38bdf8' : waiting ? '#f59e0b' : '#64c6a2';
-        workHtml = `
-            <div class="tiny" style="margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span class="pill tiny" style="border:1px solid ${color}; color:${color};">${esc(WORK_STATUS_LABELS[w.status] || w.status)}</span>
-                ${w.stepsTotal ? `<span class="muted">${w.stepsDone}/${w.stepsTotal} steps</span>` : ''}
-                ${w.openAsks ? `<span class="muted">${w.openAsks} open ask${w.openAsks === 1 ? '' : 's'}${w.openBlockers ? `, ${w.openBlockers} blocking` : ''}</span>` : ''}
-                ${isAdmin ? `<button class="btn tiny soft" onclick="OL.openAskModal('${item.id}')">Ask client…</button>` : ''}
-                ${typeof OL.testBadgeHtml === 'function' ? OL.testBadgeHtml(client, item, isAdmin) : ''}
-            </div>`;
+        staffWorkHtml = `
+            <span class="pill tiny" style="border:1px solid ${color}; color:${color};">${esc(WORK_STATUS_LABELS[w.status] || w.status)}</span>
+            ${w.stepsTotal ? `<span class="muted">${w.stepsDone}/${w.stepsTotal} steps</span>` : ''}
+            ${w.openAsks ? `<span class="muted">${w.openAsks} open ask${w.openAsks === 1 ? '' : 's'}${w.openBlockers ? `, ${w.openBlockers} blocking` : ''}</span>` : ''}
+            <button class="btn tiny soft" onclick="OL.openAskModal('${item.id}')">Ask client…</button>
+        `;
+        clientTestHtml = typeof OL.testBadgeHtml === 'function' ? OL.testBadgeHtml(client, item, isAdmin) : '';
     }
     const typeSelectHtml = `
         <select class="tiny-select" style="width:auto; max-width:120px;" title="Request type"
@@ -683,20 +695,20 @@ function renderScopingRowBase(item, idx, showUnits) {
     return `
         <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <div class="row-title is-clickable" style="display:flex; align-items:center; gap:6px;" onclick="${titleClick}">
-                    ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 13, 'var(--accent)')}
-                    ${esc(res.name || "Manual Item")}
-                </div>
-                ${typeSelectHtml}
-                <button class="btn tiny soft" onclick="OL.openRequestDetailDrawer(getActiveClient(), OL.getScopingLineItemById('${item.id}'))" style="margin-left:auto; display:inline-flex; align-items:center; gap:4px;">
-                    <i data-lucide="sliders" style="width:11px;height:11px;"></i> Details
-                </button>
+            <div class="row-title is-clickable" style="display:flex; align-items:center; gap:6px;" onclick="${titleClick}">
+                <span style="display:inline-flex; flex-shrink:0;">${OL.getLucideSVG(OL.getRegistryIcon(res.type), 13, 'var(--accent)')}</span>
+                ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
-            ${requestHoursHtml}
-            ${workHtml}
+            ${clientTestHtml ? `<div class="tiny" style="margin-top:4px;">${clientTestHtml}</div>` : ''}
             ${unitsHtml}
+            ${isAdmin ? `
+                <div class="tiny" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    ${typeSelectHtml}
+                    ${requestHoursHtml}
+                    ${staffWorkHtml}
+                </div>
+            ` : ''}
         </div>
       
         <div class="col-status">
