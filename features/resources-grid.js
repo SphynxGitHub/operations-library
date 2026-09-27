@@ -6,7 +6,7 @@
 // call into each other (renderResourceManager <-> renderResourceCard)
 // and rely on the window bridge to resolve that, same as other modules.
 
-import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
 
 export function renderResourceManager() {
   try {
@@ -1253,6 +1253,49 @@ export function closeResourceTypeManager() {
     }
 };
 
+// ---- ONE-TIME BULK UPDATE: mark every local resource NOT referenced by
+// any scoping sheet line item (on any sheet, including the maintenance
+// one) as status "Done". Console-only, not wired to any button:
+//   OL.bulkMarkUnscopedResourcesDone()                    // every client
+//   OL.bulkMarkUnscopedResourcesDone(['c-1', 'c-2', ...])  // just these
+// "On a scoping sheet" uses the exact same check the Client Requests page
+// already uses for its own "unscoped" bucket (scopedResourceIds — every
+// lineItem.resourceId across every sheet) — same definition of "scoped",
+// just persisted onto the resource itself here instead of computed live
+// for one page's display. Skips Reference/Admin/pinned resources (Naming
+// Conventions, Compliance Documents, etc.) — those never show a status
+// pill at all (OL.isReferenceResource), so setting one would be a no-op;
+// also skips anything already status "Done".
+export async function bulkMarkUnscopedResourcesDone(clientIds) {
+    const results = [];
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    for (const clientId of ids) {
+        await loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client) { results.push({ clientId, error: 'Client not found' }); continue; }
+
+        const marked = [];
+        await updateAndSync(() => {
+            const pd = client.projectData;
+            if (!pd) return;
+            const scopedResourceIds = new Set(
+                (pd.scopingSheets || []).flatMap((s) => s?.lineItems || []).map((i) => String(i.resourceId)).filter(Boolean)
+            );
+            (pd.localResources || []).forEach((r) => {
+                if (!r || scopedResourceIds.has(String(r.id))) return;
+                if (typeof OL.isReferenceResource === 'function' && OL.isReferenceResource(r)) return;
+                if (r.status === 'Done') return;
+                r.status = 'Done';
+                marked.push(r.name || r.id);
+            });
+        }, clientId);
+
+        if (marked.length) results.push({ clientId, clientName: client.meta?.name, marked });
+    }
+    console.log('Bulk "unscoped → Done" complete —', results.length, 'client(s) had items marked:', results);
+    return results;
+}
+
 //================RESOURCE CARD AND MODAL===================//
 
 // 2. RESOURCE CARD AND MODAL
@@ -1266,6 +1309,7 @@ Object.assign(window.OL, {
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
     addInlineStepLogic, deleteStep, addStepLogic, goToStepFromLibrary,
+    bulkMarkUnscopedResourcesDone,
     addNewResourceTypeFlat, renameResourceTypeFlat, updateResourceTypeProp,
     removeRegistryTypeByKey, closeResourceTypeManager
 });
