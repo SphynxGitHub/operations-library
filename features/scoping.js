@@ -170,11 +170,17 @@ export async function moveItemRound(itemId, delta) {
 
 // Whether a round is currently shown collapsed — explicit state wins if
 // set; otherwise an approved round defaults to collapsed (see
-// toggleRoundCollapse) and everything else defaults open.
-function isRoundCollapsed(sheet, round) {
+// toggleRoundCollapse) and everything else defaults open. The current/
+// active round never auto-collapses from the legacy sheet-wide status
+// fallback below, even if the whole sheet was once marked Approved —
+// that fallback exists for old rounds predating per-round approval, not
+// to hide the round where new work (e.g. a just-added backlog item) just
+// landed. An explicit collapse the user set by hand still wins either way.
+function isRoundCollapsed(sheet, round, isCurrent = false) {
     const entry = sheet.roundApprovals?.[String(round)] || {};
     if (entry.collapsed === true) return true;
     if (entry.collapsed === false) return false;
+    if (isCurrent) return false;
     return (entry.status || sheet.status || '') === 'Approved';
 }
 
@@ -187,7 +193,8 @@ export async function toggleRoundCollapse(round) {
     const sheet = client?.projectData?.scopingSheets?.[0];
     if (!client || !sheet) return;
     const key = String(round);
-    const nowCollapsed = isRoundCollapsed(sheet, round);
+    const isCurrent = getCurrentRound(sheet, i => !!OL.getResourceById(i.resourceId)) === Number(round);
+    const nowCollapsed = isRoundCollapsed(sheet, round, isCurrent);
 
     await OL.updateAndSync(() => {
         if (!sheet.roundApprovals) sheet.roundApprovals = {};
@@ -435,14 +442,14 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
     finalRoundNet = billableSubtotal - roundDeductionAmt;
     totalRoundSavings = roundGrossValue - finalRoundNet;
 
-    const collapsed = isRoundCollapsed(sheet, roundNum);
-    const rows = collapsed ? '' : items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
-
     // getCurrentRound now gates on each round's own approval (isRoundApproved)
     // internally, so the old "&& sheet.status === 'Approved'" prefix here
     // would double-gate against the legacy sheet-wide flag specifically —
     // dropped in favor of letting each round's own status decide.
     const isCurrentRound = getCurrentRound(sheet, i => !!OL.getResourceById(i.resourceId)) === Number(roundNum);
+    const collapsed = isRoundCollapsed(sheet, roundNum, isCurrentRound);
+    const rows = collapsed ? '' : items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
+
     const roundApprovalStatus = sheet.roundApprovals?.[String(roundNum)]?.status || sheet.status || '';
     const roundIsAdmin = state.adminMode === true;
 
