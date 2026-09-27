@@ -751,7 +751,8 @@ export async function deleteMaintenanceRequest(itemId) {
 }
 
 // ---- ONE-TIME MIGRATION: move a client's open Client Requests items onto
-// the main scoping sheet's Backlog section. Console-only, not wired to any
+// the real scoping sheet (Backlog if they had no status yet, otherwise
+// wherever their existing status/round already put them). Console-only, not wired to any
 // button — run once per affected client:
 //   OL.migrateClientRequestsToBacklog(['client-id-1', 'client-id-2'])
 // Pulls from BOTH places an open request can currently live: the
@@ -761,13 +762,21 @@ export async function deleteMaintenanceRequest(itemId) {
 // Only moves items whose status isn't Done/Don't Do; preserves each item's
 // id (so any task already linked to it via requestLineItemId/links[] keeps
 // working — findRequestItem/findRequestsForTask search every sheet, so the
-// link doesn't care which sheet the item lives on) and resourceIds (a
-// request covering real resources, not just a resource-less "reqline").
-// Leaves the maintenance sheet's plan/hours tracking (grants, periods)
-// completely untouched — this only moves the request line items.
+// link doesn't care which sheet the item lives on). PRESERVES status/round
+// as-is — this is a relocation, not a reclassification; an item already
+// "Do Now" and being actively worked stays "Do Now". Only an item with no
+// status at all defaults to Backlog/no round. Also preserves resourceId —
+// the field the round view and pricing actually key off — generating a
+// fresh "reqline-" placeholder only if the item had none at all; any
+// resourceId it already had (real or reqline-placeholder) is kept as
+// resourceId itself, not folded into the separate resourceIds (extra
+// resources) array. Leaves the maintenance sheet's plan/hours tracking
+// (grants, periods) completely untouched — this only moves the request
+// line items.
 export async function migrateClientRequestsToBacklog(clientIds) {
     const results = [];
-    for (const clientId of clientIds || []) {
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    for (const clientId of ids) {
         await loadFullClient(clientId).catch(() => null);
         const client = state.clients?.[clientId];
         if (!client) { results.push({ clientId, error: 'Client not found' }); continue; }
@@ -795,23 +804,24 @@ export async function migrateClientRequestsToBacklog(clientIds) {
                     item.reporter ? `Reported by: ${item.reporter}` : '',
                     item.receivedAt ? `Received: ${item.receivedAt}` : '',
                 ].filter(Boolean).join(' · ');
-                const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds
-                    : (item.resourceId && !String(item.resourceId).startsWith('reqline-')) ? [item.resourceId] : undefined;
+                const resourceId = item.resourceId || ('reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+                const hasStatus = !!String(item.status || '').trim();
                 if (!Array.isArray(mainSheet.lineItems)) mainSheet.lineItems = [];
                 mainSheet.lineItems.push({
                     id: item.id,
+                    resourceId,
+                    ...(Array.isArray(item.resourceIds) && item.resourceIds.length ? { resourceIds: item.resourceIds } : {}),
                     name: item.name,
                     requestType: item.requestType || 'build',
-                    status: 'Backlog',
+                    status: hasStatus ? item.status : 'Backlog',
                     responsibleParty: item.responsibleParty || 'Sphynx',
-                    round: null,
+                    round: hasStatus ? (item.round ?? 1) : null,
                     teamMode: item.teamMode || 'everyone',
                     teamIds: item.teamIds || [],
                     data: item.data || {},
                     manualHours: item.manualHours || 0,
                     dependencies: item.dependencies || [],
                     notes: [item.notes, extras].filter(Boolean).join('\n\n'),
-                    ...(resourceIds ? { resourceIds } : {}),
                 });
             });
 
