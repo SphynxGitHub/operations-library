@@ -24,6 +24,7 @@
 
 import { addLink } from './task-links.js';
 import { assigneeForRole } from './testing.js';
+import { findFirstAvailableDate, DEFAULT_TASK_ESTIMATE_HOURS } from './scheduling.js';
 
 const lc = (v) => String(v ?? '').toLowerCase();
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
@@ -78,7 +79,7 @@ export function suggestAssignee(client, roles, requestType, assigneeByType, fall
 //   resourceId, resourceName, assignee, included }. "included" is what the review screen's checkboxes bind
 // to — everything starts true (the SOP loads as-is), a human toggles what they don't want, or adds a row
 // with templateId: null for something the SOP didn't call for.
-export function buildActivationPlan({ item, resources, requestType, resourceType, askTemplates, client, roles, assigneeByType, uid }) {
+export function buildActivationPlan({ item, resources, requestType, resourceType, askTemplates, client, roles, assigneeByType, uid, calendarEvents = [], existingTasks = [] }) {
     const title = item?.name || resources?.[0]?.name || 'Request';
     const plan = [];
 
@@ -87,14 +88,27 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
     // time-based-billing request — not every request is a resource build).
     const targets = resources && resources.length ? resources : [{ id: null, name: title, type: resourceType }];
     targets.forEach((res) => {
+        const assignee = suggestAssignee(client, roles, requestType, assigneeByType);
+        const estimatedHours = DEFAULT_TASK_ESTIMATE_HOURS;
+        // Auto-slotted against the same growing task list each row adds to
+        // (see below), so two implementation rows in one plan for the same
+        // assignee don't both get suggested the same already-full day.
+        const slot = findFirstAvailableDate({ calendarEvents, tasks: existingTasks, assignee, estimatedHours });
         plan.push({
             id: uid(), kind: 'implementation', templateId: null,
             title: res.id ? `Build/revise ${res.name}` : `Work on ${title}`,
             instructions: '', askKind: null,
             resourceId: res.id, resourceName: res.name,
-            assignee: suggestAssignee(client, roles, requestType, assigneeByType),
+            assignee, estimatedHours,
+            dueDate: slot.date, dueDateReason: slot.date ? null : slot.reason,
             included: true,
         });
+        // So the NEXT implementation row's own auto-slot search sees this
+        // one's hours already queued, rather than every row in the same
+        // plan racing for the same first-available day.
+        if (slot.date) {
+            existingTasks = [...existingTasks, { assignee, dueDate: slot.date, estimatedHours, status: 'Open' }];
+        }
     });
 
     // Before-phase client-ask tasks from the SOP, one pass per resource
@@ -131,6 +145,8 @@ export function commitActivationPlan(plan, ctx) {
             askKind: row.kind === 'ask' ? row.askKind : null,
             instructions: row.instructions || '',
             assignee: row.assignee || null,
+            estimatedHours: row.estimatedHours || null,
+            dueDate: row.dueDate || '',
             links: [],
         };
         addLink(task, ctx.requestId, row.resourceId ? [row.resourceId] : []);
