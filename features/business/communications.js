@@ -1411,24 +1411,37 @@ OL.unlinkGmailPiece = async function(messageId, pieceLinkId) {
 // -------------------------------------------------------------
 // EMAIL CANDIDATE CLASSIFICATION (fuzzy-match suggestions)
 // -------------------------------------------------------------
-// Two stages, cost-gated: a free local heuristic decides whether an email
-// is even worth sending to the model at all; only emails that pass it hit
-// the actual Claude call (supabase/functions/classify-email-candidates —
-// see that file's own header for the required ANTHROPIC_API_KEY secret).
-// Results cache on the row (classified_at) so re-opening an email, or a
-// future re-sync, never re-classifies it.
+// Fully local phrase-library matching — no network call, no API key,
+// nothing sent off this machine. A whole-email heuristic first decides
+// whether an email is worth looking at closely at all
+// (OL._emailLooksLikeCandidate); a second, per-sentence pass then splits
+// the body into lines and pattern-matches each one for type (new
+// request / revision), fuzzy-scoring it against the client's open
+// requests/resources for a possible existing-item match
+// (OL._classifyEmailCandidatesLocally). Results cache on the row
+// (classified_at) so re-opening an email, or a future re-sync, never
+// re-classifies it.
+//
+// AN AI-BACKED VERSION IS BUILT BUT NOT CALLED FROM HERE — see
+// supabase/functions/classify-email-candidates (requires an
+// ANTHROPIC_API_KEY secret). Flagged as a future upgrade: swap
+// OL.classifyEmailCandidates's body back to the db.functions.invoke(...)
+// call (see BUILD_NOTES/git history) if the phrase-library's accuracy
+// turns out not to be good enough in practice. The suggestions schema and
+// UI are identical either way — only how a candidate gets found changes.
 //
 // NOT YET WIRED INTO SYNC: ideally this runs during the Gmail sync job so
 // a badge is already there by the time someone opens the inbox — that
 // file isn't something this pass has visibility into. For now it runs
 // lazily the first time an unclassified email is opened (see the call in
-// openGmailMessageModal below), which still respects the cost-gating, just
-// classifies on first view instead of on arrival. See BUILD_NOTES.
+// openGmailMessageModal below). Being fully local, cost isn't a concern
+// here the way it was for the AI path — this could safely run on every
+// synced email once wired into sync, not just on first open.
 
 // Cheap, free, local — patterns that suggest an actual ask rather than
 // scheduling chatter or a pleasantry. Intentionally permissive (a false
-// positive just costs one API call; a false negative means a real ask
-// never gets suggested at all, which is the worse failure).
+// positive costs nothing here — it's still all local — a false negative
+// means a real ask never gets suggested at all, which is the worse failure).
 OL._EMAIL_CANDIDATE_PATTERNS = [
     /could you( also)?\b/i, /can you\b/i, /would (it be possible|you|love)\b/i,
     /please (add|update|change|fix|build|set up|create)\b/i,
@@ -1465,6 +1478,89 @@ OL._openItemsForClassification = function(clientId) {
 // re-renders the panel if that email's modal is still open. Safe to call
 // speculatively — no-ops instantly if already classified or the heuristic
 // says skip.
+// Sentence-level type patterns for the phrase-library classifier —
+// deliberately similar in spirit to OL._EMAIL_CANDIDATE_PATTERNS (the
+// whole-email gate above) but scored per sentence so each candidate gets
+// its own type guess, not just a yes/no for the whole email.
+OL._REVISION_PATTERNS = [
+    /\bwrong\b/i, /\bbroken\b/i, /doesn'?t work/i, /not working/i, /\bfix(ed|ing)?\b/i,
+    /\bissue\b/i, /\berror\b/i, /still (going out|showing|has)\b/i, /old (logo|version)\b/i,
+];
+OL._NEW_REQUEST_PATTERNS = [
+    /could you( also)?\b/i, /can you\b/i, /can we\b/i, /would (it be possible|you|love)\b/i,
+    /please (add|update|change|fix|build|set up|create)\b/i, /(need|needs|needed) (to|a|an)\b/i,
+    /one more thing\b/i, /wanted to (flag|ask|see)\b/i,
+];
+
+// Splits on sentence-ending punctuation AND newlines (emails often list
+// asks line by line without full stops), then keeps only the ones that
+// actually look like a candidate on their own — the whole-email heuristic
+// above just gates whether it's worth looking at all; this is the
+// per-sentence pass that decides which lines matter.
+OL._splitEmailIntoCandidateLines = function(bodyText) {
+    const lines = String(bodyText || '')
+        .split(/\r?\n|(?<=[.!?])\s+(?=[A-Z0-9])/)
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 15 && s.length <= 400);
+    // De-dupe near-identical lines (quoted reply chains repeat the same text).
+    const seen = new Set();
+    return lines.filter((s) => {
+        const key = s.toLowerCase().replace(/\s+/g, ' ');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+};
+
+// Cheap word-overlap similarity, 0..1 — no external library, just set
+// intersection against the smaller side (an open item's title is usually
+// much shorter than the candidate sentence it appears in).
+OL._wordOverlapScore = function(a, b) {
+    const words = (s) => new Set(String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 2));
+    const wa = words(a), wb = words(b);
+    if (!wa.size || !wb.size) return 0;
+    let hits = 0;
+    wb.forEach((w) => { if (wa.has(w)) hits++; });
+    return hits / Math.min(wa.size, wb.size);
+};
+
+// The phrase-library classifier itself — fully local, no network call, no
+// API key. Caps at 5 suggestions per email so an over-eager pattern list
+// doesn't flood the panel; see BUILD_NOTES for tuning notes. An AI-backed
+// version (supabase/functions/classify-email-candidates) is built and
+// ready as a future upgrade but not called from here — see BUILD_NOTES.
+OL._classifyEmailCandidatesLocally = function(bodyText, openItems) {
+    const lines = OL._splitEmailIntoCandidateLines(bodyText);
+    const out = [];
+
+    for (const line of lines) {
+        if (out.length >= 5) break;
+        const revisionHits = OL._REVISION_PATTERNS.filter((p) => p.test(line)).length;
+        const newRequestHits = OL._NEW_REQUEST_PATTERNS.filter((p) => p.test(line)).length;
+        if (revisionHits === 0 && newRequestHits === 0) continue;
+
+        // Best existing-item match for this line, if any.
+        let best = null;
+        for (const item of openItems) {
+            const score = OL._wordOverlapScore(line, item.label);
+            if (score >= 0.5 && (!best || score > best.score)) best = { ...item, score };
+        }
+
+        if (best) {
+            out.push({
+                text: line, suggestedType: 'existing_match',
+                matchTargetId: best.id, matchTargetLabel: best.label,
+                confidence: best.score >= 0.75 ? 'high' : 'medium',
+            });
+        } else {
+            const suggestedType = revisionHits > 0 && revisionHits >= newRequestHits ? 'revision' : 'new_request';
+            const hitCount = Math.max(revisionHits, newRequestHits);
+            out.push({ text: line, suggestedType, matchTargetId: null, matchTargetLabel: null, confidence: hitCount >= 2 ? 'medium' : 'low' });
+        }
+    }
+    return out;
+};
+
 OL.classifyEmailCandidates = async function(messageId) {
     const { data: m, error: fetchErr } = await db.from('gmail_messages')
         .select('id, body, snippet, linked_client_id, classified_at').eq('id', messageId).single();
@@ -1479,17 +1575,7 @@ OL.classifyEmailCandidates = async function(messageId) {
     }
 
     const openItems = OL._openItemsForClassification(m.linked_client_id);
-    let candidates = [];
-    try {
-        const { data, error } = await db.functions.invoke('classify-email-candidates', {
-            body: { emailBody: bodyText, openItems },
-        });
-        if (error) throw error;
-        candidates = Array.isArray(data?.candidates) ? data.candidates : [];
-    } catch (e) {
-        console.error('Email classification failed:', e);
-        return;   // don't mark classified_at on a failed call — worth retrying later, not a permanent "no candidates"
-    }
+    const candidates = OL._classifyEmailCandidatesLocally(bodyText, openItems);
 
     const suggestions = candidates.map((c) => ({
         id: 'sg-' + uid(), text: c.text, suggestedType: c.suggestedType,
