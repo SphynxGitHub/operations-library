@@ -1025,9 +1025,9 @@ OL.openGmailMessageModal = async function(id) {
                          below) rather than inlined here, since embedding
                          arbitrary email HTML into this template string would
                          be extremely fragile to escape correctly. -->
-                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:460px; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
+                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:65vh; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
                 ` : `
-                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:460px; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
+                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; height:65vh; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
                         ${esc(OL._stripHtmlForPreview(m.body) || m.snippet || 'No preview available for this message.')}
                     </div>
                     <div id="gmail-piece-links"></div>
@@ -1036,11 +1036,8 @@ OL.openGmailMessageModal = async function(id) {
                 <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
                     <div id="gmail-suggestions"></div>
                     <div id="gmail-open-client-asks"></div>
-                    <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-                        <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event
-                    </label>
                     <div id="gmail-thread-link-suggestion"></div>
-                    <div id="gmail-link-body"></div>
+                    <div id="gmail-link-summary"></div>
                 </div>
             </div>
         </div>
@@ -1048,7 +1045,7 @@ OL.openGmailMessageModal = async function(id) {
     OL._gmailLinkSelectedEvent = null; // resolved just below if this email already has a linked event
 
     openModal(html);
-    OL.renderGmailLinkStep();
+    OL.renderGmailLinkSummary();
     OL.renderGmailOpenClientAsks(m);
     OL.renderGmailPieceLinks(m);
     OL.renderGmailAttachments(m);
@@ -2666,6 +2663,67 @@ OL._findResourceForTask = function(clientId, task) {
     return resources.find(r => (r.name || '').trim().toLowerCase() === label) || null;
 };
 
+// Compact, always-visible readout of the current link state (chips for
+// whatever's linked, or "Not linked yet") plus a single button. All the
+// actual picking happens in the modal opened by OL.openGmailLinkModal —
+// this just reflects the result, same as a resolved suggestion would.
+OL.renderGmailLinkSummary = function() {
+    const st = OL._gmailLinkState;
+    const container = document.getElementById('gmail-link-summary');
+    if (!container || !st) return;
+
+    const client = st.clientId ? state.clients[st.clientId] : null;
+    const resource = st.resourceId
+        ? (client?.projectData?.localResources || []).find(r => r.id === st.resourceId) || OL._allClientResourcesFlat().find(r => r.id === st.resourceId)
+        : null;
+    const task = st.taskId
+        ? (client?.projectData?.clientTasks || []).find(t => t.id === st.taskId) || OL._allClientTasksFlat().find(t => t.id === st.taskId)
+        : null;
+    const request = st.requestId
+        ? (client?.projectData?.scopingSheets?.[0]?.lineItems || []).find(r => String(r.id) === String(st.requestId)) || OL._allClientRequestsFlat().find(r => String(r.id) === String(st.requestId))
+        : null;
+    const event = st.eventId ? OL._gmailLinkSelectedEvent : null;
+
+    const chips = [
+        client ? `<span class="pill tiny soft">Project: ${esc(client.meta?.name || 'Unnamed')}</span>` : '',
+        resource ? `<span class="pill tiny soft">Resource: ${esc(resource.name)}</span>` : '',
+        task ? `<span class="pill tiny soft">Task: ${esc(task.title || task.name)}</span>` : '',
+        request ? `<span class="pill tiny soft">Request: ${esc(request.name || request.title)}</span>` : '',
+        event ? `<span class="pill tiny soft">Event: ${esc(event.title)}</span>` : ''
+    ].filter(Boolean);
+
+    container.innerHTML = `
+        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+            <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Project / Resource / Task / Event
+        </label>
+        ${chips.length ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">${chips.join('')}</div>` : `<div class="tiny muted" style="margin-bottom:10px;">Not linked yet.</div>`}
+        <button class="btn small ${chips.length ? 'soft' : 'primary'}" style="width:100%;" onclick="OL.openGmailLinkModal()">
+            <i data-lucide="link" style="width:12px;height:12px;"></i> ${chips.length ? 'Edit Link' : 'Link to Project / Resource / Task / Event'}
+        </button>
+    `;
+    if (window.lucide) lucide.createIcons();
+};
+
+// Opens the full picker as a modal overlay on top of the email modal — the
+// same OL.showOverlayModal pattern a suggestion's "Choose target..." uses
+// (see OL.openExcerptLinkPicker). The ✕ closes everything and reopens the
+// email modal fresh, matching that picker's Cancel behavior.
+OL.openGmailLinkModal = function() {
+    const st = OL._gmailLinkState;
+    if (!st) return;
+    const content = `
+        <div style="padding:24px 36px 24px 24px; box-sizing:border-box; max-width:900px; width:90vw;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:14px;">
+                <h3 style="margin:0; font-size:15px;"><i data-lucide="link" style="width:14px;height:14px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event</h3>
+                <button class="btn tiny soft" onclick="OL.closeModal(); OL.openGmailMessageModal('${st.emailId}')">✕</button>
+            </div>
+            <div id="gmail-link-body"></div>
+        </div>
+    `;
+    OL.showOverlayModal(content);
+    OL.renderGmailLinkStep();
+};
+
 OL.renderGmailLinkStep = function() {
     const st = OL._gmailLinkState;
     const container = document.getElementById('gmail-link-body');
@@ -3442,7 +3500,8 @@ OL.applyThreadLinkSuggestion = async function() {
     }
     const box = document.getElementById('gmail-thread-link-suggestion');
     if (box) box.innerHTML = '';
-    OL.renderGmailLinkStep();
+    OL.renderGmailLinkSummary();
+    OL.openGmailLinkModal();
 };
 
 window.OL.renderBusinessCommunications = OL.renderBusinessCommunications;
