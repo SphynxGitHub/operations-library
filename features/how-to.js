@@ -1961,10 +1961,17 @@ export function filterTaskHowToSearch(taskId, query, isVault, clientId) {
     
     const existingIds = task?.howToIds || [];
 
-    // 2. Filter available guides (exclude existing). Client tasks only get guides visible to that project.
+    // 2. Filter available guides (exclude existing). An internal-only guide would leak to the client if
+    // attached to a task the client can see, so that's still blocked — but a task assigned to Sphynx itself
+    // (not isClientTask) never reaches a client view, so it should be able to use any guide, internal
+    // included. This used to filter every non-vault task the same way, which meant staff couldn't attach an
+    // internal-only guide to their own internal task at all.
+    const taskIsClientFacing = !isVault && task?.isClientTask === true;
     const pool = isVault
         ? (state.master.howToLibrary || [])
-        : [...(state.master.howToLibrary || []).filter(g => isGuideVisibleInProject(g, client)), ...(client?.projectData?.localHowTo || [])];
+        : taskIsClientFacing
+            ? [...(state.master.howToLibrary || []).filter(g => isGuideVisibleInProject(g, client)), ...(client?.projectData?.localHowTo || [])]
+            : [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
     const results = pool.filter(guide => {
         const matches = (guide.name || "").toLowerCase().includes(q);
         const alreadyLinked = existingIds.includes(guide.id);
@@ -1995,9 +2002,13 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
         : client?.projectData?.clientTasks.find(t => t.id === taskId);
 
     const guide = isVault ? (state.master.howToLibrary || []).find(g => g.id === howToId) : findGuide(howToId, client);
-    // Linking an internal-only guide to a client task isn't allowed (unlinking always is).
+    // Linking an internal-only guide to a CLIENT-FACING task isn't allowed (unlinking always is) — it would
+    // put internal-only content somewhere the client can see. A task that isn't client-facing (isClientTask
+    // is not true — the normal case for Sphynx's own work) never reaches a client view, so any guide,
+    // internal included, is fine there. See the matching comment in filterTaskHowToSearch above.
     const linking = !(task?.howToIds || []).includes(howToId);
-    if (!isVault && linking && guide && !isGuideVisibleInProject(guide, client)) return;
+    const taskIsClientFacing = !isVault && task?.isClientTask === true;
+    if (taskIsClientFacing && linking && guide && !isGuideVisibleInProject(guide, client)) return;
 
     if (task && guide) {
         if (!task.howToIds) task.howToIds = [];
