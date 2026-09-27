@@ -77,6 +77,23 @@ export function isActiveItem(sheet, item, isReal = () => true) {
     return current !== null && round === current;
 }
 
+// The round to drop a backlog item into when it's pulled onto the sheet:
+// the current draft/unapproved round if one exists, else (highest existing
+// round) + 1. Backlog items themselves (round left null) are excluded from
+// what counts as an "existing round" here.
+export function nextOpenRound(sheet) {
+    const rounds = new Set();
+    (sheet?.lineItems || []).forEach((item) => {
+        if (!item || String(item.status || '') === 'Backlog') return;
+        const r = parseInt(item.round, 10);
+        if (Number.isFinite(r) && r >= 1) rounds.add(r);
+    });
+    const sorted = [...rounds].sort((a, b) => a - b);
+    const draft = sorted.find((r) => !isRoundApproved(sheet, r));
+    if (draft !== undefined) return draft;
+    return (sorted.length ? sorted[sorted.length - 1] : 0) + 1;
+}
+
 let requestTypes = DEFAULT_REQUEST_TYPES;
 let typesRequested = false;
 let disabled = false;
@@ -223,7 +240,13 @@ function buildDesired(client, masterResources, opts = {}) {
         real.forEach(({ item, idx, resource, title }) => {
             const status = String(item.status || '');
             const round = parseInt(item.round, 10);
-            const roundNumber = Number.isFinite(round) && round >= 1 ? round : 1;
+            // A backlog item has no round yet — must stay null, not fall
+            // back to 1, or it gets silently swept into Round 1's pricing/
+            // approval aggregation as if it were already scheduled. See
+            // BUILD_NOTES on why this has to be an explicit status check,
+            // not just "round is blank" (a scheduled item can also have a
+            // temporarily-blank round mid-edit).
+            const roundNumber = status === 'Backlog' ? null : (Number.isFinite(round) && round >= 1 ? round : 1);
 
             const isMaint = isMaintenanceSheet(sheet);         // client requests in maintenance: no round, not from scoping
             const isActive = currentRound !== null && status === 'Do Now' && roundNumber === currentRound;
