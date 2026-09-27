@@ -9,7 +9,7 @@
 
 import { state, esc, uid, getActiveClient, updateAndSync, persist, loadFullClient } from '../core/data.js';
 import {
-    updateTestRuns, recordResult, markReadyForTesting, runForItem, testRunById, runProgress,
+    updateTestRuns, recordResult, markReadyForTesting, runsForItem, testRunById, runProgress,
     DEFAULT_TEST_TEMPLATES, TEST_RESULTS, TESTABLE_TYPES,
 } from '../core/testing.js';
 import { reviewDefaults } from '../core/conclusion.js';
@@ -28,6 +28,7 @@ function contextFor(client) {
         roles: state.master?.roles || [],
         closedNames: closedNames(),
         resourceFor: (item) => (item && item.resourceId && typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null),
+        resourceForId: (id) => (id && typeof OL.getResourceById === 'function' ? OL.getResourceById(id) : null),
         uid,
         now: new Date().toISOString(),
     };
@@ -165,17 +166,25 @@ export async function markReady(itemId) {
 }
 
 // ---------------- scoping sheet: badge and buttons on an active request ----------------
+// One request can now have several checklists (one per resource it covers —
+// see core/testing.js's runsForItem). A single-resource request still shows
+// exactly the one badge+button it always did; a multi-resource request
+// shows one per resource, wrapped, so none of its checklists are hidden
+// behind whichever resource used to be picked first.
 export function testBadgeHtml(client, item, canAct) {
     if (!client || !item) return '';
     const requestType = String(item.requestType || 'build');
     if (!TESTABLE_TYPES.includes(requestType)) return '';
-    const run = runForItem(client, item.id);
-    if (run) {
-        const p = runProgress(run);
-        const color = run.status === 'passed' ? '#22c55e' : run.status === 'needs_fix' ? '#ef4444' : '#38bdf8';
-        const text = run.status === 'passed' ? '✅ Tested' : `🧪 Testing ${p.passed + p.skipped}/${p.total}${p.failed ? `, ${p.failed} failed` : ''}`;
-        return `<span class="pill tiny" style="border:1px solid ${color}; color:${color};">${text}</span>
-                <button class="btn tiny soft" onclick="OL.openTestRun('${run.id}', '${esc(client.id)}')">Open checklist</button>`;
+    const runs = runsForItem(client, item.id);
+    if (runs.length) {
+        return `<span style="display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap;">${runs.map((run) => {
+            const p = runProgress(run);
+            const color = run.status === 'passed' ? '#22c55e' : run.status === 'needs_fix' ? '#ef4444' : '#38bdf8';
+            const text = (run.status === 'passed' ? '✅' : '🧪') + (run.resourceName ? ` ${esc(run.resourceName)}` : '') +
+                (run.status === 'passed' ? ' Tested' : ` ${p.passed + p.skipped}/${p.total}${p.failed ? `, ${p.failed} failed` : ''}`);
+            return `<span class="pill tiny" style="border:1px solid ${color}; color:${color};">${text}</span>
+                    <button class="btn tiny soft" onclick="OL.openTestRun('${run.id}', '${esc(client.id)}')">Open</button>`;
+        }).join('')}</span>`;
     }
     return canAct ? `<button class="btn tiny soft" title="Start testing this request now" onclick="OL.markReadyForTesting('${esc(item.id)}')">Ready for testing</button>` : '';
 }

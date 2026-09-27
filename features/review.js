@@ -36,6 +36,7 @@ function contextFor() {
     return {
         templates: templatesInUse(), roles: state.master?.roles || [], closedNames: closedNames(),
         resourceFor: (item) => (item && item.resourceId && typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null),
+        resourceForId: (id) => (id && typeof OL.getResourceById === 'function' ? OL.getResourceById(id) : null),
         uid, now: new Date().toISOString(), today: todayIso(), defaults: reviewDefaults(state.master),
     };
 }
