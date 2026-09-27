@@ -39,7 +39,7 @@ OL.openActivationReview = async function(clientId, itemId) {
         resourceType: resources[0]?.type || '',
         askTemplates,
         client, roles: state.master.roles || [],
-        assigneeByType: state.master.assigneeByType || {},   // no storage column yet — see BUILD_NOTES; suggestAssignee falls back to role-matching when empty
+        assigneeByType: state.master.assigneeByType || {},   // assignee_by_type.sql — suggestAssignee falls back to role-matching when empty
         uid,
     });
 
