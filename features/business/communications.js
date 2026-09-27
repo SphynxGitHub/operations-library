@@ -1249,7 +1249,7 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
 
 // ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
 OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt') {
-    OL._excerptLinkState = { messageId, excerptText, kind, targetType: '', targetId: '', targetLabel: '', note: '', query: '' };
+    OL._excerptLinkState = { messageId, excerptText, kind, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '' };
     OL.renderExcerptLinkPicker();
 };
 
@@ -1287,10 +1287,21 @@ OL.renderExcerptLinkPicker = function() {
                     <span class="tiny bold">${esc(st.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(st.targetType)}</span></span>
                     <button class="btn tiny soft" onclick="OL._excerptLinkState.targetType=''; OL._excerptLinkState.targetId=''; OL.renderExcerptLinkPicker();">Change</button>
                 </div>
+            ` : st.creatingNewTask ? `
+                <div style="padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:12px;">
+                    <label class="tiny muted bold" style="display:block; margin-bottom:4px;">New task title</label>
+                    <input type="text" id="excerpt-new-task-title" class="modal-input tiny" style="width:100%; margin-bottom:8px;" value="${esc(st.newTaskTitle || '')}"
+                           oninput="OL._excerptLinkState.newTaskTitle=this.value">
+                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a task.</div>` : ''}
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewTask=false; OL.renderExcerptLinkPicker();">Back to search</button>
+                        <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
+                    </div>
+                </div>
             ` : `
                 <input type="text" class="modal-input tiny" placeholder="Search tasks, requests, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
                        oninput="OL._excerptLinkState.query=this.value; OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker());">
-                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:12px;">
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:8px;">
                     <div>
                         <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Tasks</div>
                         <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
@@ -1310,6 +1321,7 @@ OL.renderExcerptLinkPicker = function() {
                         </div>
                     </div>
                 </div>
+                <div class="tiny muted" style="margin-bottom:12px;">Not finding it? <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateTask();">Create a new task instead</a>${!clientId ? ' (link this email to a project first)' : ''}.</div>
             `}
 
             <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Note (optional — a refined summary, not the raw excerpt)</label>
@@ -1333,6 +1345,47 @@ OL.__excerptPick = function(type, id, label) {
     OL._excerptLinkState.targetId = id;
     OL._excerptLinkState.targetLabel = label;
     OL.renderExcerptLinkPicker();
+};
+
+// ---- "not finding it? create a new task instead" — same picker, no separate flow ----
+OL.startExcerptCreateTask = function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    st.creatingNewTask = true;
+    st.newTaskTitle = st.excerptText.length > 80 ? st.excerptText.slice(0, 80) : st.excerptText;
+    OL.renderExcerptLinkPicker();
+    setTimeout(() => document.getElementById('excerpt-new-task-title')?.focus(), 0);
+};
+
+// Creates the task (same shape/pattern as the existing whole-email
+// OL.createAndLinkGmailTask), then reuses confirmExcerptLink for the
+// piece_link write and any pending-suggestion resolution, rather than
+// duplicating that logic here.
+OL.confirmExcerptCreateTask = async function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    const clientId = OL._gmailLinkState?.clientId;
+    const title = (st.newTaskTitle || '').trim();
+    if (!title || !clientId) return;
+
+    let newTaskId;
+    await updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+        newTaskId = uid();
+        client.projectData.clientTasks.unshift({
+            id: newTaskId, title, name: title,
+            description: st.excerptText || '', assignee: 'Sphynx Task', loggedHours: 0,
+            createdAt: new Date().toISOString(),
+        });
+    }, clientId);
+    if (!newTaskId) return;
+
+    st.targetType = 'task'; st.targetId = newTaskId; st.targetLabel = title;
+    st.creatingNewTask = false;
+    await OL.confirmExcerptLink();
 };
 
 OL.confirmExcerptLink = async function() {
