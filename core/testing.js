@@ -6,16 +6,25 @@
 // still being built. Pure functions on the client project JSON: no database, no page.
 //
 // Where things live (in client.projectData):
-//   testRuns[]   one per tested request:
-//                { id, sheetId, itemId, round, title, requestType, resourceName, status, createdAt,
+//   testRuns[]   one per resource of a tested request (or one, with
+//                resourceId null, for a testable request that covers no
+//                resource — an audit, a troubleshoot with no library item):
+//                { id, sheetId, itemId, resourceId, round, title, requestType, resourceName, status, createdAt,
 //                  testTaskId, passedAt, steps: [{ id, title, how, expected, result, note, by, at,
 //                                                   fixTaskId, retest }] }
+//                A multi-resource request gets one run per resource, each with its own template match
+//                and its own Testing task, so a two-resource build doesn't get tested — or reported as
+//                passed — on the strength of only one resource's checklist. itemId/sheetId/round/requestType
+//                are duplicated across a request's runs so every existing itemId-keyed reader (round
+//                progress, the client's review page) keeps working without having to know a request can
+//                now have more than one.
 //   clientTasks  the Testing task (testRunId) and any fix tasks (fixForTestRunId).
 //   The fix tasks link to the request (requestLineItemId) so they show as open work on it; the
 //   Testing task deliberately does not, so it never counts as one of the request's build steps.
 // Templates (the steps to test) live in the master registry as testTemplates.
 
 import { getCurrentRound } from './requests.js';
+import { requestResourceIds } from './request-pricing.js';
 import { deriveWorkStatus, isTaskClosed, tasksForItem } from './work-status.js';
 
 export const TEST_RESULTS = { PASS: 'pass', FAIL: 'fail', SKIP: 'skip' };
@@ -94,7 +103,7 @@ export function pickTemplates(templates, requestType, resourceType) {
     return picked;
 }
 
-export function buildRun({ item, sheetId, round, title, resourceName, requestType, templates, resourceType, uid, now }) {
+export function buildRun({ item, sheetId, round, title, resourceId, resourceName, requestType, templates, resourceType, uid, now }) {
     const picked = pickTemplates(templates, requestType, resourceType);
     const vars = { resource: resourceName || title, request: title };
     const out = [];
@@ -104,7 +113,8 @@ export function buildRun({ item, sheetId, round, title, resourceName, requestTyp
                    result: '', note: '', by: '', at: '', fixTaskId: '', retest: false });
     }));
     if (!out.length) return null;
-    return { id: uid(), sheetId: String(sheetId ?? ''), itemId: String(item.id), round, title, requestType, resourceName: resourceName || '',
+    return { id: uid(), sheetId: String(sheetId ?? ''), itemId: String(item.id), resourceId: resourceId ? String(resourceId) : null,
+             round, title, requestType, resourceName: resourceName || '',
              status: 'open', createdAt: now, testTaskId: '', passedAt: '', steps: out };
 }
 
@@ -193,26 +203,39 @@ export function updateTestRuns(client, ctx) {
             if (round !== current) return;
             const requestType = isBlank(item.requestType) ? 'build' : String(item.requestType);
             if (!TESTABLE_TYPES.includes(requestType)) return;
-            if (pd.testRuns.some((run) => run.itemId === String(item.id) && run.sheetId === String(sheet.id ?? ''))) return;
             if (!isReadyForTesting(item, pd.clientTasks, closed)) return;
 
-            const resource = ctx.resourceFor(item);
-            const title = titleOf(item, resource);
-            const run = buildRun({ item, sheetId: sheet.id, round, title, resourceName: resource?.name || '', requestType,
-                                   templates, resourceType: resource?.type || '', uid: ctx.uid, now });
-            if (!run) return;
+            const title = titleOf(item, ctx.resourceFor(item));
+            // One run per resource the request covers, so a multi-resource
+            // request is tested — and reported as passed — resource by
+            // resource, not on the strength of whichever resource happened
+            // to be first. A request with no resources (an audit, a
+            // troubleshoot with no library item) gets a single run keyed to
+            // the request itself (resourceId: null), same as before.
+            const resIds = requestResourceIds(item);
+            const targets = resIds.length
+                ? resIds.map((id) => ({ id, res: ctx.resourceForId ? ctx.resourceForId(id) : null }))
+                : [{ id: null, res: ctx.resourceFor(item) }];
 
-            const task = {
-                id: ctx.uid(), title: `Test: ${title}`, name: `Test: ${title}`,
-                description: 'This request is ready. Open the checklist and mark each step Pass, Fail or Skipped. A failed step creates a fix task.',
-                status: 'Pending Sphynx Action', assignee: testerName, dueDate: '', isClientTask: false, loggedHours: 0,
-                parentTaskId: null, createdBy: 'testing', createdAt: now, testRunId: run.id, testForItemId: String(item.id),
-            };
-            run.testTaskId = task.id;
-            pd.clientTasks.unshift(task);
-            pd.testRuns.push(run);
-            item.testingStartedAt = now;
-            result.created.push(run.id);
+            targets.forEach(({ id, res }) => {
+                if (pd.testRuns.some((run) => run.itemId === String(item.id) && run.sheetId === String(sheet.id ?? '') && (run.resourceId || null) === (id ? String(id) : null))) return;
+
+                const run = buildRun({ item, sheetId: sheet.id, round, title, resourceId: id, resourceName: res?.name || '', requestType,
+                                       templates, resourceType: res?.type || '', uid: ctx.uid, now });
+                if (!run) return;
+
+                const task = {
+                    id: ctx.uid(), title: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`, name: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`,
+                    description: 'This request is ready. Open the checklist and mark each step Pass, Fail or Skipped. A failed step creates a fix task.',
+                    status: 'Pending Sphynx Action', assignee: testerName, dueDate: '', isClientTask: false, loggedHours: 0,
+                    parentTaskId: null, createdBy: 'testing', createdAt: now, testRunId: run.id, testForItemId: String(item.id),
+                };
+                run.testTaskId = task.id;
+                pd.clientTasks.unshift(task);
+                pd.testRuns.push(run);
+                result.created.push(run.id);
+            });
+            if (!item.testingStartedAt) item.testingStartedAt = now;
         });
     });
 
@@ -255,7 +278,28 @@ export function updateTestRuns(client, ctx) {
     return result;
 }
 
+// Every run for a request — one per resource it covers, or one with
+// resourceId null for a request with none. sheetId is optional, same as
+// before. The plural counterpart to runForItem, for anything that needs to
+// know about all of a multi-resource request's checklists, not just one.
+export function runsForItem(client, itemId, sheetId) {
+    return (client?.projectData?.testRuns || []).filter((r) => r.itemId === String(itemId) && (sheetId === undefined || r.sheetId === String(sheetId ?? '')));
+}
+// Back-compat for callers that predate multi-resource runs and only ever
+// expected one — returns the first. New code should prefer runsForItem or
+// itemTestStatus, which look at every run on the request, not just one.
 export function runForItem(client, itemId, sheetId) {
-    return (client?.projectData?.testRuns || []).find((r) => r.itemId === String(itemId) && (sheetId === undefined || r.sheetId === String(sheetId ?? ''))) || null;
+    return runsForItem(client, itemId, sheetId)[0] || null;
 }
 export const testRunById = (client, runId) => (client?.projectData?.testRuns || []).find((r) => r.id === runId) || null;
+
+// A request's testing status across every resource it covers: 'needs_fix'
+// if any run does, else 'open' while any run is still open, 'passed' only
+// once every run has passed. null when it has no runs yet.
+export function itemTestStatus(client, itemId, sheetId) {
+    const runs = runsForItem(client, itemId, sheetId);
+    if (!runs.length) return null;
+    if (runs.some((r) => r.status === 'needs_fix')) return 'needs_fix';
+    if (runs.some((r) => r.status !== 'passed')) return 'open';
+    return 'passed';
+}

@@ -18,7 +18,8 @@
 
 import { getCurrentRound } from './requests.js';
 import { isTaskClosed } from './work-status.js';
-import { TESTABLE_TYPES, isReadyForTesting, assigneeForRole, pickTemplates, DEFAULT_TEST_TEMPLATES } from './testing.js';
+import { TESTABLE_TYPES, isReadyForTesting, assigneeForRole, pickTemplates, DEFAULT_TEST_TEMPLATES, itemTestStatus, runsForItem } from './testing.js';
+import { requestResourceIds } from './request-pricing.js';
 
 export const REVIEW_DEFAULTS = { days: 30, followUpEveryDays: 10 };
 export const roundKey = (sheetId, round) => `${sheetId ?? ''}:${round}`;
@@ -72,13 +73,22 @@ export function roundProgress(client, sheet, round, ctx) {
     roundItems(sheet, round, ctx).forEach((item) => {
         out.total++;
         const type = isBlank(item.requestType) ? 'build' : String(item.requestType);
-        const resource = ctx.resourceFor(item);
-        const needsRun = TESTABLE_TYPES.includes(type) && pickTemplates(templates, type, resource?.type || '').length > 0;
+        // Whether ANY of the request's resources need a checklist — a
+        // multi-resource request needs testing if any one resource has a
+        // matching template, not just its first/primary resource.
+        const resIds = requestResourceIds(item);
+        const resourceTypes = resIds.length
+            ? resIds.map((id) => (ctx.resourceForId ? ctx.resourceForId(id) : null)?.type || '')
+            : [(ctx.resourceFor ? ctx.resourceFor(item) : null)?.type || ''];
+        const needsRun = TESTABLE_TYPES.includes(type) && resourceTypes.some((rt) => pickTemplates(templates, type, rt).length > 0);
         if (needsRun) {
-            const run = (pd.testRuns || []).find((r) => r.itemId === String(item.id) && r.sheetId === String(sheet.id ?? ''));
-            if (!run) out.building++;
-            else if (run.status === 'passed') out.complete++;
-            else if (run.status === 'needs_fix') out.needsFix++;
+            // Complete only once every resource's run has passed — see
+            // core/testing.js's itemTestStatus for why this can no longer
+            // be "the" run.
+            const status = itemTestStatus(client, item.id, sheet.id);
+            if (!status) out.building++;
+            else if (status === 'passed') out.complete++;
+            else if (status === 'needs_fix') out.needsFix++;
             else out.testing++;
         } else if (isReadyForTesting(item, pd.clientTasks || [], closed)) out.complete++;
         else out.building++;
@@ -90,14 +100,16 @@ export function roundProgress(client, sheet, round, ctx) {
 // with no results, notes or internal names. Each step keeps its id (an opaque code) so the client's Pass or Fail
 // can be matched back to the step. Kept separate from Sphynx's tested copy.
 export function buildClientChecklist(client, sheet, round, ctx) {
-    const pd = client?.projectData || {};
     const sections = [];
     roundItems(sheet, round, ctx).forEach((item) => {
-        const run = (pd.testRuns || []).find((r) => r.itemId === String(item.id) && r.sheetId === String(sheet.id ?? ''));
-        if (!run) return;
-        sections.push({
-            title: run.title, requestType: run.requestType, resourceName: run.resourceName || '',
-            steps: (run.steps || []).map((s) => ({ id: s.id, title: s.title, how: s.how || '', expected: s.expected || '' })),
+        // Every resource's run gets its own section — see core/testing.js's
+        // runsForItem — so a multi-resource request shows every checklist,
+        // not just whichever run used to be found first.
+        runsForItem(client, item.id, sheet.id).forEach((run) => {
+            sections.push({
+                title: run.title, requestType: run.requestType, resourceName: run.resourceName || '',
+                steps: (run.steps || []).map((s) => ({ id: s.id, title: s.title, how: s.how || '', expected: s.expected || '' })),
+            });
         });
     });
     return { clientName: client?.meta?.name || '', round: Number(round), sections };
