@@ -1216,7 +1216,14 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
 
     doc.getElementById('gmail-excerpt-link-btn')?.remove();
 
-    body.addEventListener('mouseup', () => {
+    body.addEventListener('mouseup', (e) => {
+        // A click on the "Link this" button itself also bubbles a mouseup
+        // up to body — without this guard, that re-runs the selection
+        // logic below, which deletes the button and appends a fresh one in
+        // the same spot right as the button's own click is about to fire,
+        // so the click lands on a button that's already been swapped out.
+        if (e.target && e.target.id === 'gmail-excerpt-link-btn') return;
+
         const sel = win.getSelection();
         const text = (sel?.toString() || '').trim();
         doc.getElementById('gmail-excerpt-link-btn')?.remove();
