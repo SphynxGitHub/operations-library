@@ -703,14 +703,6 @@ function renderScopingRowBase(item, idx, showUnits) {
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${unitsHtml}
-            ${isAdmin ? `
-                <div class="tiny" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                    ${typeSelectHtml}
-                    ${requestHoursHtml}
-                    ${staffWorkHtml}
-                    ${clientTestHtml}
-                </div>
-            ` : ''}
         </div>
       
         <div class="col-status">
@@ -774,6 +766,15 @@ function renderScopingRowBase(item, idx, showUnits) {
                 </button>
             ` : ''}
         </div>
+
+        ${isAdmin ? `
+            <div class="col-staff-row tiny" style="grid-column: 1 / -1; margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                ${typeSelectHtml}
+                ${requestHoursHtml}
+                ${staffWorkHtml}
+                ${clientTestHtml}
+            </div>
+        ` : ''}
     </div>
   `;
 }
