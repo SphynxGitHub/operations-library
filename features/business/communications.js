@@ -1024,12 +1024,14 @@ OL.openGmailMessageModal = async function(id) {
                          be extremely fragile to escape correctly. -->
                     <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:460px; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
                 ` : `
-                    <div style="white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:460px; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
+                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:460px; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
                         ${esc(OL._stripHtmlForPreview(m.body) || m.snippet || 'No preview available for this message.')}
                     </div>
+                    <div id="gmail-piece-links"></div>
                 `}
 
                 <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
+                    <div id="gmail-open-client-asks"></div>
                     <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
                         <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Link to Project / Resource / Task / Event
                     </label>
@@ -1043,6 +1045,9 @@ OL.openGmailMessageModal = async function(id) {
 
     openModal(html);
     OL.renderGmailLinkStep();
+    OL.renderGmailOpenClientAsks(m);
+    OL.renderGmailPieceLinks(m);
+    OL.attachExcerptSelectionHandler(m.id);
     OL.loadThreadLinkSuggestion(m);
 
     if (m.body_html) {
@@ -1129,6 +1134,238 @@ OL.openGmailMessageModal = async function(id) {
     }
 };
 window.OL.openGmailMessageModal = OL.openGmailMessageModal;
+
+// -------------------------------------------------------------
+// EMAIL PIECE-LINKING: open client asks first, excerpt links
+// -------------------------------------------------------------
+// A second linking mechanism alongside the whole-email link fields above
+// (linked_task_id etc.) — lets ONE email answer several different things at
+// once. Stored in gmail_messages.piece_links (piece_links.sql), an array of
+// { id, kind: 'excerpt', text, note, targetType, targetId, targetLabel,
+// createdAt }. Attachment-kind entries are designed in but not reachable
+// yet — see BUILD_NOTES, incoming attachments aren't synced/stored at all
+// currently, so there's nothing to link.
+//
+// This never auto-closes a task — linking is the only action here. Closing
+// the task it answered is always a separate, deliberate step from the task
+// itself (see "jump to task" below).
+
+// The client's open client-facing asks, shown above the general link
+// picker since most replies are answering something already waited on —
+// picking one links the WHOLE email to that task (reuses the existing
+// single-task link field; it's the fast path for the common case of "this
+// email is entirely about one open ask"). For an email answering more than
+// one thing at once, or answering only part of its body, use excerpt
+// linking below instead.
+OL.renderGmailOpenClientAsks = function(m) {
+    const container = document.getElementById('gmail-open-client-asks');
+    if (!container) return;
+    const clientId = m.linked_client_id;
+    if (!clientId) { container.innerHTML = ''; return; }
+    const client = state.clients?.[clientId];
+    const tasks = (client?.projectData?.clientTasks || []).filter((t) => {
+        if (!t.askKind) return false;                                   // only client-facing asks
+        const closed = t.status === 'Done' || t.status === 'Completed' || t.completed;
+        return !closed;
+    });
+    if (!tasks.length) { container.innerHTML = ''; return; }
+
+    container.innerHTML = `
+        <div style="margin-bottom:16px; padding:10px 12px; background:rgba(var(--accent-rgb), 0.05); border:1px solid var(--line); border-radius:8px;">
+            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Open asks for this client</label>
+            <div style="display:grid; gap:4px;">
+                ${tasks.map((t) => `
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; ${String(m.linked_task_id) === String(t.id) ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}">
+                        <span class="tiny">${esc(t.title || t.name)}</span>
+                        ${String(m.linked_task_id) === String(t.id)
+                            ? `<span class="tiny" style="color:var(--accent); flex-shrink:0;">Linked</span>`
+                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink().then(() => OL.openGmailMessageModal('${m.id}'));">This answers it</button>`}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+};
+
+// ---- excerpt selection: highlight text in the plain-text body -> a small floating "Link this" button ----
+OL.attachExcerptSelectionHandler = function(messageId) {
+    const body = document.getElementById('gmail-body-plain');
+    if (!body) return;   // body_html messages use the sandboxed iframe — selection there isn't supported yet, see BUILD_NOTES
+    document.getElementById('gmail-excerpt-link-btn')?.remove();
+
+    body.onmouseup = () => {
+        const sel = window.getSelection();
+        const text = (sel?.toString() || '').trim();
+        document.getElementById('gmail-excerpt-link-btn')?.remove();
+        if (!text || sel.rangeCount === 0) return;
+
+        const range = sel.getRangeAt(0);
+        if (!body.contains(range.commonAncestorContainer)) return;   // selection made outside this body
+        const rect = range.getBoundingClientRect();
+        const bodyRect = body.getBoundingClientRect();
+
+        const btn = document.createElement('button');
+        btn.id = 'gmail-excerpt-link-btn';
+        btn.className = 'btn tiny primary';
+        btn.textContent = 'Link this';
+        btn.style.cssText = `position:absolute; z-index:20; top:${rect.top - bodyRect.top + body.scrollTop - 32}px; left:${Math.max(0, rect.left - bodyRect.left)}px;`;
+        btn.onmousedown = (e) => e.preventDefault();   // don't clear the selection before onclick fires
+        btn.onclick = () => OL.openExcerptLinkPicker(messageId, text);
+        body.appendChild(btn);
+    };
+};
+
+// ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
+OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt') {
+    OL._excerptLinkState = { messageId, excerptText, kind, targetType: '', targetId: '', targetLabel: '', note: '', query: '' };
+    OL.renderExcerptLinkPicker();
+};
+
+OL.renderExcerptLinkPicker = function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    const m = OL._gmailLinkState;   // the open email's link state carries clientId already, if set
+    const clientId = m?.clientId || '';
+    const client = clientId ? state.clients?.[clientId] : null;
+
+    const query = (st.query || '').trim().toLowerCase();
+    const taskPool = client ? (client.projectData?.clientTasks || []) : (OL._allClientTasksFlat ? OL._allClientTasksFlat() : []);
+    const requestPool = client ? OL.listProjectRequests(client) : (OL._allClientRequestsFlat ? OL._allClientRequestsFlat() : []);
+    const resourcePool = client ? (client.projectData?.localResources || []) : (OL._allClientResourcesFlat ? OL._allClientResourcesFlat() : []);
+
+    const matchTitle = (v) => String(v || '').toLowerCase().includes(query);
+    const tasks = taskPool.filter((t) => matchTitle(t.title || t.name)).slice(0, 30);
+    const requests = requestPool.filter((r) => matchTitle(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))).slice(0, 30);
+    const resources = resourcePool.filter((r) => matchTitle(r.name)).slice(0, 30);
+
+    const pick = (type, id, label) => { OL._excerptLinkState.targetType = type; OL._excerptLinkState.targetId = id; OL._excerptLinkState.targetLabel = label; OL.renderExcerptLinkPicker(); };
+
+    const content = `
+        <div style="padding:20px; max-width:640px; width:90vw;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:14px;">
+                <div>
+                    <h3 style="margin:0; font-size:15px;">Link this ${st.kind}</h3>
+                    <div class="tiny muted" style="margin-top:4px; max-width:520px;">"${esc(st.excerptText.length > 140 ? st.excerptText.slice(0, 140) + '…' : st.excerptText)}"</div>
+                </div>
+                <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">✕</button>
+            </div>
+
+            ${st.targetId ? `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px; margin-bottom:12px;">
+                    <span class="tiny bold">${esc(st.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(st.targetType)}</span></span>
+                    <button class="btn tiny soft" onclick="OL._excerptLinkState.targetType=''; OL._excerptLinkState.targetId=''; OL.renderExcerptLinkPicker();">Change</button>
+                </div>
+            ` : `
+                <input type="text" class="modal-input tiny" placeholder="Search tasks, requests, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
+                       oninput="OL._excerptLinkState.query=this.value; OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker());">
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:12px;">
+                    <div>
+                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Tasks</div>
+                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
+                            ${tasks.length ? tasks.map((t) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("task", ${JSON.stringify(t.id)}, ${JSON.stringify(t.title || t.name)})'>${esc(t.title || t.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Requests</div>
+                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
+                            ${requests.length ? requests.map((r) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("request", ${JSON.stringify(r.id)}, ${JSON.stringify(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))})'>${esc(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Resources</div>
+                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
+                            ${resources.length ? resources.map((r) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("resource", ${JSON.stringify(r.id)}, ${JSON.stringify(r.name)})'>${esc(r.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                        </div>
+                    </div>
+                </div>
+            `}
+
+            <label class="tiny muted bold" style="display:block; margin-bottom:4px;">Note (optional — a refined summary, not the raw excerpt)</label>
+            <textarea class="modal-input tiny" rows="2" style="width:100%; margin-bottom:14px;" placeholder="e.g. confirms all 12 fields mapped"
+                      oninput="OL._excerptLinkState.note=this.value">${esc(st.note)}</textarea>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
+                <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
+            </div>
+        </div>
+    `;
+    OL.showOverlayModal(content);
+};
+
+// Bridge for the inline onclick handlers above (keeps the picker's own
+// state update + re-render in one place rather than duplicated per column).
+OL.__excerptPick = function(type, id, label) {
+    if (!OL._excerptLinkState) return;
+    OL._excerptLinkState.targetType = type;
+    OL._excerptLinkState.targetId = id;
+    OL._excerptLinkState.targetLabel = label;
+    OL.renderExcerptLinkPicker();
+};
+
+OL.confirmExcerptLink = async function() {
+    const st = OL._excerptLinkState;
+    if (!st || !st.targetId) return;
+
+    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links').eq('id', st.messageId).single();
+    if (fetchErr) { alert('Could not load this email to link it.'); return; }
+
+    const pieceLinks = Array.isArray(m.piece_links) ? m.piece_links.slice() : [];
+    pieceLinks.push({
+        id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
+        targetType: st.targetType, targetId: st.targetId, targetLabel: st.targetLabel,
+        createdAt: new Date().toISOString(),
+    });
+
+    const { error } = await db.from('gmail_messages').update({ piece_links: pieceLinks }).eq('id', st.messageId);
+    if (error) { alert('Could not save that link.'); return; }
+
+    OL._excerptLinkState = null;
+    OL.closeModal();
+    OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
+};
+
+// ---- showing what's already linked, with jump-to-target and unlink ----
+OL.renderGmailPieceLinks = function(m) {
+    const container = document.getElementById('gmail-piece-links');
+    if (!container) return;
+    const links = Array.isArray(m.piece_links) ? m.piece_links : [];
+    if (!links.length) { container.innerHTML = ''; return; }
+
+    container.innerHTML = `
+        <div style="margin-top:12px; display:grid; gap:6px;">
+            <span class="tiny bold uppercase muted">Linked pieces (${links.length})</span>
+            ${links.map((l) => `
+                <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:rgba(var(--accent-rgb),0.04);">
+                    <div class="tiny muted" style="margin-bottom:4px;">"${esc(l.text.length > 100 ? l.text.slice(0, 100) + '…' : l.text)}"</div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                        <span class="tiny bold">${esc(l.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(l.targetType)}</span></span>
+                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button class="btn tiny soft" onclick="OL.jumpToGmailPieceTarget('${esc(l.targetType)}', '${esc(l.targetId)}', '${esc(m.linked_client_id || '')}')">Jump to ${esc(l.targetType)}</button>
+                            <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.unlinkGmailPiece('${m.id}', '${l.id}')">Unlink</button>
+                        </div>
+                    </div>
+                    ${l.note ? `<div class="tiny muted" style="margin-top:4px;">${esc(l.note)}</div>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+OL.jumpToGmailPieceTarget = function(type, id, clientId) {
+    OL.closeModal();
+    if (type === 'task') { OL.openTaskInContext(clientId, id); return; }
+    if (type === 'request') { OL.openRequestFromTask(clientId, id); return; }
+    if (type === 'resource' && typeof OL.openResourceModal === 'function') { OL.openResourceModal(id); return; }
+};
+
+OL.unlinkGmailPiece = async function(messageId, pieceLinkId) {
+    const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links').eq('id', messageId).single();
+    if (fetchErr) return;
+    const pieceLinks = (Array.isArray(m.piece_links) ? m.piece_links : []).filter((l) => l.id !== pieceLinkId);
+    await db.from('gmail_messages').update({ piece_links: pieceLinks }).eq('id', messageId);
+    OL.openGmailMessageModal(messageId);
+};
 
 // -------------------------------------------------------------
 // COMPOSE / SEND EMAIL
