@@ -28,7 +28,7 @@
 // with this trigger (including ones installed by installStarterRequestSops)
 // is now dead — it will never match again. See BUILD_NOTES.
 
-import { esc, uid, state, updateAndSync } from '../../core/data.js';
+import { esc, uid, state, updateAndSync, persist } from '../../core/data.js';
 import { SHEET_STATUSES, getRequestTypes, listNewActivations } from '../../core/requests.js';
 import { commitActivationPlan, recordAskTemplateOverrides, DEFAULT_ASK_TEMPLATES } from '../../core/activation.js';
 import './meeting-summary.js';   // registers the meeting summary email feature
@@ -379,6 +379,9 @@ OL.renderAutomationBuilder = function() {
                 <button class="btn small soft" onclick="OL.openTestTemplates()" title="The steps a tester works through for each kind of request">
                     Test templates
                 </button>
+                <button class="btn small soft" onclick="OL.openAssigneeDefaults()" title="Default implementation-task assignee per request type, suggested when reviewing an activation">
+                    Assignee defaults
+                </button>
                 <button class="btn small soft" onclick="OL.installStarterRequestSops()" title="Adds a draft set of steps for each request type">
                     Install starter SOPs
                 </button>
@@ -689,7 +692,60 @@ OL.deleteAutomationRule = function(ruleId) {
     OL.renderAutomationBuilder();
 };
 
-// ---- bridge: keep OL.* calls working until callers import directly ----
+// ---- ASSIGNEE DEFAULTS: assignee_by_type.sql-backed settings screen ----
+// A flat { [requestType]: assigneeName } lookup, checked by
+// core/activation.js's suggestAssignee before falling back to role-based
+// assignment. One row per known request type (getRequestTypes), plus any
+// extra keys already saved that aren't in that list (a since-removed or
+// custom type) so editing never silently drops them.
+OL.openAssigneeDefaults = function() {
+    const known = getRequestTypes().map((t) => t.key);
+    const saved = state.master.assigneeByType || {};
+    const extraKeys = Object.keys(saved).filter((k) => !known.includes(k));
+    const rows = [...known, ...extraKeys];
+    const canSave = state.masterHasAssigneeByType !== false;
+
+    const rowHtml = (key, label) => `
+        <div class="ad-row" data-key="${esc(key)}" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center; margin-bottom:6px;">
+            <span class="tiny">${esc(label || key)}</span>
+            <input type="text" class="modal-input tiny ad-assignee" placeholder="No default — falls back to role" value="${esc(saved[key] || '')}">
+        </div>`;
+
+    window.openModal(`
+        <div class="modal-head">
+            <div class="modal-title-text">🙋 Assignee defaults</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" style="max-width:520px; box-sizing:border-box;">
+            <div class="tiny muted" style="margin-bottom:12px;">
+                Who an implementation task is suggested to on the activation-review screen, by request type.
+                Leave a row blank to fall back to role-based assignment instead.
+                ${canSave ? '' : '<br><strong style="color:#ef4444;">These cannot be saved yet: run assignee_by_type.sql in Supabase, then reload.</strong>'}
+            </div>
+            <div id="ad-list">
+                ${rows.map((key) => rowHtml(key, known.includes(key) ? getRequestTypes().find((t) => t.key === key)?.label : null)).join('')}
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                <button class="btn primary" ${canSave ? '' : 'disabled'} onclick="OL.saveAssigneeDefaults()">Save</button>
+            </div>
+        </div>`);
+};
+
+OL.saveAssigneeDefaults = function() {
+    if (state.masterHasAssigneeByType === false) { alert('Run assignee_by_type.sql in Supabase first, then reload.'); return; }
+    const next = {};
+    document.querySelectorAll('#ad-list .ad-row').forEach((row) => {
+        const key = row.getAttribute('data-key');
+        const value = row.querySelector('.ad-assignee').value.trim();
+        if (key && value) next[key] = value;
+    });
+    state.master.assigneeByType = next;
+    persist();
+    OL.closeModal();
+};
+
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getAutomationConditionFields: OL.getAutomationConditionFields,
@@ -701,5 +757,7 @@ Object.assign(window.OL, {
     refreshAutomationConditionFields: OL.refreshAutomationConditionFields,
     saveAutomationRule: OL.saveAutomationRule,
     toggleAutomationRule: OL.toggleAutomationRule,
-    deleteAutomationRule: OL.deleteAutomationRule
+    deleteAutomationRule: OL.deleteAutomationRule,
+    openAssigneeDefaults: OL.openAssigneeDefaults,
+    saveAssigneeDefaults: OL.saveAssigneeDefaults
 });
