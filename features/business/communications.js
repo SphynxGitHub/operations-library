@@ -1122,6 +1122,12 @@ OL.openGmailMessageModal = async function(id) {
             `;
     
             frame.srcdoc = styleHeader + processedHtml;
+            // allow-same-origin (already on this sandbox) lets our own
+            // parent-page script reach into the iframe's DOM once it loads —
+            // this is the parent's trusted code, not anything from the
+            // email's own HTML (which still can't execute, no allow-scripts).
+            // That's what makes excerpt selection possible here at all.
+            frame.addEventListener('load', () => OL.attachExcerptSelectionHandler(id, frame), { once: true });
         }
     }
 
@@ -1187,32 +1193,48 @@ OL.renderGmailOpenClientAsks = function(m) {
     `;
 };
 
-// ---- excerpt selection: highlight text in the plain-text body -> a small floating "Link this" button ----
-OL.attachExcerptSelectionHandler = function(messageId) {
-    const body = document.getElementById('gmail-body-plain');
-    if (!body) return;   // body_html messages use the sandboxed iframe — selection there isn't supported yet, see BUILD_NOTES
-    document.getElementById('gmail-excerpt-link-btn')?.remove();
+// ---- excerpt selection: highlight text -> a small floating "Link this" button ----
+// Two bodies to support: the plain-text render (in the parent document) and
+// the HTML render (in the sandboxed-but-same-origin iframe, wired up once
+// its srcdoc content loads — see the frame.addEventListener('load', ...)
+// call above). `frame` is omitted for the plain-text case.
+OL.attachExcerptSelectionHandler = function(messageId, frame) {
+    const doc = frame ? frame.contentDocument : document;
+    const win = frame ? frame.contentWindow : window;
+    const body = frame ? doc.body : document.getElementById('gmail-body-plain');
+    if (!doc || !win || !body) return;
 
-    body.onmouseup = () => {
-        const sel = window.getSelection();
+    doc.getElementById('gmail-excerpt-link-btn')?.remove();
+
+    body.addEventListener('mouseup', () => {
+        const sel = win.getSelection();
         const text = (sel?.toString() || '').trim();
-        document.getElementById('gmail-excerpt-link-btn')?.remove();
+        doc.getElementById('gmail-excerpt-link-btn')?.remove();
         if (!text || sel.rangeCount === 0) return;
 
         const range = sel.getRangeAt(0);
         if (!body.contains(range.commonAncestorContainer)) return;   // selection made outside this body
         const rect = range.getBoundingClientRect();
-        const bodyRect = body.getBoundingClientRect();
+        // In the iframe case this button is appended into the iframe's own
+        // document, so its coordinates are relative to that document —
+        // scrollX/Y there, not the parent page's.
+        const scrollX = frame ? (win.scrollX || doc.documentElement.scrollLeft || 0) : 0;
+        const scrollY = frame ? (win.scrollY || doc.documentElement.scrollTop || 0) : (body.scrollTop || 0);
+        const bodyRect = frame ? { top: 0, left: 0 } : body.getBoundingClientRect();
 
-        const btn = document.createElement('button');
+        const btn = doc.createElement('button');
         btn.id = 'gmail-excerpt-link-btn';
-        btn.className = 'btn tiny primary';
         btn.textContent = 'Link this';
-        btn.style.cssText = `position:absolute; z-index:20; top:${rect.top - bodyRect.top + body.scrollTop - 32}px; left:${Math.max(0, rect.left - bodyRect.left)}px;`;
+        btn.style.cssText = `position:absolute; z-index:2147483647; top:${rect.top - bodyRect.top + scrollY - 32}px; left:${Math.max(0, rect.left - bodyRect.left + scrollX)}px; padding:4px 10px; font-size:11px; font-weight:600; border-radius:6px; border:none; cursor:pointer; background:var(--accent, #64c6a2); color:#fff;`;
         btn.onmousedown = (e) => e.preventDefault();   // don't clear the selection before onclick fires
+        // This closure is defined here, in the parent script, even though
+        // the button element itself gets appended into the iframe's
+        // document — a function's scope follows where it was DEFINED, not
+        // which document its DOM node lives in, so plain `OL` below still
+        // correctly refers to the parent page's OL.
         btn.onclick = () => OL.openExcerptLinkPicker(messageId, text);
-        body.appendChild(btn);
-    };
+        (doc.body || doc.documentElement).appendChild(btn);
+    });
 };
 
 // ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
