@@ -424,24 +424,14 @@ export async function onboardNewClient() {
   location.hash = "#/client-tasks";
 }
 
-export function provisionSphynxTemplates(clientId) {
-    const client = state.clients[clientId];
-    if (!client) return;
-
-    if (!client.projectData.localResources) client.projectData.localResources = [];
-    const currentResources = client.projectData.localResources;
-
-    // 🏛️ System Level
-    const systemTemplates = [
-        { name: "Sphynx Client Agreement", type: "Legal", systemPinned: true },
-    ];
-
-    if (client.meta.status === 'Ongoing Maintenance') {
-        systemTemplates.push({ name: "Maintenance Time Tracker and Zapier Error Log", type: "Reference", systemPinned: true });
-    }
-
-    // 📂 Reference Level
-    const adminTemplates = [
+// The three standard "Reference" section resources every project should
+// have (Naming Conventions, Folder Hierarchy, Compliance Documents) —
+// shared by provisionSphynxTemplates (new clients) and
+// backfillReferenceResources (existing clients missing them). A function,
+// not a static array, since Folder Hierarchy's tree ids and Compliance
+// Documents' file ids need to be fresh each time this is provisioned.
+function referenceTemplates() {
+    return [
         { name: "Naming Conventions", type: "Reference", adminPinned: true,
           // Pre-loaded with the standard patterns; edit per client.
           data: {
@@ -479,8 +469,25 @@ export function provisionSphynxTemplates(clientId) {
           ] 
         }
     ];
+}
 
-    const allToProvision = [...systemTemplates, ...adminTemplates];
+export function provisionSphynxTemplates(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    const currentResources = client.projectData.localResources;
+
+    // 🏛️ System Level
+    const systemTemplates = [
+        { name: "Sphynx Client Agreement", type: "Legal", systemPinned: true },
+    ];
+
+    if (client.meta.status === 'Ongoing Maintenance') {
+        systemTemplates.push({ name: "Maintenance Time Tracker and Zapier Error Log", type: "Reference", systemPinned: true });
+    }
+
+    const allToProvision = [...systemTemplates, ...referenceTemplates()];
 
     allToProvision.forEach(temp => {
         const exists = currentResources.some(r => r.name === temp.name);
@@ -497,6 +504,53 @@ export function provisionSphynxTemplates(clientId) {
         }
     });
 };
+
+// ---- ONE-TIME BACKFILL: add any missing "Reference" section resources
+// (Naming Conventions, Folder Hierarchy, Compliance Documents) to older
+// projects that predate them. Console-only, not wired to any button:
+//   OL.backfillReferenceResources()                    // every client
+//   OL.backfillReferenceResources(['c-1', 'c-2', ...])  // just these
+// Shares referenceTemplates() with provisionSphynxTemplates (the new-client
+// path), so a client is only ever missing exactly what's genuinely absent
+// — same by-name existence check, nothing duplicated for a client that
+// already has all three. Never touches "Sphynx Client Agreement" or the
+// Ongoing-Maintenance-only time tracker — this is scoped to the Reference
+// section specifically, not a full re-provision.
+export async function backfillReferenceResources(clientIds) {
+    const results = [];
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    for (const clientId of ids) {
+        await loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client) { results.push({ clientId, error: 'Client not found' }); continue; }
+
+        const added = [];
+        await updateAndSync(() => {
+            if (!client.projectData) client.projectData = {};
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            const currentResources = client.projectData.localResources;
+
+            referenceTemplates().forEach(temp => {
+                const exists = currentResources.some(r => r.name === temp.name);
+                if (exists) return;
+                currentResources.push({
+                    ...temp,
+                    id: 'sys-' + uid(),
+                    isLocked: true,
+                    description: "Standard Sphynx Asset.",
+                    createdDate: new Date().toISOString(),
+                    steps: [],
+                    data: temp.data || {}
+                });
+                added.push(temp.name);
+            });
+        }, clientId);
+
+        if (added.length) results.push({ clientId, clientName: client.meta?.name, added });
+    }
+    console.log('Reference backfill complete —', results.length, 'client(s) needed something:', results);
+    return results;
+}
 
 //=======BUILD CLIENT PROFILE SETTINGS / LINK / DELETE PROFILE ===========//
 
@@ -1299,7 +1353,7 @@ export function updateErrorSheetId(clientId, value) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderPartnerDashboard, partnerCreateClient, handlePartnerAssignment,
-    onboardNewClient, provisionSphynxTemplates, getDynamicPartners,
+    onboardNewClient, provisionSphynxTemplates, backfillReferenceResources, getDynamicPartners,
     openClientProfileModal, toggleClientModule, isClientModuleOn, toggleClientBusinessModule, copyShareLink,
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
