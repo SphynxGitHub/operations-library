@@ -115,52 +115,79 @@ function _renderResourceManagerImpl() {
             </div>
         </div>
 
-        <div class="v2-toolbar" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--line);">
-            <div class="canvas-search-wrap" style="flex: 2; min-width: 250px; position:relative; display:flex; align-items:center;">
-                <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
-                <input type="text" id="lib-filter-input" class="v2-search-input" 
-                       placeholder="Search name, description, or notes..." 
-                       style="padding-left:35px; width:100%;"
-                       value="${state.libSearch || ''}"
-                       oninput="state.libSearch = this.value; OL.syncResourceLibraryFilters()">
+        <div class="card" style="padding: 20px; margin: 20px 0;">
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+
+                <div style="display: flex; gap: 8px; flex: 2 1 320px; min-width: 260px; align-items:center;">
+                    <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
+                    <input type="text" id="lib-filter-input"
+                           class="modal-input tiny" style="flex:1; width:100%;"
+                           placeholder="Search name, description, or notes..."
+                           value="${esc(state.libSearch || '')}"
+                           oninput="const v=this.value; OL.reRenderPreservingFocus(() => { state.libSearch = v; OL.syncResourceLibraryFilters(); });">
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="tag" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Type:</span>
+                    <select id="lib-filter-type" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">All Types</option>
+                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="grid-2x2" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">App:</span>
+                    <select id="lib-filter-app" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">All Apps</option>
+                        ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="user-check" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Owner:</span>
+                    <select id="lib-filter-assignee" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">All Owners</option>
+                        ${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="dollar-sign" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Scoping:</span>
+                    <select id="lib-filter-scoped" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">All Scoping</option>
+                        <option value="scoped">Scoped ($)</option>
+                        <option value="unscoped">Unscoped</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="users" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Party:</span>
+                    <select id="lib-filter-party" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">All Parties</option>
+                        <option value="Sphynx">Sphynx</option>
+                        <option value="Client">Client</option>
+                        <option value="Joint">Joint</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="workflow" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Logic:</span>
+                    <select id="lib-filter-logic" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">Any Logic</option>
+                        <option value="has">With λ Logic</option>
+                    </select>
+                </div>
+
+                <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear
+                </button>
             </div>
-            
-            <select id="lib-filter-type" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Types</option>
-                ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
-            </select>
-
-            <select id="lib-filter-app" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Apps</option>
-                ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
-            </select>
-
-            <select id="lib-filter-assignee" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Owners</option>
-                ${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
-            </select>
-
-            <select id="lib-filter-scoped" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Scoping</option>
-                <option value="scoped">Scoped ($)</option>
-                <option value="unscoped">Unscoped</option>
-            </select>
-
-            <select id="lib-filter-party" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Parties</option>
-                <option value="Sphynx">Sphynx</option>
-                <option value="Client">Client</option>
-                <option value="Joint">Joint</option>
-            </select>
-
-            <select id="lib-filter-logic" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">Any Logic</option>
-                <option value="has">With λ Logic</option>
-            </select>
-
-            <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
-                <i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear
-            </button>
         </div>
 
         <div id="resource-library-results"></div>
