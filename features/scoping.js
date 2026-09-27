@@ -6,7 +6,7 @@
 // discounts), the pricing-rate "folder" modal, and scoping-item
 // dependency management.
 
-import { state, esc, uid, getActiveClient, persist } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
 import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
@@ -2248,6 +2248,49 @@ export async function saveAsks(itemId) {
     renderScopingSheet();
 }
 
+// ---- ONE-TIME REPAIR: fix any line item created with the "reqline-"
+// marker on id instead of resourceId (the confirmExcerptCreateRequest bug
+// — see BUILD_NOTES). Those items have no resource to resolve, so they're
+// invisible on the round-grouped scoping view the moment they leave the
+// Backlog section (or were never in it to begin with). Console-only:
+//   OL.repairBrokenReqlineRequests()                      // scans every client
+//   OL.repairBrokenReqlineRequests(['c-1', 'c-2', ...])    // just these
+// Only ever ADDS the missing resourceId — never touches an item that
+// already has one. Also normalizes status/round back to Backlog, but only
+// when status is still exactly 'Considering' (the broken code's default);
+// anything already moved further along (Do Now, Done, etc.) is left as-is,
+// since that reflects a real decision someone made, however they got to
+// it.
+export async function repairBrokenReqlineRequests(clientIds) {
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    const results = [];
+    for (const clientId of ids) {
+        await loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client) continue;
+
+        const fixed = [];
+        await updateAndSync(() => {
+            (client.projectData?.scopingSheets || []).forEach((sheet) => {
+                (sheet?.lineItems || []).forEach((item) => {
+                    const isBroken = item && String(item.id).startsWith('reqline-') && !item.resourceId;
+                    if (!isBroken) return;
+                    item.resourceId = 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+                    if (String(item.status || '') === 'Considering') {
+                        item.status = 'Backlog';
+                        item.round = null;
+                    }
+                    fixed.push(item.name || item.id);
+                });
+            });
+        }, clientId);
+
+        if (fixed.length) results.push({ clientId, clientName: client.meta?.name, fixed });
+    }
+    console.log('Repair complete —', results.length, 'client(s) had broken items:', results);
+    return results;
+}
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getScopingDataForResource, isResourceInScope, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
@@ -2262,7 +2305,8 @@ Object.assign(window.OL, {
     openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
-    getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest
+    getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,
+    repairBrokenReqlineRequests
 });
 
 window.renderScopingSheet = renderScopingSheet;
