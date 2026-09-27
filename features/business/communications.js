@@ -1301,10 +1301,6 @@ OL.renderExcerptLinkPicker = function() {
                     <input type="text" id="excerpt-new-task-title" class="modal-input tiny" style="width:100%; margin-bottom:8px;" value="${esc(st.newTaskTitle || '')}"
                            oninput="OL._excerptLinkState.newTaskTitle=this.value">
                     ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a task.</div>` : ''}
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewTask=false; OL.renderExcerptLinkPicker();">Back to search</button>
-                        <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
-                    </div>
                 </div>
             ` : st.creatingNewRequest ? `
                 <div style="padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:12px;">
@@ -1317,10 +1313,6 @@ OL.renderExcerptLinkPicker = function() {
                     </select>
                     ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a request.</div>` : ''}
                     <div class="tiny muted" style="margin-bottom:8px;">Created as "Considering" — sits on the scoping sheet, not yet scheduled into a round or activated.</div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewRequest=false; OL.renderExcerptLinkPicker();">Back to search</button>
-                        <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">Create & link</button>
-                    </div>
                 </div>
             ` : `
                 <input type="text" class="modal-input tiny" placeholder="Search tasks, requests, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
@@ -1353,8 +1345,16 @@ OL.renderExcerptLinkPicker = function() {
                       oninput="OL._excerptLinkState.note=this.value">${esc(st.note)}</textarea>
 
             <div style="display:flex; justify-content:flex-end; gap:8px;">
-                <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
-                <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
+                ${st.creatingNewTask ? `
+                    <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewTask=false; OL.renderExcerptLinkPicker();">Back to search</button>
+                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
+                ` : st.creatingNewRequest ? `
+                    <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewRequest=false; OL.renderExcerptLinkPicker();">Back to search</button>
+                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">Create & link</button>
+                ` : `
+                    <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
+                    <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
+                `}
             </div>
         </div>
     `;
