@@ -1475,7 +1475,7 @@ OL.renderGmailAttachments = function(m) {
     if (window.lucide) lucide.createIcons();
 };
 
-
+OL.renderGmailPieceLinks = function(m) {
     const container = document.getElementById('gmail-piece-links');
     if (!container) return;
     const links = Array.isArray(m.piece_links) ? m.piece_links : [];
