@@ -147,8 +147,24 @@ export async function addBacklogItemToSheet(itemId) {
         if (!item.resourceId && item.name) {
             item.resourceId = 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         }
-        item.round = nextOpenRound(sheet);
+        const target = nextOpenRound(sheet);
+        item.round = target;
         item.status = 'Considering';
+        // On a sheet still carrying the old sheet-wide 'Approved' flag, a
+        // round with no entry of its own counts as approved AND starts
+        // collapsed — so a brand-new round would swallow the request out of
+        // view. Give the new round its own draft entry, expanded.
+        if (!sheet.roundApprovals) sheet.roundApprovals = {};
+        const entry = sheet.roundApprovals[String(target)];
+        if (!entry || !entry.status) {
+            sheet.roundApprovals[String(target)] = {
+                ...(entry || {}),
+                status: 'Drafting',
+                statusChangedAt: new Date().toISOString(),
+                approvedAt: null,
+                collapsed: false,
+            };
+        }
     });
 
     renderScopingSheet();
