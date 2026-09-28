@@ -1848,14 +1848,6 @@ export function openRequestDetailDrawer(client, req) {
 
       ${OL.renderRollupSection ? OL.renderRollupSection(client.id, 'request', req.id) : ''}
 
-      <!-- LINKED EMAILS FOR REQUESTS -->
-      <div style="margin-bottom: 20px; min-width: 0; width: 100%; overflow-x: hidden;">
-        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-          <i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails
-        </label>
-        <div id="linked-request-emails-list" class="tiny muted" style="min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">Loading linked emails…</div>
-      </div>
-
       <!-- COMMENTS SIDEBAR / THREAD -->
       <div id="request-comments-container">
         ${OL.renderTaskCommentsSidebarHTML(client, req)}
@@ -1865,7 +1857,6 @@ export function openRequestDetailDrawer(client, req) {
 
   openModal(html);
   OL.setComposeContext?.({ kind: 'request', clientId: client.id, id: req.id });
-  OL.loadLinkedEmailsForRequest(req.id);
   if (OL.hydrateRollupSection) OL.hydrateRollupSection(client.id, 'request', req.id);
   if (window.lucide) lucide.createIcons();
 };
@@ -1884,138 +1875,8 @@ export function updateRequestDescription(clientId, reqId, newDesc) {
 export async function loadLinkedEmailsForRequest(requestId) {
   const container = document.getElementById('linked-request-emails-list');
   if (!container) return;
-
-  const { data, error } = await db
-    .from('gmail_messages')
-    .select('id, sender, subject, snippet, date, note, body')
-    .eq('linked_request_id', requestId)
-    .order('date', { ascending: false });
-
-  if (error || !data || !data.length) {
-    container.innerHTML = `<span class="tiny muted">No linked emails found for this request.</span>`;
-    return;
-  }
-
-  container.innerHTML = `
-    <div style="display:grid; gap:6px; min-width:0; width:100%; box-sizing:border-box;">
-        ${data.map(m => `
-            <div style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px; min-width:0; width:100%; box-sizing:border-box; overflow-x:hidden;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
-                    <div style="min-width:0; flex:1; overflow-wrap:anywhere; word-break:break-word;">
-                        <strong style="display:block; overflow-wrap:anywhere; word-break:break-word;">${esc(m.subject || 'No Subject')}</strong>
-                        <div class="muted" style="overflow-wrap:anywhere; word-break:break-word;">${esc(m.sender)}${m.date ? ` · ${new Date(m.date).toLocaleDateString()}` : ''}</div>
-                    </div>
-                    <i data-lucide="external-link" style="width:12px;height:12px; flex-shrink:0; margin-top:2px; color:var(--muted);"></i>
-                </div>
-            </div>
-        `).join('')}
-    </div>
-  `;
-  if (window.lucide) lucide.createIcons();
-};
-
-export function openRequestLineModal(itemId) {
-    const client = getActiveClient();
-    if (!client) return;
-
-    const sheet = client.projectData?.scopingSheets?.[0];
-    const item = itemId ? sheet?.lineItems?.find(i => String(i.id) === String(itemId)) : null;
-    const isEdit = !!item;
-    const clientName = client.meta?.name || 'Client';
-
-    const isReqLine = !item || String(item.resourceId || '').startsWith('reqline-');
-    const typeKey = item?.requestType || (isReqLine ? 'meeting' : 'build');
-    const shownTitle = item?.name || (!isReqLine ? (OL.getResourceById(item.resourceId)?.name || '') : '');
-    const status = item?.status || 'Do Now';
-    const party = item?.responsibleParty || 'Sphynx';
-
-    const opt = (value, label, current) =>
-        `<option value="${esc(value)}" ${String(current) === String(value) ? 'selected' : ''}>${esc(label)}</option>`;
-
-    const html = `
-        <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line);">
-            <div class="modal-title-text" style="font-weight:700; font-size:16px;">${isEdit ? '✏️ Edit Request' : '➕ Add Request'}</div>
-            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
-        </div>
-        <div class="modal-body" style="padding-top:14px;">
-            <p class="tiny muted" style="margin-bottom:16px; font-size:11px; line-height:1.4;">
-                ${isEdit && requestResourceIds(item).filter(id => !String(id).startsWith('reqline-')).length
-                    ? 'A request can cover one or more resources. Its fee is the total of what it covers; set the units on each resource.'
-                    : 'For work with no library resource, like a training session, an audit or a working meeting. Its fee is estimated hours x your base rate, or plan the resources it will cover once it is saved.'}
-            </p>
-
-            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
-                <label class="tiny muted" style="font-size:10px; font-weight:600;">Title</label>
-                <input id="rq-title" type="text" class="modal-input" 
-                       placeholder="e.g. Calendly audit" value="${esc(shownTitle)}" autofocus>
-            </div>
-
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Type</label>
-                    <select id="rq-type" class="modal-input">
-                        ${getRequestTypes().map(t => opt(t.key, t.label, typeKey)).join('')}
-                    </select>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Estimated hours</label>
-                    <input id="rq-hours" type="number" min="0" step="0.25" class="modal-input"
-                           value="${item ? (parseFloat(item.manualHours) || 0) : ''}" placeholder="0">
-                </div>
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Client decision</label>
-                    <select id="rq-status" class="modal-input" onchange="const r=document.getElementById('rq-round'); if(r) r.disabled = (this.value === 'Backlog');">
-                        ${['Backlog', 'Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
-                        ${status === 'Done' || status === "Don't Do" ? opt(status, status, status) : ''}
-                    </select>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Responsible party</label>
-                    <select id="rq-party" class="modal-input">
-                        ${opt('Sphynx', 'Sphynx', party)}
-                        ${opt(clientName, clientName, party)}
-                        ${opt('Joint', 'Joint', party)}
-                    </select>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Round</label>
-                    <input id="rq-round" type="number" min="1" step="1" class="modal-input" ${status === 'Backlog' ? 'disabled' : ''}
-                           value="${parseInt(item?.round, 10) || 1}">
-                </div>
-            </div>
-
-            ${isEdit && typeof OL.requestResourcesSectionHtml === 'function' ? OL.requestResourcesSectionHtml(client, item) : ''}
-
-            ${requestRolesSectionHtml(client, item)}
-
-            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
-                <label class="tiny muted" style="font-size:10px; font-weight:600;">Notes (optional)</label>
-                <textarea id="rq-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>
-            </div>
-
-            ${isEdit && typeof OL.requestTasksPanelHtml === 'function' ? `
-                <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Tasks</label>
-                    ${OL.requestTasksPanelHtml(client, item) || '<div class="tiny muted">No tasks yet.</div>'}
-                    <div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
-                        <input id="rq-task-title" type="text" class="modal-input tiny" style="flex:1; min-width:0;" placeholder="Add a task for this request...">
-                        <select id="rq-task-assignee" class="modal-input tiny" style="width:auto;">
-                            <option value="">Default assignee</option>
-                            ${(state.master?.sphynxTeam || []).map((m) => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
-                        </select>
-                        <input id="rq-task-due" type="date" class="modal-input tiny" style="width:auto;">
-                        <button type="button" class="btn tiny soft" onclick="OL.rqAddTask('${esc(String(item.id))}')">Add task</button>
-                    </div>
-                </div>` : ''}
-
-            <div style="display:flex; gap:10px;">
-                <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.saveRequestLine(${itemId ? `'${itemId}'` : 'null'})">
-                    ${isEdit ? 'Save' : 'Add to sheet'}
-                </button>
-            </div>
-        </div>
-    `;
-    openModal(html);
+  const client = getActiveClient();
+  if (client && typeof OL.renderEmailLinksInto === 'function') await OL.renderEmailLinksInto(container, client.id, 'request', requestId);
 }
 
 // The Roles section of the request window: who covers each role on THIS request. Each dropdown starts on the

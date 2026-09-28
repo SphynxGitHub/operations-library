@@ -2175,8 +2175,8 @@ OL.renderInContextTaskModal = function(client, task) {
                                 ${task.howToIds.map(htId => {
                                     const guide = OL.findGuide ? OL.findGuide(htId, client) : (state.master.howToLibrary || []).find(g => g.id === htId);
                                     if (!guide) return '';
-                                    // Internal-only master guides never show on a client task, even if linked earlier.
-                                    if (OL.isGuideVisibleInProject && !OL.isGuideVisibleInProject(guide, client)) return '';
+                                    // Internal-only guides show to the team, but never on the client's side, even if linked.
+                                    if (window.IS_GUEST === true && OL.isGuideVisibleInProject && !OL.isGuideVisibleInProject(guide, client)) return '';
                                     const textBlock = (guide.blocks || []).find(b => b.type === 'text');
                                     const preview = textBlock?.data?.html ? textBlock.data.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
                                     return `

@@ -1961,17 +1961,14 @@ export function filterTaskHowToSearch(taskId, query, isVault, clientId) {
     
     const existingIds = task?.howToIds || [];
 
-    // 2. Filter available guides (exclude existing). An internal-only guide would leak to the client if
-    // attached to a task the client can see, so that's still blocked — but a task assigned to Sphynx itself
-    // (not isClientTask) never reaches a client view, so it should be able to use any guide, internal
-    // included. This used to filter every non-vault task the same way, which meant staff couldn't attach an
-    // internal-only guide to their own internal task at all.
-    const taskIsClientFacing = !isVault && task?.isClientTask === true;
-    const pool = isVault
-        ? (state.master.howToLibrary || [])
-        : taskIsClientFacing
-            ? [...(state.master.howToLibrary || []).filter(g => isGuideVisibleInProject(g, client)), ...(client?.projectData?.localHowTo || [])]
-            : [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+    // 2. Filter available guides (exclude existing). Team members can link ANY guide, internal-only included, to
+    // any task — including one the client sees. What keeps an internal guide from the client is the client's own
+    // view of the task, which leaves it out (see the Linked How-To Guides list in features/business/tasks.js).
+    // Client and partner logins only ever get guides shared with their project.
+    const isStaff = window.IS_GUEST !== true;
+    const pool = isVault || isStaff
+        ? [...(state.master.howToLibrary || []), ...(isVault ? [] : (client?.projectData?.localHowTo || []))]
+        : [...(state.master.howToLibrary || []).filter(g => isGuideVisibleInProject(g, client)), ...(client?.projectData?.localHowTo || [])];
     const results = pool.filter(guide => {
         const matches = (guide.name || "").toLowerCase().includes(q);
         const alreadyLinked = existingIds.includes(guide.id);
@@ -2002,13 +1999,10 @@ export function toggleTaskHowTo(event, taskId, howToId, isVault, clientId) {
         : client?.projectData?.clientTasks.find(t => t.id === taskId);
 
     const guide = isVault ? (state.master.howToLibrary || []).find(g => g.id === howToId) : findGuide(howToId, client);
-    // Linking an internal-only guide to a CLIENT-FACING task isn't allowed (unlinking always is) — it would
-    // put internal-only content somewhere the client can see. A task that isn't client-facing (isClientTask
-    // is not true — the normal case for Sphynx's own work) never reaches a client view, so any guide,
-    // internal included, is fine there. See the matching comment in filterTaskHowToSearch above.
+    // Team members can link any guide, internal-only included; the client's view of the task leaves internal
+    // guides out. A client or partner login can only link guides shared with their project.
     const linking = !(task?.howToIds || []).includes(howToId);
-    const taskIsClientFacing = !isVault && task?.isClientTask === true;
-    if (taskIsClientFacing && linking && guide && !isGuideVisibleInProject(guide, client)) return;
+    if (window.IS_GUEST === true && linking && guide && !isGuideVisibleInProject(guide, client)) return;
 
     if (task && guide) {
         if (!task.howToIds) task.howToIds = [];

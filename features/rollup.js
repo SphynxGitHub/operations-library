@@ -10,6 +10,7 @@
 
 import { state, esc, db } from '../core/data.js';
 import { requestResourceIds } from '../core/request-pricing.js';
+import { requestIdsForTask } from '../core/task-links.js';
 
 function pd(clientId) { return state.clients?.[clientId]?.projectData || {}; }
 
@@ -50,7 +51,11 @@ export function rollupScope(clientId, kind, id) {
         rootTaskIds = tasks.filter((t) => String(t.parentResourceId || '') === String(id)
             || (res?.name && (t.resourceName || '').trim().toLowerCase() === res.name.trim().toLowerCase())).map((t) => String(t.id));
     }
-    tasks.forEach((t) => { if (t.requestLineItemId && requestIds.includes(String(t.requestLineItemId))) rootTaskIds.push(String(t.id)); });
+    // A task belongs to a request through its links (a task can be linked to several), or the older single field.
+    tasks.forEach((t) => {
+        const ids = new Set([...(requestIdsForTask(t) || []).map(String), ...(t.requestLineItemId ? [String(t.requestLineItemId)] : [])]);
+        if (requestIds.some((r) => ids.has(String(r)))) rootTaskIds.push(String(t.id));
+    });
     return { taskIds: [...withSubtasks(clientId, rootTaskIds)], requestIds };
 }
 
@@ -102,6 +107,90 @@ export async function loadRollupEmails(clientId, kind, id) {
     return data || [];
 }
 
+// Excerpts and attachments pulled out of emails and linked to this item, a request under it, or a task under it
+// (gmail_messages.piece_links). Returns [{ messageId, subject, sender, date, link }], newest first.
+export async function loadRollupPieces(clientId, kind, id) {
+    const { taskIds, requestIds } = rollupScope(clientId, kind, id);
+    const wanted = new Map();          // targetId -> targetType
+    if (kind === 'request' || kind === 'resource' || kind === 'task') wanted.set(String(id), kind);
+    requestIds.forEach((r) => wanted.set(String(r), 'request'));
+    taskIds.forEach((t) => wanted.set(String(t), 'task'));
+    if (!wanted.size) return [];
+    const ors = [...wanted.keys()].map((tid) => `piece_links.cs.${JSON.stringify([{ targetId: tid }])}`);
+    const { data, error } = await db.from('gmail_messages')
+        .select('id, sender, subject, date, piece_links')
+        .or(ors.join(','))
+        .order('date', { ascending: false })
+        .limit(200);
+    let rows = data;
+    if (error) {
+        // The filter above depends on how the database matches inside the links; if it is refused, fall back to
+        // this project's emails and pick the links out here.
+        console.warn('Rollup excerpt filter failed, falling back:', error.message);
+        const fb = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').eq('linked_client_id', clientId).order('date', { ascending: false }).limit(500);
+        if (fb.error) { console.error('Rollup excerpt load failed:', fb.error.message); return []; }
+        rows = fb.data;
+    }
+    const out = [];
+    (rows || []).forEach((m) => {
+        (Array.isArray(m.piece_links) ? m.piece_links : []).forEach((l) => {
+            if (l && wanted.has(String(l.targetId))) out.push({ messageId: m.id, subject: m.subject, sender: m.sender, date: m.date, link: l });
+        });
+    });
+    return out;
+}
+
+// One block listing everything linked from email: whole emails, then excerpts and attachments. Shared by the
+// request window, the request detail drawer, and the rolled-up sections.
+export async function renderEmailLinksInto(container, clientId, kind, id) {
+    if (!container) return;
+    container.innerHTML = '<span class="tiny muted">Loading…</span>';
+    const [emails, pieces] = await Promise.all([loadRollupEmails(clientId, kind, id), loadRollupPieces(clientId, kind, id)]);
+    const wholeIds = new Set(emails.map((m) => String(m.id)));
+    const whole = emails.map((m) => `
+        <div style="padding:6px 8px; background:rgba(168,85,247,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer;" onclick="OL.openGmailMessageModal('${esc(m.id)}')">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="mail" style="width:11px;height:11px;color:#a855f7;flex-shrink:0;"></i>
+                <strong class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject || 'No Subject')}</strong>
+                <span class="tiny muted" style="flex-shrink:0;">${m.date ? esc(new Date(m.date).toLocaleDateString()) : ''}</span>
+                <span class="pill tiny soft" style="font-size:9px;">whole email</span>
+            </div>
+            ${(m.note || m.snippet) ? `<div class="tiny muted" style="margin-top:4px; max-height:60px; overflow:hidden; white-space:pre-wrap;">${esc(m.note || m.snippet)}</div>` : ''}
+        </div>`);
+    const bits = pieces.map((p) => {
+        const l = p.link, isAtt = l.kind === 'attachment';
+        const body = isAtt ? (l.attachmentName || l.text || 'Attachment') : (l.text || '');
+        return `
+        <div style="padding:6px 8px; background:rgba(56,189,248,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer;" onclick="OL.openGmailMessageModal('${esc(p.messageId)}')">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="${isAtt ? 'paperclip' : 'quote'}" style="width:11px;height:11px;color:#38bdf8;flex-shrink:0;"></i>
+                <strong class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.subject || 'No Subject')}</strong>
+                <span class="tiny muted" style="flex-shrink:0;">${p.date ? esc(new Date(p.date).toLocaleDateString()) : ''}</span>
+                <span class="pill tiny soft" style="font-size:9px;">${isAtt ? 'attachment' : 'excerpt'}${l.targetType && String(l.targetId) !== String(id) ? ` on ${esc(l.targetType)}` : ''}</span>
+            </div>
+            <div class="tiny" style="margin-top:4px; max-height:72px; overflow:hidden; white-space:pre-wrap;">${esc(body)}</div>
+            ${l.note ? `<div class="tiny muted" style="margin-top:2px;">${esc(l.note)}</div>` : ''}
+        </div>`;
+    });
+    container.innerHTML = (whole.length || bits.length)
+        ? `<div style="display:grid; gap:4px;">${whole.join('')}${bits.join('')}</div>`
+        : '<span class="tiny muted">None.</span>';
+    if (window.lucide) lucide.createIcons();
+}
+
+// A self-contained section for the request window: fills itself in once it is on the page.
+export function requestEmailsSectionHtml(clientId, requestId) {
+    return `
+    <div style="margin-bottom:16px;">
+        <label class="tiny muted" style="font-size:10px; font-weight:600;">Emails linked to this request</label>
+        <div id="request-email-links-${esc(String(requestId))}" style="margin-top:4px;"><span class="tiny muted">Loading…</span></div>
+    </div>`;
+}
+export function hydrateRequestEmailsSection(clientId, requestId) {
+    const box = document.getElementById(`request-email-links-${requestId}`);
+    if (box) renderEmailLinksInto(box, clientId, 'request', requestId);
+}
+
 const fromPill = (clientId, r) => r.taskId
     ? `<span class="pill tiny soft" style="font-size:9px; cursor:pointer; flex-shrink:0;" onclick="event.stopPropagation(); OL.openTaskInContext('${esc(clientId)}', '${esc(String(r.taskId))}')" title="Open the task this came from">↳ ${esc(r.taskTitle)}</span>`
     : `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">↳ ${esc(r.taskTitle || '')}</span>`;
@@ -129,7 +218,7 @@ export function renderRollupSection(clientId, kind, id) {
                 </div>`).join('') : '<span class="tiny muted">None.</span>'}
         </div>
 
-        <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Linked emails</div>
+        <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Linked emails, excerpts and attachments</div>
         <div class="rollup-emails" style="display:grid; gap:4px; margin-bottom:10px;"><span class="tiny muted">Loading…</span></div>
 
         <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Comments (${comments.length})</div>
@@ -150,26 +239,7 @@ export function renderRollupSection(clientId, kind, id) {
 export async function hydrateRollupSection(clientId, kind, id) {
     const box = document.querySelector(`#rollup-${kind}-${CSS.escape(String(id))} .rollup-emails`);
     if (!box) return;
-    const emails = await loadRollupEmails(clientId, kind, id);
-    const titleFor = (m) => {
-        if (m.linked_task_id) { const t = taskById(clientId, m.linked_task_id); if (t) return { taskId: t.id, taskTitle: t.title || t.name }; }
-        return { taskTitle: kind === 'request' ? 'this request' : kind === 'resource' ? 'this resource' : 'this task' };
-    };
-    box.innerHTML = emails.length ? emails.map((m) => {
-        const src = titleFor(m);
-        const note = m.note_html ? OL.sanitizeCommentHtml(m.note_html) : esc(m.note || m.snippet || '');
-        return `
-        <div style="padding:6px 8px; background:rgba(168,85,247,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer;" onclick="OL.openGmailMessageModal('${esc(m.id)}')">
-            <div style="display:flex; align-items:center; gap:6px;">
-                <i data-lucide="mail" style="width:11px;height:11px;color:#a855f7;flex-shrink:0;"></i>
-                <strong class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject || 'No Subject')}</strong>
-                <span class="tiny muted" style="flex-shrink:0;">${m.date ? esc(new Date(m.date).toLocaleDateString()) : ''}</span>
-                ${fromPill(clientId, src)}
-            </div>
-            ${note ? `<div class="tiny muted ol-richtext-view" style="margin-top:4px; max-height:90px; overflow:hidden; ${m.note_html ? '' : 'white-space:pre-wrap;'}">${note}</div>` : ''}
-        </div>`;
-    }).join('') : '<span class="tiny muted">None.</span>';
-    if (window.lucide) lucide.createIcons();
+    await renderEmailLinksInto(box, clientId, kind, id);
 }
 
-Object.assign(window.OL, { collectRollup, renderRollupSection, hydrateRollupSection, loadRollupEmails, rollupScope });
+Object.assign(window.OL, { collectRollup, renderRollupSection, hydrateRollupSection, loadRollupEmails, loadRollupPieces, renderEmailLinksInto, requestEmailsSectionHtml, hydrateRequestEmailsSection, rollupScope });
