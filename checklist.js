@@ -45,19 +45,34 @@
             .catch(function () { return 'We could not save that. Please check your connection and try again.'; });
     }
 
+    // Approve the whole checklist. Resolves with { error } or { approvedAt }.
+    function approve() {
+        return fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ t: token, approve: true }) })
+            .then(function (res) {
+                return res.json().catch(function () { return {}; }).then(function (body) {
+                    if (res.ok) return { approvedAt: (body && body.approvedAt) || new Date().toISOString() };
+                    return { error: (body && body.message) || 'We could not save that. Please try again.' };
+                });
+            })
+            .catch(function () { return { error: 'We could not save that. Please check your connection and try again.' }; });
+    }
+
     function render(data) {
         var answers = {};
         Object.keys(data.answers || {}).forEach(function (k) {
             var a = data.answers[k] || {};
             if (a.result === 'pass' || a.result === 'fail') answers[k] = { result: a.result, note: String(a.note || '') };
         });
-        var totals = { steps: 0 };
+        var totals = { steps: 0, answerable: 0 };
+        var approval = { at: data.approvedAt || '', refresh: function () {} };
         var progress = el('div', 'muted', '');
         progress.id = 'progress';
         function updateProgress() {
             var reviewed = 0, fails = 0;
             Object.keys(answers).forEach(function (k) { reviewed++; if (answers[k].result === 'fail') fails++; });
             progress.textContent = reviewed + ' of ' + totals.steps + ' reviewed' + (fails ? ' | ' + fails + ' need' + (fails === 1 ? 's' : '') + ' attention' : '');
+            if (fails) approval.at = '';          // a Fail takes an earlier approval back
+            approval.refresh();
         }
 
         var nodes = [];
@@ -91,6 +106,7 @@
                 item.appendChild(body);
 
                 if (step.id) {
+                    totals.answerable++;
                     var id = step.id;
                     var controls = el('div', 'controls');
                     var passBtn = el('button', 'choice pass', 'Pass'); passBtn.type = 'button';
@@ -152,6 +168,40 @@
             card.appendChild(list);
             nodes.push(card);
         });
+        // ---- approval: available once every item is a Pass ----
+        var approveCard = el('div', 'card');
+        var approveTitle = el('h2', '', 'Approve');
+        var approveText = el('p', 'muted', '');
+        var approveBtn = el('button', 'send', 'Approve: everything works'); approveBtn.type = 'button';
+        var approveStatus = el('div', 'status muted');
+        approveCard.appendChild(approveTitle); approveCard.appendChild(approveText); approveCard.appendChild(approveBtn); approveCard.appendChild(approveStatus);
+        var approving = false;
+        approval.refresh = function () {
+            var reviewed = 0, fails = 0;
+            Object.keys(answers).forEach(function (k) { reviewed++; if (answers[k].result === 'fail') fails++; });
+            var ready = totals.answerable > 0 && reviewed >= totals.answerable && !fails;
+            if (approval.at) {
+                approveText.textContent = 'Thank you. You approved this on ' + niceDate(approval.at) + '. If you find anything else, mark it Fail above and we will fix it.';
+                approveBtn.style.display = 'none';
+            } else {
+                approveText.textContent = ready
+                    ? 'You have passed every item. If you are happy with everything, approve it and we will wrap up this round.'
+                    : 'When every item is marked Pass, you can approve this round here.';
+                approveBtn.style.display = '';
+                approveBtn.disabled = approving || !ready;
+            }
+        };
+        approveBtn.addEventListener('click', function () {
+            if (approving) return;
+            approving = true; approveStatus.textContent = 'Saving...'; approveStatus.className = 'status muted'; approval.refresh();
+            approve().then(function (r) {
+                approving = false;
+                if (r.error) { approveStatus.textContent = r.error; approveStatus.className = 'status problem'; }
+                else { approval.at = r.approvedAt; approveStatus.textContent = ''; }
+                approval.refresh();
+            });
+        });
+        nodes.push(approveCard);
         updateProgress();
         show(nodes);
     }

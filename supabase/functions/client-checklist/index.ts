@@ -5,6 +5,7 @@
 //                 The page (checklist.html on your site) opens from a private link in the review email.
 //                 The link carries an unguessable token.
 //                   GET  ?t=<token>            returns that one checklist, with any answers already given
+//                   POST {t, approve: true}          approves the whole checklist, once every step is a Pass
 //                   POST {t, stepId, result, note}   saves the client's Pass or Fail for one step (a Fail
 //                                                    needs a note saying what went wrong)
 //                 (Supabase does not serve web pages from functions, so the page itself is a static
@@ -65,6 +66,32 @@ serve(async (req) => {
 
       const token = String(body?.t || "");
       if (!TOKEN_RE.test(token)) return notFound();
+
+      // ---- the client approves the whole checklist ----
+      // Only once every step in it has been answered Pass (no Fail, nothing left blank). Approval is
+      // stored on the checklist row; a Fail given afterwards takes it back (see below).
+      if (body?.approve === true) {
+        const { data: chk, error: chkErr } = await supabase
+          .from("client_checklists").select("client_id, sections, revoked").eq("token", token).maybeSingle();
+        if (chkErr) { console.error("client-checklist lookup failed:", chkErr.message); return json({ error: "server_error" }, 500); }
+        if (!chk || chk.revoked) return notFound();
+        const stepIds: string[] = (Array.isArray(chk.sections) ? chk.sections : [])
+          .flatMap((sec: any) => (Array.isArray(sec?.steps) ? sec.steps : []).map((st: any) => st?.id).filter(Boolean));
+        const { data: given } = await supabase.from("client_checklist_results").select("step_id, result").eq("token", token);
+        const passed = new Set((given || []).filter((a: any) => a.result === "pass").map((a: any) => a.step_id));
+        const anyFail = (given || []).some((a: any) => a.result === "fail");
+        if (!stepIds.length || anyFail || !stepIds.every((id) => passed.has(id))) {
+          return json({ error: "not_ready", message: "Please mark every item Pass before approving." }, 400);
+        }
+        const approvedAt = new Date().toISOString();
+        const { error: apErr } = await supabase.from("client_checklists").update({ approved_at: approvedAt }).eq("token", token);
+        if (apErr) {
+          console.error("client-checklist approve failed:", apErr.message);
+          return json({ error: "approval_unavailable", message: "Approval is not switched on yet. Please email us instead." }, 501);
+        }
+        return json({ ok: true, approvedAt });
+      }
+
       const stepId = String(body?.stepId || "");
       const result = String(body?.result || "");
       if (!STEP_RE.test(stepId) || (result !== "pass" && result !== "fail")) return json({ error: "bad_request", message: "A step and a Pass or Fail are required." }, 400);
@@ -89,6 +116,8 @@ serve(async (req) => {
         ingested_at: result === "pass" ? now : null,   // a Fail waits for the app to open its task
       }, { onConflict: "token,step_id" });
       if (saveErr) { console.error("client-checklist save failed:", saveErr.message); return json({ error: "server_error" }, 500); }
+      // A Fail after approving means it is no longer approved. (Ignored if approval isn't set up yet.)
+      if (result === "fail") { await supabase.from("client_checklists").update({ approved_at: null }).eq("token", token); }
       return json({ ok: true });
     }
 
@@ -112,7 +141,13 @@ serve(async (req) => {
     const answers: Record<string, { result: string; note: string }> = {};
     (answerRows || []).forEach((a: any) => { answers[a.step_id] = { result: a.result, note: a.note || "" }; });
 
+    // Kept as its own read so the checklist keeps working before approval is switched on.
+    let approvedAt: string | null = null;
+    const ap = await supabase.from("client_checklists").select("approved_at").eq("token", token).maybeSingle();
+    if (!ap.error) approvedAt = ap.data?.approved_at || null;
+
     return json({
+      approvedAt,
       clientName: data.client_name,
       round: data.round,
       reviewStart: data.review_start,

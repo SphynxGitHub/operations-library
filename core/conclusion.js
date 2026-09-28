@@ -280,6 +280,8 @@ export function closeReview(client, key, ctx) {
         const t = pd.clientTasks.find((x) => x.id === id);
         if (t && !isTaskClosed(t, closed)) { t.status = closed[0]; t.completedAt = ctx.now; t.cancelledAt = ctx.now; }
     });
+    const approvedTask = st.approvedTaskId ? pd.clientTasks.find((x) => x.id === st.approvedTaskId) : null;
+    if (approvedTask && !isTaskClosed(approvedTask, closed)) { approvedTask.status = closed[0]; approvedTask.completedAt = ctx.now; }
     st.status = 'closed'; st.closedAt = ctx.now;
     return { state: st, marked };
 }

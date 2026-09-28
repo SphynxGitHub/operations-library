@@ -99,3 +99,40 @@ export function applyClientFeedback(client, rows, ctx) {
     });
     return out;
 }
+
+
+// The client's overall approval of a checklist (client_checklists.approved_at, set by the client's Approve
+// button once every step is a Pass). approvals: [{ token, approved_at }]. For each review in progress: a new
+// approval is recorded on the round and a task appears for the Communication person to close the review; an
+// approval the client has since taken back (by failing a step) is removed and its task cancelled. Returns
+// the round keys that changed. Closing the review itself stays a person's decision. ctx: { roles, closedNames, uid, now }
+export function applyClientApproval(client, approvals, ctx) {
+    const changed = [];
+    const pd = client?.projectData;
+    if (!pd) return changed;
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    const closed = ctx.closedNames && ctx.closedNames.length ? ctx.closedNames : ['Done'];
+    inReview(pd).forEach((st) => {
+        const row = (approvals || []).find((a) => a.token === st.checklistToken);
+        const at = row && row.approved_at ? String(row.approved_at) : '';
+        if (at && !st.clientApprovedAt) {
+            st.clientApprovedAt = at;
+            const task = {
+                id: ctx.uid(), title: `Client approved Round ${st.round}: close the review`, name: `Client approved Round ${st.round}: close the review`,
+                description: 'The client has passed every item and approved this round. Check nothing else is open on it, then close the review from the Scoping Sheet.',
+                status: 'Pending Sphynx Action', assignee: assigneeForRole(client, ctx.roles, /communicat/i), dueDate: String(ctx.now || '').slice(0, 10),
+                isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'conclusion', createdAt: ctx.now, reviewApprovedKey: st.key,
+            };
+            pd.clientTasks.unshift(task);
+            st.approvedTaskId = task.id;
+            changed.push(st.key);
+        } else if (!at && st.clientApprovedAt) {
+            delete st.clientApprovedAt;
+            const t = pd.clientTasks.find((x) => x.id === st.approvedTaskId);
+            if (t && !closed.includes(t.status)) { t.status = closed[0]; t.cancelledAt = ctx.now; }
+            delete st.approvedTaskId;
+            changed.push(st.key);
+        }
+    });
+    return changed;
+}

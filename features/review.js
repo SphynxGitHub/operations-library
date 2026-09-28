@@ -15,7 +15,7 @@ import {
 } from '../core/conclusion.js';
 import { isRoundApproved } from '../core/requests.js';
 import { buildChecklistPdf } from '../core/checklist-pdf.js';
-import { applyClientFeedback, feedbackNeedsUpdate } from '../core/review-feedback.js';
+import { applyClientFeedback, feedbackNeedsUpdate, applyClientApproval } from '../core/review-feedback.js';
 
 const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm';
 
@@ -70,7 +70,10 @@ export function roundStatusHtml(client, sheet, round, isCurrent = true) {
     if (s.kind === 'in_review') {
         const cr = s.state && s.state.clientReview;
         const allPassed = !!(cr && cr.total && cr.reviewed >= cr.total && !cr.failed);
-        const seen = cr && cr.total
+        const approved = s.state && s.state.clientApprovedAt;
+        const seen = approved
+            ? pill(`✅ Client approved ${String(s.state.clientApprovedAt).slice(0, 10)}`, '#22c55e')
+            : cr && cr.total
             ? (allPassed
                 ? pill('✅ Client passed every step', '#22c55e')
                 : `<span class="tiny muted" style="margin-left:8px;">Client reviewed ${cr.reviewed}/${cr.total}${cr.failed ? `, ${cr.failed} issue${cr.failed === 1 ? '' : 's'}` : ''}</span>`)
@@ -298,7 +301,17 @@ export async function pullClientReviewFeedback() {
         const tokens = reviewing.flatMap((c) => Object.values(c.projectData.roundStates).filter((st) => st.status === 'in_review' && st.checklistToken).map((st) => st.checklistToken));
         const { data: rows, error } = await db.from('client_checklist_results').select('*').in('token', tokens);
         if (error) { console.warn('Client review answers could not be read:', error.message); return result; }
+        // The client's overall approval (client_checklists.approved_at). Read on its own so everything else keeps
+        // working before the column exists.
+        let approvals = [];
+        try {
+            const ap = await db.from('client_checklists').select('token, approved_at').in('token', tokens);
+            if (!ap.error) approvals = ap.data || [];
+        } catch (e) { /* approval not switched on yet */ }
         for (const client of reviewing) {
+            let approvalChanged = [];
+            await updateAndSync(() => { approvalChanged = applyClientApproval(client, approvals, { ...contextFor(), now: new Date().toISOString() }); }, client.id);
+            if (approvalChanged.length) { result.projects++; refreshScopingIfOpen(); }
             if (!feedbackNeedsUpdate(client, rows || [])) continue;
             let applied = null;
             await updateAndSync(() => { applied = applyClientFeedback(client, rows || [], { ...contextFor(), now: new Date().toISOString() }); }, client.id);
