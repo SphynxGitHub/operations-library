@@ -121,6 +121,32 @@ OL.reRenderPreservingFocus = function(renderFn) {
 // -------------------------------------------------------------
 // 1. UNIFIED CLIENT FEED VIEW (GMAIL MESSAGES SYNCED INTO SUPABASE)
 // -------------------------------------------------------------
+// Collapses a list of messages down to the most recent one per thread (thread_id — a message with no
+// thread_id is its own thread). The representative carries the rest as olThreadOlder, oldest first, so a row
+// can expand in place instead of the whole thread re-rendering as separate list rows every time.
+OL._expandedThreads = OL._expandedThreads || {};
+function collapseToLatestPerThread(list) {
+    const byThread = new Map();
+    (list || []).forEach((m) => {
+        const key = m.thread_id || ('_solo_' + m.id);
+        if (!byThread.has(key)) byThread.set(key, []);
+        byThread.get(key).push(m);
+    });
+    const out = [];
+    byThread.forEach((msgs) => {
+        const sorted = msgs.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        const latest = sorted[0];
+        latest.olThreadOlder = sorted.slice(1).reverse();   // oldest first, for reading order when expanded
+        out.push(latest);
+    });
+    return out.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+OL.toggleThreadExpanded = function(threadKey) {
+    OL._expandedThreads[threadKey] = !OL._expandedThreads[threadKey];
+    OL.renderBusinessCommunications();
+};
+
 OL.renderCommFeedView = function(commsData, clients) {
     const isConnected = commsData.gmail?.connected || state.master?.googleConnected || false;
     const allThreads = commsData.threads || [];
@@ -153,6 +179,7 @@ OL.renderCommFeedView = function(commsData, clients) {
 
         return matchesQuery && matchesLinks && matchesProject && matchesDate;
     });
+    const collapsedThreads = collapseToLatestPerThread(threads);
 
     return `
         <div class="card" style="padding: 20px;">
@@ -220,12 +247,12 @@ OL.renderCommFeedView = function(commsData, clients) {
                 <div class="tiny muted">Channels: <strong style="color:${isConnected ? '#22c55e' : 'var(--muted)'};">${isConnected ? '● Gmail Active' : '○ Gmail Offline'}</strong></div>
             </div>
 
-            ${threads.length === 0 ? `
+            ${collapsedThreads.length === 0 ? `
                 <div style="text-align:center; padding: 40px; color: var(--muted);">
                     <i data-lucide="inbox" style="width:36px;height:32px;margin-bottom:8px;opacity:0.5;"></i>
                     <div>${isConnected ? (OL.commTabState.showArchived ? 'No archived emails.' : 'No emails match these filters.') : 'Connect your Google account under Gmail Settings to stream real emails.'}</div>
                 </div>
-            ` : (groupBy === 'none' ? OL.renderCommThreadRows(threads) : OL.renderGroupedCommThreads(threads, groupBy, subGroupBy))}
+            ` : (groupBy === 'none' ? OL.renderCommThreadRows(collapsedThreads) : OL.renderGroupedCommThreads(collapsedThreads, groupBy, subGroupBy))}
         </div>
     `;
 };
@@ -278,9 +305,34 @@ OL.renderCommThreadRow = function(m) {
     const parsedSender = OL._parseSenderHeader(m.sender);
     const senderName = parsedSender?.name || m.sender || 'Unknown';
     const senderEmail = parsedSender?.email || '';
+    const older = m.olThreadOlder || [];
+    const threadKey = m.thread_id || m.id;
+    const expanded = !!OL._expandedThreads[threadKey];
+
+    if (older.length) {
+        // Show the latest message's own row, then — only if expanded — the rest of the thread as smaller,
+        // read-only rows right beneath it. Collapsed, it's one row with a toggle, not the whole chain.
+        return `
+            ${OL.renderCommThreadRow.single(m)}
+            <div style="margin: -4px 0 2px 48px;">
+                <button class="btn tiny soft" style="font-size:10px;" onclick="OL.toggleThreadExpanded('${esc(threadKey)}')">
+                    <i data-lucide="${expanded ? 'chevron-up' : 'chevron-down'}" style="width:10px;height:10px;"></i>
+                    ${expanded ? 'Hide' : 'Show'} ${older.length} earlier email${older.length === 1 ? '' : 's'} in this thread
+                </button>
+                ${expanded ? `<div style="display:grid; gap:6px; margin-top:6px;">${older.map((o) => OL.renderCommThreadRow.single(o, true)).join('')}</div>` : ''}
+            </div>
+        `;
+    }
+    return OL.renderCommThreadRow.single(m);
+};
+
+OL.renderCommThreadRow.single = function(m, muted = false) {
+    const parsedSender = OL._parseSenderHeader(m.sender);
+    const senderName = parsedSender?.name || m.sender || 'Unknown';
+    const senderEmail = parsedSender?.email || '';
 
     return `
-        <div style="display:grid; grid-template-columns: 38px 76px 160px minmax(0,1fr) 118px; gap: 10px; padding: 12px; background: ${OL.bulkEmailSelection?.[m.id] ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid var(--line); border-radius: 6px; align-items:center;">
+        <div style="display:grid; grid-template-columns: 38px 76px 160px minmax(0,1fr) 118px; gap: 10px; padding: ${muted ? '8px 12px' : '12px'}; background: ${OL.bulkEmailSelection?.[m.id] ? 'rgba(168,85,247,0.08)' : (muted ? 'transparent' : 'rgba(255,255,255,0.02)')}; border: 1px solid var(--line); border-radius: 6px; align-items:center; ${muted ? 'opacity:0.75; font-size:11px;' : ''}">
             <div style="display:flex; align-items:center; justify-content:center; gap:6px;" title="Select">
                 ${OL.renderEmailSelectCheckbox ? OL.renderEmailSelectCheckbox(m) : ''}
                 <i data-lucide="mail" style="width:14px;height:14px; color:var(--accent);"></i>
