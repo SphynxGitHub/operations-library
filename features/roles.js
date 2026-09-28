@@ -21,10 +21,10 @@
 //        - Communication and Testing tasks are identified by how the app
 //          itself tags them when it generates them (see taskCompRoleId).
 //        - Everything else Sphynx-side counts as Implementation.
-//        - Sales and Scoping have no task trail to roll up (that work
-//          happens before a round exists), so those two still show the
-//          single project-level default person at 100% — worth a second
-//          pass once there's a way to track that work too.
+//        - Sales and Scoping have no task trail (that work happens before a
+//          round exists), so they follow the person assigned on each request
+//          (request window > Roles, falling back to the project default),
+//          weighted by each request's fee.
 //      The role's cut of the round's fee is still governed by that
 //      role's default % (state.master.roles) — splitting THAT more
 //      finely is a later step (see openRoundRoleAssignmentsModal's note).
@@ -252,24 +252,59 @@ function tasksInRound(client, sheet, round) {
     return out;
 }
 
+// The billable requests in the round (Do Now, Sphynx/Joint) with their fee — the basis for splitting
+// Sales and Scoping between whoever is assigned to each request.
+function billableRoundRequests(sheet, round) {
+    return (sheet?.lineItems || []).filter((item) => {
+        if (!item || roundOf(item) !== Number(round)) return false;
+        const status = String(item.status || '').toLowerCase().trim();
+        const party = String(item.responsibleParty || '').toLowerCase().trim();
+        return status === 'do now' && (party === 'sphynx' || party === 'joint');
+    }).map((item) => {
+        const res = typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId) : null;
+        const fee = (typeof OL.calculateRowFee === 'function' ? OL.calculateRowFee(item, res) : 0) || 0;
+        return { item, fee };
+    });
+}
+
 // The actual rollup: for every role, who's covering it this round and
 // what share of that role's dollar cut each of them earns.
+//   - Sales / Scoping: from the person assigned on each request (falling
+//     back to the project default), weighted by that request's fee.
+//   - Communication / Implementation / Testing: from who is actually
+//     assigned to the round's tasks. Where there are no tasks yet, the
+//     people assigned on the requests are shown as "planned" (no dollars).
 export function computeRoundRoleTracking(client, sheet, round) {
     const roles = getRoles();
     const fee = roundApprovedFee(client, sheet, round);
     const tasks = tasksInRound(client, sheet, round);
     const defaults = client.projectData?.roleAssignments || [];
+    const requests = billableRoundRequests(sheet, round);
+
+    const personFor = (role, item) => {
+        const own = String(item?.roleAssignments?.[role.id] || '').trim();
+        if (own) return own;
+        return (defaults.find((a) => a.roleId === role.id) || {}).memberName || '';
+    };
 
     return roles.map(role => {
         const amount = fee ? fee * Number(role.defaultPercent || 0) / 100 : null;
 
         if (MANUAL_ONLY_ROLES.includes(role.id)) {
-            const defaultAssignment = defaults.find(a => a.roleId === role.id);
-            const name = defaultAssignment?.memberName || '';
-            return {
-                role, amount, autoTracked: false,
-                people: name ? [{ name, count: 0, share: 1, amount }] : [],
-            };
+            const totalFee = requests.reduce((s, r) => s + r.fee, 0);
+            const weights = {};
+            let unassigned = 0;
+            requests.forEach(({ item, fee: f }) => {
+                const name = personFor(role, item);
+                if (!name) { unassigned++; return; }
+                weights[name] = (weights[name] || 0) + (totalFee ? f : 1);
+            });
+            const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+            const people = Object.entries(weights).map(([name, w]) => {
+                const share = totalWeight ? w / totalWeight : 0;
+                return { name, count: 0, share, amount: amount !== null ? amount * share : null };
+            }).sort((a, b) => b.share - a.share);
+            return { role, amount, autoTracked: false, fromRequests: true, unassigned, people };
         }
 
         const roleTasks = tasks.filter(t => taskCompRoleId(t) === role.id);
@@ -286,7 +321,8 @@ export function computeRoundRoleTracking(client, sheet, round) {
             return { name, count, share, amount: amount !== null ? amount * share : null };
         }).sort((a, b) => b.share - a.share);
 
-        return { role, amount, autoTracked: true, totalTasks: total, unassigned, people };
+        const planned = total ? [] : [...new Set(requests.map(({ item }) => personFor(role, item)).filter(Boolean))];
+        return { role, amount, autoTracked: true, totalTasks: total, unassigned, people, planned };
     });
 }
 
@@ -313,8 +349,8 @@ export function openRoundRoleAssignmentsModal(clientId, sheetId, round) {
             </div>
             <p class="tiny muted" style="margin-bottom:14px;">
                 Internal view only — not shown to the client or partner. Communication, Implementation and
-                Testing are auto-tracked from who's actually assigned to this round's tasks; Sales and Scoping
-                still show the project's default person until there's a way to track that work too. Each role's
+                Testing follow who's actually assigned to this round's tasks. Sales and Scoping follow who's
+                assigned on each request (set in the request window), weighted by the request's fee. Each role's
                 % of the round is still the master default for now (Comp Roles) — splitting that more finely per
                 round is a later step.
             </p>
@@ -331,10 +367,14 @@ function renderRoundRoleSection(t) {
     let body;
     if (!t.autoTracked) {
         body = t.people.length
-            ? `<div class="tiny">${esc(t.people[0].name)} — 100% (${amountText}) <span class="tiny muted">— project default, not yet auto-tracked</span></div>`
-            : `<div class="tiny muted">No default person set for this role.</div>`;
+            ? t.people.map((p) => `
+                <div class="tiny" style="display:flex; justify-content:space-between; gap:8px;">
+                    <span>${esc(p.name)} — ${(p.share * 100).toFixed(0)}% of the round's requests</span>
+                    <span class="muted">${p.amount !== null ? `$${p.amount.toFixed(2)}` : ''}</span>
+                </div>`).join('') + (t.unassigned ? `<div class="tiny muted" style="margin-top:2px;">${t.unassigned} request${t.unassigned === 1 ? '' : 's'} with no one assigned, not counted.</div>` : '')
+            : `<div class="tiny muted">No one assigned on this round's requests, and no project default set.</div>`;
     } else if (!t.totalTasks) {
-        body = `<div class="tiny muted">No ${esc(t.role.name.toLowerCase())} tasks in this round yet.</div>`;
+        body = `<div class="tiny muted">No ${esc(t.role.name.toLowerCase())} tasks in this round yet.${t.planned && t.planned.length ? ` Planned on the requests: ${esc(t.planned.join(', '))}.` : ''}</div>`;
     } else {
         body = t.people.map(p => `
             <div class="tiny" style="display:flex; justify-content:space-between; gap:8px;">
