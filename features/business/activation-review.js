@@ -15,6 +15,7 @@
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES } from '../../core/activation.js';
+import { findFirstAvailableDate } from '../../core/scheduling.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
@@ -33,6 +34,11 @@ OL.openActivationReview = async function(clientId, itemId) {
     const resources = requestResourceIds(item).map((id) => lookup(id)).filter(Boolean);
     const requestType = item.requestType || 'build';
     const askTemplates = (state.master.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
+    // Scoped to this client — calendar events are already client-linked
+    // (features/business/calendar.js), and a task's own project is the
+    // only pool that matters for its queued-hours load.
+    const calendarEvents = (state.master?.googleCalendarEvents || []).filter((e) => e.linked_client_id === clientId);
+    const existingTasks = client.projectData?.clientTasks || [];
 
     const plan = buildActivationPlan({
         item, resources, requestType,
@@ -40,10 +46,10 @@ OL.openActivationReview = async function(clientId, itemId) {
         askTemplates,
         client, roles: state.master.roles || [],
         assigneeByType: state.master.assigneeByType || {},   // assignee_by_type.sql — suggestAssignee falls back to role-matching when empty
-        uid,
+        uid, calendarEvents, existingTasks,
     });
 
-    OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan };
+    OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan, calendarEvents, existingTasks };
     OL.renderActivationReviewStep();
 };
 
@@ -56,11 +62,16 @@ function rowHTML(st, row) {
                 <div style="font-size:13px;">${esc(row.title)}${row.resourceName ? ` <span class="tiny muted">· ${esc(row.resourceName)}</span>` : ''}</div>
                 ${isAsk && row.instructions ? `<div class="tiny muted" style="margin-top:2px;">${esc(row.instructions)}</div>` : ''}
                 ${!isAsk ? `
-                    <div style="margin-top:4px;">
+                    <div style="margin-top:4px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                         <input type="text" class="tiny modal-input" value="${esc(row.assignee || '')}" placeholder="Assignee"
-                               style="width:180px; padding:3px 6px;"
+                               style="width:160px; padding:3px 6px;"
                                onchange="OL.setActivationRowAssignee('${row.id}', this.value)">
+                        <input type="date" class="tiny modal-input" value="${esc(row.dueDate || '')}"
+                               style="width:150px; padding:3px 6px;"
+                               onchange="OL.setActivationRowDueDate('${row.id}', this.value)">
+                        <span class="tiny" style="color:${row.estimatedHours ? 'var(--text-muted, #94a3b8)' : 'inherit'};">${row.estimatedHours ? `est. ${row.estimatedHours}h` : ''}</span>
                     </div>
+                    ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next 2 weeks — pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}
             </div>
@@ -115,8 +126,24 @@ OL.setActivationRowAssignee = function(rowId, value) {
     const row = st?.plan.find((r) => r.id === rowId);
     if (!row) return;
     row.assignee = value;
-    // No re-render here — the input already shows what was typed, and
-    // re-rendering while someone is still typing would steal focus.
+    // A different assignee has a different schedule — the old
+    // auto-suggested date belonged to the previous person, so it's
+    // recomputed here rather than left stale. This does need a re-render
+    // (the date field's value changes), unlike a plain text edit.
+    if (row.kind === 'implementation' && st) {
+        const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: value, estimatedHours: row.estimatedHours });
+        row.dueDate = slot.date;
+        row.dueDateReason = slot.date ? null : slot.reason;
+        OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
+    }
+};
+
+OL.setActivationRowDueDate = function(rowId, value) {
+    const st = OL._activationReviewState;
+    const row = st?.plan.find((r) => r.id === rowId);
+    if (!row) return;
+    row.dueDate = value;
+    row.dueDateReason = null;   // a manually picked date isn't "no capacity found" anymore, whatever it was before
 };
 
 // A manual addition — templateId stays null, which is exactly what
