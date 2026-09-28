@@ -1448,6 +1448,11 @@ OL.confirmExcerptCreateRequest = async function() {
         newItemId = 'reqline-' + Date.now();
         client.projectData.scopingSheets[0].lineItems.push({
             id: newItemId,
+            // Request-only lines need a synthetic 'reqline-' resourceId, the
+            // same as the Add Request modal gives them (see saveRequestLine
+            // in features/scoping.js). Without one, getResourceById can't
+            // resolve the line and the scoping sheet silently hides it.
+            resourceId: 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
             name: title,
             requestType: st.newRequestType || 'build',
             // Backlog, not Considering/round 1 — lands in the scoping
