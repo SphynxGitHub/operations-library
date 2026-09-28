@@ -14,27 +14,34 @@ import { deriveWorkStatus, testingPhaseFor, WORK_STATUS } from './work-status.js
 import { requestResourceIds } from './request-pricing.js';
 import { isMaintenanceSheet, MAINTENANCE_SHEET_ID } from './maintenance.js';
 
-// Shown until the editable list loads from the request_types table.
+// Shown until the editable list loads from the request_types table. Audit and Troubleshoot fold into Revise;
+// Meeting isn't a type someone picks any more — a meeting request comes directly from the booked calendar
+// event (see MEETING_TYPES in features/request-tasks.js and core/conclusion.js's Quickstart naming, neither of
+// which depend on this list). 'revision' is kept as the stored key so existing data and SOP templates
+// (core/activation.js, core/testing.js) don't need remapping — 'Revise' is just its label now.
 export const DEFAULT_REQUEST_TYPES = [
     { key: 'build',        label: 'Build' },
-    { key: 'revision',     label: 'Revision' },
-    { key: 'audit',        label: 'Audit' },
-    { key: 'troubleshoot', label: 'Troubleshoot' },
+    { key: 'revision',     label: 'Revise' },
     { key: 'training',     label: 'Training' },
-    { key: 'meeting',      label: 'Meeting' },
 ];
+// Old keys a request might still carry from before this consolidation, and what they fold into.
+export const CONSOLIDATED_REQUEST_TYPES = { audit: 'revision', troubleshoot: 'revision', meeting: 'build' };
 
-// Where a client's scoping sheet stands, from the go-ahead decision to approval.
-export const SHEET_STATUSES = [
-    'Awaiting Go-Ahead',
-    'Drafting',
-    'Presented',
-    'Revising',
-    'Confirming Final Scope',
-    'Approved',
-    'On Hold',
-    'Declined',
-];
+// Where a working round stands. Anything pre-approval collapses into Drafting — there's no separate
+// "presented to the client" or "revising the scope" state to track any more.
+export const SHEET_STATUSES = ['Drafting', 'Approved', 'On Hold', 'Declined'];
+// Old statuses a round might still carry from before this consolidation, and what they fold into.
+export const CONSOLIDATED_SHEET_STATUSES = { 'Awaiting Go-Ahead': 'Drafting', 'Presented': 'Drafting', 'Revising': 'Drafting', 'Confirming Final Scope': 'Drafting' };
+
+// A round's own status string (falls back to the sheet-wide legacy flag exactly like isRoundApproved does).
+// Used to decide whether a round is active enough for its client tasks to feed the consolidated follow-up —
+// Drafting and Approved both count; On Hold and Declined don't.
+export function roundStatusOf(sheet, round) {
+    const key = String(round);
+    const entry = sheet?.roundApprovals?.[key];
+    if (entry && entry.status) return entry.status;
+    return sheet?.status === 'Approved' ? 'Approved' : (sheet?.status || 'Drafting');
+}
 
 // The current round is the first APPROVED round that still has a Do Now item open.
 // isReal lets callers ignore lines that are not really on the sheet.

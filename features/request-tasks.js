@@ -12,7 +12,10 @@ import {
     PHASES, PHASE_LABELS,
 } from '../core/request-tasks.js';
 
-const MEETING_TYPES = ['meeting', 'training', 'audit'];
+// Which request types can link to a calendar meeting. 'meeting' and 'audit' aren't request types any more —
+// audit folded into 'revision' (a revision can still be linked to the meeting where it came up), and a meeting
+// itself is no longer created as a request at all; it comes directly from the booked calendar event.
+const MEETING_TYPES = ['training', 'revision'];
 
 function ctxFor() {
     const names = (state.master?.sphynxTeam || []).map((m) => m.name).concat(typeof OL !== 'undefined' ? (OL.thirdPartyAssignees || []) : []);

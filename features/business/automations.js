@@ -292,13 +292,13 @@ OL.commitRequestActivation = function(client, item, plan, { requestType, resourc
 };
 
 // ---- STARTER SOPs: a draft set of steps per request type, editable afterwards ----
+// Audit and Troubleshoot are folded into Revise, whose steps now cover both what they used to (diagnose/audit
+// the issue as part of confirming the change, fix it, confirm/review with the client). Meeting isn't a request
+// type any more — see core/requests.js.
 const STARTER_REQUEST_SOPS = [
-    { type: 'build',        label: 'Build',        steps: ['Confirm requirements', 'Build', 'Internal review', 'Deliver and hand off'] },
-    { type: 'revision',     label: 'Revision',     steps: ['Confirm the change', 'Make the change', 'Deliver'] },
-    { type: 'audit',        label: 'Audit',        steps: ['Run the audit', 'Write up findings', 'Review with client'] },
-    { type: 'troubleshoot', label: 'Troubleshoot', steps: ['Diagnose', 'Fix', 'Confirm with client'] },
-    { type: 'training',     label: 'Training',     steps: ['Prepare', 'Deliver session', 'Send recap'] },
-    { type: 'meeting',      label: 'Meeting',      steps: ['Prepare', 'Hold the meeting'] }
+    { type: 'build',        label: 'Build',   steps: ['Confirm requirements', 'Build', 'Internal review', 'Deliver and hand off'] },
+    { type: 'revision',     label: 'Revise',  steps: ['Diagnose or confirm the change', 'Make the change', 'Deliver and confirm with client'] },
+    { type: 'training',     label: 'Training', steps: ['Prepare', 'Deliver session', 'Send recap'] }
 ];
 
 OL.installStarterRequestSops = function() {

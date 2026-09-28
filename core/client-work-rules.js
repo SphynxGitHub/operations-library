@@ -30,7 +30,7 @@
 import { linksForTask, addLink } from './task-links.js';
 import { isTaskClosed, isClientWaitingStatus, isThirdPartyWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
-import { isRoundApproved, isActiveItem, getCurrentRound } from './requests.js';
+import { isRoundApproved, isActiveItem, getCurrentRound, roundStatusOf } from './requests.js';
 import { isOngoing } from './maintenance.js';
 import { state, uid } from './data.js';
 
@@ -66,6 +66,15 @@ function communicationAssignee(client, ctx) {
 
 const requestsOf = (client) => (client?.projectData?.scopingSheets || []).flatMap((s) => (s?.lineItems || []));
 const requestById = (client, id) => requestsOf(client).find((i) => i && String(i.id) === String(id)) || null;
+
+// A request's own round is "active for follow-up" only while its round is Drafting or Approved — On Hold and
+// Declined rounds don't chase the client for anything. Backlog items (no round yet) aren't active either.
+function requestIsFollowUpEligible(client, item) {
+    if (!item || isBlank(item.round)) return false;
+    const sheet = (client?.projectData?.scopingSheets || []).find((sh) => sh && (sh.lineItems || []).some((i) => i === item));
+    if (!sheet) return false;
+    return ['Drafting', 'Approved'].includes(roundStatusOf(sheet, item.round));
+}
 const requestTitle = (client, item) => (item && !isBlank(item.name) ? String(item.name).trim() : 'Request');
 const resourceName = (client, id) => {
     const r = (client?.projectData?.localResources || []).find((x) => String(x.id) === String(id));
@@ -210,6 +219,7 @@ export function openClientItems(client, ctx) {
             const item = l.requestId ? requestById(client, l.requestId) : null;
             if (!item) return;
             if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
+            if (!requestIsFollowUpEligible(client, item)) return;   // On Hold / Declined rounds don't chase the client
             const reqKey = l.requestId;
             if (!groups.has(reqKey)) groups.set(reqKey, { title: requestTitle(client, item), resources: new Map() });
             const g = groups.get(reqKey);
@@ -600,8 +610,13 @@ function labelFor(client, task) {
 export function followUpEmailData(client, ctx) {
     const all = client?.projectData?.clientTasks || [];
 
+    const clientAskEligible = (t) => {
+        const links = linksForTask(t);
+        if (!links.length) return true;   // not tied to a request (e.g. added directly from this window) — always eligible
+        return links.some((l) => { const item = l.requestId ? requestById(client, l.requestId) : null; return item && requestIsFollowUpEligible(client, item); });
+    };
     const clientAsks = all.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask)
-        && t.askKind !== 'follow_up' && isOpen(t, ctx))
+        && t.askKind !== 'follow_up' && isOpen(t, ctx) && clientAskEligible(t))
         .map((t) => ({ id: t.id, title: t.title || t.name || 'Task', description: (t.description || '').replace(/^For:\s*/, '').trim() }));
 
     const pendingReview = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')

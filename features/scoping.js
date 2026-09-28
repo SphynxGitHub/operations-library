@@ -8,7 +8,7 @@
 
 import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
 import { addLink } from '../core/task-links.js';
-import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES } from '../core/requests.js';
+import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 
@@ -1896,7 +1896,7 @@ export function openRequestLineModal(itemId) {
     const clientName = client.meta?.name || 'Client';
 
     const isReqLine = !item || String(item.resourceId || '').startsWith('reqline-');
-    const typeKey = item?.requestType || (isReqLine ? 'meeting' : 'build');
+    const typeKey = item?.requestType || 'build';   // 'meeting' is no longer a pickable default — it isn't a request type any more
     const shownTitle = item?.name || (!isReqLine ? (OL.getResourceById(item.resourceId)?.name || '') : '');
     const status = item?.status || 'Do Now';
     const party = item?.responsibleParty || 'Sphynx';
@@ -2054,7 +2054,7 @@ export function applyRequestFormToItem(item) {
     const status = read('rq-status') || item.status || 'Do Now';
     Object.assign(item, {
         ...(title ? { name: title } : {}),
-        requestType: read('rq-type') || item.requestType || 'meeting',
+        requestType: read('rq-type') || item.requestType || 'build',
         notes: read('rq-notes').trim(),
         status,
         responsibleParty: read('rq-party') || item.responsibleParty || 'Sphynx',
@@ -2141,6 +2141,55 @@ export async function setSheetStatus(newStatus) {
     });
 
     renderScopingSheet();
+}
+
+// ---- ONE-TIME MIGRATION: consolidated request types and round statuses ----
+// Request types: Audit and Troubleshoot fold into Revise; Meeting is no longer a type at all (a meeting
+// request now comes straight from the booked calendar event) and folds into Build. Round statuses: everything
+// before Approved (Awaiting Go-Ahead, Presented, Revising, Confirming Final Scope) folds into Drafting.
+// Rewrites every scoping line item's requestType and every round's status/sheet-wide status in place — nothing
+// about which requests exist, their rounds, or their approval changes; only the labels on old data move to
+// where they now live. Console-only, same shape as clearLegacySheetStatus:
+//   OL.consolidateTypesAndStatuses()                      // dry run, all clients
+//   OL.consolidateTypesAndStatuses(null, { apply: true }) // do it, all clients
+//   OL.consolidateTypesAndStatuses(['c-123'], { apply: true })
+export async function consolidateTypesAndStatuses(clientIds, { apply = false } = {}) {
+    const results = [];
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    for (const clientId of ids) {
+        if (typeof OL.loadFullClient === 'function') await OL.loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client?.projectData) continue;
+
+        const plan = { clientId, clientName: client.meta?.name, typesChanged: [], statusesChanged: [] };
+        const run = () => {
+            (client.projectData.scopingSheets || []).forEach((sheet) => {
+                if (!sheet) return;
+                (sheet.lineItems || []).forEach((item) => {
+                    const from = CONSOLIDATED_REQUEST_TYPES[item?.requestType];
+                    if (from) { plan.typesChanged.push({ item: item.id, from: item.requestType, to: from }); item.requestType = from; }
+                });
+                if (CONSOLIDATED_SHEET_STATUSES[sheet.status]) {
+                    plan.statusesChanged.push({ sheetId: sheet.id, scope: 'sheet-wide', from: sheet.status, to: CONSOLIDATED_SHEET_STATUSES[sheet.status] });
+                    sheet.status = CONSOLIDATED_SHEET_STATUSES[sheet.status];
+                }
+                Object.entries(sheet.roundApprovals || {}).forEach(([round, entry]) => {
+                    const to = CONSOLIDATED_SHEET_STATUSES[entry?.status];
+                    if (to) { plan.statusesChanged.push({ sheetId: sheet.id, scope: 'round ' + round, from: entry.status, to }); entry.status = to; }
+                });
+            });
+        };
+
+        if (apply) await OL.updateAndSync(run, clientId);
+        else {
+            const backup = JSON.parse(JSON.stringify(client.projectData.scopingSheets || []));
+            run();
+            client.projectData.scopingSheets = backup;
+        }
+        if (plan.typesChanged.length || plan.statusesChanged.length) results.push(plan);
+    }
+    console.log(apply ? 'Consolidated:' : 'DRY RUN — nothing changed. Re-run with { apply: true }:', results);
+    return results;
 }
 
 // ---- ONE-TIME MIGRATION: retire the legacy sheet-wide approval status ----
@@ -2471,7 +2520,7 @@ Object.assign(window.OL, {
     openTypeDetailModal, createNewVarForType, updateVarRate, removeScopingVariable,
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
-    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus, rqAddTask,
+    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus, consolidateTypesAndStatuses, rqAddTask,
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,

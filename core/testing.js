@@ -28,7 +28,7 @@ import { requestResourceIds } from './request-pricing.js';
 import { deriveWorkStatus, isTaskClosed, tasksForItem } from './work-status.js';
 
 export const TEST_RESULTS = { PASS: 'pass', FAIL: 'fail', SKIP: 'skip' };
-export const TESTABLE_TYPES = ['build', 'revision', 'audit', 'troubleshoot'];   // training and meetings are not tested
+export const TESTABLE_TYPES = ['build', 'revision'];   // audit and troubleshoot are now 'revision'; training isn't tested
 
 // A starting set, used until you save your own under Test templates. Steps are "title | how | expected".
 const steps = (lines) => lines.map(([title, how, expected]) => ({ title, how, expected }));
@@ -62,13 +62,6 @@ export const DEFAULT_TEST_TEMPLATES = [
     { id: 'tt-revision', name: 'Revision', requestTypes: ['revision'], resourceTypes: [], fallback: false, steps: steps([
         ['Confirm the change works', 'Test the specific change that was requested in {request}', 'It behaves as requested'],
         ['Spot-check related items', 'Check the things next to it that should not have changed', 'Nothing else changed'],
-    ]) },
-    { id: 'tt-audit', name: 'Audit', requestTypes: ['audit'], resourceTypes: [], fallback: false, steps: steps([
-        ['Confirm the findings document was reviewed', 'Check that the write-up for {request} was reviewed', 'It was reviewed, with any follow-ups noted'],
-    ]) },
-    { id: 'tt-troubleshoot', name: 'Troubleshoot', requestTypes: ['troubleshoot'], resourceTypes: [], fallback: false, steps: steps([
-        ['Confirm the problem is fixed', 'Repeat what went wrong in {request}', 'It now works'],
-        ['Check for side effects', 'Look at what the fix could have touched', 'Nothing else broke'],
     ]) },
     { id: 'tt-general', name: 'General (anything else)', requestTypes: ['build', 'revision'], resourceTypes: [], fallback: true, steps: steps([
         ['Run it end to end', 'Use {resource} the way it will really be used', 'It works from start to finish'],
