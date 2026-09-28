@@ -14,7 +14,7 @@
 
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
-import { buildActivationPlan, DEFAULT_ASK_TEMPLATES } from '../../core/activation.js';
+import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
 import { findFirstAvailableDate } from '../../core/scheduling.js';
 
 const resourceLookup = (client) => (id) =>
@@ -163,7 +163,72 @@ OL.addCustomActivationAsk = function() {
     OL.renderActivationReviewStep();
 };
 
+// The SOP's current client-ask templates (the built-in starting set until an org saves its own).
+const currentAskTemplates = () => (state.master?.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
+
+// Commit the reviewed plan. If it differs from the SOP's client asks (an SOP ask unchecked, or an ask added
+// that isn't on the SOP), ask first: apply that to future requests like this one, or just this once (Smart SOP
+// Updates). With no differences it commits straight away.
 OL.confirmActivationReview = function() {
+    const st = OL._activationReviewState;
+    if (!st) return;
+
+    const overrides = computeActivationOverrides(st.plan, {
+        requestType: st.requestType, resourceType: st.resourceType, askTemplates: currentAskTemplates(),
+    });
+    if (!overrides.length) { OL._commitActivationReview([]); return; }
+
+    st.sopChanges = overrides.map((override) => ({ override, scope: 'once' }));
+    OL.renderSopUpdatePrompt();
+};
+
+OL.renderSopUpdatePrompt = function() {
+    const st = OL._activationReviewState;
+    if (!st || !st.sopChanges) return;
+    const scopeLabel = `${st.requestType || 'build'}${st.resourceType ? ' / ' + st.resourceType : ''}`;
+    const rows = st.sopChanges.map((c, i) => {
+        const o = c.override;
+        const once = `<label style="display:flex; gap:6px; align-items:center; font-size:12px;"><input type="radio" name="sop-${i}" ${c.scope === 'once' ? 'checked' : ''} onchange="OL.setSopChangeScope(${i}, 'once')"> Just this once</label>`;
+        const future = o.action === 'removed'
+            ? `<label style="display:flex; gap:6px; align-items:center; font-size:12px;"><input type="radio" name="sop-${i}" ${c.scope === 'future' ? 'checked' : ''} onchange="OL.setSopChangeScope(${i}, 'future')"> Stop asking for this on future ${esc(scopeLabel)} requests</label>`
+            : `<label style="display:flex; gap:6px; align-items:center; font-size:12px;"><input type="radio" name="sop-${i}" ${c.scope === 'future' ? 'checked' : ''} onchange="OL.setSopChangeScope(${i}, 'future')"> Add to the SOP for future ${esc(scopeLabel)} requests</label>`;
+        return `
+            <div style="padding:10px 12px; border:1px solid var(--line); border-radius:6px; margin-bottom:8px;">
+                <div style="font-size:13px; margin-bottom:6px;">${o.action === 'removed' ? 'You left out' : 'You added'}: <strong>${esc(o.name || o.title || '')}</strong></div>
+                <div style="display:flex; flex-direction:column; gap:4px;">${once}${future}</div>
+            </div>`;
+    }).join('');
+
+    OL.showOverlayModal(`
+        <div style="padding:20px; max-width:560px; width:100%;" onclick="event.stopPropagation()">
+            <h3 style="margin:0 0 6px;">Update the SOP?</h3>
+            <p class="tiny muted" style="margin:0 0 14px;">This plan differs from the SOP's client asks. Choose whether each change should apply to future requests like this one, or only to this request.</p>
+            ${rows}
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; border-top:1px solid var(--line); padding-top:12px;">
+                <button class="btn tiny soft" onclick="OL.backToActivationReview()">Back</button>
+                <button class="btn tiny primary" onclick="OL.finishActivationWithSopChoices()">Activate</button>
+            </div>
+        </div>`);
+};
+
+OL.setSopChangeScope = function(i, scope) {
+    const c = OL._activationReviewState?.sopChanges?.[i];
+    if (c) c.scope = scope;
+};
+
+OL.backToActivationReview = function() {
+    if (OL._activationReviewState) OL._activationReviewState.sopChanges = null;
+    OL.renderActivationReviewStep();
+};
+
+OL.finishActivationWithSopChoices = function() {
+    const st = OL._activationReviewState;
+    OL._commitActivationReview(st?.sopChanges || []);
+};
+
+// Creates the tasks, then applies any "future requests" choices to the SOP's ask templates (after the commit,
+// so the commit still logs what differed from the SOP as it was).
+OL._commitActivationReview = function(decisions) {
     const st = OL._activationReviewState;
     if (!st) return;
     const clientId = st.clientId;
@@ -173,6 +238,11 @@ OL.confirmActivationReview = function() {
         const item = OL.findRequestItem ? OL.findRequestItem(client, st.itemId) : null;
         if (!client || !item) return;
         OL.commitRequestActivation(client, item, st.plan, { requestType: st.requestType, resourceType: st.resourceType });
+
+        if ((decisions || []).some((d) => d.scope === 'future')) {
+            const base = (state.master.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
+            state.master.askTemplates = applySopUpdates(base, decisions, { requestType: st.requestType, resourceType: st.resourceType, uid });
+        }
     }, clientId);
 
     OL._activationReviewState = null;
