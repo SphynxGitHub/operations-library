@@ -123,7 +123,12 @@ export function renderDependencySection(clientId, kind, id) {
             ${blocked ? `<span class="pill tiny" style="font-size:9px; color:#f59e0b; border:1px solid #f59e0b;"><i data-lucide="lock" style="width:9px;height:9px;"></i> Blocked</span>` : ''}
         </div>
         <div class="tiny muted" style="margin-bottom:4px;">Waiting on</div>
-        <div style="display:grid; gap:3px; margin-bottom:8px;">${blockedBy.length ? blockedBy.map((d) => row(d, true)).join('') : '<span class="tiny muted">Nothing — ready to work.</span>'}</div>
+        <div style="display:grid; gap:3px; margin-bottom:8px;">
+            ${blockedBy.length ? blockedBy.map((d) => row(d, true)).join('') : '<span class="tiny muted">Nothing — ready to work.</span>'}
+            ${blockedBy.some((d) => d.kind === 'task' && d.item?.askKind && !isDone('task', d.item))
+                ? `<div class="tiny muted" style="padding:3px 6px;"><i data-lucide="clock" style="width:10px;height:10px;"></i> Waiting on the client for one of these — this is treated the same as flipping the task to a "Pending Client ..." status.</div>` : ''}
+        </div>
+        ${(kind === 'task' || kind === 'request') ? `<button type="button" class="btn tiny soft" style="margin-bottom:6px; width:100%; justify-content:center;" onclick="OL.askClientAsDependency('${esc(clientId)}', '${kind}', '${esc(String(id))}')">✉️ Ask the client for something new…</button>` : ''}
         <div class="dep-picker" data-dep-key="${esc(key)}">
         <input type="text" id="dep-search-${esc(key)}" class="modal-input tiny" placeholder="+ Add something this waits on (task, request, resource)…" value="${esc(OL._depSearch[key] || '')}" autocomplete="off"
                style="width:100%;" onfocus="OL.openDependencyPicker('${esc(clientId)}', '${kind}', '${esc(String(id))}')"
@@ -144,6 +149,20 @@ export function renderDependencySection(clientId, kind, id) {
             <div class="tiny muted" style="margin:10px 0 4px;">Blocking</div>
             <div style="display:grid; gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
     </div>`;
+}
+
+OL._refreshDependencySection = (clientId, kind, id) => refresh(clientId, kind, id);
+
+// The scoping request a new client ask should be attributed to and billed against — this item if it already
+// is one, else the first request a task is linked to. Resources aren't tied to one request, so there's nothing
+// to attribute a resource-triggered ask to; that case gets a plain client task with no request link instead.
+function requestIdFor(clientId, kind, id, item) {
+    if (kind === 'request') return id;
+    if (kind === 'task') {
+        const links = OL.linksForTask ? OL.linksForTask(item) : (item?.links || []);
+        return links[0]?.requestId || null;
+    }
+    return null;
 }
 
 function refresh(clientId, kind, id) {
@@ -203,7 +222,19 @@ OL.addBlockedBy = function (clientId, kind, id, depKind, depId) {
     refresh(clientId, kind, id);
 };
 
-OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {
+// "Ask the client for something new…" from the Dependencies section: opens the same Ask client form used on
+// the Scoping Sheet, attributed to the request this item belongs to, and links whatever gets created as this
+// item's dependency in one step — this is the proxy the request/resource windows use instead of their own
+// separate "add client task" control.
+OL.askClientAsDependency = function (clientId, kind, id) {
+    const item = findItem(clientId, kind, id);
+    const requestId = requestIdFor(clientId, kind, id, item);
+    if (!requestId) { alert("This isn't linked to a request yet, so there's nothing to attribute a client ask to. Link it to a request first."); return; }
+    OL.closeDependencyPickers();
+    if (typeof OL.openAskModal === 'function') OL.openAskModal(requestId, { kind, id });
+};
+
+OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {
     updateAndSync(() => {
         const item = findItem(clientId, kind, id);
         if (item?.blockedBy) item.blockedBy = item.blockedBy.filter((d) => !(d.kind === depKind && String(d.id) === String(depId)));
@@ -217,4 +248,4 @@ OL.openDependencyTarget = function (clientId, kind, id) {
     if (kind === 'resource') { OL.closeModal?.(); return OL.openResourceModal?.(id); }
 };
 
-Object.assign(window.OL, { renderDependencySection, isBlocked });
+Object.assign(window.OL, { renderDependencySection, isBlocked, askClientAsDependency: OL.askClientAsDependency });

@@ -833,6 +833,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                 </div>
 
                 <aside style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(56,189,248,0.03); position:sticky; top:0; max-height:calc(100vh - 150px); overflow-y:auto;">
+                    ${evt.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(evt.linked_client_id) : ''}
                     <div class="bold tiny uppercase muted" style="margin-bottom:4px;">Tasks from this meeting</div>
                     <div class="tiny muted" style="margin-bottom:10px;">
                         These are the real tasks. Editing them here changes the tasks themselves, and the email follows.

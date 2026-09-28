@@ -653,6 +653,9 @@ function renderScopingRowBase(item, idx, showUnits) {
     // existing self-gating is left as-is, not hidden further.
     let staffWorkHtml = '';
     let clientTestHtml = '';
+    // Ask client only needs the request to be Do Now — asking for something doesn't require the round to be
+    // approved yet, so this no longer waits on isActiveRow the way the rest of this block does.
+    const askButtonHtml = (isAdmin && status === 'do now') ? `<button class="btn tiny soft" onclick="OL.openAskModal('${item.id}')">Ask client…</button>` : '';
     if (isActiveRow) {
         const round = Math.max(parseInt(item.round, 10) || 1, 1);
         const phase = testingPhaseFor(client?.projectData, sheetForStatus.id, item, round);
@@ -663,9 +666,13 @@ function renderScopingRowBase(item, idx, showUnits) {
             <span class="pill tiny" style="border:1px solid ${color}; color:${color};">${esc(WORK_STATUS_LABELS[w.status] || w.status)}</span>
             ${w.stepsTotal ? `<span class="muted">${w.stepsDone}/${w.stepsTotal} steps</span>` : ''}
             ${w.openAsks ? `<span class="muted">${w.openAsks} open ask${w.openAsks === 1 ? '' : 's'}</span>` : ''}
-            <button class="btn tiny soft" onclick="OL.openAskModal('${item.id}')">Ask client…</button>
+            ${askButtonHtml}
         `;
         clientTestHtml = typeof OL.testBadgeHtml === 'function' ? OL.testBadgeHtml(client, item, isAdmin) : '';
+    } else if (askButtonHtml) {
+        // Not the active round (not approved / not current) — still Do Now, so asking is still useful; just
+        // without the steps/status pill, which needs an active round to mean anything.
+        staffWorkHtml = askButtonHtml;
     }
     const typeSelectHtml = `
         <select class="tiny-select" style="width:auto; max-width:120px;" title="Request type"
@@ -2264,11 +2271,14 @@ function askLineHtml() {
         </div>`;
 }
 
-export function openAskModal(itemId) {
+export function openAskModal(itemId, blockFor = null) {
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const item = sheet?.lineItems?.find(i => String(i.id) === String(itemId));
     if (!client || !item) return;
+    // If opened from a Dependencies picker ("Ask the client for something new…"), the new ask task(s) also get
+    // added as what that task/request/resource is waiting on — see saveAsks.
+    OL._askModalBlockFor = blockFor;
 
     const label = item.name || OL.getResourceById(item.resourceId)?.name || 'this item';
     const kindOptions = Object.entries(ASK_KINDS)
@@ -2333,6 +2343,7 @@ export async function saveAsks(itemId) {
     const sheet = client?.projectData?.scopingSheets?.[0];
     const item = sheet?.lineItems?.find(i => String(i.id) === String(itemId));
     if (!client || !item) return;
+    const blockFor = OL._askModalBlockFor;
 
     const kind = document.getElementById('ask-kind')?.value || 'review';
     const kindInfo = ASK_KINDS[kind] || ASK_KINDS.review;
@@ -2388,10 +2399,22 @@ export async function saveAsks(itemId) {
         } else {
             client.projectData.clientTasks.unshift(...asks);
         }
+
+        if (blockFor && asks.length) {
+            const target = blockFor.kind === 'task' ? (client.projectData.clientTasks || []).find((t) => String(t.id) === String(blockFor.id))
+                : blockFor.kind === 'resource' ? (client.projectData.localResources || []).find((r) => String(r.id) === String(blockFor.id))
+                : (OL.findRequestItem ? OL.findRequestItem(client, blockFor.id) : null);
+            if (target) {
+                if (!target.blockedBy) target.blockedBy = [];
+                asks.forEach((a) => target.blockedBy.push({ kind: 'task', id: a.id, addedDate: now }));
+            }
+        }
     });
 
+    OL._askModalBlockFor = null;
     OL.closeModal();
     renderScopingSheet();
+    if (blockFor && typeof OL._refreshDependencySection === 'function') OL._refreshDependencySection(client.id, blockFor.kind, blockFor.id);
 }
 
 // ---- ONE-TIME REPAIR: fix any line item created with the "reqline-"

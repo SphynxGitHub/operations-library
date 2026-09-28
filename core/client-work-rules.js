@@ -3,13 +3,15 @@
 // updateTestRuns / updateRoundStates — see core/data.js persist()). Every pass is idempotent: it looks at
 // what already exists and only adds or changes what's missing, so running it on every save is safe.
 //
-//   1. Implementation tasks waiting on the client. Client tasks alone change nothing on an implementation task:
-//      the implementer decides whether they can keep working. If they can't, they set the task to a "Pending
-//      Client ..." status (Pending Client Action, Feedback, Document or Review). Its due date is then logged and
-//      removed, and the client tasks open at that moment are recorded. When ALL the client tasks related to it
-//      (the ones recorded, plus any added since) are complete, the task goes back to "Pending Sphynx Action" and
-//      gets a date again: the original date if that isn't in the past, otherwise the day after the last client
-//      task was completed. A task left on Pending Sphynx Action is never touched by this.
+//   1. Implementation tasks waiting on the client. Client tasks alone change nothing on an implementation task,
+//      and neither does a Dependency (features/dependencies.js) on one — those are informational (see
+//      openClientTasksFor below, used to display them). The implementer decides whether they can keep working,
+//      and says so ONLY by changing the task's status to a "Pending Client ..." status (Action, Feedback,
+//      Document or Review). That flip is what logs the due date and removes it, and records the client tasks
+//      open at that moment (by request/resource AND anything set as a Dependency). When ALL of them are
+//      complete, the task goes back to "Pending Sphynx Action" and gets a date again: the original date if
+//      that isn't in the past, otherwise the day after the last one was completed. A task left on Pending
+//      Sphynx Action is never touched by this, no matter what it depends on.
 //   2. One consolidated client follow-up task per project (not per task or round): lists everything open on
 //      the client, request by request and resource by resource. It closes when nothing is open, reopens with
 //      the same history when something new arrives, and comes back with a new date each time a touchpoint is
@@ -28,7 +30,7 @@
 import { linksForTask, addLink } from './task-links.js';
 import { isTaskClosed, isClientWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
-import { isRoundApproved } from './requests.js';
+import { isRoundApproved, isActiveItem, getCurrentRound } from './requests.js';
 import { isOngoing } from './maintenance.js';
 import { state, uid } from './data.js';
 
@@ -97,6 +99,18 @@ export function relatedClientTasks(client, task, ctx) {
     });
 }
 
+// Every open client-ask task connected to an implementation task — by request/resource (the normal, automatic
+// link) or by an explicit Dependency (features/dependencies.js). This is what the Tasks view nests underneath
+// an implementation task, and what a task's own "Waiting on" comes from once it IS flipped to a Pending Client
+// status (see reconcileBlockedTasks). Purely a lookup — it never changes anything.
+export function openClientTasksFor(client, task, ctx) {
+    const byRequest = relatedClientTasks(client, task, ctx);
+    const byDependency = dependencyClientTasks(client, task, ctx);
+    const seen = new Set();
+    return [...byRequest, ...byDependency].filter((t) => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
+}
+
+
 const localDay = (iso) => day(iso);
 
 // Where a released task's date goes: its original date, unless that has passed; then the day after the last
@@ -105,6 +119,17 @@ export function restoreDueDate(original, latestCompletedDay, today) {
     if (!isBlank(original) && day(original) >= today) return day(original);
     const after = isBlank(latestCompletedDay) ? today : addDays(latestCompletedDay, 1);
     return after < today ? today : after;
+}
+
+// The open client-ask tasks a task is blocked by (a Dependency of kind 'task' pointing at a client-facing,
+// still-open task). Anything else in blockedBy (another implementation task, a request, a resource) is a plain
+// sequencing dependency and isn't part of this. Informational only — see the header note above.
+export function dependencyClientTasks(client, task, ctx) {
+    const all = client?.projectData?.clientTasks || [];
+    return (task.blockedBy || [])
+        .filter((d) => d && d.kind === 'task')
+        .map((d) => all.find((t) => t && String(t.id) === String(d.id)))
+        .filter((t) => t && isClientFacing(t, ctx) && isOpen(t, ctx));
 }
 
 const addComment = (task, text, ctx) => {
@@ -116,20 +141,23 @@ export function reconcileBlockedTasks(client, ctx) {
     const all = client?.projectData?.clientTasks || [];
     all.forEach((t) => {
         if (!t || !isImplementationTask(t, ctx)) return;
+        const depTasks = dependencyClientTasks(client, t, ctx);
         const waiting = isClientWaitingStatus(t.status);
 
         if (waiting && !t.blockedOn) {
-            // Just set to a client-waiting status: log the due date, remove it, note what it is waiting for.
-            const related = relatedClientTasks(client, t, ctx);
-            t.blockedOn = { since: ctx.now, status: t.status, dueDate: day(t.dueDate), taskIds: related.map((x) => x.id), completed: {} };
+            // Just set to a client-waiting status (by hand or via a Dependency): log the due date, remove it,
+            // note what it is waiting for.
+            const related = [...new Set([...relatedClientTasks(client, t, ctx).map((x) => x.id), ...depTasks.map((x) => x.id)])];
+            t.blockedOn = { since: ctx.now, status: t.status, dueDate: day(t.dueDate), taskIds: related, completed: {} };
             (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'removed', dueDate: day(t.dueDate), status: t.status });
             if (!isBlank(t.dueDate)) addComment(t, `Due date ${day(t.dueDate)} removed while waiting on the client (${t.status}). It comes back when the related client tasks are complete.`, ctx);
             t.dueDate = '';
             out.blocked.push(t.id);
         } else if (waiting && t.blockedOn) {
-            // Keep the list current: client tasks added after the flip are part of what it is waiting for.
+            // Keep the list current: client tasks added after the flip, by request/resource or by Dependency,
+            // are part of what it is waiting for.
             const b = t.blockedOn;
-            relatedClientTasks(client, t, ctx).forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
+            [...relatedClientTasks(client, t, ctx), ...depTasks].forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
             // Note when each one was completed, for the restored date.
             b.taskIds.forEach((id) => {
                 const c = all.find((x) => x.id === id);
@@ -532,4 +560,25 @@ if (typeof setTimeout === 'function' && typeof document !== 'undefined') {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders });
+// Whether a client task belongs to a request that's active right now (Do Now, current approved round) — used
+// to decide what shows nested under the consolidated follow-up task, per client task rather than per request.
+export function isActiveRequestTask(client, task) {
+    const links = linksForTask(task);
+    if (!links.length) return false;
+    return (client?.projectData?.scopingSheets || []).some((sheet) => {
+        if (!sheet || sheet.kind === 'maintenance' || sheet.id === 'maintenance') return false;
+        return links.some((l) => {
+            const item = (sheet.lineItems || []).find((i) => i && String(i.id) === String(l.requestId));
+            return item && isActiveItem(sheet, item, (i) => !isBlank(i.resourceId));
+        });
+    });
+}
+
+export function openClientTasksForId(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const t = client?.projectData?.clientTasks?.find((x) => x && x.id === taskId);
+    if (!client || !t) return [];
+    return openClientTasksFor(client, t, contextNow());
+}
+
+Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask });

@@ -1925,6 +1925,7 @@ OL.openComposeEmailModal = function(options = {}) {
         </div>
         <div class="modal-body" style="max-width:760px; width:100%;">
             <div style="display:grid; gap:10px;">
+                ${st.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(st.linked_client_id) : ''}
                 <div class="tiny muted">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>
                 <div>
                     <label class="tiny muted bold" style="display:block; margin-bottom:2px;">To</label>

@@ -248,17 +248,24 @@ OL._commitActivationReview = function(decisions) {
     if (!st) return;
     const clientId = st.clientId;
 
+    let buildTasks = [];
     updateAndSync(() => {
         const client = state.clients?.[clientId];
         const item = OL.findRequestItem ? OL.findRequestItem(client, st.itemId) : null;
         if (!client || !item) return;
-        OL.commitRequestActivation(client, item, st.plan, { requestType: st.requestType, resourceType: st.resourceType });
+        const committed = OL.commitRequestActivation(client, item, st.plan, { requestType: st.requestType, resourceType: st.resourceType });
+        // The build (implementation) tasks just created — not the client asks.
+        const made = new Set((committed && committed.createdTaskIds) || []);
+        buildTasks = (client.projectData.clientTasks || []).filter((t) => made.has(t.id) && !t.askKind && !t.isClientTask).map((t) => ({ id: t.id, title: t.title || t.name }));
 
         if ((decisions || []).some((d) => d.scope === 'future')) {
             const base = (state.master.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
             state.master.askTemplates = applySopUpdates(base, decisions, { requestType: st.requestType, resourceType: st.resourceType, uid });
         }
-    }, clientId);
+    }, clientId).then(() => {
+        // Anything already linked to the request from email rolls down onto the new build tasks.
+        if (buildTasks.length && typeof OL.rollDownRequestLinks === 'function') return OL.rollDownRequestLinks(clientId, st.itemId, buildTasks);
+    }).catch((e) => console.warn('Rolling links down failed:', e));
 
     OL._activationReviewState = null;
     OL.closeModal();

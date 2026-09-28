@@ -97,10 +97,24 @@ OL.sortTasksMentionsFirst = function(tasks) {
 OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
     const rowHTML = OL.renderTaskRowHTML(t, todayStr, enableBulkSelect);
 
+    // The client tasks an implementation task is waiting on (by request/resource or a Dependency), and — for
+    // the one consolidated follow-up task — the same, but only for requests that are active right now, so the
+    // follow-up doesn't repeat everything that's still in the backlog.
+    let openItemsHTML = '';
+    if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask) {
+        if (t.consolidatedFollowUp) {
+            const all = OL.openClientTasksForId(t.clientId, t.id);
+            const active = all.filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(state.clients?.[t.clientId], x));
+            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, active, { indent: t.parentTaskId ? 48 : 20, label: 'Active-round items waiting on the client' });
+        } else if (!t.askKind) {
+            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, OL.openClientTasksForId(t.clientId, t.id), { indent: t.parentTaskId ? 48 : 20 });
+        }
+    }
+
     const isExpanded = !!OL.expandedCommentCards[t.id];
     const mentions = OL.showTaskComments ? OL.getTaskMentionComments(t) : [];
     const toShow = isExpanded ? (t.comments || []) : mentions;
-    if (!toShow.length) return rowHTML;
+    if (!toShow.length) return rowHTML + openItemsHTML;
 
     const sorted = [...toShow].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     const subrow = `
@@ -116,7 +130,7 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
             `).join('')}
         </div>
     `;
-    return rowHTML + subrow;
+    return rowHTML + subrow + openItemsHTML;
 };
 
 // -------------------------------------------------------------
@@ -2222,6 +2236,14 @@ OL.renderInContextTaskModal = function(client, task) {
                     ` : ''}
 
                     ${OL.renderDependencySection ? OL.renderDependencySection(client?.id, 'task', task.id) : ''}
+                    ${(() => {
+                        if (!client || !task || task.isClientTask || typeof OL.openClientTasksForId !== 'function') return '';
+                        const items = task.consolidatedFollowUp
+                            ? OL.openClientTasksForId(client.id, task.id).filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(client, x))
+                            : (task.askKind ? [] : OL.openClientTasksForId(client.id, task.id));
+                        if (!items.length) return '';
+                        return `<div style="margin-bottom:20px;"><label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">${task.consolidatedFollowUp ? 'Active-round items waiting on the client' : 'Waiting on the client for'}</label>${OL.renderOpenClientTasksList(client.id, items, { indent: 0 })}</div>`;
+                    })()}
                     ${OL.renderRollupSection ? OL.renderRollupSection(client?.id, 'task', task.id) : ''}
 
                     <!-- LINKED EMAILS SECTION WITH ENFORCED CONSTRAINTS -->
