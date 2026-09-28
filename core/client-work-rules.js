@@ -285,10 +285,15 @@ export function reconcileClientFollowUp(client, ctx) {
         const existing = pd.clientTasks.find((p) => p && p.statusNoteFor === t.id && isOpen(p, ctx));
         if (existing) return;
         if (t.statusNoteAt && daysBetween(day(t.statusNoteAt), ctx.today) < (ctx.staleDays || DEFAULT_STALE_DAYS)) return;   // already asked recently
+        // Stalled waiting on a third party: the status-note prompt goes to whoever handles third-party
+        // follow-up (Anthony), not the task's own assignee — they're often waiting on a vendor, not sitting on
+        // it themselves. Stalled on Sphynx's own side still prompts the task's assignee, as before.
+        const thirdParty = isThirdPartyWaitingStatus(t.status);
+        const promptAssignee = thirdParty ? (ctx.thirdPartyStatusNoteAssignee || 'Anthony') : (t.assignee || null);
         const p = {
             id: ctx.uid(), title: `Status note: ${t.title || t.name}`, name: `Status note: ${t.title || t.name}`,
-            description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days. Add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
-            status: OPEN_STATUS, assignee: t.assignee || null, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
+            description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days${thirdParty ? ' — it\'s waiting on a third party' : ''}. Add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
+            status: OPEN_STATUS, assignee: promptAssignee, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
             createdBy: 'followup', createdAt: ctx.now, statusNoteFor: t.id, links: [],
         };
         linksForTask(t).forEach((l) => addLink(p, l.requestId, l.resourceIds || []));
@@ -514,6 +519,7 @@ function contextNow(extra = {}) {
         today: localToday(), now: new Date().toISOString(), uid,
         followUpEveryDays: Number(state.master?.followUpEveryDays) || DEFAULT_FOLLOW_UP_EVERY_DAYS,
         staleDays: Number(state.master?.staleDays) || DEFAULT_STALE_DAYS,
+        thirdPartyStatusNoteAssignee: state.master?.thirdPartyStatusNoteAssignee || 'Anthony',
         isOngoing, ...extra,
     };
 }
