@@ -2091,6 +2091,70 @@ export async function setSheetStatus(newStatus) {
     renderScopingSheet();
 }
 
+// ---- ONE-TIME MIGRATION: retire the legacy sheet-wide approval status ----
+// Approval used to be one flag for the whole sheet (sheet.status). Any round
+// without its own roundApprovals entry still inherits it, which is how a
+// brand-new round could show up already "Approved" and collapsed. This copies
+// the sheet-wide status onto every existing round that has no entry of its
+// own (so nothing that is approved today changes), then clears the
+// sheet-wide fields so future rounds start clean. The maintenance sheet is
+// left alone (its status is what keeps Client Requests always-open).
+// Console-only:
+//   OL.clearLegacySheetStatus()                      // dry run, all clients
+//   OL.clearLegacySheetStatus(null, { apply: true }) // do it, all clients
+//   OL.clearLegacySheetStatus(['c-123'], { apply: true })
+export async function clearLegacySheetStatus(clientIds, { apply = false } = {}) {
+    const results = [];
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    for (const clientId of ids) {
+        if (typeof OL.loadFullClient === 'function') await OL.loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client?.projectData) continue;
+
+        const plan = [];
+        const run = () => {
+            (client.projectData.scopingSheets || []).forEach((sheet) => {
+                if (!sheet || sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;
+                const legacy = String(sheet.status || '').trim();
+                if (!legacy) return;
+                const rounds = new Set(Object.keys(sheet.roundApprovals || {}));
+                (sheet.lineItems || []).forEach((item) => {
+                    if (!item || String(item.status || '') === 'Backlog') return;
+                    rounds.add(String(Math.max(1, parseInt(item.round, 10) || 1)));
+                });
+                const stamped = [];
+                if (!sheet.roundApprovals) sheet.roundApprovals = {};
+                rounds.forEach((r) => {
+                    const entry = sheet.roundApprovals[r];
+                    if (entry && entry.status) return;
+                    sheet.roundApprovals[r] = {
+                        ...(entry || {}),
+                        status: legacy,
+                        statusChangedAt: sheet.statusChangedAt || null,
+                        approvedAt: legacy === 'Approved' ? (sheet.approvedAt || sheet.statusChangedAt || null) : (entry?.approvedAt || null),
+                    };
+                    stamped.push(r);
+                });
+                plan.push({ sheetId: sheet.id, was: legacy, roundsStamped: stamped.sort((a, b) => a - b) });
+                sheet.status = '';
+                delete sheet.statusChangedAt;
+                delete sheet.approvedAt;
+            });
+        };
+
+        if (apply) await OL.updateAndSync(run, clientId);
+        else {
+            // dry run: work on a throwaway copy so nothing is touched
+            const backup = JSON.parse(JSON.stringify(client.projectData.scopingSheets || []));
+            run();
+            client.projectData.scopingSheets = backup;
+        }
+        if (plan.length) results.push({ clientId, clientName: client.meta?.name, sheets: plan });
+    }
+    console.log(apply ? 'Legacy sheet status cleared:' : 'DRY RUN — nothing changed. Re-run with { apply: true }:', results);
+    return results;
+}
+
 // Approval, per round — see core/requests.js isRoundApproved for why this
 // exists separately from setSheetStatus: a round with no explicit entry of
 // its own inherits the legacy sheet-wide status, so existing approved
@@ -2349,7 +2413,7 @@ Object.assign(window.OL, {
     openTypeDetailModal, createNewVarForType, updateVarRate, removeScopingVariable,
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
-    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus,
+    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus,
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,
