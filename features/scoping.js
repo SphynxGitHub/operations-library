@@ -1985,6 +1985,8 @@ export function openRequestLineModal(itemId) {
 
             ${isEdit && typeof OL.requestResourcesSectionHtml === 'function' ? OL.requestResourcesSectionHtml(client, item) : ''}
 
+            ${requestRolesSectionHtml(client, item)}
+
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
                 <label class="tiny muted" style="font-size:10px; font-weight:600;">Notes (optional)</label>
                 <textarea id="rq-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>
@@ -2006,6 +2008,35 @@ export function openRequestLineModal(itemId) {
     openModal(html);
 }
 
+// The Roles section of the request window: who covers each role on THIS request. Each dropdown starts on the
+// project's default for that role (Role Defaults) and only stores a person when it's changed. It's a starting
+// point for who gets the work (activation, testing tasks) and the source for Sales/Scoping on the round's comp
+// view; Implementation/Testing/Communication comp still follows who tasks are actually assigned to.
+function requestRolesSectionHtml(client, item) {
+    const roles = typeof OL.getRoles === 'function' ? OL.getRoles() : [];
+    if (!roles.length) return '';
+    const team = state.master?.sphynxTeam || [];
+    const defaults = client?.projectData?.roleAssignments || [];
+    const own = item?.roleAssignments || {};
+    return `
+        <div style="margin-bottom:16px;">
+            <label class="tiny muted" style="font-size:10px; font-weight:600;">Roles on this request</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:4px;">
+                ${roles.map((r) => {
+                    const def = (defaults.find((a) => a.roleId === r.id) || {}).memberName || '';
+                    return `
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span class="tiny muted" style="font-size:10px;">${esc(r.name)}</span>
+                        <select id="rq-role-${esc(r.id)}" class="modal-input tiny">
+                            <option value="">${def ? `Project default (${esc(def)})` : 'Unassigned'}</option>
+                            ${team.map((m) => `<option value="${esc(m.name)}" ${own[r.id] === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+                        </select>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+}
+
 export function applyRequestFormToItem(item) {
     if (!document.getElementById('rq-title')) return item;
     const read = (id) => document.getElementById(id)?.value ?? '';
@@ -2022,6 +2053,17 @@ export function applyRequestFormToItem(item) {
         round: status === 'Backlog' ? null : Math.max(1, parseInt(read('rq-round'), 10) || 1),
         manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
     });
+    // Per-request role picks: only overrides are stored; blank means "use the project default".
+    if (typeof OL.getRoles === 'function') {
+        const picked = {};
+        OL.getRoles().forEach((r) => {
+            const v = (document.getElementById('rq-role-' + r.id)?.value || '').trim();
+            if (v) picked[r.id] = v;
+        });
+        if (document.getElementById('rq-title')) {
+            if (Object.keys(picked).length) item.roleAssignments = picked; else delete item.roleAssignments;
+        }
+    }
     return item;
 }
 
