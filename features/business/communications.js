@@ -1159,9 +1159,10 @@ window.OL.openGmailMessageModal = OL.openGmailMessageModal;
 // (linked_task_id etc.) — lets ONE email answer several different things at
 // once. Stored in gmail_messages.piece_links (piece_links.sql), an array of
 // { id, kind: 'excerpt', text, note, targetType, targetId, targetLabel,
-// createdAt }. Attachment-kind entries are designed in but not reachable
-// yet — see BUILD_NOTES, incoming attachments aren't synced/stored at all
-// currently, so there's nothing to link.
+// createdAt }, or kind 'attachment' with the stored file's path. Attachments are synced by get-gmail-messages
+// (collectAttachmentParts / fetchAndStoreAttachments, kept in the private gmail-attachments storage bucket, listed
+// on gmail_messages.attachments) and shown on the email with a "Link this attachment" button — see
+// gmail_attachments.sql for the column and bucket they need.
 //
 // This never auto-closes a task — linking is the only action here. Closing
 // the task it answered is always a separate, deliberate step from the task

@@ -11,6 +11,7 @@
 // Needs 001_lifecycle_tables.sql (adds calendar_events.summary_sent_at).
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
+import { addLink } from '../../core/task-links.js';
 import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
@@ -561,6 +562,13 @@ function renderMsTaskRows() {
                        onchange="OL.msUpdateTask('${t.id}', 'dueDate', this.value)">
                 <button type="button" class="btn tiny soft" title="Delete this task" onclick="OL.msDeleteTask('${t.id}')">✕</button>
             </div>
+            ${t.madeRequestId
+                ? `<div class="tiny" style="margin-top:6px; color:#64c6a2;">✓ Also added as a ${esc(t.madeRequestType || 'request')} in Pending on the Scoping Sheet</div>`
+                : `<div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                        <span class="tiny muted">Client is asking for something new?</span>
+                        <button type="button" class="btn tiny soft" title="Adds it to Pending on the Scoping Sheet as a new request" onclick="OL.msMakeRequest('${t.id}', 'build')">New request</button>
+                        <button type="button" class="btn tiny soft" title="Adds it to Pending on the Scoping Sheet as a revision" onclick="OL.msMakeRequest('${t.id}', 'revision')">Revision</button>
+                   </div>`}
         </div>`;
     }).join('')
         : '<div class="tiny muted" style="margin-bottom:8px;">No open tasks from this meeting yet.</div>';
@@ -621,6 +629,41 @@ OL.msAddTask = async function() {
         });
     }, st.client.id);
     if (input) input.value = '';
+    renderMsTaskRows();
+};
+
+// An action item that is really the client asking for work: adds it to Pending on the Scoping Sheet as a new
+// request or a revision, and links the task to it so the two stay connected. The task stays in this meeting's
+// Next steps. Nothing is scheduled or priced until someone moves it into a round.
+OL.msMakeRequest = async function(taskId, type) {
+    const st = OL._msState;
+    if (!st) return;
+    const t = st.client.projectData.clientTasks.find(x => x.id === taskId);
+    if (!t || t.madeRequestId) return;
+    const title = String(t.title || t.name || '').trim();
+    const label = type === 'revision' ? 'revision' : 'new request';
+    if (!confirm(`Add "${title}" to Pending on the Scoping Sheet as a ${label}?`)) return;
+    await updateAndSync(() => {
+        const pd = st.client.projectData;
+        if (!Array.isArray(pd.scopingSheets)) pd.scopingSheets = [];
+        let sheet = pd.scopingSheets.find(sh => sh && sh.kind !== 'maintenance' && sh.id !== 'maintenance');
+        if (!sheet) { sheet = { id: 'initial', lineItems: [] }; pd.scopingSheets.unshift(sheet); }
+        if (!Array.isArray(sheet.lineItems)) sheet.lineItems = [];
+        const when = st.evt.start ? new Date(st.evt.start).toLocaleDateString() : '';
+        const item = {
+            id: 'li-' + Date.now(),
+            resourceId: 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            name: title,
+            requestType: type === 'revision' ? 'revision' : 'build',
+            status: 'Backlog', responsibleParty: 'Sphynx', round: null,
+            teamMode: 'everyone', teamIds: [], data: {}, manualHours: 0, dependencies: [],
+            notes: `From the meeting "${st.evt.title || 'Meeting'}"${when ? ' on ' + when : ''}.`,
+        };
+        sheet.lineItems.push(item);
+        addLink(t, item.id, []);
+        t.madeRequestId = item.id;
+        t.madeRequestType = label;
+    }, st.client.id);
     renderMsTaskRows();
 };
 
@@ -816,6 +859,7 @@ window.OL.applyExtensionTimeEntries = OL.applyExtensionTimeEntries;
 window.OL.openMeetingSummaryEmail = OL.openMeetingSummaryEmail;
 window.OL.msUpdateTask = OL.msUpdateTask;
 window.OL.msAddTask = OL.msAddTask;
+window.OL.msMakeRequest = OL.msMakeRequest;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
 window.OL.msToggleInclude = OL.msToggleInclude;
