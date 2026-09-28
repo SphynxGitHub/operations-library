@@ -156,6 +156,15 @@ export function isReadyForTesting(item, tasks, closedNames) {
 
 const titleOf = (item, resource) => (!isBlank(item?.name) ? String(item.name).trim() : (resource?.name || ''));
 
+// A request can carry its own person per role (item.roleAssignments, keyed by role id, set in the request
+// window). That wins; otherwise it falls back to the project's default for the role. Only a starting point for
+// who gets the work — comp still follows who tasks are actually assigned to.
+export function assigneeForRequestRole(client, roles, pattern, item, fallback = 'Sphynx Task') {
+    const role = (roles || []).find((r) => pattern.test(String(r?.name || '')));
+    const own = role && item && item.roleAssignments ? String(item.roleAssignments[role.id] || '').trim() : '';
+    return own || assigneeForRole(client, roles, pattern, fallback);
+}
+
 export function assigneeForRole(client, roles, pattern, fallback = 'Sphynx Task') {
     const role = (roles || []).find((r) => pattern.test(String(r?.name || '')));
     const a = role ? (client?.projectData?.roleAssignments || []).find((x) => x.roleId === role.id) : null;
@@ -183,8 +192,9 @@ export function updateTestRuns(client, ctx) {
     const closedName = closed[0];
     const now = ctx.now || new Date().toISOString();
     const templates = ctx.templates || DEFAULT_TEST_TEMPLATES;
-    const testerName = assigneeForRole(client, ctx.roles, /test/i);
-    const builderName = assigneeForRole(client, ctx.roles, /implement/i);
+    const testerFor = (item) => assigneeForRequestRole(client, ctx.roles, /test/i, item);
+    const builderFor = (item) => assigneeForRequestRole(client, ctx.roles, /implement/i, item);
+    const itemById = (id) => (pd.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => i && String(i.id) === String(id)) || null;
 
     // 1. a request whose steps are done gets its own checklist and a Testing task
     (pd.scopingSheets || []).forEach((sheet) => {
@@ -227,7 +237,7 @@ export function updateTestRuns(client, ctx) {
                 const task = {
                     id: ctx.uid(), title: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`, name: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`,
                     description: 'This request is ready. Open the checklist and mark each step Pass, Fail or Skipped. A failed step creates a fix task.',
-                    status: 'Pending Sphynx Action', assignee: testerName, dueDate: '', isClientTask: false, loggedHours: 0,
+                    status: 'Pending Sphynx Action', assignee: testerFor(item), dueDate: '', isClientTask: false, loggedHours: 0,
                     parentTaskId: null, createdBy: 'testing', createdAt: now, testRunId: run.id, testForItemId: String(item.id),
                 };
                 run.testTaskId = task.id;
@@ -246,7 +256,7 @@ export function updateTestRuns(client, ctx) {
                 const fix = {
                     id: ctx.uid(), title: `Fix: ${step.title} (${run.title})`, name: `Fix: ${step.title} (${run.title})`,
                     description: [step.note ? `Tester's note: ${step.note}` : '', step.how ? `How it was tested: ${step.how}` : '', step.expected ? `Expected: ${step.expected}` : ''].filter(Boolean).join('\n'),
-                    status: 'Pending Sphynx Action', assignee: builderName, dueDate: '', isClientTask: false, loggedHours: 0,
+                    status: 'Pending Sphynx Action', assignee: builderFor(itemById(run.itemId)), dueDate: '', isClientTask: false, loggedHours: 0,
                     parentTaskId: null, createdBy: 'testing', createdAt: now,
                     requestLineItemId: run.itemId, fixForTestRunId: run.id, fixForStepId: step.id,
                 };
