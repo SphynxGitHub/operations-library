@@ -1,7 +1,7 @@
 //======================= CORE / REQUEST TASKS =======================//
 // The tasks that belong to a request, grouped for the scoping sheet, the request window and the printed sheet:
 //   Before          pre-meeting or pre-implementation dependencies (things to have in place first), including asks to the client
-//   Implementation  the work itself: SOP steps, fixes from testing and from the client's review
+//   During          (key: implementation) the work itself: SOP steps, fixes from testing and from the client's review
 //   After           post-meeting action items
 // plus the ones that are the client's to do ("client-facing").
 // A request's start and end dates are the earliest and latest due date among its tasks (worked out, never stored).
@@ -11,7 +11,8 @@ import { isTaskClosed } from './work-status.js';
 import { taskAppliesToRequest } from './task-links.js';
 
 export const PHASES = ['before', 'implementation', 'after'];
-export const PHASE_LABELS = { before: 'Before', implementation: 'Implementation', after: 'After' };
+// The stored key stays 'implementation' (saved on tasks as task.phase) — only the label the person reads changes.
+export const PHASE_LABELS = { before: 'Before', implementation: 'During', after: 'After' };
 
 const CLIENT_ASK_KINDS = ['review', 'document', 'feedback'];
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
