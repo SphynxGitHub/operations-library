@@ -106,10 +106,11 @@ function tidySummary(text) {
         .trim();
 }
 
+// Due dates are scheduling detail for whoever owns the task, not something the client needs in the email body —
+// they're set from the Add task control, not shown in this bullet.
 function taskLine(task) {
     const who = task.assignee && !PLACEHOLDER_ASSIGNEES.includes(task.assignee) ? ` (${task.assignee})` : '';
-    const due = formatDue(task.dueDate);
-    return `• ${String(task.title || task.name || 'Task').trim()}${who}${due ? `, due ${due}` : ''}`;
+    return `• ${String(task.title || task.name || 'Task').trim()}${who}`;
 }
 
 // The Next steps section as text, generated from the tasks (never typed by hand).

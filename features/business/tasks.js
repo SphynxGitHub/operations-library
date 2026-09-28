@@ -2048,6 +2048,13 @@ OL.openTaskInContext = async function(clientId, taskId) {
             return;
         }
 
+        // The one consolidated client follow-up task opens as its own compose window (draft email + a checklist
+        // of what's actually open), not the generic task detail modal.
+        if (task.consolidatedFollowUp && typeof OL.openClientFollowUpEmail === 'function') {
+            OL.openClientFollowUpEmail(clientId, taskId);
+            return;
+        }
+
         if (typeof window.openTaskModal === 'function') {
             window.openTaskModal(taskId, false, clientId);
             return;

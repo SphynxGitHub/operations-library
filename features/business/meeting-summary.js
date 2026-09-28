@@ -632,18 +632,20 @@ OL.msAddTask = async function() {
     const title = String(input?.value || '').trim();
     if (!title) return;
     const assignee = document.getElementById('ms-new-owner')?.value || 'Sphynx Task';
+    const dueDate = document.getElementById('ms-new-due')?.value || '';
     const owner = ownerOf(assignee);
     await updateAndSync(() => {
         st.client.projectData.clientTasks.unshift({
             id: uid(), title, name: title,
             status: owner === 'client' ? 'Client Task' : 'Pending Sphynx Action',
-            assignee, dueDate: '', isClientTask: owner === 'client',
+            assignee, dueDate, isClientTask: owner === 'client',
             loggedHours: 0, parentTaskId: null, createdBy: 'meeting-summary', source: 'meeting-summary',
             createdAt: new Date().toISOString(),
             parentEventId: st.evt.id, linkedEventId: st.evt.id,
         });
     }, st.client.id);
     if (input) input.value = '';
+    const dueInput = document.getElementById('ms-new-due'); if (dueInput) dueInput.value = '';
     renderMsTaskRows();
 };
 
@@ -843,8 +845,9 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                     <div style="border-top:1px solid var(--line); padding-top:10px; margin-top:4px;">
                         <input id="ms-new-task" type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box;" placeholder="Add a task from this meeting…"
                                onkeydown="if(event.key==='Enter'){event.preventDefault(); OL.msAddTask();}">
-                        <div style="display:grid; grid-template-columns: minmax(0,1fr) auto; gap:6px; margin-top:6px; align-items:center;">
+                        <div style="display:grid; grid-template-columns: minmax(0,1fr) auto auto; gap:6px; margin-top:6px; align-items:center;">
                             <select id="ms-new-owner" class="modal-input tiny">${assigneeOptionsHtml(client, 'Sphynx Task')}</select>
+                            <input id="ms-new-due" type="date" class="modal-input tiny" style="width:auto;" title="Due date — not shown in the email, just scheduling">
                             <button type="button" class="btn tiny soft" onclick="OL.msAddTask()">+ Add task</button>
                         </div>
                     </div>

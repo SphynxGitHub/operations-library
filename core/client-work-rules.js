@@ -28,7 +28,7 @@
 // now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
 
 import { linksForTask, addLink } from './task-links.js';
-import { isTaskClosed, isClientWaitingStatus } from './work-status.js';
+import { isTaskClosed, isClientWaitingStatus, isThirdPartyWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
 import { isRoundApproved, isActiveItem, getCurrentRound } from './requests.js';
 import { isOngoing } from './maintenance.js';
@@ -226,7 +226,7 @@ export function openClientItems(client, ctx) {
 function staleTasks(client, ctx) {
     const days = ctx.staleDays || DEFAULT_STALE_DAYS;
     return (client?.projectData?.clientTasks || []).filter((t) => t && isImplementationTask(t, ctx) && isOpen(t, ctx)
-        && t.status !== BLOCKED_STATUS && t.statusChangedAt && daysBetween(day(t.statusChangedAt), ctx.today) >= days);
+        && !isClientWaitingStatus(t.status) && t.statusChangedAt && daysBetween(day(t.statusChangedAt), ctx.today) >= days);
 }
 
 function lastCommentText(task) {
@@ -574,6 +574,59 @@ export function isActiveRequestTask(client, task) {
     });
 }
 
+// {resourceName}: note, or {requestName}: note if the task has no resource — used by the follow-up email's
+// Sphynx/Other/Review sections, since those are about the WORK (a resource or a request), not the task's own
+// title.
+function labelFor(client, task) {
+    const links = linksForTask(task);
+    for (const l of links) {
+        const rid = (l.resourceIds || [])[0];
+        if (rid) { const name = resourceName(client, rid); if (name) return name; }
+    }
+    const req = links[0] ? requestById(client, links[0].requestId) : null;
+    return req ? requestTitle(client, req) : (task.title || task.name || 'Task');
+}
+
+// Everything the consolidated follow-up's compose window needs, in the four sections the email is built from:
+//   1. clientAsks         — open client-facing tasks: what the CLIENT owes us. {id, title, description}
+//   2. pendingReview      — implementation tasks currently on "Pending Client Review": work sitting with the
+//                           client to review/approve. {id, label, note} — note is the task's own description,
+//                           or its title if it has none, since there's no separate status note for these.
+//   3. sphynxStalled      — implementation tasks stale 10+ days, still Sphynx's to do. {id, label, note} — note
+//                           is the implementer's status-note comment (see the stale-task prompt, above).
+//   4. thirdPartyStalled  — the same, for tasks on a "Pending Third Party ..." status.
+// "Stalled" here always means a written status note exists — an implementer's comment on the prompt task this
+// module already creates — not just "old and Pending Sphynx Action", so nothing is shown without an actual note.
+export function followUpEmailData(client, ctx) {
+    const all = client?.projectData?.clientTasks || [];
+
+    const clientAsks = all.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask)
+        && t.askKind !== 'follow_up' && isOpen(t, ctx))
+        .map((t) => ({ id: t.id, title: t.title || t.name || 'Task', description: (t.description || '').replace(/^For:\s*/, '').trim() }));
+
+    const pendingReview = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')
+        .map((t) => ({ id: t.id, label: labelFor(client, t), note: (t.description || t.title || t.name || '').trim() }));
+
+    const sphynxStalled = [];
+    const thirdPartyStalled = [];
+    all.filter((p) => p && p.statusNoteFor).forEach((p) => {
+        const target = all.find((x) => x.id === p.statusNoteFor);
+        if (!target || !isOpen(target, ctx)) return;
+        const text = (p.comments || []).filter((c) => c && !isBlank(c.text)).slice(-1)[0]?.text;
+        if (!text) return;   // no note written yet — nothing to report
+        const row = { id: target.id, label: labelFor(client, target), note: String(text).trim() };
+        (isThirdPartyWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);
+    });
+
+    return { clientAsks, pendingReview, sphynxStalled, thirdPartyStalled };
+}
+
+export function followUpEmailDataForId(clientId) {
+    const client = state.clients?.[clientId];
+    if (!client) return { clientAsks: [], pendingReview: [], sphynxStalled: [], thirdPartyStalled: [] };
+    return followUpEmailData(client, contextNow());
+}
+
 export function openClientTasksForId(clientId, taskId) {
     const client = state.clients?.[clientId];
     const t = client?.projectData?.clientTasks?.find((x) => x && x.id === taskId);
@@ -581,4 +634,4 @@ export function openClientTasksForId(clientId, taskId) {
     return openClientTasksFor(client, t, contextNow());
 }
 
-Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask });
+Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
