@@ -6,20 +6,18 @@
 // Tasks link to a request through task.links[] (core/task-links.js) — or,
 // for tasks that predate it, the legacy requestLineItemId field, which
 // taskAppliesToRequest() below still honors — plus:
-//   isBlocker          true if work on the request cannot continue without it
 //   askKind            'review' | 'document' | 'feedback' | 'third_party' for something
 //                      asked of the client or a third party, 'follow_up' for the
 //                      Communication follow-up, and empty for Sphynx's own steps
 //
 // Rules
 //   * No open asks                          -> Pending Sphynx Action (Implementation)
-//   * Open asks and EVERY one is a blocker  -> Waiting (Communication)
-//   * Open asks, some not blockers          -> stays Pending Sphynx Action, unless the
-//                                              request has step tasks and none are open,
-//                                              in which case there is nothing left for
-//                                              Sphynx to do and it waits
+//   * Open asks, and the implementer has put EVERY open step task on a "Pending Client ..." (or Pending Third
+//     Party) status  -> Waiting (Communication). Asks alone never make a request wait: the implementer decides
+//     whether they can keep working, and says so by changing the task's status.
+//   * Open asks and the request has step tasks but none are open (nothing left for Sphynx to do) -> Waiting
 //   * Waiting is "on Client" if any open ask is for the client, else "on Third Party"
-
+//
 import { taskAppliesToRequest } from './task-links.js';
 
 export const WORK_STATUS = {
@@ -51,6 +49,12 @@ export const ASK_KINDS = {
 
 const ASK_KEYS = Object.keys(ASK_KINDS);
 
+// A task the implementer has parked while waiting on someone else: "Pending Client Action", "Pending Client
+// Feedback", "Pending Client Document", "Pending Client Review", or "Pending Third Party ...".
+export const isClientWaitingStatus = (status) => /^pending client\b/i.test(String(status || '').trim());
+export const isThirdPartyWaitingStatus = (status) => /^pending third party\b/i.test(String(status || '').trim());
+export const isWaitingStatus = (status) => isClientWaitingStatus(status) || isThirdPartyWaitingStatus(status);
+
 export function isTaskClosed(task, closedNames) {
     const names = Array.isArray(closedNames) && closedNames.length ? closedNames : ['Done'];
     return !!task && names.includes(String(task.status || ''));
@@ -77,7 +81,7 @@ export function testingPhaseFor(pd, sheetId, item, round) {
 // opts.phase is 'testing' or 'review' (see testingPhaseFor).
 export function deriveWorkStatus(item, tasks, opts = {}) {
     const closedNames = Array.isArray(opts.closedNames) && opts.closedNames.length ? opts.closedNames : ['Done'];
-    const empty = { status: WORK_STATUS.PENDING, role: 'implementation', openAsks: 0, openBlockers: 0, waitingOn: null, stepsTotal: 0, stepsDone: 0 };
+    const empty = { status: WORK_STATUS.PENDING, role: 'implementation', openAsks: 0, waitingOn: null, stepsTotal: 0, stepsDone: 0 };
 
     if (!item) return empty;
     if (String(item.status || '') === 'Done') {
@@ -86,8 +90,6 @@ export function deriveWorkStatus(item, tasks, opts = {}) {
 
     const linked = tasksForItem(tasks, item.id);
     const openAsks = linked.filter(t => ASK_KEYS.includes(t.askKind) && !isTaskClosed(t, closedNames));
-    const openBlockers = openAsks.filter(t => t.isBlocker).length;
-
     const steps = linked.filter(t => !t.askKind);                 // Sphynx's own step tasks
     const openSteps = steps.filter(t => !isTaskClosed(t, closedNames));
     const progress = { stepsTotal: steps.length, stepsDone: steps.length - openSteps.length };
@@ -99,11 +101,11 @@ export function deriveWorkStatus(item, tasks, opts = {}) {
         }
         return { ...empty, ...progress };
     }
-    const allBlockers = openBlockers === openAsks.length;
     const nothingLeftForSphynx = steps.length > 0 && openSteps.length === 0;
+    const allStepsWaiting = openSteps.length > 0 && openSteps.every((t) => isWaitingStatus(t.status));
 
-    if (!allBlockers && !nothingLeftForSphynx) {
-        return { ...empty, openAsks: openAsks.length, openBlockers, ...progress };
+    if (!allStepsWaiting && !nothingLeftForSphynx) {
+        return { ...empty, openAsks: openAsks.length, ...progress };
     }
 
     const waitingOn = openAsks.some(t => t.askKind !== 'third_party') ? 'client' : 'third_party';
@@ -111,7 +113,6 @@ export function deriveWorkStatus(item, tasks, opts = {}) {
         status: waitingOn === 'client' ? WORK_STATUS.WAITING_CLIENT : WORK_STATUS.WAITING_THIRD,
         role: 'communication',
         openAsks: openAsks.length,
-        openBlockers,
         waitingOn,
         ...progress,
     };

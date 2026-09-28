@@ -662,7 +662,7 @@ function renderScopingRowBase(item, idx, showUnits) {
         staffWorkHtml = `
             <span class="pill tiny" style="border:1px solid ${color}; color:${color};">${esc(WORK_STATUS_LABELS[w.status] || w.status)}</span>
             ${w.stepsTotal ? `<span class="muted">${w.stepsDone}/${w.stepsTotal} steps</span>` : ''}
-            ${w.openAsks ? `<span class="muted">${w.openAsks} open ask${w.openAsks === 1 ? '' : 's'}${w.openBlockers ? `, ${w.openBlockers} blocking` : ''}</span>` : ''}
+            ${w.openAsks ? `<span class="muted">${w.openAsks} open ask${w.openAsks === 1 ? '' : 's'}</span>` : ''}
             <button class="btn tiny soft" onclick="OL.openAskModal('${item.id}')">Ask client…</button>
         `;
         clientTestHtml = typeof OL.testBadgeHtml === 'function' ? OL.testBadgeHtml(client, item, isAdmin) : '';
@@ -2289,11 +2289,8 @@ function askAssigneeOptions(client, kind) {
 
 function askLineHtml() {
     return `
-        <div class="ask-line" style="display:grid; grid-template-columns: 1fr auto 130px auto; gap:8px; align-items:center; margin-bottom:8px;">
+        <div class="ask-line" style="display:grid; grid-template-columns: 1fr 130px auto; gap:8px; align-items:center; margin-bottom:8px;">
             <input type="text" class="modal-input tiny ask-title" placeholder="What do you need? e.g. Logo file">
-            <label class="tiny muted" style="display:flex; align-items:center; gap:4px; white-space:nowrap;" title="Work can't continue without this">
-                <input type="checkbox" class="ask-blocker" checked> Blocker
-            </label>
             <input type="date" class="modal-input tiny ask-due">
             <button type="button" class="btn tiny soft" onclick="this.closest('.ask-line').remove()">✕</button>
         </div>`;
@@ -2319,9 +2316,9 @@ export function openAskModal(itemId) {
         </div>
         <div class="modal-body">
             <p class="tiny muted" style="margin-bottom:12px;">
-                What is <b>${esc(label)}</b> waiting on? Each line becomes a task linked to this request.
-                Tick <b>Blocker</b> if work can't continue without it. If every open ask is a blocker,
-                the request shows as waiting and a follow-up task is created.
+                What is <b>${esc(label)}</b> waiting on? Each line becomes a task linked to this request, and
+                it is added to the client follow-up. If the work can't continue without it, set the
+                implementation task to <b>Pending Client Action</b> (or another Pending Client status).
             </p>
 
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px;">
@@ -2375,7 +2372,6 @@ export async function saveAsks(itemId) {
 
     const lines = Array.from(document.querySelectorAll('.ask-line')).map(row => ({
         title: (row.querySelector('.ask-title')?.value || '').trim(),
-        blocker: !!row.querySelector('.ask-blocker')?.checked,
         due: row.querySelector('.ask-due')?.value || '',
     })).filter(l => l.title);
 
@@ -2406,7 +2402,6 @@ export async function saveAsks(itemId) {
             createdBy: 'request-ask',
             createdAt: now,
             requestLineItemId: item.id,
-            isBlocker: l.blocker,
             askKind: kind,
         }));
 
@@ -2419,7 +2414,7 @@ export async function saveAsks(itemId) {
                 description: `Waiting on ${lines.length} item${lines.length === 1 ? '' : 's'}: ${lines.map(l => l.title).join('; ')}`,
                 status: 'Needs Follow Up', assignee: communicationAssignee(client), dueDate: dueDates[0] || '',
                 isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'request-ask', createdAt: now,
-                requestLineItemId: item.id, isBlocker: false, askKind: 'follow_up',
+                requestLineItemId: item.id, askKind: 'follow_up',
             };
             client.projectData.clientTasks.unshift(followUp, ...asks);
         } else {

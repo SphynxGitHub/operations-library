@@ -3,11 +3,13 @@
 // updateTestRuns / updateRoundStates — see core/data.js persist()). Every pass is idempotent: it looks at
 // what already exists and only adds or changes what's missing, so running it on every save is safe.
 //
-//   1. Blocked implementation tasks. When someone flips an implementation task to "Pending Client Action",
-//      its due date is kept aside and cleared so it doesn't clutter their list, and the client tasks that
-//      were open on the same request/resource at that moment are recorded. Once all of those are closed, the
-//      task flips back to "Pending Sphynx Action" and gets its date back (or tomorrow, if that date has
-//      passed). Nothing flips automatically just because an ask was added — the implementer chooses when.
+//   1. Implementation tasks waiting on the client. Client tasks alone change nothing on an implementation task:
+//      the implementer decides whether they can keep working. If they can't, they set the task to a "Pending
+//      Client ..." status (Pending Client Action, Feedback, Document or Review). Its due date is then logged and
+//      removed, and the client tasks open at that moment are recorded. When ALL the client tasks related to it
+//      (the ones recorded, plus any added since) are complete, the task goes back to "Pending Sphynx Action" and
+//      gets a date again: the original date if that isn't in the past, otherwise the day after the last client
+//      task was completed. A task left on Pending Sphynx Action is never touched by this.
 //   2. One consolidated client follow-up task per project (not per task or round): lists everything open on
 //      the client, request by request and resource by resource. It closes when nothing is open, reopens with
 //      the same history when something new arrives, and comes back with a new date each time a touchpoint is
@@ -24,13 +26,13 @@
 // now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
 
 import { linksForTask, addLink } from './task-links.js';
-import { isTaskClosed } from './work-status.js';
+import { isTaskClosed, isClientWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
 import { isRoundApproved } from './requests.js';
 import { isOngoing } from './maintenance.js';
 import { state, uid } from './data.js';
 
-export const BLOCKED_STATUS = 'Pending Client Action';
+export const BLOCKED_STATUS = 'Pending Client Action';   // the default waiting status; any "Pending Client ..." status counts
 export const OPEN_STATUS = 'Pending Sphynx Action';
 export const FOLLOW_UP_STATUS = 'Needs Follow Up';
 export const DEFAULT_FOLLOW_UP_EVERY_DAYS = 3;
@@ -95,34 +97,60 @@ export function relatedClientTasks(client, task, ctx) {
     });
 }
 
-export const restoreDueDate = (saved, today) => (isBlank(saved) ? '' : (day(saved) >= today ? day(saved) : addDays(today, 1)));
+const localDay = (iso) => day(iso);
+
+// Where a released task's date goes: its original date, unless that has passed; then the day after the last
+// client task was completed (never earlier than today).
+export function restoreDueDate(original, latestCompletedDay, today) {
+    if (!isBlank(original) && day(original) >= today) return day(original);
+    const after = isBlank(latestCompletedDay) ? today : addDays(latestCompletedDay, 1);
+    return after < today ? today : after;
+}
+
+const addComment = (task, text, ctx) => {
+    (task.comments = task.comments || []).push({ id: ctx.uid(), author: 'System', text, html: '', mentions: [], date: ctx.now });
+};
 
 export function reconcileBlockedTasks(client, ctx) {
     const out = { blocked: [], released: [] };
-    (client?.projectData?.clientTasks || []).forEach((t) => {
+    const all = client?.projectData?.clientTasks || [];
+    all.forEach((t) => {
         if (!t || !isImplementationTask(t, ctx)) return;
-        const blocked = t.status === BLOCKED_STATUS;
+        const waiting = isClientWaitingStatus(t.status);
 
-        if (blocked && !t.blockedOn) {
-            // Just flipped: keep the date aside, clear it, and note what it is waiting for.
-            t.blockedOn = { since: ctx.now, dueDate: day(t.dueDate), taskIds: relatedClientTasks(client, t, ctx).map((x) => x.id) };
+        if (waiting && !t.blockedOn) {
+            // Just set to a client-waiting status: log the due date, remove it, note what it is waiting for.
+            const related = relatedClientTasks(client, t, ctx);
+            t.blockedOn = { since: ctx.now, status: t.status, dueDate: day(t.dueDate), taskIds: related.map((x) => x.id), completed: {} };
+            (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'removed', dueDate: day(t.dueDate), status: t.status });
+            if (!isBlank(t.dueDate)) addComment(t, `Due date ${day(t.dueDate)} removed while waiting on the client (${t.status}). It comes back when the related client tasks are complete.`, ctx);
             t.dueDate = '';
             out.blocked.push(t.id);
-        } else if (blocked && t.blockedOn) {
-            const waiting = (t.blockedOn.taskIds || []).length > 0;
-            const allClosed = waiting && t.blockedOn.taskIds.every((id) => {
-                const c = (client.projectData.clientTasks || []).find((x) => x.id === id);
-                return !c || !isOpen(c, ctx);
+        } else if (waiting && t.blockedOn) {
+            // Keep the list current: client tasks added after the flip are part of what it is waiting for.
+            const b = t.blockedOn;
+            relatedClientTasks(client, t, ctx).forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
+            // Note when each one was completed, for the restored date.
+            b.taskIds.forEach((id) => {
+                const c = all.find((x) => x.id === id);
+                if (c && !isOpen(c, ctx) && !b.completed[id]) b.completed[id] = day(c.completedAt || ctx.now);
             });
-            if (allClosed) {
+            const done = b.taskIds.length > 0 && b.taskIds.every((id) => { const c = all.find((x) => x.id === id); return !c || !isOpen(c, ctx); });
+            if (done) {
+                const latest = Object.values(b.completed).sort().pop() || '';
                 t.status = OPEN_STATUS;
-                t.dueDate = restoreDueDate(t.blockedOn.dueDate, ctx.today);
+                t.dueDate = restoreDueDate(b.dueDate, latest, ctx.today);
+                (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'restored', dueDate: t.dueDate });
+                addComment(t, `All the related client tasks are complete. Back to ${OPEN_STATUS}${t.dueDate ? `, due ${t.dueDate}` : ''}.`, ctx);
                 delete t.blockedOn;
                 out.released.push(t.id);
             }
-        } else if (!blocked && t.blockedOn) {
-            // Someone moved it out of the waiting status by hand: give the date back.
-            if (isBlank(t.dueDate)) t.dueDate = restoreDueDate(t.blockedOn.dueDate, ctx.today);
+        } else if (!waiting && t.blockedOn) {
+            // The implementer moved it out of the waiting status themselves: give the date back.
+            if (isBlank(t.dueDate)) {
+                t.dueDate = restoreDueDate(t.blockedOn.dueDate, '', ctx.today);
+                (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'restored', dueDate: t.dueDate });
+            }
             delete t.blockedOn;
             out.released.push(t.id);
         }
