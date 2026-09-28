@@ -1291,10 +1291,27 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
         const scrollY = frame ? (win.scrollY || doc.documentElement.scrollTop || 0) : (body.scrollTop || 0);
         const bodyRect = frame ? { top: 0, left: 0 } : body.getBoundingClientRect();
 
+        // Placing the button 32px above the selection, unconditionally, is what was cutting it off: with
+        // nothing above (selection near the top of the visible area) that put it outside the scrollable area
+        // entirely, and near the bottom there wasn't always room for it below either. Now it only goes above
+        // the selection when there's actually room; otherwise it drops below the selection instead, and if
+        // there's no room there either it's clamped to the bottom of the visible area.
+        const BTN_H = 28;
+        const viewportTop = frame ? 0 : bodyRect.top;
+        const viewportBottom = frame ? (win.innerHeight || 0) : bodyRect.bottom;
+        let topPx;
+        if ((rect.top - viewportTop) >= (BTN_H + 6)) {
+            topPx = rect.top - bodyRect.top + scrollY - BTN_H - 4;               // room above: put it there, as before
+        } else if ((viewportBottom - rect.bottom) >= (BTN_H + 6)) {
+            topPx = rect.bottom - bodyRect.top + scrollY + 6;                    // no room above: put it below instead
+        } else {
+            topPx = Math.max(0, viewportBottom - bodyRect.top + scrollY - BTN_H - 4);   // no room either way: clamp to the bottom edge
+        }
+
         const btn = doc.createElement('button');
         btn.id = 'gmail-excerpt-link-btn';
         btn.textContent = 'Link this';
-        btn.style.cssText = `position:absolute; z-index:2147483647; top:${rect.top - bodyRect.top + scrollY - 32}px; left:${Math.max(0, rect.left - bodyRect.left + scrollX)}px; padding:4px 10px; font-size:11px; font-weight:600; border-radius:6px; border:none; cursor:pointer; background:var(--accent, #64c6a2); color:#fff;`;
+        btn.style.cssText = `position:absolute; z-index:2147483647; top:${topPx}px; left:${Math.max(0, rect.left - bodyRect.left + scrollX)}px; padding:4px 10px; font-size:11px; font-weight:600; border-radius:6px; border:none; cursor:pointer; background:var(--accent, #64c6a2); color:#fff;`;
         btn.onmousedown = (e) => e.preventDefault();   // don't clear the selection before onclick fires
         // This closure is defined here, in the parent script, even though
         // the button element itself gets appended into the iframe's

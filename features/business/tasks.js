@@ -2731,6 +2731,27 @@ OL._ALLOWED_COMMENT_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'UL', 'OL', '
 // and signature), and only as an uploaded picture (data:image/png|jpeg|gif|
 // webp;base64) or an https:// address.
 OL._SAFE_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
+// Text pasted from Outlook/Word/Gmail/etc. almost always carries an explicit near-black color on every run —
+// the source's own "default" text color, not a deliberate choice. Kept as an inline style, it hardcodes black
+// text that becomes unreadable in dark mode. Anything this dark is treated as "no color" instead, so it
+// follows the app's own theme like untouched text does. A genuine deliberate color pick from the toolbar is
+// essentially never this dark, so this doesn't take away the ability to actually choose black on purpose in
+// any way that matters.
+OL._isNearBlack = function(color) {
+    const c = String(color || '').trim().toLowerCase();
+    if (!c) return false;
+    if (c === 'black' || c === '#000' || c === '#000000') return true;
+    const hex = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+    if (hex) {
+        const h = hex[1].length === 3 ? hex[1].split('').map((x) => x + x).join('') : hex[1];
+        const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+        return r <= 30 && g <= 30 && b <= 30;
+    }
+    const rgb = c.match(/^rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)/);
+    if (rgb) return Number(rgb[1]) <= 30 && Number(rgb[2]) <= 30 && Number(rgb[3]) <= 30;
+    return false;
+};
+
 OL._SAFE_IMG_SRC_RE = /^(data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]+|https:\/\/[^\s"'<>]+)$/i;
 OL._ALIGNABLE_TAGS = new Set(['DIV', 'P', 'H3', 'H4', 'LI', 'BLOCKQUOTE', 'UL', 'OL']);
 OL.sanitizeCommentHtml = function(html, opts = {}) {
@@ -2745,7 +2766,7 @@ OL.sanitizeCommentHtml = function(html, opts = {}) {
                 if (child.tagName === 'FONT') {
                     const span = document.createElement('span');
                     const c = (child.getAttribute('color') || '').trim();
-                    if (c && OL._SAFE_COLOR_RE.test(c)) span.style.color = c;
+                    if (c && OL._SAFE_COLOR_RE.test(c) && !OL._isNearBlack(c)) span.style.color = c;
                     while (child.firstChild) span.appendChild(child.firstChild);
                     node.replaceChild(span, child);
                     child = span;
@@ -2787,7 +2808,7 @@ OL.sanitizeCommentHtml = function(html, opts = {}) {
                     }
                 });
                 // Keep only a text color, nothing else from style.
-                if (color && OL._SAFE_COLOR_RE.test(color.replace(/\s+/g, ' ').trim())) child.style.color = color;
+                if (color && OL._SAFE_COLOR_RE.test(color.replace(/\s+/g, ' ').trim()) && !OL._isNearBlack(color)) child.style.color = color;
                 if (align && align !== 'left') child.style.textAlign = align;
                 walk(child);
             } else if (child.nodeType !== 3) { // not an element, not plain text (comments, etc.)
