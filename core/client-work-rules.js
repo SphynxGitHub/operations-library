@@ -467,5 +467,41 @@ export function syncPeriodReminders(clientId, periods) {
     return created;
 }
 
+// The rules above run when a client is saved. Time-based ones (60 days with no requests, work that has gone
+// stale, plan-period reminders) must also run for a client nobody has touched, so this goes through every loaded
+// client shortly after the app opens and every few hours after that. Team logins only. A client is saved only if
+// something actually changed.
+let sweeping = false;
+export async function sweepClientWorkRules() {
+    if (sweeping || window.IS_GUEST || !(state.adminMode === true || state.teamMemberMode === true)) return { checked: 0, changed: 0 };
+    sweeping = true;
+    const out = { checked: 0, changed: 0 };
+    try {
+        for (const client of Object.values(state.clients || {})) {
+            if (!client || client._metaOnly || !client.projectData || client.meta?.status === 'Partner') continue;
+            out.checked++;
+            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup]);
+            const before = snap();
+            try {
+                // Ongoing Maintenance: read the plan periods so the two reminders before a period ends exist even
+                // if nobody opens Maintenance & Hours (loadMaintenanceData makes them).
+                if (isOngoing(client) && typeof window.OL?.loadMaintenanceData === 'function') await window.OL.loadMaintenanceData(client.id);
+                runClientWorkRules(client, contextNow());
+            } catch (e) { console.warn('Work rules sweep failed for', client.id, e); continue; }
+            if (snap() !== before) {
+                out.changed++;
+                if (window.OL?.markClientDirty) window.OL.markClientDirty(client.id);
+            }
+        }
+        if (out.changed && window.OL?.persist) await window.OL.persist();
+    } finally { sweeping = false; }
+    return out;
+}
+
+if (typeof setTimeout === 'function' && typeof document !== 'undefined') {
+    setTimeout(() => { sweepClientWorkRules(); }, 90 * 1000);
+    setInterval(() => { sweepClientWorkRules(); }, 6 * 60 * 60 * 1000);
+}
+
 window.OL = window.OL || {};
-Object.assign(window.OL, { runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders });
+Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders });

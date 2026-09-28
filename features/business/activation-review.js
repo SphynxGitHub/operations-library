@@ -15,7 +15,7 @@
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
-import { findFirstAvailableDate } from '../../core/scheduling.js';
+import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, MAX_DAILY_HOURS } from '../../core/scheduling.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
@@ -53,6 +53,19 @@ OL.openActivationReview = async function(clientId, itemId) {
     OL.renderActivationReviewStep();
 };
 
+// How busy the assignee is on a row's due date: meetings + tasks already due that day, plus the other included
+// rows in this plan for the same person and day, plus this row's own estimate. Amber from 4 hours, red over 5
+// (the auto-slotter itself stops at 6.4).
+function rowLoad(st, row) {
+    if (!st || row.kind !== 'implementation' || !row.assignee || !row.dueDate) return null;
+    const day = String(row.dueDate).slice(0, 10);
+    const base = dailyLoadHours(st.calendarEvents, st.existingTasks, row.assignee, day);
+    const others = (st.plan || []).filter((r) => r !== row && r.included && r.kind === 'implementation' && r.assignee === row.assignee && String(r.dueDate || '').slice(0, 10) === day)
+        .reduce((sum, r) => sum + (Number(r.estimatedHours) || 0), 0);
+    const hours = base + others + (Number(row.estimatedHours) || 0);
+    return { hours, tier: dayLoadTier(hours) };
+}
+
 function rowHTML(st, row) {
     const isAsk = row.kind === 'ask';
     return `
@@ -71,6 +84,7 @@ function rowHTML(st, row) {
                                onchange="OL.setActivationRowDueDate('${row.id}', this.value)">
                         <span class="tiny" style="color:${row.estimatedHours ? 'var(--text-muted, #94a3b8)' : 'inherit'};">${row.estimatedHours ? `est. ${row.estimatedHours}h` : ''}</span>
                     </div>
+                    ${(() => { const l = rowLoad(st, row); if (!l || l.tier === 'clear') return ''; const c = l.tier === 'red' ? '#ef4444' : '#f59e0b'; return `<div class="tiny" style="color:${c}; margin-top:2px;">${l.tier === 'red' ? 'Very busy' : 'Getting busy'}: ${l.hours.toFixed(1)}h booked that day${l.hours > MAX_DAILY_HOURS ? ` (over the ${MAX_DAILY_HOURS}h limit)` : ''}.</div>`; })()}
                     ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next 2 weeks — pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}
@@ -144,6 +158,7 @@ OL.setActivationRowDueDate = function(rowId, value) {
     if (!row) return;
     row.dueDate = value;
     row.dueDateReason = null;   // a manually picked date isn't "no capacity found" anymore, whatever it was before
+    OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());   // the day's load flag depends on the date
 };
 
 // A manual addition — templateId stays null, which is exactly what

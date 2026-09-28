@@ -1508,6 +1508,7 @@ OL.confirmExcerptLink = async function() {
     OL._excerptLinkState = null;
     OL._pendingSuggestionLink = null;
     OL.closeModal();
+    if (updatePayload.suggestions && await OL._maybeAutoArchiveAfterSuggestions(st.messageId)) return;
     OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
 };
 
@@ -1832,6 +1833,7 @@ OL.linkGmailSuggestion = async function(messageId, suggestionId) {
     const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'linked' } : s);
 
     await db.from('gmail_messages').update({ piece_links: pieceLinks, suggestions }).eq('id', messageId);
+    if (await OL._maybeAutoArchiveAfterSuggestions(messageId)) return;
     OL.openGmailMessageModal(messageId);
 };
 
@@ -1848,11 +1850,30 @@ OL.openExcerptLinkPickerForSuggestion = function(messageId, suggestionId) {
     });
 };
 
+// Auto-archive rule for suggestions: once every suggested item on an email has been linked or dismissed, the
+// email is dealt with, so it's archived (only this message, in the app and in Gmail). An email with nothing
+// suggested is never archived by this — and a quick one-item link ("This answers it") doesn't archive on its
+// own either; see saveGmailLink for the other rule (linked to a project AND another item).
+// Returns true if it archived, so the caller knows not to reopen the email.
+OL._maybeAutoArchiveAfterSuggestions = async function(messageId) {
+    const { data: m, error } = await db.from('gmail_messages').select('suggestions, archived').eq('id', messageId).single();
+    if (error || !m || m.archived) return false;
+    const list = Array.isArray(m.suggestions) ? m.suggestions : [];
+    if (!list.length) return false;
+    if (!list.every((s) => s && (s.status === 'linked' || s.status === 'dismissed'))) return false;
+    OL.closeModal();
+    await OL.archiveGmailMessage(messageId, true, { wholeThread: false, skipClose: true });
+    await OL.loadGmailFeed();
+    OL._refreshAfterGmailAction();
+    return true;
+};
+
 OL.dismissGmailSuggestion = async function(messageId, suggestionId) {
     const { data: m, error: fetchErr } = await db.from('gmail_messages').select('suggestions').eq('id', messageId).single();
     if (fetchErr) return;
     const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'dismissed' } : s);
     await db.from('gmail_messages').update({ suggestions }).eq('id', messageId);
+    if (await OL._maybeAutoArchiveAfterSuggestions(messageId)) return;
     OL.openGmailMessageModal(messageId);
 };
 

@@ -537,6 +537,18 @@ function renderMsOtherTasks() {
     }).join('') : `<div class="tiny muted">${q ? 'No matches.' : 'No other open tasks on this project.'}</div>`;
 }
 
+// A hint for one action item: does the wording sound like the client asking for new work or a fix? Uses the same
+// phrase matcher as email suggestions (communications.js), and only ever shows a chip — nothing is created
+// until someone clicks New request or Revision. Items for the client to do, and ones already turned into a
+// request, get no hint.
+function requestHintFor(task) {
+    if (!task || task.madeRequestId || task.isClientTask || typeof OL._classifyEmailCandidatesLocally !== 'function') return null;
+    const title = String(task.title || task.name || '');
+    if (title.length < 8) return null;
+    const hit = OL._classifyEmailCandidatesLocally(title, [])[0];
+    return hit && (hit.suggestedType === 'revision' || hit.suggestedType === 'new_request') ? hit.suggestedType : null;
+}
+
 function renderMsTaskRows() {
     const st = OL._msState;
     const box = document.getElementById('ms-task-rows');
@@ -564,11 +576,14 @@ function renderMsTaskRows() {
             </div>
             ${t.madeRequestId
                 ? `<div class="tiny" style="margin-top:6px; color:#64c6a2;">✓ Also added as a ${esc(t.madeRequestType || 'request')} in Pending on the Scoping Sheet</div>`
-                : `<div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
-                        <span class="tiny muted">Client is asking for something new?</span>
-                        <button type="button" class="btn tiny soft" title="Adds it to Pending on the Scoping Sheet as a new request" onclick="OL.msMakeRequest('${t.id}', 'build')">New request</button>
-                        <button type="button" class="btn tiny soft" title="Adds it to Pending on the Scoping Sheet as a revision" onclick="OL.msMakeRequest('${t.id}', 'revision')">Revision</button>
-                   </div>`}
+                : (() => {
+                    const hint = requestHintFor(t);
+                    return `<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+                        ${hint ? `<span class="pill tiny" style="border:1px solid #f59e0b; color:#f59e0b;">Looks like a ${hint === 'revision' ? 'revision' : 'new request'}</span>` : `<span class="tiny muted">Client is asking for something new?</span>`}
+                        <button type="button" class="btn tiny ${hint === 'new_request' ? 'primary' : 'soft'}" title="Adds it to Pending on the Scoping Sheet as a new request" onclick="OL.msMakeRequest('${t.id}', 'build')">New request</button>
+                        <button type="button" class="btn tiny ${hint === 'revision' ? 'primary' : 'soft'}" title="Adds it to Pending on the Scoping Sheet as a revision" onclick="OL.msMakeRequest('${t.id}', 'revision')">Revision</button>
+                   </div>`;
+                })()}
         </div>`;
     }).join('')
         : '<div class="tiny muted" style="margin-bottom:8px;">No open tasks from this meeting yet.</div>';

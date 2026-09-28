@@ -9,6 +9,7 @@
 
 import { isTaskClosed } from './work-status.js';
 import { taskAppliesToRequest } from './task-links.js';
+import { previewClientAsks } from './activation.js';
 
 export const PHASES = ['before', 'implementation', 'after'];
 // The stored key stays 'implementation' (saved on tasks as task.phase) — only the label the person reads changes.
@@ -100,16 +101,23 @@ export function clientTasksByRequest(client, ctx = {}) {
         const title = !isBlank(item.name) ? String(item.name).trim() : (ctx.resourceNameFor ? ctx.resourceNameFor(item) : '') || 'Request';
         const g = groupRequestTasks(client, item, ctx);
         const mine = g.entries.filter((e) => e.clientFacing && !e.done);
-        if (!mine.length) return;
+        const tasks = mine.map((e) => ({
+            title: String(e.task.title || e.task.name || 'Task'), dueDate: dayOf(e.task.dueDate),
+            kind: ({ review: 'Review', document: 'Document', feedback: 'Feedback' })[e.task.askKind] || '',
+            phase: e.phase,
+        }));
+        // Not activated yet, so its client asks don't exist as tasks — show the ones the SOP will ask for, so the
+        // client can see what to prepare while they are deciding. They have no date until it is activated.
+        if (!item.activatedAt && ctx.askTemplates && ctx.resourcesFor) {
+            const seen = new Set(tasks.map((t) => t.title));
+            previewClientAsks({
+                item, resources: ctx.resourcesFor(item), requestType: isBlank(item.requestType) ? 'build' : String(item.requestType),
+                resourceType: ctx.resourceTypeFor ? ctx.resourceTypeFor(item) : '', askTemplates: ctx.askTemplates,
+            }).forEach((a) => { if (!seen.has(a.title)) tasks.push({ title: a.title, dueDate: '', kind: ({ review: 'Review', document: 'Document', feedback: 'Feedback' })[a.askKind] || '', phase: 'before', planned: true }); });
+        }
+        if (!tasks.length) return;
         const r = parseInt(item.round, 10);
-        out.push({
-            itemId: String(item.id), title, round: Number.isFinite(r) && r >= 1 ? r : 1,
-            tasks: mine.map((e) => ({
-                title: String(e.task.title || e.task.name || 'Task'), dueDate: dayOf(e.task.dueDate),
-                kind: ({ review: 'Review', document: 'Document', feedback: 'Feedback' })[e.task.askKind] || '',
-                phase: e.phase,
-            })),
-        });
+        out.push({ itemId: String(item.id), title, round: Number.isFinite(r) && r >= 1 ? r : 1, tasks });
     }));
     return out.sort((a, b) => a.round - b.round || a.title.localeCompare(b.title));
 }

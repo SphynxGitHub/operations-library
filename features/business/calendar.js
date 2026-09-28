@@ -81,6 +81,9 @@ OL.renderBusinessCalendar = function() {
                     <button class="btn small soft" onclick="OL.openManageCalendarsModal()">
                         <i data-lucide="calendar-plus" style="width:14px;height:14px;"></i> Manage Calendars
                     </button>
+                    <button class="btn small primary" onclick="OL.openNewMeetingModal()" title="Create a meeting on the connected Google Calendar and invite people">
+                        <i data-lucide="calendar-plus" style="width:14px;height:14px;"></i> New meeting
+                    </button>
                     <button class="btn small soft" onclick="OL.fetchLiveGoogleCalendar()" ${OL.calendarState.loading ? 'disabled' : ''}>
                         <i data-lucide="refresh-cw" style="width:14px;height:14px;${OL.calendarState.loading ? 'animation: spin 1s linear infinite;' : ''}"></i>
                         ${OL.calendarState.loading ? 'Syncing...' : 'Sync Calendar'}
@@ -1540,6 +1543,100 @@ OL.setEventLoggedHours = async function(id, hoursValue) {
 // -------------------------------------------------------------
 // LIVE GOOGLE CALENDAR SYNC
 // -------------------------------------------------------------
+// ---------------- New meeting, created here ----------------
+// Creates the meeting on the connected Google Calendar (Google sends the invitations), then syncs the calendar so
+// it shows up like any other meeting and is matched to its project by the guests' emails. Picking a project just
+// fills in that project's contacts as guests. The calendar it goes on is the first one being synced (else the
+// account's main calendar).
+OL.openNewMeetingModal = function(prefill = {}) {
+    const clients = Object.values(state.clients || {}).filter((c) => c?.meta?.status !== 'Partner').sort((a, b) => String(a.meta?.name || '').localeCompare(String(b.meta?.name || '')));
+    const nextHour = new Date(Date.now() + 3600000); nextHour.setMinutes(0, 0, 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateVal = prefill.date || `${nextHour.getFullYear()}-${pad(nextHour.getMonth() + 1)}-${pad(nextHour.getDate())}`;
+    const timeVal = prefill.time || `${pad(nextHour.getHours())}:00`;
+    const field = (label, inner) => `<div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;"><label class="tiny muted" style="font-size:10px; font-weight:600;">${label}</label>${inner}</div>`;
+    OL._newMeeting = { guests: [] };
+    openModal(`
+        <div class="modal-head"><div class="modal-title-text">New meeting</div><div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button></div>
+        <div class="modal-body" style="max-width:560px;">
+            ${field('Title', '<input id="nm-title" type="text" class="modal-input" placeholder="e.g. Intake form review" autofocus>')}
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+                ${field('Date', `<input id="nm-date" type="date" class="modal-input" value="${dateVal}">`)}
+                ${field('Start', `<input id="nm-time" type="time" class="modal-input" value="${timeVal}">`)}
+                ${field('Length', `<select id="nm-length" class="modal-input">${[15, 30, 45, 60, 90, 120].map((m) => `<option value="${m}" ${m === 30 ? 'selected' : ''}>${m} minutes</option>`).join('')}</select>`)}
+            </div>
+            ${field('Project (fills in their contacts as guests)', `<select id="nm-client" class="modal-input" onchange="OL.newMeetingPickClient(this.value)"><option value="">None</option>${clients.map((c) => `<option value="${esc(c.id)}">${esc(c.meta?.name || c.id)}</option>`).join('')}</select>`)}
+            ${field('Guests', `<div id="nm-guests" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;"></div>
+                <div style="display:flex; gap:6px;"><input id="nm-guest-input" type="email" class="modal-input tiny" style="flex:1;" placeholder="Add an email and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault(); OL.newMeetingAddGuest();}">
+                <button type="button" class="btn tiny soft" onclick="OL.newMeetingAddGuest()">Add</button></div>`)}
+            ${field('Notes (optional)', '<textarea id="nm-notes" class="modal-input" rows="3"></textarea>')}
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:14px;"><input id="nm-meet" type="checkbox"> Add a Google Meet link</label>
+            <div id="nm-status" class="tiny muted" style="margin-bottom:8px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button id="nm-save" class="btn primary" onclick="OL.saveNewMeeting()">Create and invite</button>
+            </div>
+        </div>`);
+    OL.renderNewMeetingGuests();
+};
+
+OL.renderNewMeetingGuests = function() {
+    const box = document.getElementById('nm-guests');
+    if (!box) return;
+    const g = OL._newMeeting.guests;
+    box.innerHTML = g.length ? g.map((e, i) => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:6px;">${esc(e)}<span style="cursor:pointer;" onclick="OL.newMeetingRemoveGuest(${i})">✕</span></span>`).join('') : '<span class="tiny muted">No guests yet.</span>';
+};
+OL.newMeetingAddGuest = function() {
+    const input = document.getElementById('nm-guest-input');
+    const email = String(input?.value || '').trim().toLowerCase();
+    if (!email) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('That email address does not look right.'); return; }
+    if (!OL._newMeeting.guests.includes(email)) OL._newMeeting.guests.push(email);
+    input.value = '';
+    OL.renderNewMeetingGuests();
+};
+OL.newMeetingRemoveGuest = function(i) { OL._newMeeting.guests.splice(i, 1); OL.renderNewMeetingGuests(); };
+OL.newMeetingPickClient = function(clientId) {
+    const client = state.clients?.[clientId];
+    if (!client) return;
+    (client.projectData?.teamMembers || []).filter((m) => m.email).forEach((m) => {
+        const e = String(m.email).toLowerCase();
+        if (!OL._newMeeting.guests.includes(e)) OL._newMeeting.guests.push(e);
+    });
+    OL.renderNewMeetingGuests();
+};
+
+OL.saveNewMeeting = async function() {
+    const val = (id) => document.getElementById(id)?.value || '';
+    const title = val('nm-title').trim(), date = val('nm-date'), time = val('nm-time');
+    if (!title) { alert('Give the meeting a title.'); return; }
+    if (!date || !time) { alert('Pick a date and start time.'); return; }
+    const pending = String(val('nm-guest-input')).trim();
+    if (pending) OL.newMeetingAddGuest();
+    const status = document.getElementById('nm-status'), btn = document.getElementById('nm-save');
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Creating the meeting...';
+    try {
+        const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/create-calendar-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) },
+            body: JSON.stringify({
+                title, start: `${date}T${time}`, durationMinutes: Number(val('nm-length')) || 30,
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, calendarId: (state.master?.syncedCalendarIds || [])[0] || 'primary',
+                attendees: OL._newMeeting.guests, description: val('nm-notes'), addMeet: !!document.getElementById('nm-meet')?.checked,
+            }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = body.message || 'Could not create the meeting.'; if (btn) btn.disabled = false; return; }
+        OL.closeModal();
+        await OL.fetchLiveGoogleCalendar();   // bring it in, matched to its project like any other meeting
+    } catch (err) {
+        if (status) status.textContent = 'Could not reach the server. Please try again.';
+        if (btn) btn.disabled = false;
+    }
+};
+
 OL.fetchLiveGoogleCalendar = async function() {
     if (OL.calendarState.loading) return;
     OL.calendarState.loading = true;

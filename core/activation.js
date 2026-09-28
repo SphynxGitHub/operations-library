@@ -77,6 +77,22 @@ export function suggestAssignee(client, roles, requestType, assigneeByType, fall
     return assigneeForRole(client, roles, fallbackPattern);
 }
 
+// The client asks a request WOULD get at activation, for showing the client what to prepare while they are still
+// deciding (the printed scoping sheet). Same templates and the same wording as buildActivationPlan, without
+// creating anything.
+export function previewClientAsks({ item, resources, requestType, resourceType, askTemplates }) {
+    const title = item?.name || resources?.[0]?.name || 'Request';
+    const targets = resources && resources.length ? resources : [{ id: null, name: title, type: resourceType }];
+    const vars = { resource: resources?.[0]?.name || title, request: title };
+    const out = [];
+    targets.forEach((res) => {
+        pickAskTemplates(askTemplates, requestType, res.type || resourceType).forEach((t) => {
+            out.push({ title: fill(t.title, { ...vars, resource: res.name || vars.resource }), askKind: t.askKind || 'document' });
+        });
+    });
+    return out;
+}
+
 // ---- the plan itself ----
 // One row per proposed task: { id, kind: 'implementation'|'ask', templateId, title, instructions, askKind,
 //   resourceId, resourceName, assignee, included }. "included" is what the review screen's checkboxes bind

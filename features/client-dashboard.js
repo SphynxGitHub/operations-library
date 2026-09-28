@@ -6,6 +6,7 @@
 // delete), and the cross-client feature-sync ("Migration") action.
 
 import { state, esc, uid, getActiveClient, persist, updateAndSync, switchClient, loadFullClient } from '../core/data.js';
+import { recordStatusChange, computeStatusKpis } from '../core/status-kpis.js';
 
 //======================= CLIENT DASHBOARD SECTION =======================//
 
@@ -42,7 +43,17 @@ export function renderClientDashboard() {
     // A client assigned to them by an admin (Sphynx-owned) always uses the
     // real Sphynx status list, so a partner can't relabel it into something
     // the rest of the system won't recognize.
-    const statusOptionsFor = (client) => (isPartnerViewer && !isPartnerCreatedClient(client, partnerRecord)) ? DEFAULT_PIPELINE_STATUSES : pipelineStatuses;
+    // A partner tracks each client in its portfolio on its OWN status (meta.partnerStatus), chosen from its own
+    // list. It never touches the real Sphynx status (meta.status), which only an admin changes and which
+    // everything else in the app reads. Admins keep seeing and setting the real status.
+    const statusOptionsFor = (client) => isPartnerViewer ? pipelineStatuses : DEFAULT_PIPELINE_STATUSES;
+    const shownStatusFor = (client) => {
+        if (!isPartnerViewer) return client.meta?.status;
+        const own = client.meta?.partnerStatus;
+        if (own && pipelineStatuses.includes(own)) return own;
+        return pipelineStatuses.includes(client.meta?.status) ? client.meta.status : pipelineStatuses[0];
+    };
+    const setStatusCall = (client) => isPartnerViewer ? `OL.updatePartnerStatus('${client.id}', this.value)` : `OL.updateClientStatus('${client.id}', this.value)`;
     
     // 🚀 FILTER LOGIC & PARTNER ISOLATION
     const activeFilter = state.dashboardFilter || 'All';
@@ -75,7 +86,7 @@ export function renderClientDashboard() {
 
     // Apply Status Filter
     if (activeFilter !== 'All') {
-        clients = clients.filter(c => c.meta?.status === activeFilter);
+        clients = clients.filter(c => shownStatusFor(c) === activeFilter);
     }
 
     // Apply the search bar as an actual filter on the visible grid, not
@@ -109,6 +120,7 @@ export function renderClientDashboard() {
 
             <div class="header-actions">
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
+                ${!isPartnerViewer && state.adminMode === true ? `<button class="btn small soft" onclick="OL.openStatusKpis()" title="Where projects are and how long they stay">Pipeline KPIs</button>` : ''}
                 ${!isPartnerViewer ? `<button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>` : ''}
                 ${isPartnerViewer ? `<button class="btn small soft" onclick="OL.editPipelineStatuses()" title="Customize your pipeline stages">Edit Statuses</button>` : ''}
                 ${isPartnerViewer ? `<button class="btn small soft" onclick="OL.openOnboardingWizard()" title="Guided setup" style="display:flex;align-items:center;gap:6px;">
@@ -174,10 +186,10 @@ export function renderClientDashboard() {
                             </div>
                             <select class="status-pill-dropdown"
                                     onclick="event.stopPropagation()"
-                                    onchange="event.stopPropagation(); OL.updateClientStatus('${client.id}', this.value)"
+                                    onchange="event.stopPropagation(); ${setStatusCall(client)}"
                                     style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
                                 ${statusOptionsFor(client).map(status => `
-                                    <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
+                                    <option value="${status}" ${shownStatusFor(client) === status ? 'selected' : ''}>${status}</option>
                                 `).join('')}
                             </select>
                             ${window.FORCE_ADMIN === true ? `
@@ -268,10 +280,10 @@ export function renderClientDashboard() {
                         </div>
                         <select class="status-pill-dropdown" 
                                 onclick="event.stopPropagation()" 
-                                onchange="OL.updateClientStatus('${client.id}', this.value)"
+                                onchange="${setStatusCall(client)}"
                                 style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
                             ${statusOptionsFor(client).map(status => `
-                                <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
+                                <option value="${status}" ${shownStatusFor(client) === status ? 'selected' : ''}>${status}</option>
                             `).join('')}
                         </select>
                     </div>
@@ -327,8 +339,52 @@ export function renderClientDashboard() {
 };
 
 // 2. CREATE CLIENT INCLUDING PROFILE ID & AUTO-CREATE DRIVE WORKSPACE
-export async function onboardNewClient() {
-  const name = prompt("Enter Client Name:");
+// Guided setup for a new client project: name, main contact, starting status, which tabs they see, and whether
+// to make the Drive folder now. Everything is filled in and created in one step (createNewClient below).
+const WIZARD_MODULES = [
+    { id: 'checklist', label: 'Tasks' }, { id: 'apps', label: 'Apps' }, { id: 'functions', label: 'Functions' },
+    { id: 'resources', label: 'Resources' }, { id: 'scoping', label: 'Scoping' }, { id: 'analysis', label: 'Analysis' },
+    { id: 'how-to', label: 'How-To' }, { id: 'team', label: 'Team' },
+];
+export function onboardNewClient() {
+    const statuses = ['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance'];
+    const field = (label, inner) => `<div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;"><label class="tiny muted" style="font-size:10px; font-weight:600;">${label}</label>${inner}</div>`;
+    openModal(`
+        <div class="modal-head"><div class="modal-title-text">New client</div><div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button></div>
+        <div class="modal-body" style="max-width:560px;">
+            <p class="tiny muted" style="margin-bottom:14px;">Set up the basics now. Everything here can be changed later from the client's profile.</p>
+            ${field('Client name', '<input id="nc-name" type="text" class="modal-input" placeholder="e.g. Harris & Harris Wealth" autofocus>')}
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                ${field('Main contact name', '<input id="nc-contact" type="text" class="modal-input" placeholder="Optional">')}
+                ${field('Main contact email', '<input id="nc-email" type="email" class="modal-input" placeholder="Optional. Used to match their emails and meetings">')}
+            </div>
+            ${field('Starting status', `<select id="nc-status" class="modal-input">${statuses.map((x) => `<option value="${x}">${x}</option>`).join('')}</select>`)}
+            ${field('Tabs they can see', `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">${WIZARD_MODULES.map((m) => `
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" class="nc-mod" value="${m.id}" ${m.id === 'checklist' ? 'checked' : ''}> ${m.label}</label>`).join('')}</div>
+                <div class="tiny muted">Client Requests and Maintenance & Hours are on by default. Add or remove any of these later.</div>`)}
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:14px;"><input id="nc-drive" type="checkbox" checked> Create their Google Drive folder now</label>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.submitNewClientWizard()">Create client</button>
+            </div>
+        </div>`);
+}
+
+export async function submitNewClientWizard() {
+    const name = (document.getElementById('nc-name')?.value || '').trim();
+    if (!name) { alert('Enter the client\'s name.'); return; }
+    const contact = (document.getElementById('nc-contact')?.value || '').trim();
+    const email = (document.getElementById('nc-email')?.value || '').trim();
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) { alert('That email address does not look right.'); return; }
+    const status = document.getElementById('nc-status')?.value || 'Discovery';
+    const modules = Array.from(document.querySelectorAll('.nc-mod')).filter((c) => c.checked).map((c) => c.value);
+    const makeDrive = document.getElementById('nc-drive')?.checked !== false;
+    OL.closeModal();
+    await createNewClient({ name, contact, email, status, modules, makeDrive });
+}
+
+export async function createNewClient({ name, contact = '', email = '', status = 'Discovery', modules = ['checklist'], makeDrive = true } = {}) {
   if (!name) return;
   
   const clientId = "c-" + Date.now();
@@ -340,18 +396,10 @@ export async function onboardNewClient() {
     meta: {
       name,
       onboarded: new Date().toLocaleDateString(),
-      status: "Discovery",
+      createdDate: new Date().toISOString(),
+      status,
     },
-    modules: {
-      checklist: true,
-      apps: false,
-      functions: false,
-      resources: false,
-      scoping: false,
-      analysis: false,
-      "how-to": false,
-      team: false
-    },
+    modules: Object.fromEntries(['checklist', 'apps', 'functions', 'resources', 'scoping', 'analysis', 'how-to', 'team'].map((id) => [id, modules.includes(id)])),
     permissions: {
       apps: "full",
       functions: "full",
@@ -370,7 +418,7 @@ export async function onboardNewClient() {
       localHowTo: [],
       scopingSheets: [{ id: "initial", lineItems: [] }],
       clientTasks: [],
-      teamMembers: [],
+      teamMembers: (contact || email) ? [{ id: uid(), name: contact || name, email, isPrimaryContact: true, roles: [] }] : [],
       stages: [],
       workflows: [],
     },
@@ -380,6 +428,7 @@ export async function onboardNewClient() {
   // 1. Assign to local state & provision templates
   state.clients[clientId] = newClientObj;
   OL.provisionSphynxTemplates(clientId);
+  if (status === 'Ongoing Maintenance' && typeof OL.onClientBecameOngoing === 'function') OL.onClientBecameOngoing(newClientObj);
   state.activeClientId = clientId;
 
   // 2. Persist initial state to Supabase
@@ -387,7 +436,7 @@ export async function onboardNewClient() {
 
   // 3. Auto-create Google Drive folder & subfolders
   let driveFolderId = null;
-  if (typeof OL.resolveClientDriveFolder === "function") {
+  if (makeDrive && typeof OL.resolveClientDriveFolder === "function") {
     try {
       console.log(`📁 Creating Google Drive workspace for ${name}...`);
       const driveResult = await OL.resolveClientDriveFolder(clientId);
@@ -1090,6 +1139,51 @@ export function setDashboardFilter(filterName) {
 
 const DEFAULT_PIPELINE_STATUSES = ['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'];
 
+// Pipeline KPIs (admins): where projects are now, how long they usually stay in each status, and how many that
+// started in Discovery became paying clients. Built from the status history logged on each project.
+export function openStatusKpis() {
+    const k = computeStatusKpis(Object.values(state.clients || {}));
+    const order = ['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect'];
+    const statuses = [...new Set([...order, ...Object.keys(k.current)])].filter((s) => k.current[s] || k.averageDays[s]);
+    const rows = statuses.map((s) => `
+        <tr><td style="padding:6px 8px;">${esc(s)}</td>
+            <td style="padding:6px 8px; text-align:right;">${k.current[s] || 0}</td>
+            <td style="padding:6px 8px; text-align:right;">${k.averageDays[s] ? `${k.averageDays[s].days} days <span class="muted tiny">(${k.averageDays[s].stays})</span>` : '<span class="muted">not enough history yet</span>'}</td></tr>`).join('');
+    const moves = Object.entries(k.transitions).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .map(([t, n]) => `<div class="tiny" style="display:flex; justify-content:space-between;"><span>${esc(t)}</span><span class="muted">${n}</span></div>`).join('');
+    const c = k.discoveryConversion;
+    openModal(`
+        <div class="modal-head"><div class="modal-title-text">Pipeline KPIs</div><div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button></div>
+        <div class="modal-body" style="max-width:640px;">
+            <p class="tiny muted" style="margin-bottom:12px;">From the status changes logged on each project. Only changes made from now on are logged, so averages fill in over time.</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px;">
+                <div class="card-section"><div class="tiny muted">Projects</div><div style="font-size:22px; font-weight:700;">${k.total}</div></div>
+                <div class="card-section"><div class="tiny muted">Discovery to paying</div><div style="font-size:22px; font-weight:700;">${c.rate === null ? 'n/a' : c.rate + '%'}</div><div class="tiny muted">${c.converted} of ${c.started}</div></div>
+                <div class="card-section"><div class="tiny muted">Status changes, last ${k.windowDays} days</div><div style="font-size:22px; font-weight:700;">${k.changesInWindow}</div></div>
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead><tr class="tiny muted" style="text-align:left;"><th style="padding:6px 8px;">Status</th><th style="padding:6px 8px; text-align:right;">Now</th><th style="padding:6px 8px; text-align:right;">Average stay</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${moves ? `<div style="margin-top:14px;"><div class="tiny muted" style="margin-bottom:4px;">Most common moves</div>${moves}</div>` : ''}
+        </div>`);
+}
+
+// A partner's own tracking status for a client in its portfolio. Stored separately from the real status, so it can
+// say anything the partner likes without affecting templates, maintenance or anything else that reads meta.status.
+export function updatePartnerStatus(clientId, newStatus) {
+    const client = state.clients[clientId];
+    if (!client) return;
+    const viewer = getActiveClient();
+    const isPartnerViewer = viewer?.meta?.status === 'Partner' && !(window.FORCE_ADMIN === true);
+    if (!isPartnerViewer) return;   // admins set the real status
+    if (!client.meta) client.meta = {};
+    client.meta.partnerStatus = newStatus;
+    OL.markClientDirty(clientId);
+    OL.persist().then(() => { renderClientDashboard(); });
+}
+
 export function updateClientStatus(clientId, newStatus) {
     const client = state.clients[clientId];
     if (!client) return;
@@ -1103,6 +1197,7 @@ export function updateClientStatus(clientId, newStatus) {
     }
 
     const wasOngoing = client.meta.status === 'Ongoing Maintenance';
+    recordStatusChange(client.meta, client.meta.status, newStatus);
     client.meta.status = newStatus;
     
     OL.provisionSphynxTemplates(clientId);
@@ -1382,7 +1477,7 @@ Object.assign(window.OL, {
     openClientProfileModal, toggleClientModule, isClientModuleOn, toggleClientBusinessModule, copyShareLink,
     openPartnerClientModulesModal, openPushLocalItemToClientModal, pushLocalItemToClient,
     setDashboardFilter, updateClientStatus, updateClientNameInline,
-    deleteClient, pushFeaturesToAllClients,
+    deleteClient, pushFeaturesToAllClients, updatePartnerStatus, openStatusKpis, submitNewClientWizard, createNewClient,
     toggleGmailLabelForClient, updateGmailLabelName, updateErrorSheetId,
     editPipelineStatuses
 });

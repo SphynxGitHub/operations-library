@@ -5,6 +5,8 @@
 // event, so the meeting's action items appear under it as After. The logic is in core/request-tasks.js.
 
 import { state, esc, db, getActiveClient, updateAndSync } from '../core/data.js';
+import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
+import { requestResourceIds as requestResourceIdsOf } from '../core/request-pricing.js';
 import {
     groupRequestTasks, resourceDates, taskPhase, clientTasksByRequest, renderClientTasksAppendix, CLIENT_TASKS_CSS,
     PHASES, PHASE_LABELS,
@@ -16,7 +18,14 @@ function ctxFor() {
     const names = (state.master?.sphynxTeam || []).map((m) => m.name).concat(typeof OL !== 'undefined' ? (OL.thirdPartyAssignees || []) : []);
     const statuses = typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : [];
     const closed = statuses.filter((s) => s.isClosed).map((s) => s.name);
-    return { closedNames: closed.length ? closed : ['Done'], sphynxNames: names, statuses, resourceNameFor: (item) => (typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId)?.name : '') || '' };
+    const resourcesFor = (item) => requestResourceIdsOf(item).map((id) => (typeof OL.getResourceById === 'function' ? OL.getResourceById(id) : null)).filter((r) => r && !String(r.id).startsWith('reqline-'));
+    return {
+        closedNames: closed.length ? closed : ['Done'], sphynxNames: names, statuses,
+        resourceNameFor: (item) => (typeof OL.getResourceById === 'function' ? OL.getResourceById(item.resourceId)?.name : '') || '',
+        // the SOP's client-ask templates, so the printed sheet can preview what will be asked (see clientTasksByRequest)
+        askTemplates: (state.master?.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES,
+        resourcesFor, resourceTypeFor: (item) => resourcesFor(item)[0]?.type || '',
+    };
 }
 
 const day = (iso) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '');
