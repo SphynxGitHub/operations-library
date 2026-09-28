@@ -47,6 +47,9 @@ export const DEFAULT_ASK_TEMPLATES = [
 // ---- which templates apply (same shape as testing.js's templateApplies/pickTemplates) ----
 export function askTemplateApplies(t, requestType, resourceType) {
     if (!t) return false;
+    // "Stop asking for this on future requests like this one" (Smart SOP Updates) — a per-template
+    // exclusion for one request type (and resource type, when given) rather than deleting the template.
+    if ((t.excludeFor || []).some((x) => lc(x.requestType) === lc(requestType) && (isBlank(x.resourceType) || lc(x.resourceType) === lc(resourceType)))) return false;
     const types = (t.requestTypes || []).map(lc);
     if (types.length && !types.includes(lc(requestType))) return false;
     const resTypes = (t.resourceTypes || []).map(lc);
@@ -136,6 +139,45 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
     return plan;
 }
 
+// What differs between the confirmed plan and the SOP's current client-ask defaults: an SOP ask that was
+// unchecked ('removed'), or an ask added that wasn't on the SOP ('added'). Exact membership only — no
+// similarity matching, so it never mis-clusters two differently-worded asks. Used both to preview the
+// changes (Smart SOP Updates prompt) and to log them at commit.
+export function computeActivationOverrides(plan, ctx) {
+    const defaults = pickAskTemplates(ctx.askTemplates, ctx.requestType, ctx.resourceType);
+    const includedTemplateIds = new Set((plan || []).filter((r) => r.kind === 'ask' && r.included && r.templateId).map((r) => r.templateId));
+    const overrides = [];
+    defaults.forEach((t) => {
+        if (!includedTemplateIds.has(t.id)) overrides.push({ action: 'removed', templateId: t.id, name: t.name || t.title });
+    });
+    (plan || []).filter((r) => r.kind === 'ask' && r.included && !r.templateId).forEach((r) => {
+        overrides.push({ action: 'added', title: r.title, instructions: r.instructions || '', askKind: r.askKind });
+    });
+    return overrides;
+}
+
+// Applies the person's answers to the SOP. decisions: [{ override, scope: 'once'|'future' }]. Only 'future'
+// changes anything: a 'removed' ask gets an exclusion for this request type (and resource type), so it stops
+// being proposed for requests like this one; an 'added' ask becomes a new template for them. Returns the new
+// template list (the caller saves it); never mutates the list it was given.
+export function applySopUpdates(templates, decisions, ctx) {
+    const list = (templates || []).map((t) => ({ ...t, excludeFor: [...(t.excludeFor || [])] }));
+    (decisions || []).forEach(({ override, scope }) => {
+        if (scope !== 'future' || !override) return;
+        if (override.action === 'removed') {
+            const t = list.find((x) => x.id === override.templateId);
+            if (t) t.excludeFor.push({ requestType: ctx.requestType, resourceType: ctx.resourceType || '' });
+        } else if (override.action === 'added') {
+            list.push({
+                id: 'at-' + ctx.uid(), name: override.title, requestTypes: [ctx.requestType],
+                resourceTypes: isBlank(ctx.resourceType) ? [] : [ctx.resourceType], fallback: false,
+                askKind: override.askKind || 'document', title: override.title, instructions: override.instructions || '',
+            });
+        }
+    });
+    return list;
+}
+
 // ---- committing the plan: create real tasks, link them, report what to log ----
 // ctx: { requestId, requestType, resourceType, askTemplates, uid, now, clientTasks (array to push into) }.
 // Returns { createdTaskIds, overrides }. Does NOT stamp item.activatedAt — same as listNewActivations in
@@ -158,18 +200,7 @@ export function commitActivationPlan(plan, ctx) {
         created.push(task.id);
     });
 
-    // Compare what shipped against the SOP's current defaults, exact
-    // membership only (see the SOP-refinement note above) — no similarity
-    // matching, so this never mis-clusters two differently-worded asks.
-    const defaultTemplateIds = new Set(pickAskTemplates(ctx.askTemplates, ctx.requestType, ctx.resourceType).map((t) => t.id));
-    const includedTemplateIds = new Set((plan || []).filter((r) => r.kind === 'ask' && r.included && r.templateId).map((r) => r.templateId));
-    const overrides = [];
-    defaultTemplateIds.forEach((id) => {
-        if (!includedTemplateIds.has(id)) overrides.push({ action: 'removed', templateId: id });
-    });
-    (plan || []).filter((r) => r.kind === 'ask' && r.included && !r.templateId).forEach((r) => {
-        overrides.push({ action: 'added', title: r.title, askKind: r.askKind });
-    });
+    const overrides = computeActivationOverrides(plan, ctx);
 
     return { createdTaskIds: created, overrides };
 }
