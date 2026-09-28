@@ -141,6 +141,12 @@ export async function addBacklogItemToSheet(itemId) {
     if (!item) return;
 
     await OL.updateAndSync(() => {
+        // Heal request-only lines created before they were given a
+        // synthetic resourceId (e.g. from an email excerpt) — without one the
+        // sheet can't resolve the line and hides it.
+        if (!item.resourceId && item.name) {
+            item.resourceId = 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        }
         item.round = nextOpenRound(sheet);
         item.status = 'Considering';
     });
