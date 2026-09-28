@@ -4,6 +4,11 @@
 // A request shows the comments, Drive uploads and linked emails of every
 // task under it (and their subtasks). A resource shows the same for every
 // task that points at it directly and every request that covers it.
+// An implementation task also pulls in the open client-ask tasks it's
+// waiting on — by request/resource, or by an explicit Dependency
+// (features/dependencies.js) — so something linked straight to the ASK
+// (an email, an excerpt, an attachment) shows up on the implementation
+// task too, and from there up to its request and resource the same way.
 // Nothing is copied into the parent's own data — it's read live from the
 // children, so edits and deletions on a task show up everywhere at once,
 // and the parent's own comments/files stay separate from the rolled-up ones.
@@ -29,6 +34,19 @@ function withSubtasks(clientId, rootIds) {
     return out;
 }
 
+// Client-ask tasks a set of tasks is waiting on via an explicit Dependency (task.blockedBy, kind 'task') — the
+// same relationship core/client-work-rules.js's dependencyClientTasks reads, kept independent here to avoid a
+// cross-module import for one small lookup.
+function dependencyLinkedTaskIds(clientId, taskIds) {
+    const tasks = pd(clientId).clientTasks || [];
+    const out = new Set();
+    taskIds.forEach((id) => {
+        const t = tasks.find((x) => x && String(x.id) === String(id));
+        (t?.blockedBy || []).forEach((d) => { if (d && d.kind === 'task') out.add(String(d.id)); });
+    });
+    return out;
+}
+
 function requestsCoveringResource(clientId, resId) {
     const reqs = OL.listProjectRequests ? OL.listProjectRequests(state.clients[clientId]) : [];
     return reqs.filter((r) => requestResourceIds(r).includes(String(resId)));
@@ -43,6 +61,11 @@ export function rollupScope(clientId, kind, id) {
     if (kind === 'task') {
         const all = withSubtasks(clientId, [id]);
         all.delete(String(id));
+        // The open client-ask tasks THIS task is waiting on via a Dependency — their linked emails/excerpts
+        // roll up here too. Related-by-request/resource client asks aren't included at task level (they belong
+        // to the request as a whole, not specifically to this one task among possibly several) — only an
+        // explicit Dependency ties an ask to this particular task.
+        dependencyLinkedTaskIds(clientId, [String(id)]).forEach((tid) => all.add(tid));
         return { taskIds: [...all], requestIds: [] };
     }
     if (kind === 'request') requestIds = [String(id)];
@@ -57,6 +80,9 @@ export function rollupScope(clientId, kind, id) {
         const ids = new Set([...(requestIdsForTask(t) || []).map(String), ...(t.requestLineItemId ? [String(t.requestLineItemId)] : [])]);
         if (requestIds.some((r) => ids.has(String(r)))) rootTaskIds.push(String(t.id));
     });
+    // Plus any client-ask task one of those is waiting on via a Dependency, even when the ask itself isn't
+    // directly linked to this request or resource (e.g. it was added from the Dependencies panel on the task).
+    dependencyLinkedTaskIds(clientId, rootTaskIds).forEach((tid) => rootTaskIds.push(tid));
     return { taskIds: [...withSubtasks(clientId, rootTaskIds)], requestIds };
 }
 
@@ -347,7 +373,9 @@ export function openClientTasksForClient(clientId, { limit = 8 } = {}) {
     const tasks = client?.projectData?.clientTasks || [];
     const closed = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter((s) => s.isClosed).map((s) => s.name);
     const isOpen = (t) => !closed.includes(t.status) && t.status !== 'Done';
-    return tasks.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask) && t.askKind !== 'follow_up' && isOpen(t))
+    // askKind alone, not isClientTask — that flag is set more broadly (any task assigned to the client) and
+    // pulled in ordinary implementation tasks that just happen to have a client-flavored assignee, not real asks.
+    return tasks.filter((t) => t && !t.consolidatedFollowUp && t.askKind && t.askKind !== 'follow_up' && isOpen(t))
         .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')))
         .slice(0, limit);
 }
