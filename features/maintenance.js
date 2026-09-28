@@ -676,6 +676,14 @@ export function openMaintenanceRequestModal(itemId) {
     const client = getActiveClient(); if (!client) return;
     const sheet = maintenanceSheetOf(client.projectData);
     const item = itemId ? sheet?.lineItems?.find((i) => String(i.id) === String(itemId)) : null;
+    // This tab lists requests from every sheet, but this editor only knows the
+    // maintenance sheet. A request that lives on the main scoping sheet
+    // belongs in the scoping request editor — otherwise it opens as a blank
+    // "Add client request" form.
+    if (itemId && !item) {
+        const onMain = (client.projectData?.scopingSheets || []).some((sh) => sh && (sh.lineItems || []).some((i) => String(i?.id) === String(itemId)));
+        if (onMain && typeof OL.openRequestLineModal === 'function') { OL.openRequestLineModal(itemId); return; }
+    }
     const isEdit = !!item;
     const done = String(item?.status || '') === 'Done';
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(l)}</option>`;
