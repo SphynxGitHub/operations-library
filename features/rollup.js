@@ -10,7 +10,7 @@
 
 import { state, esc, db } from '../core/data.js';
 import { requestResourceIds } from '../core/request-pricing.js';
-import { requestIdsForTask } from '../core/task-links.js';
+import { requestIdsForTask, linksForTask } from '../core/task-links.js';
 import { rollDownPieceLinks, removePieceLink } from '../core/roll-down.js';
 
 function pd(clientId) { return state.clients?.[clientId]?.projectData || {}; }
@@ -211,6 +211,27 @@ function refreshEmailLinks(clientId, kind, id) {
     if (box) renderEmailLinksInto(box, clientId, kind, id);
 }
 
+// The request's existing build (implementation) tasks — not client asks, not the request itself — for rolling
+// links down onto after activation, when a NEW link arrives (see rollDownForRequest below). This is the same
+// task set activation itself hands to rollDownRequestLinks; this just looks them up when there's no fresh
+// activation result to read them from.
+function buildTasksForRequest(clientId, requestId) {
+    const client = state.clients?.[clientId];
+    const tasks = client?.projectData?.clientTasks || [];
+    return tasks.filter((t) => t && !t.askKind && !t.isClientTask
+        && requestIdsForTask(t).map(String).includes(String(requestId)))
+        .map((t) => ({ id: t.id, title: t.title || t.name }));
+}
+
+// Called right when a NEW link to a request is made (an excerpt, an attachment, or the whole email) — not just
+// at activation. If the request already has build tasks (it was activated before this link existed), the link
+// rolls down onto them immediately, the same way activation rolls down everything that already existed.
+export async function rollDownForRequest(clientId, requestId) {
+    const tasks = buildTasksForRequest(clientId, requestId);
+    if (!tasks.length) return 0;
+    return rollDownRequestLinks(clientId, requestId, tasks);
+}
+
 // At activation: everything already linked to the request from email (excerpts, attachments, the whole email)
 // is copied onto the request's new build tasks, so it's right there where the work happens. tasks: [{ id, title }].
 export async function rollDownRequestLinks(clientId, requestId, tasks) {
@@ -294,7 +315,7 @@ export async function hydrateRollupSection(clientId, kind, id) {
     await renderEmailLinksInto(box, clientId, kind, id);
 }
 
-Object.assign(window.OL, { collectRollup, renderRollupSection, hydrateRollupSection, loadRollupEmails, loadRollupPieces, renderEmailLinksInto, removeEmailPiece, removeEmailRequestLink, rollDownRequestLinks, requestEmailsSectionHtml, hydrateRequestEmailsSection, rollupScope });
+Object.assign(window.OL, { collectRollup, renderRollupSection, hydrateRollupSection, loadRollupEmails, loadRollupPieces, renderEmailLinksInto, removeEmailPiece, removeEmailRequestLink, rollDownRequestLinks, rollDownForRequest, requestEmailsSectionHtml, hydrateRequestEmailsSection, rollupScope });
 
 // ---------------------------------------------------------------------------------------------
 // OPEN CLIENT TASKS — a compact nested list, reused everywhere an implementation task's or the
