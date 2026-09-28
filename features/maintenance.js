@@ -43,6 +43,8 @@ export async function loadMaintenanceData(clientId) {
         if (g.error) throw g.error;
         slot.periods = p.data || []; slot.grants = g.data || []; slot.error = '';
         slot.loadedAt = Date.now();
+        // Reminders as the active plan period nears its end (2 months and 2 weeks out). One per period per date.
+        try { if (typeof OL.syncPeriodReminders === 'function') OL.syncPeriodReminders(clientId, slot.periods); } catch (e) { console.warn('Period reminders failed:', e); }
     } catch (err) {
         slot.error = err.message || 'Could not load';
     } finally {

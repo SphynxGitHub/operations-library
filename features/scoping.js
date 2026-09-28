@@ -7,6 +7,7 @@
 // dependency management.
 
 import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
+import { addLink } from '../core/task-links.js';
 import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
@@ -1996,6 +1997,15 @@ export function openRequestLineModal(itemId) {
                 <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
                     <label class="tiny muted" style="font-size:10px; font-weight:600;">Tasks</label>
                     ${OL.requestTasksPanelHtml(client, item) || '<div class="tiny muted">No tasks yet.</div>'}
+                    <div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                        <input id="rq-task-title" type="text" class="modal-input tiny" style="flex:1; min-width:0;" placeholder="Add a task for this request...">
+                        <select id="rq-task-assignee" class="modal-input tiny" style="width:auto;">
+                            <option value="">Default assignee</option>
+                            ${(state.master?.sphynxTeam || []).map((m) => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+                        </select>
+                        <input id="rq-task-due" type="date" class="modal-input tiny" style="width:auto;">
+                        <button type="button" class="btn tiny soft" onclick="OL.rqAddTask('${esc(String(item.id))}')">Add task</button>
+                    </div>
                 </div>` : ''}
 
             <div style="display:flex; gap:10px;">
@@ -2035,6 +2045,31 @@ function requestRolesSectionHtml(client, item) {
                 }).join('')}
             </div>
         </div>`;
+}
+
+// Adds an internal (Sphynx) task straight from the request window. It is linked to this request, sits under
+// During, and goes to the chosen person, else the request's Implementation person, else the project default.
+export async function rqAddTask(itemId) {
+    const client = getActiveClient();
+    const item = (client?.projectData?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => i && String(i.id) === String(itemId));
+    if (!client || !item) return;
+    const title = (document.getElementById('rq-task-title')?.value || '').trim();
+    if (!title) { alert('Give the task a title.'); return; }
+    const chosen = document.getElementById('rq-task-assignee')?.value || '';
+    const due = document.getElementById('rq-task-due')?.value || '';
+    const roles = typeof OL.getRoles === 'function' ? OL.getRoles() : [];
+    const implRole = roles.find((r) => /implement/i.test(String(r?.name || '')));
+    const own = implRole && item.roleAssignments ? String(item.roleAssignments[implRole.id] || '').trim() : '';
+    const fallback = implRole ? ((client.projectData.roleAssignments || []).find((a) => a.roleId === implRole.id) || {}).memberName : '';
+    const task = {
+        id: uid(), title, name: title, status: 'Pending Sphynx Action', assignee: chosen || own || fallback || 'Sphynx Task',
+        dueDate: due, isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'request-window',
+        createdAt: new Date().toISOString(), phase: 'implementation', links: [],
+    };
+    addLink(task, item.id, []);
+    if (applyRequestFormToItem) applyRequestFormToItem(item);   // keep anything typed in the window
+    await OL.updateAndSync(() => { client.projectData.clientTasks.unshift(task); }, client.id);
+    OL.openRequestLineModal(String(item.id));
 }
 
 export function applyRequestFormToItem(item) {
@@ -2375,26 +2410,21 @@ export async function saveAsks(itemId) {
             askKind: kind,
         }));
 
-        const followUpTitle = isThirdParty ? `Follow up with ${assignee}: ${label}` : `Follow up with client: ${label}`;
-        const followUp = {
-            id: uid(),
-            title: followUpTitle,
-            name: followUpTitle,
-            description: `Waiting on ${lines.length} item${lines.length === 1 ? '' : 's'}: ${lines.map(l => l.title).join('; ')}`,
-            status: 'Needs Follow Up',
-            assignee: communicationAssignee(client),
-            dueDate: dueDates[0] || '',
-            isClientTask: false,
-            loggedHours: 0,
-            parentTaskId: null,
-            createdBy: 'request-ask',
-            createdAt: now,
-            requestLineItemId: item.id,
-            isBlocker: false,
-            askKind: 'follow_up',
-        };
-
-        client.projectData.clientTasks.unshift(followUp, ...asks);
+        // Client asks feed the project's ONE consolidated follow-up task (core/client-work-rules.js), which the save
+        // creates or updates — no separate follow-up per batch. Third-party asks still get their own follow-up.
+        if (isThirdParty) {
+            const followUpTitle = `Follow up with ${assignee}: ${label}`;
+            const followUp = {
+                id: uid(), title: followUpTitle, name: followUpTitle,
+                description: `Waiting on ${lines.length} item${lines.length === 1 ? '' : 's'}: ${lines.map(l => l.title).join('; ')}`,
+                status: 'Needs Follow Up', assignee: communicationAssignee(client), dueDate: dueDates[0] || '',
+                isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'request-ask', createdAt: now,
+                requestLineItemId: item.id, isBlocker: false, askKind: 'follow_up',
+            };
+            client.projectData.clientTasks.unshift(followUp, ...asks);
+        } else {
+            client.projectData.clientTasks.unshift(...asks);
+        }
     });
 
     OL.closeModal();
@@ -2455,7 +2485,7 @@ Object.assign(window.OL, {
     openTypeDetailModal, createNewVarForType, updateVarRate, removeScopingVariable,
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
-    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus,
+    openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus, rqAddTask,
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,

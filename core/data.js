@@ -246,6 +246,16 @@ export function persist() {
                     console.warn('Recurring task spawn failed:', recurErr);
                 }
 
+                // Blocked tasks, the consolidated client follow-up, stale-work status notes, quarterly and
+                // Ongoing Maintenance touch-points (core/client-work-rules.js).
+                try {
+                    if (!window.IS_GUEST && window.OL && typeof window.OL.runClientWorkRulesFor === 'function') {
+                        window.OL.runClientWorkRulesFor(client);
+                    }
+                } catch (rulesErr) {
+                    console.warn('Client work rules failed:', rulesErr);
+                }
+
                 // A request whose steps are now done gets its testing checklist (and a fix task for any failed
                 // step) before this save captures the client, so they are saved with it.
                 try {
@@ -1241,6 +1251,7 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
 
     const projectVal = projectSelect.value;
     let targetClientId = projectVal;
+    let newProjectCreated = false;
 
     // 1. Create new project if selected
     if (projectVal === '__new__') {
@@ -1248,15 +1259,26 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
         const projectName = (newProjectInput?.value || '').trim() || email.split('@')[0];
 
         targetClientId = 'c-' + uid();
+        // Same starting point as Add Client (onboardNewClient in features/client-dashboard.js): a
+        // login token, default modules and permissions, and the empty project data every screen
+        // expects — then the SOP templates and Drive folder below. Status starts at Discovery.
         state.clients[targetClientId] = {
             id: targetClientId,
-            meta: { name: projectName, status: 'Discovery', createdDate: new Date().toISOString() },
+            publicToken: 'access_' + Math.random().toString(36).slice(2, 12),
+            googleDriveFolderId: null,
+            driveSubfolders: {},
+            meta: { name: projectName, onboarded: new Date().toLocaleDateString(), status: 'Discovery', createdDate: new Date().toISOString() },
+            modules: { checklist: true, apps: false, functions: false, resources: false, scoping: false, analysis: false, 'how-to': false, team: false },
+            permissions: { apps: 'full', functions: 'full', resources: 'full', scoping: 'full', checklist: 'full', team: 'full', 'how-to': 'full', analysis: 'full' },
             projectData: {
                 teamMembers: [{ id: uid(), name: projectName, email: email, isPrimaryContact: true, roles: [] }],
-                localResources: [], localApps: [], localAnalyses: [], clientTasks: [],
-                scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
-            }
+                localResources: [], localApps: [], localAnalyses: [], localFunctions: [], localHowTo: [],
+                clientTasks: [], stages: [], workflows: [],
+                scopingSheets: [{ id: 'initial', lineItems: [] }]
+            },
+            sharedMasterIds: []
         };
+        newProjectCreated = true;
     } else {
         // 2. Attach to existing project
         const client = state.clients[targetClientId];
@@ -1287,8 +1309,23 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
         }
     }
 
+    if (newProjectCreated) {
+        // SOP/task templates, then the Drive folder tree — the same two steps Add Client runs.
+        try { if (typeof OL.provisionSphynxTemplates === 'function') OL.provisionSphynxTemplates(targetClientId); } catch (e) { console.warn('Template setup failed:', e); }
+    }
     OL.markClientDirty(targetClientId);
     await OL.persist();
+    if (newProjectCreated && typeof OL.resolveClientDriveFolder === 'function') {
+        try {
+            const drive = await OL.resolveClientDriveFolder(targetClientId);
+            if (drive?.folderId) {
+                state.clients[targetClientId].googleDriveFolderId = drive.folderId;
+                state.clients[targetClientId].driveSubfolders = drive.subfolders;
+                OL.markClientDirty(targetClientId);
+                await OL.persist();
+            }
+        } catch (e) { console.warn('Drive folder setup failed:', e); }
+    }
     OL.closeModal();
 
     // Refresh whichever view you actually triggered this from -- NOT both

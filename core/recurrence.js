@@ -107,6 +107,7 @@ export function spawnRecurringTasksFor(client) {
             dependencies: [],
             // manual billable choices carry over; rules re-evaluate anyway
             ...(t.billable === true || t.billable === false ? { billable: t.billable } : {}),
+            ...(t.recurrenceTag ? { recurrenceTag: t.recurrenceTag } : {}),
             recurrence: { ...t.recurrence },
             recurrenceSeriesId: t.recurrenceSeriesId || t.id,
             recurrencePrevId: t.id,

@@ -546,7 +546,8 @@ OL.openErrorDetailModal = async function(id) {
         </div>
         <div class="modal-body" style="max-width:600px; width:100%;">
 
-            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+            <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:10px;">
+                <button type="button" class="btn tiny soft" onclick="OL.emailErrorInContext('${r.id}')" title="Open an email draft with this error's details inside it">${ic('mail')}Send email</button>
                 <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
                     <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                     <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
@@ -664,6 +665,39 @@ window.OL.openErrorDetailModal = OL.openErrorDetailModal;
 // actually has a cause and/or resolution written down. Suggested, never
 // applied automatically — a banner offers it, the user decides.
 // -------------------------------------------------------------
+// Opens the compose window with this error's details already in the draft, addressed to the project's primary
+// contact(s) when the error is matched to a project. The draft is linked to the project (and resource, when
+// known) so the sent email files itself there. Cause, resolution and notes are included only if filled in.
+OL.emailErrorInContext = function(id) {
+    const r = OL.errorLogState.rows.find(x => x.id === id);
+    if (!r) return;
+    const client = r.client_id ? state.clients?.[r.client_id] : null;
+    const team = client?.projectData?.teamMembers || [];
+    const contacts = team.filter(m => m.email && m.isPrimaryContact);
+    const to = (contacts.length ? contacts : team.filter(m => m.email).slice(0, 1)).map(m => m.email).join(', ');
+    const names = (contacts.length ? contacts : team.filter(m => m.email).slice(0, 1)).map(m => String(m.name || '').split(' ')[0]).filter(Boolean);
+    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const row = (label, value) => value ? `<tr><td style="padding:2px 12px 2px 0; color:#64748b; vertical-align:top;">${esc(label)}</td><td style="padding:2px 0;">${esc(value)}</td></tr>` : '';
+    const link = r.history_link ? `<p><a href="${esc(r.history_link)}">View the run in Zapier</a></p>` : '';
+    const bodyHtml = `<p>Hi ${esc(names.length ? names.join(' and ') : 'there')},</p>`
+        + `<p>We noticed an error on one of your automations and wanted to let you know.</p>`
+        + `<table style="border-collapse:collapse;">${row('Automation', r.title || r.service)}${row('Service', r.service)}${row('When', occurred)}</table>`
+        + (r.message ? `<p style="white-space:pre-wrap;">${esc(r.message)}</p>` : '')
+        + (r.cause ? `<p><strong>Likely cause:</strong> ${esc(r.cause)}</p>` : '')
+        + (r.resolution ? `<p><strong>What we did:</strong> ${esc(r.resolution)}</p>` : '')
+        + link;
+    if (typeof OL.openComposeEmailModal !== 'function') { alert('Email is not available here.'); return; }
+    OL.closeModal?.();
+    OL.openComposeEmailModal({
+        title: `✉️ Email about error${client ? ' · ' + (client.meta?.name || '') : ''}`,
+        to,
+        subject: `${client?.meta?.name ? client.meta.name + ' — ' : ''}Error: ${r.title || r.service || 'automation'}`,
+        bodyHtml,
+        linked_client_id: r.client_id || null,
+        linked_resource_id: r.resource_id || null,
+    });
+};
+
 OL.findRecurringErrorMatch = async function(r) {
     if (!r.service && !r.title) return null; // nothing distinctive enough to match on
 

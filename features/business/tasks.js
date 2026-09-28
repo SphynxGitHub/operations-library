@@ -162,6 +162,7 @@ OL.thirdPartyAssignees = [
 OL.getSystemStatuses = function() {
     return state.master?.taskStatuses || [
         { id: "st-1", name: "Pending Sphynx Action", color: "#64c6a2", isClosed: false },
+        { id: "st-blocked-client", name: "Pending Client Action", color: "#0880ea", isClosed: false },
         { id: "st-2", name: "Pending Client Feedback", color: "#0880ea", isClosed: false },
         { id: "st-3", name: "Pending Client Document", color: "#4a55e6", isClosed: false },
         { id: "st-4", name: "Pending Client Review", color: "#b83dba", isClosed: false },

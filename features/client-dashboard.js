@@ -1102,9 +1102,12 @@ export function updateClientStatus(clientId, newStatus) {
         return;
     }
 
+    const wasOngoing = client.meta.status === 'Ongoing Maintenance';
     client.meta.status = newStatus;
     
     OL.provisionSphynxTemplates(clientId);
+    // Becoming Ongoing Maintenance: a setup task and a monthly touch base appear, and any quarterly check-in stops.
+    if (newStatus === 'Ongoing Maintenance' && !wasOngoing && typeof OL.onClientBecameOngoing === 'function') OL.onClientBecameOngoing(client);
     OL.markClientDirty(clientId);
     OL.persist().then(() => {
         window.handleRoute();

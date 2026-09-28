@@ -31,6 +31,7 @@ import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
 import './core/billable.js';
 import './core/recurrence.js';
+import './core/client-work-rules.js';
 import './features/dependencies.js';
 import './features/rollup.js';
 import './core/live-refresh.js';

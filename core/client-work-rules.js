@@ -1,0 +1,471 @@
+//======================= CORE / CLIENT WORK RULES =======================//
+// Rules that keep client-waiting work and follow-ups moving, run before each save (same place as
+// updateTestRuns / updateRoundStates — see core/data.js persist()). Every pass is idempotent: it looks at
+// what already exists and only adds or changes what's missing, so running it on every save is safe.
+//
+//   1. Blocked implementation tasks. When someone flips an implementation task to "Pending Client Action",
+//      its due date is kept aside and cleared so it doesn't clutter their list, and the client tasks that
+//      were open on the same request/resource at that moment are recorded. Once all of those are closed, the
+//      task flips back to "Pending Sphynx Action" and gets its date back (or tomorrow, if that date has
+//      passed). Nothing flips automatically just because an ask was added — the implementer chooses when.
+//   2. One consolidated client follow-up task per project (not per task or round): lists everything open on
+//      the client, request by request and resource by resource. It closes when nothing is open, reopens with
+//      the same history when something new arrives, and comes back with a new date each time a touchpoint is
+//      marked done while items are still open.
+//   3. Stale implementation tasks (no status change for 10+ days) get a "status note" task for the
+//      implementer, due a day before the next follow-up; its latest comment appears on the follow-up as a
+//      "status to share" line.
+//   4. Quarterly check-in after a round closes (four quarters, or until the client converts to Ongoing
+//      Maintenance).
+//   5. Ongoing Maintenance: a setup task and a monthly touch base when a client becomes Ongoing Maintenance,
+//      and a prompt to propose a brainstorming meeting after 60 days with no new requests.
+//
+// Pure functions on the client project JSON. ctx: { roles, closedNames, sphynxNames, today (YYYY-MM-DD),
+// now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
+
+import { linksForTask, addLink } from './task-links.js';
+import { isTaskClosed } from './work-status.js';
+import { isClientFacing } from './request-tasks.js';
+import { isRoundApproved } from './requests.js';
+import { isOngoing } from './maintenance.js';
+import { state, uid } from './data.js';
+
+export const BLOCKED_STATUS = 'Pending Client Action';
+export const OPEN_STATUS = 'Pending Sphynx Action';
+export const FOLLOW_UP_STATUS = 'Needs Follow Up';
+export const DEFAULT_FOLLOW_UP_EVERY_DAYS = 3;
+export const DEFAULT_STALE_DAYS = 10;
+export const INACTIVITY_DAYS = 60;
+
+const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+const day = (v) => String(v || '').slice(0, 10);
+const parse = (iso) => new Date(`${day(iso)}T12:00:00Z`);
+const fmt = (d) => d.toISOString().slice(0, 10);
+export const addDays = (iso, n) => { const d = parse(iso); d.setUTCDate(d.getUTCDate() + Number(n)); return fmt(d); };
+export const addMonths = (iso, n) => {
+    const d = parse(iso); const dom = d.getUTCDate();
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + Number(n));
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(dom, last));
+    return fmt(d);
+};
+export const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
+
+const closedList = (ctx) => (ctx.closedNames && ctx.closedNames.length ? ctx.closedNames : ['Done']);
+const isOpen = (t, ctx) => !!t && !isTaskClosed(t, closedList(ctx));
+
+function communicationAssignee(client, ctx) {
+    const role = (ctx.roles || []).find((r) => /communicat/i.test(String(r?.name || '')));
+    const a = role ? (client?.projectData?.roleAssignments || []).find((x) => x.roleId === role.id) : null;
+    return (a && a.memberName) || 'Sphynx Task';
+}
+
+const requestsOf = (client) => (client?.projectData?.scopingSheets || []).flatMap((s) => (s?.lineItems || []));
+const requestById = (client, id) => requestsOf(client).find((i) => i && String(i.id) === String(id)) || null;
+const requestTitle = (client, item) => (item && !isBlank(item.name) ? String(item.name).trim() : 'Request');
+const resourceName = (client, id) => {
+    const r = (client?.projectData?.localResources || []).find((x) => String(x.id) === String(id));
+    return r?.name || '';
+};
+
+// Implementation work = Sphynx's own steps: not something asked of the client / a third party, and not a
+// housekeeping task the rules themselves create.
+const isImplementationTask = (t, ctx) => !!t && !t.isClientTask && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
+    && !t.recurrenceTag && !t.testRunId && !t.reviewNotifyKey && !t.reviewFollowUpKey && linksForTask(t).length > 0
+    && !isClientFacing(t, ctx);
+
+// ------------------------------------------------------------------------------------------
+// 1. Blocked implementation tasks
+// ------------------------------------------------------------------------------------------
+
+// The open client-facing tasks that hold up an implementation task: same request, and — when the
+// implementation task is scoped to particular resources — asks for those resources or for the request as a
+// whole.
+export function relatedClientTasks(client, task, ctx) {
+    const tasks = client?.projectData?.clientTasks || [];
+    const mine = linksForTask(task);
+    return tasks.filter((t) => {
+        if (!t || t.id === task.id || !isOpen(t, ctx) || !isClientFacing(t, ctx)) return false;
+        return linksForTask(t).some((theirs) => mine.some((m) => {
+            if (m.requestId !== theirs.requestId) return false;
+            const mr = m.resourceIds || [], tr = theirs.resourceIds || [];
+            if (!mr.length || !tr.length) return true;
+            return mr.some((id) => tr.includes(id));
+        }));
+    });
+}
+
+export const restoreDueDate = (saved, today) => (isBlank(saved) ? '' : (day(saved) >= today ? day(saved) : addDays(today, 1)));
+
+export function reconcileBlockedTasks(client, ctx) {
+    const out = { blocked: [], released: [] };
+    (client?.projectData?.clientTasks || []).forEach((t) => {
+        if (!t || !isImplementationTask(t, ctx)) return;
+        const blocked = t.status === BLOCKED_STATUS;
+
+        if (blocked && !t.blockedOn) {
+            // Just flipped: keep the date aside, clear it, and note what it is waiting for.
+            t.blockedOn = { since: ctx.now, dueDate: day(t.dueDate), taskIds: relatedClientTasks(client, t, ctx).map((x) => x.id) };
+            t.dueDate = '';
+            out.blocked.push(t.id);
+        } else if (blocked && t.blockedOn) {
+            const waiting = (t.blockedOn.taskIds || []).length > 0;
+            const allClosed = waiting && t.blockedOn.taskIds.every((id) => {
+                const c = (client.projectData.clientTasks || []).find((x) => x.id === id);
+                return !c || !isOpen(c, ctx);
+            });
+            if (allClosed) {
+                t.status = OPEN_STATUS;
+                t.dueDate = restoreDueDate(t.blockedOn.dueDate, ctx.today);
+                delete t.blockedOn;
+                out.released.push(t.id);
+            }
+        } else if (!blocked && t.blockedOn) {
+            // Someone moved it out of the waiting status by hand: give the date back.
+            if (isBlank(t.dueDate)) t.dueDate = restoreDueDate(t.blockedOn.dueDate, ctx.today);
+            delete t.blockedOn;
+            out.released.push(t.id);
+        }
+    });
+    return out;
+}
+
+// ------------------------------------------------------------------------------------------
+// 2 + 3. Consolidated client follow-up, and status notes for stale work
+// ------------------------------------------------------------------------------------------
+
+// When each task's status last changed. Tasks seen for the first time start their clock now, so turning this
+// on doesn't flag every old task as stale at once.
+export function stampStatusChanges(client, ctx) {
+    (client?.projectData?.clientTasks || []).forEach((t) => {
+        if (!t) return;
+        if (t.statusSeen === undefined) { t.statusSeen = t.status || ''; if (!t.statusChangedAt) t.statusChangedAt = ctx.now; return; }
+        if (t.statusSeen !== (t.status || '')) { t.statusSeen = t.status || ''; t.statusChangedAt = ctx.now; }
+    });
+}
+
+// Open client-facing tasks grouped request -> resource.
+export function openClientItems(client, ctx) {
+    const groups = new Map();
+    (client?.projectData?.clientTasks || []).forEach((t) => {
+        if (!t || !isOpen(t, ctx) || !isClientFacing(t, ctx) || t.consolidatedFollowUp) return;
+        // Client tasks always belong to a request; one that isn't linked to any is left out.
+        linksForTask(t).forEach((l) => {
+            const item = l.requestId ? requestById(client, l.requestId) : null;
+            if (!item) return;
+            if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
+            const reqKey = l.requestId;
+            if (!groups.has(reqKey)) groups.set(reqKey, { title: requestTitle(client, item), resources: new Map() });
+            const g = groups.get(reqKey);
+            const resKeys = (l.resourceIds && l.resourceIds.length) ? l.resourceIds : [''];
+            resKeys.forEach((rid) => {
+                if (!g.resources.has(rid)) g.resources.set(rid, { name: rid ? resourceName(client, rid) : '', tasks: [] });
+                g.resources.get(rid).tasks.push(t);
+            });
+        });
+    });
+    return groups;
+}
+
+function staleTasks(client, ctx) {
+    const days = ctx.staleDays || DEFAULT_STALE_DAYS;
+    return (client?.projectData?.clientTasks || []).filter((t) => t && isImplementationTask(t, ctx) && isOpen(t, ctx)
+        && t.status !== BLOCKED_STATUS && t.statusChangedAt && daysBetween(day(t.statusChangedAt), ctx.today) >= days);
+}
+
+function lastCommentText(task) {
+    const list = (task?.comments || []).filter((c) => c && !isBlank(c.text));
+    return list.length ? String(list[list.length - 1].text).trim() : '';
+}
+
+function followUpDescription(client, groups, notes) {
+    const lines = ['Waiting on the client:'];
+    groups.forEach((g) => {
+        lines.push('', `${g.title}`);
+        g.resources.forEach((r) => {
+            if (r.name) lines.push(`  ${r.name}`);
+            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}${t.dueDate ? ` (due ${day(t.dueDate)})` : ''}`));
+        });
+    });
+    if (notes.length) {
+        lines.push('', 'Status to share:');
+        notes.forEach((n) => lines.push(`  - ${n.title}: ${n.text}`));
+    }
+    return lines.join('\n');
+}
+
+export function reconcileClientFollowUp(client, ctx) {
+    const out = { created: [], reopened: [], closed: [], notePrompts: [] };
+    const pd = client?.projectData;
+    if (!pd) return out;
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    const every = ctx.followUpEveryDays || DEFAULT_FOLLOW_UP_EVERY_DAYS;
+    const closed = closedList(ctx);
+
+    const groups = openClientItems(client, ctx);
+    const needed = groups.size > 0;
+    let fu = pd.clientTasks.find((t) => t && t.consolidatedFollowUp);
+    const nextDue = addDays(ctx.today, every);
+
+    // ---- status notes for stale work ----
+    const stale = staleTasks(client, ctx);
+    const staleIds = new Set(stale.map((t) => t.id));
+    pd.clientTasks.filter((t) => t && t.statusNoteFor && isOpen(t, ctx)).forEach((p) => {
+        const target = pd.clientTasks.find((x) => x.id === p.statusNoteFor);
+        if (!target || !isOpen(target, ctx) || !staleIds.has(target.id)) { p.status = closed[0]; p.cancelledAt = ctx.now; }   // it moved on: no note needed
+    });
+    const noteDue = (() => { const d = addDays(fu && isOpen(fu, ctx) && fu.dueDate ? day(fu.dueDate) : nextDue, -1); return d < ctx.today ? ctx.today : d; })();
+    stale.forEach((t) => {
+        const existing = pd.clientTasks.find((p) => p && p.statusNoteFor === t.id && isOpen(p, ctx));
+        if (existing) return;
+        if (t.statusNoteAt && daysBetween(day(t.statusNoteAt), ctx.today) < (ctx.staleDays || DEFAULT_STALE_DAYS)) return;   // already asked recently
+        const p = {
+            id: ctx.uid(), title: `Status note: ${t.title || t.name}`, name: `Status note: ${t.title || t.name}`,
+            description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days. Add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
+            status: OPEN_STATUS, assignee: t.assignee || null, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
+            createdBy: 'followup', createdAt: ctx.now, statusNoteFor: t.id, links: [],
+        };
+        linksForTask(t).forEach((l) => addLink(p, l.requestId, l.resourceIds || []));
+        pd.clientTasks.unshift(p);
+        out.notePrompts.push(p.id);
+    });
+    // Notes that were written (prompt task done with a comment) for tasks still open and stale feed the follow-up.
+    const notes = [];
+    pd.clientTasks.filter((p) => p && p.statusNoteFor).forEach((p) => {
+        const target = pd.clientTasks.find((x) => x.id === p.statusNoteFor);
+        if (!target || !isOpen(target, ctx)) return;
+        const text = lastCommentText(p);
+        if (text) notes.push({ title: target.title || target.name, text });
+        if (!isOpen(p, ctx) && !p.cancelledAt) target.statusNoteAt = day(p.completedAt || ctx.now);
+    });
+
+    // ---- the consolidated follow-up itself ----
+    if (!needed) {
+        if (fu && isOpen(fu, ctx)) {
+            fu.status = closed[0]; fu.completedAt = ctx.now; fu.autoClosed = true;
+            (fu.followUpLog = fu.followUpLog || []).push({ at: ctx.now, event: 'closed', note: 'Nothing waiting on the client.' });
+            out.closed.push(fu.id);
+        }
+        return out;
+    }
+
+    const description = followUpDescription(client, groups, notes);
+    if (!fu) {
+        fu = {
+            id: ctx.uid(), title: `Client follow-up: ${client.meta?.name || 'client'}`, name: `Client follow-up: ${client.meta?.name || 'client'}`,
+            description, status: FOLLOW_UP_STATUS, assignee: communicationAssignee(client, ctx), dueDate: nextDue,
+            isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'followup', createdAt: ctx.now,
+            askKind: 'follow_up', consolidatedFollowUp: true, followUpLog: [{ at: ctx.now, event: 'created' }], links: [],
+        };
+        pd.clientTasks.unshift(fu);
+        out.created.push(fu.id);
+    } else if (!isOpen(fu, ctx)) {
+        // Closed by a person (a touchpoint done) or by the rule (it was empty): either way, more is waiting, so it comes back.
+        (fu.followUpLog = fu.followUpLog || []).push({ at: fu.completedAt || ctx.now, event: fu.autoClosed ? 'closed' : 'touchpoint done' });
+        fu.followUpLog.push({ at: ctx.now, event: 'reopened' });
+        fu.status = FOLLOW_UP_STATUS; fu.completedAt = ''; fu.autoClosed = false; fu.dueDate = nextDue; fu.description = description;
+        out.reopened.push(fu.id);
+    } else if (fu.description !== description) {
+        fu.description = description;
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------------------------------
+// 4. Quarterly check-in after a round closes
+// ------------------------------------------------------------------------------------------
+
+const unapprovedRounds = (client) => {
+    const rounds = new Set();
+    (client?.projectData?.scopingSheets || []).forEach((sheet) => {
+        if (!sheet || sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;
+        (sheet.lineItems || []).forEach((i) => {
+            if (!i || ['Done', "Don't Do", 'Backlog'].includes(String(i.status || ''))) return;
+            const r = Math.max(1, parseInt(i.round, 10) || 1);
+            if (!isRoundApproved(sheet, r)) rounds.add(r);
+        });
+    });
+    return [...rounds].sort((a, b) => a - b);
+};
+
+export function quarterlyCheckInText(client) {
+    const rounds = unapprovedRounds(client);
+    return rounds.length
+        ? `Check in with the client about the next round of work. ${rounds.length === 1 ? `Round ${rounds[0]} is` : `Rounds ${rounds.join(', ')} are`} scoped but not yet approved.`
+        : 'No further rounds are scoped. Check in on the client\'s ongoing maintenance needs.';
+}
+
+// Called when a round's review closes. Four quarters: the first is due in three months; each time one is closed
+// the next appears (core/recurrence.js), up to twelve months out.
+export function createQuarterlyCheckIn(client, ctx) {
+    const pd = client?.projectData;
+    if (!pd || (ctx.isOngoing && ctx.isOngoing(client))) return null;
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    if (pd.clientTasks.some((t) => t && t.recurrenceTag === 'quarterly-check-in')) return null;   // one series at a time
+    const t = {
+        id: ctx.uid(), title: `Quarterly check-in: ${client.meta?.name || 'client'}`, name: `Quarterly check-in: ${client.meta?.name || 'client'}`,
+        description: quarterlyCheckInText(client), status: OPEN_STATUS, assignee: communicationAssignee(client, ctx),
+        dueDate: addMonths(ctx.today, 3), isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'conclusion', createdAt: ctx.now,
+        recurrenceTag: 'quarterly-check-in', recurrence: { freq: 'monthly', interval: 3, until: addMonths(ctx.today, 12) },
+    };
+    pd.clientTasks.unshift(t);
+    return t;
+}
+
+// Keeps open quarterly check-ins current, and retires them once the client is on Ongoing Maintenance.
+export function reconcileQuarterlyCheckIns(client, ctx) {
+    (client?.projectData?.clientTasks || []).forEach((t) => {
+        if (!t || t.recurrenceTag !== 'quarterly-check-in') return;
+        if (ctx.isOngoing && ctx.isOngoing(client)) {
+            if (isOpen(t, ctx)) { t.status = closedList(ctx)[0]; t.completedAt = ctx.now; t.cancelledAt = ctx.now; }
+            if (!t.recurrenceNextId) t.recurrenceNextId = 'ended';
+            return;
+        }
+        if (isOpen(t, ctx)) { const text = quarterlyCheckInText(client); if (t.description !== text) t.description = text; }
+    });
+}
+
+// ------------------------------------------------------------------------------------------
+// 5. Ongoing Maintenance touch-points
+// ------------------------------------------------------------------------------------------
+
+const requestDates = (client) => {
+    const dates = [];
+    requestsOf(client).forEach((i) => { const d = day(i?.receivedAt || i?.createdAt || i?.addedAt); if (d.length === 10) dates.push(d); });
+    (client?.projectData?.clientRequests || []).forEach((i) => { const d = day(i?.receivedAt || i?.createdAt); if (d.length === 10) dates.push(d); });
+    return dates;
+};
+
+export function reconcileMaintenance(client, ctx) {
+    const out = { created: [] };
+    const pd = client?.projectData;
+    if (!pd || !ctx.isOngoing || !ctx.isOngoing(client)) return out;
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    // A client who was already on Ongoing Maintenance before this existed is marked without a setup task
+    // (it's long since set up); one who has just converted (ctx.justConverted) gets it.
+    if (!pd.maintenanceSetup) {
+        pd.maintenanceSetup = { at: ctx.today };
+        if (!ctx.justConverted) pd.maintenanceSetup.setupTaskId = 'existing';
+    }
+    const setup = pd.maintenanceSetup;
+    const who = communicationAssignee(client, ctx);
+    const make = (fields) => {
+        const t = { id: ctx.uid(), status: OPEN_STATUS, assignee: who, isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now, ...fields };
+        t.name = t.title;
+        pd.clientTasks.unshift(t); out.created.push(t.id); return t;
+    };
+
+    if (!setup.setupTaskId) {
+        setup.setupTaskId = make({
+            title: `Set up Ongoing Maintenance: ${client.meta?.name || 'client'}`, dueDate: addDays(ctx.today, 3),
+            description: 'Start the plan period and confirm the hours tier (Maintenance & Hours). Check that error reports reach this project: the project ID or tracking sheet ID is set for the Zaps, and errors arrive in Error Tracking.',
+        }).id;
+    }
+    if (!setup.touchBaseTaskId) {
+        setup.touchBaseTaskId = make({
+            title: `Monthly hours check-in: ${client.meta?.name || 'client'}`, dueDate: addMonths(ctx.today, 1),
+            description: 'Review the hours used against the plan (Maintenance & Hours), log any time still missing, and send the client a short update.',
+            recurrenceTag: 'monthly-touch-base', recurrence: { freq: 'monthly', interval: 1 },
+        }).id;
+    }
+
+    // 60 days without a new request: prompt once per quiet stretch. A new request moves the last date forward,
+    // which starts the count again.
+    // The last request date; a client with no dated requests at all counts from when these rules started.
+    const dates = requestDates(client).sort();
+    const last = dates.length ? dates[dates.length - 1] : day(setup.at);
+    if (last && daysBetween(last, ctx.today) >= INACTIVITY_DAYS && setup.inactivityFor !== last) {
+        make({
+            title: `No requests in ${INACTIVITY_DAYS} days: ${client.meta?.name || 'client'}`, dueDate: addDays(ctx.today, 2),
+            description: `No new request since ${last}. Propose a brainstorming meeting, or send the client an Opportunities list.`,
+        });
+        setup.inactivityFor = last;
+    }
+    return out;
+}
+
+// Reminders as a plan period nears its end. periods come from the database (maintenance_plan_period), not the
+// project JSON, so the caller passes them in. One reminder per period per date.
+export function planPeriodReminders(client, periods, ctx) {
+    const pd = client?.projectData;
+    if (!pd || !ctx.isOngoing || !ctx.isOngoing(client)) return [];
+    const setup = pd.maintenanceSetup = pd.maintenanceSetup || { at: ctx.today };
+    setup.reminders = setup.reminders || {};
+    const created = [];
+    (periods || []).filter((p) => p && p.status === 'active' && p.due_date).forEach((p) => {
+        const due = day(p.due_date);
+        [[60, 'Plan period ends in 2 months'], [14, 'Plan period ends in 2 weeks']].forEach(([lead, label]) => {
+            const key = `${p.id}:${lead}`;
+            if (setup.reminders[key]) return;
+            const when = addDays(due, -lead);
+            if (when < addDays(ctx.today, -lead)) { setup.reminders[key] = 'skipped'; return; }   // too late to matter
+            const t = {
+                id: ctx.uid(), title: `${label}: ${client.meta?.name || 'client'}`, name: `${label}: ${client.meta?.name || 'client'}`,
+                description: `The current plan period ends ${due}. Talk to the client about renewing, and decide whether to give any unused hours as a courtesy carryover.`,
+                status: OPEN_STATUS, assignee: communicationAssignee(client, ctx), dueDate: when < ctx.today ? ctx.today : when,
+                isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now,
+            };
+            pd.clientTasks.unshift(t); setup.reminders[key] = t.id; created.push(t.id);
+        });
+    });
+    return created;
+}
+
+// ------------------------------------------------------------------------------------------
+// the pass
+// ------------------------------------------------------------------------------------------
+export function runClientWorkRules(client, ctx) {
+    if (!client?.projectData) return null;
+    if (!Array.isArray(client.projectData.clientTasks)) client.projectData.clientTasks = [];
+    stampStatusChanges(client, ctx);
+    const blocked = reconcileBlockedTasks(client, ctx);
+    const followUp = reconcileClientFollowUp(client, ctx);
+    reconcileQuarterlyCheckIns(client, ctx);
+    const maintenance = reconcileMaintenance(client, ctx);
+    return { blocked, followUp, maintenance };
+}
+
+// ------------------------------------------------------------------------------------------
+// wiring: build the context from app state, expose on window.OL (run from persist(), like recurrence.js)
+// ------------------------------------------------------------------------------------------
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+function ensureBlockedStatus() {
+    // An org that saved its own status list needs the new status added to it; the built-in list already has it.
+    const list = state.master?.taskStatuses;
+    if (Array.isArray(list) && list.length && !list.some((s) => s.name === BLOCKED_STATUS)) {
+        list.splice(Math.min(1, list.length), 0, { id: 'st-blocked-client', name: BLOCKED_STATUS, color: '#0880ea', isClosed: false });
+    }
+}
+
+function contextNow(extra = {}) {
+    ensureBlockedStatus();
+    const statuses = window.OL?.getSystemStatuses ? window.OL.getSystemStatuses() : (state.master?.taskStatuses || []);
+    const closed = statuses.filter((s) => s.isClosed).map((s) => s.name);
+    return {
+        roles: state.master?.roles || [], closedNames: closed.length ? closed : ['Done'],
+        sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).filter(Boolean),
+        today: localToday(), now: new Date().toISOString(), uid,
+        followUpEveryDays: Number(state.master?.followUpEveryDays) || DEFAULT_FOLLOW_UP_EVERY_DAYS,
+        staleDays: Number(state.master?.staleDays) || DEFAULT_STALE_DAYS,
+        isOngoing, ...extra,
+    };
+}
+
+export function runClientWorkRulesFor(client) { return runClientWorkRules(client, contextNow()); }
+export function onClientBecameOngoing(client) {
+    const ctx = contextNow({ justConverted: true });
+    reconcileQuarterlyCheckIns(client, ctx);
+    return reconcileMaintenance(client, ctx);
+}
+export function createQuarterlyCheckInFor(client) { return createQuarterlyCheckIn(client, contextNow()); }
+export function syncPeriodReminders(clientId, periods) {
+    const client = state.clients?.[clientId];
+    if (!client) return [];
+    const created = planPeriodReminders(client, periods, contextNow());
+    if (created.length && window.OL?.markClientDirty) { window.OL.markClientDirty(clientId); window.OL.persist?.(); }
+    return created;
+}
+
+window.OL = window.OL || {};
+Object.assign(window.OL, { runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders });

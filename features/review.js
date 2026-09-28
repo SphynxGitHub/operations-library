@@ -10,7 +10,7 @@
 import { state, esc, uid, db, getActiveClient, updateAndSync, loadFullClient } from '../core/data.js';
 import { DEFAULT_TEST_TEMPLATES } from '../core/testing.js';
 import {
-    updateRoundStates, roundStatus, setReviewDates, startReview, closeReview, openWorkInRound,
+    updateRoundStates, roundStatus, setReviewDates, startReview, closeReview, openWorkInRound, extendReview, reviewStartAt,
     buildClientChecklist, reviewDefaults, reviewEndFor, roundKey,
 } from '../core/conclusion.js';
 import { isRoundApproved } from '../core/requests.js';
@@ -69,10 +69,15 @@ export function roundStatusHtml(client, sheet, round, isCurrent = true) {
     if (s.kind === 'ready_to_notify') return pill('✅ Passed testing', '#22c55e') + (isStaff ? btn('Notify client…', `OL.openReviewNotification('${esc(key)}', '${esc(client.id)}')`) : '');
     if (s.kind === 'in_review') {
         const cr = s.state && s.state.clientReview;
-        const seen = cr && cr.total ? `<span class="tiny muted" style="margin-left:8px;">Client reviewed ${cr.reviewed}/${cr.total}${cr.failed ? `, ${cr.failed} issue${cr.failed === 1 ? '' : 's'}` : ''}</span>` : '';
+        const allPassed = !!(cr && cr.total && cr.reviewed >= cr.total && !cr.failed);
+        const seen = cr && cr.total
+            ? (allPassed
+                ? pill('✅ Client passed every step', '#22c55e')
+                : `<span class="tiny muted" style="margin-left:8px;">Client reviewed ${cr.reviewed}/${cr.total}${cr.failed ? `, ${cr.failed} issue${cr.failed === 1 ? '' : 's'}` : ''}</span>`)
+            : '';
         return pill(`📋 ${s.text}`, '#38bdf8') + seen + (isStaff ? btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
     }
-    if (s.kind === 'review_ended') return pill(`⏰ ${s.text}`, '#f59e0b') + (isStaff ? btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
+    if (s.kind === 'review_ended') return pill(`⏰ ${s.text}`, '#f59e0b') + (isStaff ? btn('Extend 10 days', `OL.extendReviewFor('${esc(key)}', '${esc(client.id)}')`) + btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
     if (s.kind === 'closed') return `<span class="tiny muted" style="margin-left:8px;">${esc(s.text)}</span>`;
     return '';
 }
@@ -118,6 +123,9 @@ export async function openReviewNotification(key, clientId) {
     const st = client?.projectData?.roundStates?.[key];
     if (!st || st.status !== 'ready_to_notify') { alert('This round is not ready to notify, or the review has already started.'); return; }
     const sheet = (client.projectData.scopingSheets || []).find((s) => String(s.id ?? '') === st.sheetId);
+    // The review starts from when this goes out: today if it's before noon on a Monday or Wednesday, else the
+    // next Monday or Wednesday. The person can still change the date below.
+    setReviewDates(st, { start: reviewStartAt(new Date()), days: st.reviewDays, followUpEveryDays: st.followUpEveryDays });
     const checklist = buildClientChecklist(client, sheet, st.round, contextFor());
     const contacts = primaryContacts(client);
     const token = OL._reviewDraft && OL._reviewDraft.key === key ? OL._reviewDraft.token : newToken();
@@ -253,7 +261,25 @@ export async function closeReviewFor(key, clientId) {
     const open = openWorkInRound(client, sheet, st.round, ctx).filter((t) => !t.reviewFollowUpKey);
     const warn = open.length ? `\n\n${open.length} task${open.length === 1 ? ' is' : 's are'} still open on this round's requests (for example "${open[0].title}"). Closing marks the requests Done anyway.` : '';
     if (!confirm(`Close the Round ${st.round} review? Its requests will be marked Done and the next round can start.${warn}`)) return;
-    await updateAndSync(() => { closeReview(client, key, { ...ctx, now: new Date().toISOString() }); }, client.id);
+    await updateAndSync(() => {
+        closeReview(client, key, { ...ctx, now: new Date().toISOString() });
+        // Four quarterly check-ins follow a closed round (unless the client is on Ongoing Maintenance).
+        if (typeof OL.createQuarterlyCheckInFor === 'function') OL.createQuarterlyCheckInFor(client);
+    }, client.id);
+    refreshScopingIfOpen();
+}
+
+// ---------------- extending a review ----------------
+export async function extendReviewFor(key, clientId) {
+    const client = await clientFor(clientId);
+    const st = client?.projectData?.roundStates?.[key];
+    if (!st || st.status !== 'in_review') return;
+    const ans = prompt(`Extend the Round ${st.round} review by how many days? (currently ends ${st.reviewEnd})`, '10');
+    if (ans === null) return;
+    const days = parseInt(ans, 10);
+    if (!(days >= 1)) { alert('Enter a number of days.'); return; }
+    const note = prompt('Reason (optional, kept in the log):', '') || '';
+    await updateAndSync(() => { extendReview(client, key, { ...contextFor(), now: new Date().toISOString() }, days, note); }, client.id);
     refreshScopingIfOpen();
 }
 
@@ -291,7 +317,7 @@ export async function pullClientReviewFeedback() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { pullClientReviewFeedback, updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
+Object.assign(window.OL, { extendReviewFor, pullClientReviewFeedback, updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
 
 // First check shortly after the app loads, then every few minutes while it is open.
 if (typeof window !== 'undefined' && typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) {

@@ -38,6 +38,30 @@ export function nextReviewStart(concludedIso, weekdays = [1, 3]) {
 }
 export const reviewEndFor = (startIso, days) => addDaysIso(startIso, Number(days));
 
+// The review starts the same day if the notification goes out before noon on a Monday or Wednesday; otherwise
+// on the next Monday or Wednesday. `when` is a Date in the sender's own time.
+export function reviewStartAt(when = new Date(), weekdays = [1, 3]) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayIso = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
+    if (weekdays.includes(when.getDay()) && when.getHours() < 12) return todayIso;
+    return nextReviewStart(todayIso, weekdays);
+}
+
+// Quickstart projects have a shorter review (14 days, a check-in every 7); everything else uses the defaults
+// (30 and 10). Quickstart is recognised by name for now — a request or resource in the round, or the project's
+// product/plan title, containing "Quickstart" — until it comes from the Stripe product.
+export const QUICKSTART_REVIEW = { days: 14, followUpEveryDays: 7 };
+export function reviewTierFor(client, sheet, round, ctx) {
+    const names = [client?.meta?.productTitle, client?.meta?.plan, client?.meta?.product];
+    (sheet?.lineItems || []).forEach((i) => {
+        if (!i || roundOf(i) !== Number(round)) return;
+        names.push(i.name);
+        const res = ctx?.resourceFor ? ctx.resourceFor(i) : null;
+        if (res) names.push(res.name, res.productTitle);
+    });
+    return names.some((n) => /quick\s*-?\s*start/i.test(String(n || ''))) ? { tier: 'Quickstart', ...QUICKSTART_REVIEW } : null;
+}
+
 // A follow-up every N days from the start, up to and including the end date.
 export function followUpDates(startIso, endIso, everyDays) {
     const every = Number(everyDays);
@@ -141,6 +165,9 @@ export function updateRoundStates(client, ctx) {
         const complete = prog.total > 0 && prog.complete === prog.total;
 
         if (!st && complete) {
+            const tier = reviewTierFor(client, sheet, current, ctx);
+            const days = tier ? tier.days : defaults.days;
+            const every = tier ? tier.followUpEveryDays : defaults.followUpEveryDays;
             const start = nextReviewStart(ctx.today);
             const task = {
                 id: ctx.uid(), title: `Notify client: Round ${current} review`, name: `Notify client: Round ${current} review`,
@@ -151,8 +178,8 @@ export function updateRoundStates(client, ctx) {
             pd.clientTasks.unshift(task);
             pd.roundStates[key] = {
                 key, sheetId: String(sheet.id ?? ''), round: current, status: 'ready_to_notify', concludedAt: ctx.today,
-                reviewStart: start, reviewDays: defaults.days, followUpEveryDays: defaults.followUpEveryDays,
-                reviewEnd: reviewEndFor(start, defaults.days), notifyTaskId: task.id, checklistToken: '', sentAt: '', sentTo: '',
+                reviewStart: start, reviewDays: days, followUpEveryDays: every, tier: tier ? tier.tier : '',
+                reviewEnd: reviewEndFor(start, days), notifyTaskId: task.id, checklistToken: '', sentAt: '', sentTo: '',
                 followUpTaskIds: [], closedAt: '',
             };
             result.ready.push(key);
@@ -200,6 +227,38 @@ export function startReview(client, key, ctx, { sentTo = '', checklistToken = ''
     });
     return st;
 }
+
+// Extend a review that is running or has just ended, a set number of calendar days at a time (10 by default,
+// as often as needed, at Sphynx's discretion). Each extension is logged on the round, and check-ins keep
+// going on the same schedule through the new end date.
+export function extendReview(client, key, ctx, days = 10, note = '') {
+    const pd = client?.projectData;
+    const st = pd?.roundStates?.[key];
+    if (!st || st.status !== 'in_review') return null;
+    const n = Math.max(1, Number(days) || 10);
+    const oldEnd = st.reviewEnd;
+    st.reviewEnd = addDaysIso(oldEnd, n);
+    st.reviewDays = Number(st.reviewDays) + n;
+    (st.extensions = st.extensions || []).push({ at: ctx.now, days: n, from: oldEnd, to: st.reviewEnd, note: String(note || '') });
+
+    const assignee = assigneeForRole(client, ctx.roles, /communicat/i);
+    const all = followUpDates(st.reviewStart, st.reviewEnd, st.followUpEveryDays);
+    const added = [];
+    all.filter((date) => date > oldEnd).forEach((date) => {
+        const day = daysBetweenIso(st.reviewStart, date);
+        const task = {
+            id: ctx.uid(), title: `Review check-in: Round ${st.round} (day ${day})`, name: `Review check-in: Round ${st.round} (day ${day})`,
+            description: `Follow up with the client on their Round ${st.round} review (extended to ${st.reviewEnd}). Ask what they have found, and log any problem as a revision task on the original request.`,
+            status: 'Pending Sphynx Action', assignee, dueDate: date, isClientTask: false, loggedHours: 0, parentTaskId: null,
+            createdBy: 'conclusion', createdAt: ctx.now, reviewFollowUpKey: key,
+        };
+        pd.clientTasks.unshift(task);
+        (st.followUpTaskIds = st.followUpTaskIds || []).push(task.id);
+        added.push(task.id);
+    });
+    return { state: st, added };
+}
+const daysBetweenIso = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 
 // Work still open on the round's requests (for a warning before closing).
 export function openWorkInRound(client, sheet, round, ctx) {
