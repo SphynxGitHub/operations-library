@@ -36,19 +36,43 @@ function refreshScopingIfOpen() {
 }
 
 // ---------------- the list of tasks ----------------
-function taskRowHtml(client, entry, statuses) {
+function taskRowHtml(client, entry, statuses, indent = 0) {
     const t = entry.task;
     const status = statuses.find((s) => s.name === t.status) || { color: '#94a3b8' };
     const title = t.title || t.name || 'Task';
     return `
-        <div class="rt-task" style="display:flex; align-items:center; gap:8px; padding:3px 0; cursor:pointer; ${entry.done ? 'opacity:0.55;' : ''}"
+        <div class="rt-task" style="display:flex; align-items:center; gap:8px; padding:3px 0; margin-left:${indent}px; cursor:pointer; ${entry.done ? 'opacity:0.55;' : ''}"
              onclick="event.stopPropagation(); OL.openTaskInContext('${esc(client.id)}', '${esc(t.id)}')">
-            <span title="${esc(t.status || 'Pending')}" style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:${status.color};"></span>
+            ${indent ? `<i data-lucide="corner-down-right" style="width:11px;height:11px;color:#f59e0b;flex-shrink:0;"></i>` : `<span title="${esc(t.status || 'Pending')}" style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:${status.color};"></span>`}
             <span style="flex:1; min-width:0; font-size:12px; ${entry.done ? 'text-decoration:line-through;' : ''} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(title)}</span>
             ${entry.clientFacing ? `<span class="pill tiny" style="font-size:9px; border:1px solid #f59e0b; color:#f59e0b; flex-shrink:0;">Client</span>` : ''}
             <span class="tiny muted" style="flex-shrink:0;">${esc(t.assignee || '')}</span>
             <span class="tiny" style="flex-shrink:0; width:52px; text-align:right; color:var(--muted);">${esc(day(String(t.dueDate || '').slice(0, 10)))}</span>
         </div>`;
+}
+
+// Within the During (implementation) phase, a client-ask entry linked to the same request nests under whichever
+// implementation-task entry it's an explicit Dependency of, or — when there's only one implementation task in
+// this phase — under that one by default, since almost every request has exactly one per resource. Anything that
+// doesn't resolve to a parent this way (several implementation tasks, no Dependency set) stays a top-level row,
+// same as before, rather than guessing wrong.
+function nestImplementationEntries(entries) {
+    const parents = entries.filter((e) => !e.clientFacing);
+    const children = entries.filter((e) => e.clientFacing);
+    const claimed = new Set();
+    const childrenFor = (parent) => children.filter((c) => {
+        if (claimed.has(c.task.id)) return false;
+        const byDependency = (parent.task.blockedBy || []).some((d) => d && d.kind === 'task' && String(d.id) === String(c.task.id));
+        const onlyParent = parents.length === 1;
+        return byDependency || onlyParent;
+    });
+    const rows = [];
+    parents.forEach((p) => {
+        rows.push({ entry: p, indent: 0 });
+        childrenFor(p).forEach((c) => { claimed.add(c.task.id); rows.push({ entry: c, indent: 20 }); });
+    });
+    children.filter((c) => !claimed.has(c.task.id)).forEach((c) => rows.push({ entry: c, indent: 0 }));
+    return rows;
 }
 
 export function requestTasksPanelHtml(client, item) {
@@ -66,7 +90,8 @@ export function requestTasksPanelHtml(client, item) {
     const groupHtml = PHASES.map((p) => g.groups[p].length ? `
         <div style="margin-top:8px;">
             <div class="tiny bold uppercase muted" style="letter-spacing:0.05em; margin-bottom:2px;">${PHASE_LABELS[p]} <span class="pill tiny soft" style="font-size:9px;">${g.groups[p].length}</span></div>
-            ${g.groups[p].map((e) => taskRowHtml(client, e, ctx.statuses)).join('')}
+            ${(p === 'implementation' ? nestImplementationEntries(g.groups[p]) : g.groups[p].map((e) => ({ entry: e, indent: 0 })))
+                .map(({ entry, indent }) => taskRowHtml(client, entry, ctx.statuses, indent)).join('')}
         </div>` : '').join('');
     return `
         <div class="request-tasks-panel" style="margin:0 0 8px 24px; padding:10px 12px; border-left:2px solid rgba(100,198,162,0.5); background:rgba(255,255,255,0.02); border-radius:0 6px 6px 0;" onclick="event.stopPropagation();">

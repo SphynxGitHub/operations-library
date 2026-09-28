@@ -95,26 +95,12 @@ OL.sortTasksMentionsFirst = function(tasks) {
 // (b) this specific card has been expanded via its 💬 counter — in which
 // case every comment on it shows, not just mentions.
 OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
-    const rowHTML = OL.renderTaskRowHTML(t, todayStr, enableBulkSelect);
-
-    // The client tasks an implementation task is waiting on (by request/resource or a Dependency), and — for
-    // the one consolidated follow-up task — the same, but only for requests that are active right now, so the
-    // follow-up doesn't repeat everything that's still in the backlog.
-    let openItemsHTML = '';
-    if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask) {
-        if (t.consolidatedFollowUp) {
-            const all = OL.openClientTasksForId(t.clientId, t.id);
-            const active = all.filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(state.clients?.[t.clientId], x));
-            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, active, { indent: t.parentTaskId ? 48 : 20, label: 'Active-round items waiting on the client' });
-        } else if (!t.askKind) {
-            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, OL.openClientTasksForId(t.clientId, t.id), { indent: t.parentTaskId ? 48 : 20 });
-        }
-    }
+    const rowHTML = OL.renderTaskRowHTML(t, todayStr, enableBulkSelect);   // includes the nested "waiting on" list
 
     const isExpanded = !!OL.expandedCommentCards[t.id];
     const mentions = OL.showTaskComments ? OL.getTaskMentionComments(t) : [];
     const toShow = isExpanded ? (t.comments || []) : mentions;
-    if (!toShow.length) return rowHTML + openItemsHTML;
+    if (!toShow.length) return rowHTML;
 
     const sorted = [...toShow].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     const subrow = `
@@ -130,7 +116,7 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
             `).join('')}
         </div>
     `;
-    return rowHTML + subrow + openItemsHTML;
+    return rowHTML + subrow;
 };
 
 // -------------------------------------------------------------
@@ -1113,7 +1099,22 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
 
     const { avatarBg, avatarColor, avatarContent, avatarBorder } = OL.computeAssigneeAvatar(t.assignee);
 
-    return `
+    // The client tasks this task is waiting on (by request/resource or a Dependency — the Dependencies section
+    // on the task itself is the authoritative list; this is the same thing shown inline so it doesn't take an
+    // extra click to see). For the one consolidated follow-up task, only ones on a request that's active right
+    // now (Do Now, current, approved round), so it doesn't repeat the whole backlog.
+    let openItemsHTML = '';
+    if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask && !t.askKind) {
+        if (t.consolidatedFollowUp) {
+            const all = OL.openClientTasksForId(t.clientId, t.id);
+            const active = all.filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(state.clients?.[t.clientId], x));
+            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, active, { indent: t.parentTaskId ? 48 : 20, label: 'Active-round items waiting on the client' });
+        } else {
+            openItemsHTML = OL.renderOpenClientTasksList(t.clientId, OL.openClientTasksForId(t.clientId, t.id), { indent: t.parentTaskId ? 48 : 20 });
+        }
+    }
+
+    const html = `
     <div class="task-row-card" 
          style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; margin-left:${t.parentTaskId ? '28px' : '0'}; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; ${t.parentTaskId ? 'border-left:2px solid var(--accent);' : ''}"
          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
@@ -1244,6 +1245,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
         </div>
     </div>
     `;
+    return html + openItemsHTML;
 };
 
 // ================= 🗂️ BULK TASK EDITOR =================
@@ -2236,14 +2238,6 @@ OL.renderInContextTaskModal = function(client, task) {
                     ` : ''}
 
                     ${OL.renderDependencySection ? OL.renderDependencySection(client?.id, 'task', task.id) : ''}
-                    ${(() => {
-                        if (!client || !task || task.isClientTask || typeof OL.openClientTasksForId !== 'function') return '';
-                        const items = task.consolidatedFollowUp
-                            ? OL.openClientTasksForId(client.id, task.id).filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(client, x))
-                            : (task.askKind ? [] : OL.openClientTasksForId(client.id, task.id));
-                        if (!items.length) return '';
-                        return `<div style="margin-bottom:20px;"><label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">${task.consolidatedFollowUp ? 'Active-round items waiting on the client' : 'Waiting on the client for'}</label>${OL.renderOpenClientTasksList(client.id, items, { indent: 0 })}</div>`;
-                    })()}
                     ${OL.renderRollupSection ? OL.renderRollupSection(client?.id, 'task', task.id) : ''}
 
                     <!-- LINKED EMAILS SECTION WITH ENFORCED CONSTRAINTS -->
