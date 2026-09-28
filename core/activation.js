@@ -88,7 +88,11 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
     // time-based-billing request — not every request is a resource build).
     const targets = resources && resources.length ? resources : [{ id: null, name: title, type: resourceType }];
     targets.forEach((res) => {
-        const assignee = suggestAssignee(client, roles, requestType, assigneeByType);
+        // The request's own Implementation person (set in the request window) wins; then request
+        // type, then the project's default.
+        const implRole = (roles || []).find((r) => /implement/i.test(String(r?.name || '')));
+        const requestImpl = implRole && item?.roleAssignments ? String(item.roleAssignments[implRole.id] || '').trim() : '';
+        const assignee = requestImpl || suggestAssignee(client, roles, requestType, assigneeByType);
         const estimatedHours = DEFAULT_TASK_ESTIMATE_HOURS;
         // Auto-slotted against the same growing task list each row adds to
         // (see below), so two implementation rows in one plan for the same
