@@ -7,6 +7,7 @@ import './calendar.js';
 import './error-log.js';
 import './team.js';
 import './automations.js';
+import './activation-review.js';
 import './meeting-agenda.js';
 import './bulk-email.js';
 
