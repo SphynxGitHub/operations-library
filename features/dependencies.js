@@ -234,7 +234,7 @@ OL.askClientAsDependency = function (clientId, kind, id) {
     if (typeof OL.openAskModal === 'function') OL.openAskModal(requestId, { kind, id });
 };
 
-OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {
+OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {
     updateAndSync(() => {
         const item = findItem(clientId, kind, id);
         if (item?.blockedBy) item.blockedBy = item.blockedBy.filter((d) => !(d.kind === depKind && String(d.id) === String(depId)));
