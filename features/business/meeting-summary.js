@@ -12,7 +12,7 @@
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
 import { addLink } from '../../core/task-links.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, nextStepsHtml, tidyEmailHtml, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, tasksForEvent, nextStepsText, nextStepsHtml, tidyEmailHtml, assembleBody, greetingNames, joinNames, messageTextToHtml, zoomItemsNotYetTasks, closedTasksForEvent } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -554,12 +554,63 @@ function requestHintFor(task) {
     return hit && (hit.suggestedType === 'revision' || hit.suggestedType === 'new_request') ? hit.suggestedType : null;
 }
 
+// What Zoom recorded for this meeting (its action items, and the summary's own next steps list) that is not a task
+// now. The email drops that list from SUMMARY (its NEXT STEPS comes from tasks), so an item with no task would be
+// missing from the email altogether. Tasks made from this meeting, done or not, are not offered again; ones that were
+// deleted are.
+function zoomNextStepsNotYetTasks() {
+    const st = OL._msState;
+    return zoomItemsNotYetTasks({
+        summary: st.evt.zoom_summary || '', actionItems: st.evt.zoom_action_items,
+        tasks: st.client.projectData.clientTasks || [], eventId: st.evt.id,
+    });
+}
+
+OL.msCreateTasksFromSummary = async function() {
+    const st = OL._msState;
+    if (!st) return;
+    const items = zoomNextStepsNotYetTasks();
+    if (!items.length) return;
+    await updateAndSync(() => {
+        items.forEach(item => st.client.projectData.clientTasks.unshift({
+            id: uid(), title: item, name: item,
+            status: 'Pending Sphynx Action', assignee: 'Sphynx Task', dueDate: dueTwoDaysAfter(st.evt.start),
+            isClientTask: false, loggedHours: 0, createdAt: new Date().toISOString(),
+            linkedEventId: st.evt.id, parentEventId: st.evt.id, source: 'zoom_summary'
+        }));
+    }, st.client.id);
+    renderMsTaskRows();
+};
+
+function zoomItemsBoxHtml() {
+    const items = zoomNextStepsNotYetTasks();
+    if (!items.length) return '';
+    return `
+        <div style="border:1px solid #f59e0b; border-radius:6px; padding:8px; margin-bottom:8px; font-size:12px;">
+            <div class="bold" style="color:#f59e0b; margin-bottom:4px;">Zoom recorded ${items.length} action item${items.length === 1 ? '' : 's'} for this meeting that ${items.length === 1 ? "isn't a task" : "aren't tasks"} now</div>
+            <ul style="margin:0 0 6px 0; padding-left:18px;">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+            <button type="button" class="btn tiny primary" onclick="OL.msCreateTasksFromSummary()">Create ${items.length === 1 ? 'this task' : `these ${items.length} tasks`}</button>
+            <div class="tiny muted" style="margin-top:4px;">If they were tasks before, they have since been deleted. Without tasks they don't appear in the email.</div>
+        </div>`;
+}
+
+// Tasks from this meeting that are done: the list above only shows open ones, so say so rather than show nothing.
+function closedTasksNoteHtml() {
+    const st = OL._msState;
+    const list = closedTasksForEvent(st.client.projectData.clientTasks, st.evt.id, closedStatusNames());
+    if (!list.length) return '';
+    return `<div class="tiny muted" style="margin-bottom:8px;">${list.length} task${list.length === 1 ? '' : 's'} from this meeting ${list.length === 1 ? 'is' : 'are'} already done, so ${list.length === 1 ? "it isn't" : "they aren't"} listed: ${list.map(t => esc(t.title || t.name || 'Task')).join('; ')}. The email's NEXT STEPS only covers open tasks. Reopen ${list.length === 1 ? 'it' : 'any'} in the Tasks tab to include ${list.length === 1 ? 'it' : 'them'}.</div>`;
+}
+
 function renderMsTaskRows() {
     const st = OL._msState;
     const box = document.getElementById('ms-task-rows');
     if (!box) return;
     const tasks = meetingTasks();
-    box.innerHTML = tasks.length ? tasks.map(t => {
+    const zoomBox = zoomItemsBoxHtml();
+    const closedNote = closedTasksNoteHtml();
+    const emptyNote = closedNote || (zoomBox ? '' : `<div class="tiny muted" style="margin-bottom:8px;">No open task is tied to this meeting, and Zoom's summary has no next steps of its own. A task belongs here when it came from this meeting's Zoom action items, was added below, or is marked as part of this meeting. Add one below, or tick tasks from "Other open tasks" to include them.</div>`);
+    box.innerHTML = zoomBox + (tasks.length ? tasks.map(t => {
         const title = t.title || t.name || '';
         const rowsNeeded = Math.min(8, Math.max(2, Math.ceil(title.length / 34)));
         return `
@@ -591,7 +642,7 @@ function renderMsTaskRows() {
                 })()}
         </div>`;
     }).join('')
-        : '<div class="tiny muted" style="margin-bottom:8px;">No open tasks from this meeting yet.</div>';
+        : emptyNote);
     // size each title box to its text so long titles are fully visible
     if (typeof box.querySelectorAll === 'function') {
         box.querySelectorAll('textarea').forEach(ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
@@ -887,6 +938,7 @@ window.OL.msAddTask = OL.msAddTask;
 window.OL.msMakeRequest = OL.msMakeRequest;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
+window.OL.msCreateTasksFromSummary = OL.msCreateTasksFromSummary;
 window.OL.msToggleInclude = OL.msToggleInclude;
 window.OL.msSetOtherFilter = OL.msSetOtherFilter;
 Object.assign(window.OL, {
