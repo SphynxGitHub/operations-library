@@ -13,7 +13,7 @@
 //
 // Redraws never interrupt typing: if the cursor is in a field on the page,
 // the redraw waits until you leave it. Scroll position is kept. The flow
-// visualizer is never redrawn from here (it manages its own state).
+// visualizer and the how-to guide editor are never redrawn from here (they manage their own state).
 
 import { db, state } from './data.js';
 
@@ -30,7 +30,11 @@ function isEditing() {
 
 function skipRoute() {
     const h = location.hash || '';
-    return h.includes('visualizer');
+    if (h.includes('visualizer')) return true;
+    // The how-to guide editor takes over the whole page without changing the URL (features/how-to.js,
+    // openGuideEditor). A route redraw would throw the guide away and drop back to the library — which is what
+    // happened on every save, poll and return to the tab. Like the visualizer, it manages its own state.
+    return !!document.getElementById('ge-shell');
 }
 
 // Loop guard: a page that saves while drawing would otherwise redraw
