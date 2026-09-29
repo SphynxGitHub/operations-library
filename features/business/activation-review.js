@@ -16,6 +16,7 @@ import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.
 import { requestResourceIds } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
 import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, MAX_DAILY_HOURS } from '../../core/scheduling.js';
+import { getOlSettings } from '../../core/ol-settings.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
@@ -84,8 +85,8 @@ function rowHTML(st, row) {
                                onchange="OL.setActivationRowDueDate('${row.id}', this.value)">
                         <span class="tiny" style="color:${row.estimatedHours ? 'var(--text-muted, #94a3b8)' : 'inherit'};">${row.estimatedHours ? `est. ${row.estimatedHours}h` : ''}</span>
                     </div>
-                    ${(() => { const l = rowLoad(st, row); if (!l || l.tier === 'clear') return ''; const c = l.tier === 'red' ? '#ef4444' : '#f59e0b'; return `<div class="tiny" style="color:${c}; margin-top:2px;">${l.tier === 'red' ? 'Very busy' : 'Getting busy'}: ${l.hours.toFixed(1)}h booked that day${l.hours > MAX_DAILY_HOURS ? ` (over the ${MAX_DAILY_HOURS}h limit)` : ''}.</div>`; })()}
-                    ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next 2 weeks — pick a date manually.</div>` : ''}
+                    ${(() => { const l = rowLoad(st, row); if (!l || l.tier === 'clear') return ''; const c = l.tier === 'red' ? '#ef4444' : '#f59e0b'; return `<div class="tiny" style="color:${c}; margin-top:2px;">${l.tier === 'red' ? 'Very busy' : 'Getting busy'}: ${l.hours.toFixed(1)}h booked that day.</div>`; })()}
+                    ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next ${getOlSettings().scheduling.windowDays} working days — ${esc(row.reviewer || 'a person')} needs to pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}
             </div>
@@ -145,9 +146,10 @@ OL.setActivationRowAssignee = function(rowId, value) {
     // recomputed here rather than left stale. This does need a re-render
     // (the date field's value changes), unlike a plain text edit.
     if (row.kind === 'implementation' && st) {
-        const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: value, estimatedHours: row.estimatedHours });
+        const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: value, estimatedHours: row.estimatedHours, clientStatus: state.clients?.[st.clientId]?.meta?.status, config: getOlSettings().scheduling });
         row.dueDate = slot.date;
         row.dueDateReason = slot.date ? null : slot.reason;
+        row.reviewer = slot.date ? '' : (slot.reviewer || '');
         OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
     }
 };

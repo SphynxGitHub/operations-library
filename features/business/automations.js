@@ -32,6 +32,7 @@ import { esc, uid, state, updateAndSync, persist } from '../../core/data.js';
 import { SHEET_STATUSES, getRequestTypes, listNewActivations } from '../../core/requests.js';
 import { commitActivationPlan, recordAskTemplateOverrides, DEFAULT_ASK_TEMPLATES } from '../../core/activation.js';
 import './meeting-summary.js';   // registers the meeting summary email feature
+import './ol-settings-panel.js'; // Templates & settings tab
 
 const TASK_STATUS_FIELDS = [
     { key: 'newStatus', label: 'New Status' },
@@ -354,6 +355,20 @@ OL.renderAutomationBuilder = function() {
     const tab = OL.automationTab || 'tasks';
     const tabBtn = (key, label, icon) => `<button class="btn small ${tab === key ? 'primary' : 'soft'}" onclick="OL.automationTab='${key}'; OL.renderAutomationBuilder();" style="display:inline-flex; align-items:center; gap:6px;"><i data-lucide="${icon}" style="width:13px;height:13px;"></i> ${label}</button>`;
 
+    if (tab === 'settings') {
+        main.innerHTML = `
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2><i data-lucide="settings" style="width:22px;height:22px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Templates &amp; settings</h2>
+                    <div class="small muted">The wording and numbers behind the automatic emails, follow-ups and scheduling.</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; margin:12px 0;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}${tabBtn('settings', 'Templates & settings', 'settings')}</div>
+            ${OL.renderOlSettingsPanel()}`;
+        if (window.lucide) lucide.createIcons();
+        return;
+    }
+
     if (tab === 'billable') {
         main.innerHTML = `
             <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -362,14 +377,14 @@ OL.renderAutomationBuilder = function() {
                     <div class="small muted">Rules that decide which time is billable.</div>
                 </div>
             </div>
-            <div style="display:flex; gap:6px; margin-top:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}</div>
+            <div style="display:flex; gap:6px; margin-top:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}${tabBtn('settings', 'Templates & settings', 'settings')}</div>
             ${OL.renderBillableRulesPanel ? OL.renderBillableRulesPanel() : ''}`;
         if (window.lucide) lucide.createIcons();
         return;
     }
 
     main.innerHTML = `
-        <div style="display:flex; gap:6px; margin-bottom:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}</div>
+        <div style="display:flex; gap:6px; margin-bottom:12px;">${tabBtn('tasks', 'Task rules', 'list-checks')}${tabBtn('billable', 'Billable rules', 'badge-dollar-sign')}${tabBtn('settings', 'Templates & settings', 'settings')}</div>
         <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h2><i data-lucide="zap" style="width:22px;height:22px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Automation Rules</h2>

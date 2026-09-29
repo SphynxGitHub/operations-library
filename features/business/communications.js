@@ -1,5 +1,6 @@
 import { esc, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getRequestTypes } from '../../core/requests.js';
+import { getOlSettings } from '../../core/ol-settings.js';
 
 const GMAIL_FEED_LIMIT = 150;
 
@@ -2232,6 +2233,7 @@ OL.openComposeEmailModal = function(options = {}) {
                             <input type="file" multiple style="display:none;" onchange="OL.addComposeAttachments(this.files); this.value='';">
                         </label>
                         <button type="button" class="btn tiny soft" onclick="OL.openComposeProjectFilePicker()">From project files</button>
+                        <button type="button" class="btn tiny soft" onclick="OL.openComposeLibraryPicker()" title="Link a resource from the Master Library (only the sections chosen for email linking)">From Master Library</button>
                         <span class="tiny muted">PDF, images, Office docs, CSV/TXT · up to 5 files, 10 MB each</span>
                     </div>
                     <div id="compose-attachments-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;"></div>
@@ -2542,7 +2544,7 @@ OL.renderComposeAttachments = function() {
     const chip = (label, sub, kind, i) => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">${label} <span class="muted" style="font-size:9px;">${sub}</span><button type="button" class="btn tiny ghost" style="padding:0 3px;" onclick="OL.removeComposeAttachment('${kind}', ${i})">✕</button></span>`;
     box.innerHTML = [
         ...st.attachments.map((a, i) => chip(`📎 ${esc(a.filename)}`, `${Math.max(1, Math.round(a.size / 1024))} KB`, 'file', i)),
-        ...st.projectFiles.map((f, i) => chip(`🔗 ${esc(f.name)}`, 'Drive link', 'project', i))
+        ...st.projectFiles.map((f, i) => chip(`🔗 ${esc(f.name)}`, f.library ? 'Library link' : 'Drive link', 'project', i))
     ].join('') || '<span class="tiny muted">None.</span>';
 };
 // Project (Drive) files from the linked task/request/resource and its
@@ -2577,6 +2579,61 @@ OL.openComposeProjectFilePicker = function() {
         </div>`;
     OL._composeProjectFileOptions = files;
 };
+// Master Library resources that may be linked from an email. Only the sections (resource types) chosen under
+// Automations > Templates & settings > Email links are offered — not every resource is meant to be sent out, and the
+// full list would be far too long. Each resource's document links go in as links (name + URL), the same as project
+// files, so the recipient always gets the current version.
+OL.openComposeLibraryPicker = function() {
+    const st = OL._composeState;
+    const box = document.getElementById('compose-project-file-picker');
+    if (!st || !box) return;
+    const types = getOlSettings().emailLinkableResourceTypes || [];
+    if (!types.length) {
+        box.innerHTML = '<div class="tiny muted" style="margin-top:6px;">No Master Library sections are set up for email linking yet. Choose them under Automations → Templates &amp; settings → Email links.</div>';
+        return;
+    }
+    box.innerHTML = `
+        <div style="margin-top:6px; border-top:1px dashed var(--line); padding-top:6px;">
+            <div class="tiny bold" style="margin-bottom:4px;">Master Library <span class="muted" style="font-weight:normal;">— ${types.map(esc).join(', ')}</span></div>
+            <input type="text" class="modal-input tiny" placeholder="Search these sections…" oninput="OL._renderComposeLibraryList(this.value)" style="margin-bottom:4px;">
+            <div id="compose-library-list" style="max-height:180px; overflow:auto; display:grid; gap:3px;"></div>
+        </div>`;
+    OL._renderComposeLibraryList('');
+};
+OL._renderComposeLibraryList = function(query) {
+    const st = OL._composeState;
+    const list = document.getElementById('compose-library-list');
+    if (!st || !list) return;
+    const types = getOlSettings().emailLinkableResourceTypes || [];
+    const q = String(query || '').trim().toLowerCase();
+    const eligible = (state.master?.functions || []).filter((r) => r && !r.isArchived && types.includes(r.type));
+    const rows = [];
+    let noLink = 0;
+    eligible.forEach((r) => {
+        const withUrl = (r.files || []).filter((f) => f && f.url);
+        if (!withUrl.length) { noLink++; return; }
+        withUrl.forEach((f) => rows.push({ name: f.name && f.name !== r.name ? `${r.name} — ${f.name}` : (r.name || 'Resource'), url: f.url, type: r.type }));
+    });
+    const shown = rows.filter((r) => !q || r.name.toLowerCase().includes(q) || String(r.type).toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    OL._composeLibraryOptions = shown.slice(0, 60);
+    list.innerHTML = (OL._composeLibraryOptions.length ? OL._composeLibraryOptions.map((r, i) => `
+            <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" ${st.projectFiles.some((p) => p.url === r.url) ? 'checked' : ''} onchange="OL.toggleComposeLibraryLink(${i}, this.checked)">
+                <span style="flex:1;">${esc(r.name)}</span><span class="muted" style="font-size:9px;">${esc(r.type)}</span>
+            </label>`).join('') : '<span class="tiny muted">Nothing matches.</span>')
+        + (shown.length > 60 ? `<div class="tiny muted">Showing the first 60 of ${shown.length} — type to narrow.</div>` : '')
+        + (noLink ? `<div class="tiny muted">${noLink} resource${noLink === 1 ? '' : 's'} in these sections ${noLink === 1 ? 'has' : 'have'} no document link yet.</div>` : '');
+};
+OL.toggleComposeLibraryLink = function(i, on) {
+    const st = OL._composeState;
+    const r = (OL._composeLibraryOptions || [])[i];
+    if (!st || !r) return;
+    st.projectFiles = st.projectFiles.filter((p) => p.url !== r.url);
+    if (on) st.projectFiles.push({ name: r.name, url: r.url, library: true });
+    OL.renderComposeAttachments();
+};
+
 OL.toggleComposeProjectFile = function(i, on) {
     const st = OL._composeState;
     const f = (OL._composeProjectFileOptions || [])[i];

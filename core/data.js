@@ -176,6 +176,8 @@ export function persist() {
             if (state.masterHasBillableRules) masterPayload.billable_rules = masterCopy.billableRules || [];
             if (state.masterHasEmailTemplates) masterPayload.email_templates = masterCopy.emailTemplates || [];
             if (state.masterHasReviewDefaults) masterPayload.review_defaults = masterCopy.reviewDefaults || { days: 30, followUpEveryDays: 10 };
+            // ol_settings comes from migrations/2026_10_ol_settings.sql (email wording, follow-up and scheduling settings) — only saved once the column exists.
+            if (state.masterHasOlSettings) masterPayload.ol_settings = masterCopy.olSettings || {};
 
             // Only staff write the master row. A partner's or client's copy of it is a limited,
             // read-only view (see sync), and saving it back would overwrite the team roster,
@@ -408,6 +410,8 @@ export async function sync() {
             // assignee_by_type comes from assignee_by_type.sql — same gating.
             state.masterHasAssigneeByType = Object.prototype.hasOwnProperty.call(masterData, 'assignee_by_type');
             if (masterData.assignee_by_type && typeof masterData.assignee_by_type === 'object' && !Array.isArray(masterData.assignee_by_type)) state.master.assigneeByType = masterData.assignee_by_type;
+            state.masterHasOlSettings = Object.prototype.hasOwnProperty.call(masterData, 'ol_settings');
+            if (masterData.ol_settings && typeof masterData.ol_settings === 'object' && !Array.isArray(masterData.ol_settings)) state.master.olSettings = masterData.ol_settings;
             state.masterHasReviewDefaults = Object.prototype.hasOwnProperty.call(masterData, 'review_defaults');
             if (masterData.review_defaults && typeof masterData.review_defaults === 'object' && !Array.isArray(masterData.review_defaults)) state.master.reviewDefaults = masterData.review_defaults;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);

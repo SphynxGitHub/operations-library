@@ -12,6 +12,7 @@
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
 import { addLink } from '../../core/task-links.js';
+import { getOlSettings } from '../../core/ol-settings.js';
 import { buildSummaryDraft, tasksForEvent, nextStepsText, nextStepsHtml, tidyEmailHtml, assembleBody, greetingNames, joinNames, messageTextToHtml, zoomItemsNotYetTasks, closedTasksForEvent } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
@@ -831,6 +832,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         tasks: [],                      // the window builds Next steps from the live tasks
         clientName: client.meta?.name || '',
         recordingUrl: evt.zoom_recording_drive_url || '',
+        templates: getOlSettings().templates.meetingSummary,   // wording from Automations > Templates & settings
     });
 
     OL._msState = { recordingUrl: evt.zoom_recording_drive_url || '', evt, client, task, directory: personDirectory(client, evt), to: [...draft.recipients], cc: [], suggest: {} };

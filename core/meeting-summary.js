@@ -291,8 +291,16 @@ export function buildSummaryDraft(input) {
     const recordingUrl = String(input.recordingUrl || '').trim();
     // The thanks and the "below is a summary" sentence read as one paragraph (no line break between them); the
     // recording line, when there is one, follows on its own line.
+    // The wording comes from settings (input.templates = the meetingSummary block of Automations > Templates &
+    // settings) when given; the literals here are only the fallback. {date}, {title} and {sender} fill in.
+    const tpl = input.templates || {};
+    const senderName = String(input.senderName || '').trim() || 'The Sphynx team';
+    const tvars = { date: meetingDate, title: String(input.title || 'Meeting').trim(), sender: senderName };
+    const fillT = (text) => String(text)
+        .replace(/\s+on \{date\}/g, tvars.date ? ` on ${tvars.date}` : '')
+        .replace(/\{(\w+)\}/g, (m, k) => (k in tvars ? tvars[k] : m));
     const intro = [
-        `Thanks for taking the time to meet with us${meetingDate ? ` on ${meetingDate}` : ''}. Below is a summary of what we covered and the next steps.`,
+        fillT(tpl.intro || 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.'),
         ...(recordingUrl ? [`${RECORDING_LINE}.`] : []),
     ].join('\n');
     // One line break under a header, not a blank line: the summary starts right beneath SUMMARY.
@@ -304,14 +312,16 @@ export function buildSummaryDraft(input) {
 
     const nextSteps = nextStepsText(input.tasks, input.clientName);
 
-    const closing = `Best,\n${String(input.senderName || '').trim() || 'The Sphynx team'}`;
+    const closing = fillT(tpl.closing || 'Best,\n{sender}');
 
     const date = shortDate(input.start);
     return {
         to: recipients.join(', '),
         recipients,
         greetingNames: names,
-        subject: `${/^summary\b/i.test(String(input.title || '').trim()) ? '' : 'Summary: '}${String(input.title || 'Meeting').trim()}${date ? ` (${date})` : ''}`,
+        subject: fillT((tpl.subject || 'Summary: {title} ({date})').replace(/\{date\}/g, date))
+            .replace(/\s*\(\s*\)/g, '')                        // no date -> no empty brackets
+            .replace(/^Summary:\s*(?=summary\b)/i, ''),          // the title already says Summary
         message,
         nextSteps,
         closing,

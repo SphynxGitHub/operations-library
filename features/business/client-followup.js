@@ -10,6 +10,7 @@
 
 import { state, esc, uid, db, updateAndSync } from '../../core/data.js';
 import { greetingNames, joinNames, tidyEmailHtml } from '../../core/meeting-summary.js';
+import { getOlSettings, fillTemplate } from '../../core/ol-settings.js';
 
 const SECTION_LABELS = {
     clientAsks: (clientName) => `Waiting on ${clientName}`,
@@ -30,8 +31,11 @@ function greetingContact(client) {
     return primary || null;
 }
 
+// Wording comes from Automations > Templates & settings (clientFollowUp); {client} and {sender} fill in.
+function followUpTemplate() { return getOlSettings().templates.clientFollowUp; }
+function senderNameNow() { return typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : ''; }
 function warmIntro(clientName, contactName) {
-    return `Hi ${contactName || 'there'},\n\nTouching base with you regarding the open items on your project. Please see below:`;
+    return `Hi ${contactName || 'there'},\n\n${fillTemplate(followUpTemplate().intro, { client: clientName, sender: senderNameNow() })}`;
 }
 
 // Rebuilds the four sections as plain text from whichever items are currently checked — the read-only preview
@@ -280,7 +284,7 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
     const st = OL._cfState;
     const intro = warmIntro(st.clientName, firstName(contact?.name));
     const myName = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
-    const closing = `Thank you,${myName ? `\n${myName}` : ''}`;
+    const closing = fillTemplate(followUpTemplate().closing, { client: st.clientName, sender: myName }).replace(/,\n$/, ',');   // no name -> no dangling blank line
     const alreadyClosed = typeof OL.isClosedStatus === 'function' && OL.isClosedStatus(task.status);
     const followedUp = alreadyClosed && !!task.nextFollowUpDue;
     const everyDays = Number(state.master?.followUpEveryDays) || 3;
@@ -316,7 +320,7 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
                     </div>
 
                     <label class="tiny muted">Subject</label>
-                    <input id="cf-subject" type="text" class="modal-input" style="margin-bottom:12px;" value="${esc(st.clientName)} — checking in on open items">
+                    <input id="cf-subject" type="text" class="modal-input" style="margin-bottom:12px;" value="${esc(fillTemplate(followUpTemplate().subject, { client: st.clientName, sender: myName }))}">
 
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="tiny muted" style="margin:0 !important;">Message</label>

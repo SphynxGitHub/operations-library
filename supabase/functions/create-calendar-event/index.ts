@@ -2,7 +2,8 @@
 // FUNCTION: create-calendar-event
 //
 // WHAT IT DOES:   Creates a meeting on the connected Google Calendar (title, start, length, guests,
-//                 notes, and optionally a Google Meet link). Google emails the invitations. The app then
+//                 notes, and optionally a join link — the Zoom link the app got from create-zoom-meeting —
+//                 or a Google Meet link). Google emails the invitations. The app then
 //                 syncs the calendar so the new meeting shows up like any other, matched to the project
 //                 by its guests.
 //
@@ -48,6 +49,10 @@ serve(async (req) => {
     const calendarId = String(body?.calendarId || "primary");
     const description = String(body?.description || "").slice(0, 8000);
     const addMeet = body?.addMeet === true;
+    // A Zoom join link made by create-zoom-meeting: goes in the event's location and at the top of the notes so
+    // it shows in every calendar and in Google's invitation email.
+    const joinUrl = /^https:\/\/([a-z0-9-]+\.)?zoom\.us\//i.test(String(body?.joinUrl || "")) ? String(body.joinUrl) : "";
+    const joinInfo = String(body?.joinInfo || "").slice(0, 1000);
     const attendees = (Array.isArray(body?.attendees) ? body.attendees : [])
       .map((e: unknown) => String(e || "").trim().toLowerCase()).filter((e: string) => EMAIL_RE.test(e)).slice(0, 50);
 
@@ -67,7 +72,8 @@ serve(async (req) => {
 
     const event: Record<string, unknown> = {
       summary: title,
-      description,
+      description: joinUrl ? [joinInfo || `Join Zoom Meeting: ${joinUrl}`, description].filter(Boolean).join("\n\n") : description,
+      ...(joinUrl ? { location: joinUrl } : {}),
       start: { dateTime: start.length === 16 ? `${start}:00` : start, timeZone },
       end: { dateTime: end, timeZone },
       attendees: attendees.map((email: string) => ({ email })),

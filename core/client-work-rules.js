@@ -24,6 +24,8 @@
 //      Maintenance).
 //   5. Ongoing Maintenance: a setup task and a monthly touch base when a client becomes Ongoing Maintenance,
 //      and a prompt to propose a brainstorming meeting after 60 days with no new requests.
+//   6. A working round left in Drafting too long (setting: Automations > Templates & settings): a task to follow up
+//      with the client or change the round's status to record the outcome. Repeats until the round leaves Drafting.
 //
 // Pure functions on the client project JSON. ctx: { roles, closedNames, sphynxNames, today (YYYY-MM-DD),
 // now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
@@ -34,6 +36,7 @@ import { isClientFacing } from './request-tasks.js';
 import { isRoundApproved, isActiveItem, getCurrentRound, roundStatusOf } from './requests.js';
 import { isOngoing } from './maintenance.js';
 import { state, uid } from './data.js';
+import { getOlSettings, fillTemplate } from './ol-settings.js';
 
 export const BLOCKED_STATUS = 'Pending Client Action';   // the default waiting status; any "Pending Client ..." status counts
 export const OPEN_STATUS = 'Pending Sphynx Action';
@@ -513,6 +516,59 @@ export function planPeriodReminders(client, periods, ctx) {
 }
 
 // ------------------------------------------------------------------------------------------
+// 6. Working rounds left in Drafting
+// ------------------------------------------------------------------------------------------
+// A round is "in Drafting" from its statusChangedAt (stamped when the round is created or its status changes; a round
+// that has none yet starts its clock the first time this runs). After afterDays a task is made for the project's
+// Communications person (or the assignee set in settings). It is not made again while that task is open, and only
+// again after repeatEveryDays once it has been closed. Approving, declining or holding the round stops it.
+const roundLabel = (round) => (/^\d+$/.test(String(round)) ? `Working Round ${round}` : String(round));
+
+function reconcileDraftingRounds(client, ctx) {
+    const cfg = ctx.drafting;
+    const created = [];
+    if (!cfg || cfg.enabled === false) return created;
+    const afterDays = Math.max(1, Number(cfg.afterDays) || 7);
+    const repeatDays = Math.max(1, Number(cfg.repeatEveryDays) || afterDays);
+    const pd = client.projectData;
+    (pd.scopingSheets || []).forEach((sheet) => {
+        if (!sheet || sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;
+        const rounds = new Set((sheet.lineItems || []).filter((i) => i && !isBlank(i.round)).map((i) => String(i.round)));
+        rounds.forEach((round) => {
+            if (roundStatusOf(sheet, round) !== 'Drafting') return;
+            let entry = sheet.roundApprovals?.[round];
+            let since = day(entry?.statusChangedAt || (entry ? '' : sheet.statusChangedAt));
+            if (!since) {
+                if (!sheet.roundApprovals) sheet.roundApprovals = {};
+                if (!entry) entry = sheet.roundApprovals[round] = { status: 'Drafting' };
+                entry.statusChangedAt = ctx.now;   // start the clock
+                since = day(ctx.now);
+            }
+            const age = daysBetween(since, ctx.today);
+            if (age < afterDays) return;
+
+            const key = `${sheet.id || 'sheet'}:${round}`;
+            const mine = pd.clientTasks.filter((t) => t && t.draftingFollowUpKey === key);
+            if (mine.some((t) => isOpen(t, ctx))) return;
+            const last = mine.map((t) => day(t.createdAt)).sort().pop();
+            if (last && daysBetween(last, ctx.today) < repeatDays) return;
+
+            const vars = { round: roundLabel(round), client: client.meta?.name || 'client', days: age };
+            const title = fillTemplate(cfg.taskTitle, vars) || `Follow up on ${vars.round}`;
+            const t = {
+                id: ctx.uid(), title, name: title,
+                description: fillTemplate(cfg.taskDescription, vars),
+                status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: ctx.today,
+                isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'drafting-followup', createdAt: ctx.now,
+                draftingFollowUpKey: key,
+            };
+            pd.clientTasks.unshift(t); created.push(t.id);
+        });
+    });
+    return created;
+}
+
+// ------------------------------------------------------------------------------------------
 // the pass
 // ------------------------------------------------------------------------------------------
 export function runClientWorkRules(client, ctx) {
@@ -523,7 +579,8 @@ export function runClientWorkRules(client, ctx) {
     const followUp = reconcileClientFollowUp(client, ctx);
     reconcileQuarterlyCheckIns(client, ctx);
     const maintenance = reconcileMaintenance(client, ctx);
-    return { blocked, followUp, maintenance };
+    const drafting = reconcileDraftingRounds(client, ctx);
+    return { blocked, followUp, maintenance, drafting };
 }
 
 // ------------------------------------------------------------------------------------------
@@ -550,6 +607,7 @@ function contextNow(extra = {}) {
         followUpEveryDays: Number(state.master?.followUpEveryDays) || DEFAULT_FOLLOW_UP_EVERY_DAYS,
         staleDays: Number(state.master?.staleDays) || DEFAULT_STALE_DAYS,
         thirdPartyStatusNoteAssignee: state.master?.thirdPartyStatusNoteAssignee || 'Anthony',
+        drafting: getOlSettings().draftingFollowUp,
         isOngoing, ...extra,
     };
 }
@@ -590,7 +648,7 @@ export async function sweepClientWorkRules() {
         for (const client of Object.values(state.clients || {})) {
             if (!client || client._metaOnly || !client.projectData || client.meta?.status === 'Partner') continue;
             out.checked++;
-            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup, client.projectData.followUpSnoozeUntil]);
+            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup, client.projectData.followUpSnoozeUntil, (client.projectData.scopingSheets || []).map((sh) => sh?.roundApprovals)]);
             const before = snap();
             try {
                 // Ongoing Maintenance: read the plan periods so the two reminders before a period ends exist even

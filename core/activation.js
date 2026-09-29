@@ -25,6 +25,7 @@
 import { addLink } from './task-links.js';
 import { assigneeForRole } from './testing.js';
 import { findFirstAvailableDate, DEFAULT_TASK_ESTIMATE_HOURS } from './scheduling.js';
+import { getOlSettings } from './ol-settings.js';
 
 const lc = (v) => String(v ?? '').toLowerCase();
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
@@ -116,14 +117,14 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
         // Auto-slotted against the same growing task list each row adds to
         // (see below), so two implementation rows in one plan for the same
         // assignee don't both get suggested the same already-full day.
-        const slot = findFirstAvailableDate({ calendarEvents, tasks: existingTasks, assignee, estimatedHours });
+        const slot = findFirstAvailableDate({ calendarEvents, tasks: existingTasks, assignee, estimatedHours, clientStatus: client?.meta?.status, config: getOlSettings().scheduling });
         plan.push({
             id: uid(), kind: 'implementation', templateId: null,
             title: res.id ? `Build/revise ${res.name}` : `Work on ${title}`,
             instructions: '', askKind: null,
             resourceId: res.id, resourceName: res.name,
             assignee, estimatedHours,
-            dueDate: slot.date, dueDateReason: slot.date ? null : slot.reason,
+            dueDate: slot.date, dueDateReason: slot.date ? null : slot.reason, reviewer: slot.date ? '' : (slot.reviewer || ''),
             included: true,
         });
         // So the NEXT implementation row's own auto-slot search sees this

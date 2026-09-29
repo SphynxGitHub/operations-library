@@ -1,0 +1,71 @@
+//======================= CORE / OL SETTINGS =======================//
+// One place for the wording and numbers that used to be hard-coded: the meeting-summary and client-follow-up
+// emails, the working-round follow-up task, the intro-call task, the scheduling thresholds, and which Master
+// Library sections may be linked from an email. Stored as one object on the master row (workspace_masters.
+// ol_settings, see migrations/2026_10_ol_settings.sql), edited on Automations > Templates & settings
+// (features/business/ol-settings-panel.js). Anything the org has not changed falls back to DEFAULT_OL_SETTINGS,
+// so nothing changes until someone edits it.
+
+import { state } from './data.js';
+
+export const DEFAULT_OL_SETTINGS = {
+    templates: {
+        // {date} = the meeting date, {title} = the meeting title, {sender} = whoever is sending.
+        meetingSummary: {
+            subject: 'Summary: {title} ({date})',
+            intro: 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.',
+            closing: 'Best,\n{sender}',
+        },
+        // {client} = the project name, {sender} = whoever is sending.
+        clientFollowUp: {
+            subject: '{client} — checking in on open items',
+            intro: 'Touching base with you regarding the open items on your project. Please see below:',
+            closing: 'Thank you,\n{sender}',
+        },
+    },
+    // A working round that sits in Drafting this long gets a task to follow up with the client or change its status.
+    draftingFollowUp: {
+        enabled: true,
+        afterDays: 7,
+        repeatEveryDays: 7,
+        taskTitle: 'Follow up on {round}: {client}',
+        taskDescription: '{round} has been in Drafting for {days} days. Follow up with the client, or change the round\'s status to Approved, Declined or On Hold to record the outcome.',
+        assignee: '',   // blank = the project's Communications person, else the general Sphynx task pool
+    },
+    introCall: {
+        enabled: true,
+        titleKeywords: 'intro call',        // comma separated; a calendar event whose title contains any of these
+        daysBefore: 2,
+        taskTitle: 'Review Intro Call Questionnaire and Notes',
+        assignee: 'Anthony',
+    },
+    scheduling: {
+        greenMaxHours: 3,     // Green: this many booked hours or fewer
+        yellowMaxHours: 4,    // Yellow: over Green, up to this
+        redMaxHours: 5,       // Red: over Yellow, under this. This many or more is Closed.
+        sameDayMaxByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
+        sameDayMaxDefault: 'red',
+        laterDayMax: 'red',
+        windowDays: 14,       // working days to look ahead before handing it to a person
+        reviewer: '',         // who gets asked to place it by hand when nothing fits
+    },
+    // Master Library sections (resource types) whose resources may be linked from an email. Empty = none.
+    emailLinkableResourceTypes: [],
+};
+
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+function merge(base, over) {
+    if (!isObj(base)) return over === undefined ? base : over;
+    const out = { ...base };
+    if (isObj(over)) Object.keys(over).forEach((k) => { out[k] = isObj(base[k]) ? merge(base[k], over[k]) : (over[k] === undefined ? base[k] : over[k]); });
+    return out;
+}
+
+export function getOlSettings(master = state?.master) {
+    return merge(DEFAULT_OL_SETTINGS, master?.olSettings || {});
+}
+
+// {name} placeholders. Unknown ones are left as typed so a typo is visible rather than silently blank.
+export function fillTemplate(text, vars = {}) {
+    return String(text ?? '').replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k] ?? '') : m));
+}

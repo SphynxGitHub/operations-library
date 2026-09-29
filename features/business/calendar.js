@@ -1,4 +1,5 @@
 import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { getOlSettings } from '../../core/ol-settings.js';
 import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
 const CALENDAR_PAGE_SIZE = 150;
@@ -1544,7 +1545,8 @@ OL.setEventLoggedHours = async function(id, hoursValue) {
 // LIVE GOOGLE CALENDAR SYNC
 // -------------------------------------------------------------
 // ---------------- New meeting, created here ----------------
-// Creates the meeting on the connected Google Calendar (Google sends the invitations), then syncs the calendar so
+// Creates a Zoom meeting (when ticked) and then the event on the connected Google Calendar with the Zoom link in it
+// (Google sends the invitations), then syncs the calendar so
 // it shows up like any other meeting and is matched to its project by the guests' emails. Picking a project just
 // fills in that project's contacts as guests. The calendar it goes on is the first one being synced (else the
 // account's main calendar).
@@ -1571,7 +1573,7 @@ OL.openNewMeetingModal = function(prefill = {}) {
                 <div style="display:flex; gap:6px;"><input id="nm-guest-input" type="email" class="modal-input tiny" style="flex:1;" placeholder="Add an email and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault(); OL.newMeetingAddGuest();}">
                 <button type="button" class="btn tiny soft" onclick="OL.newMeetingAddGuest()">Add</button></div>`)}
             ${field('Notes (optional)', '<textarea id="nm-notes" class="modal-input" rows="3"></textarea>')}
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:14px;"><input id="nm-meet" type="checkbox"> Add a Google Meet link</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:14px;"><input id="nm-zoom" type="checkbox" checked> Create a Zoom meeting and put the link in the invite</label>
             <div id="nm-status" class="tiny muted" style="margin-bottom:8px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
@@ -1618,13 +1620,33 @@ OL.saveNewMeeting = async function() {
     if (btn) btn.disabled = true;
     if (status) status.textContent = 'Creating the meeting...';
     try {
+        // Zoom first: the invite that goes out has to carry the join link, so a Zoom problem is reported before
+        // anything is put on the calendar.
+        let zoom = null;
+        if (document.getElementById('nm-zoom')?.checked) {
+            if (status) status.textContent = 'Creating the Zoom meeting...';
+            const zres = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/create-zoom-meeting', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) },
+                body: JSON.stringify({ title, start: `${date}T${time}`, durationMinutes: Number(val('nm-length')) || 30,
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, agenda: val('nm-notes') }),
+            });
+            const zbody = await zres.json().catch(() => ({}));
+            if (!zres.ok || !zbody.joinUrl) {
+                if (status) status.textContent = zbody.message || 'Could not create the Zoom meeting, so nothing was scheduled.';
+                if (btn) btn.disabled = false;
+                return;
+            }
+            zoom = zbody;
+            if (status) status.textContent = 'Adding it to the calendar...';
+        }
         const res = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/create-calendar-event', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) },
             body: JSON.stringify({
                 title, start: `${date}T${time}`, durationMinutes: Number(val('nm-length')) || 30,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, calendarId: (state.master?.syncedCalendarIds || [])[0] || 'primary',
-                attendees: OL._newMeeting.guests, description: val('nm-notes'), addMeet: !!document.getElementById('nm-meet')?.checked,
+                attendees: OL._newMeeting.guests, description: val('nm-notes'), joinUrl: zoom?.joinUrl || undefined, joinInfo: zoom ? `Join Zoom Meeting: ${zoom.joinUrl}${zoom.meetingId ? `\nMeeting ID: ${zoom.meetingId}` : ''}${zoom.passcode ? `\nPasscode: ${zoom.passcode}` : ''}` : undefined,
             }),
         });
         const body = await res.json().catch(() => ({}));
@@ -1850,6 +1872,41 @@ OL.recheckZoomForEvent = async function(eventId) {
     OL.openCalendarEventModal(eventId);
 };
 
+// An intro call on the calendar gets a review task ahead of it (Automations > Templates & settings > Intro calls):
+// due N days before the call (today if that has already passed), assigned to the person set there. Matches on the
+// event title, once per event, and only for events matched to a project. Runs inside the updateAndSync in
+// processCalendarAutomations.
+OL.createIntroCallReviewTask = function(client, evt) {
+    const cfg = getOlSettings().introCall;
+    if (!cfg || cfg.enabled === false || !client || !evt?.start) return null;
+    const words = String(cfg.titleKeywords || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+    const title = String(evt.title || '').toLowerCase();
+    if (!words.length || !words.some((w) => title.includes(w))) return null;
+    if (!client.projectData) client.projectData = {};
+    if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+    if (client.projectData.clientTasks.some((t) => t && t.introCallEventId === evt.id)) return null;
+
+    const callDay = new Date(evt.start);
+    const due = new Date(callDay.getFullYear(), callDay.getMonth(), callDay.getDate() - (Number(cfg.daysBefore) || 0));
+    const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const pad = (n) => String(n).padStart(2, '0');
+    const d = due < today ? today : due;
+    const dueDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const name = String(cfg.taskTitle || '').trim() || 'Review Intro Call Questionnaire and Notes';
+    const wanted = String(cfg.assignee || '').trim().toLowerCase();
+    const member = (state.master?.sphynxTeam || []).find((m) => wanted && String(m.name || '').toLowerCase().includes(wanted));
+    const assignee = member?.name || cfg.assignee || 'Sphynx Task';
+    const task = {
+        id: uid(), title: name, name, status: 'Pending Sphynx Action', assignee, dueDate,
+        description: `Intro call: ${evt.title} (${callDay.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}).`,
+        isClientTask: OL.computeIsClientTask ? OL.computeIsClientTask(assignee) : false,
+        loggedHours: 0, timeLog: [], parentTaskId: null, createdBy: 'automation', createdAt: now.toISOString(),
+        introCallEventId: evt.id,
+    };
+    client.projectData.clientTasks.unshift(task);
+    return task;
+};
+
 OL.processCalendarAutomations = async function() {
     const { data, error } = await db
         .from('calendar_events')
@@ -1870,6 +1927,8 @@ OL.processCalendarAutomations = async function() {
             const durationHours = (!evt.all_day && evt.start && evt.end)
                 ? Math.round(((new Date(evt.end) - new Date(evt.start)) / 3600000) * 100) / 100
                 : null;
+
+            OL.createIntroCallReviewTask(client, evt);
 
             if (typeof OL.runAutomationRules === 'function') {
                 OL.runAutomationRules('calendar_event_synced', {

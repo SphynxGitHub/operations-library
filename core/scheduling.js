@@ -20,6 +20,7 @@
 // window, this returns no date at all — the caller's job is to then ask a
 // human to pick manually, never to silently overbook someone.
 import { taskAssignees } from './task-assignees.js';
+import { DEFAULT_OL_SETTINGS } from './ol-settings.js';
 
 
 export const WORKDAY_HOURS = 8;
@@ -61,7 +62,7 @@ export function meetingHoursForDay(calendarEvents, assignee, dayKey) {
 export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId) {
     if (!assignee) return 0;
     return (tasks || []).reduce((sum, t) => {
-        if (!t || t.id === excludeTaskId) return sum;
+        if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         if ((t.dueDate || '').slice(0, 10) !== dayKey) return sum;
         const closed = t.status === 'Done' || t.status === 'Completed' || t.completed;
@@ -76,41 +77,59 @@ export function dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeT
     return meetingHoursForDay(calendarEvents, assignee, dayKey) + queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId);
 }
 
-// Finds the first day, starting today (or startDate), within windowDays,
-// whose load plus this task's own estimate stays under the 80% ceiling.
-// Returns { date: 'YYYY-MM-DD', loadHours } on success, or
-// { date: null, reason: 'no_capacity_in_window' } if nothing fit — the
-// caller hands off to a human at that point, never overbooks silently.
-export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estimatedHours, startDate, windowDays = 14, excludeTaskId }) {
-    const estimate = Number.isFinite(estimatedHours) ? estimatedHours : DEFAULT_TASK_ESTIMATE_HOURS;
+// ---- Priority levels (Green / Yellow / Red / Closed) ----
+// A day's booked hours (meetings + tasks already due) put it in a level. The levels, and how full a day may be
+// before a task is placed on it, are settings (core/ol-settings.js > scheduling), not constants:
+//   Green  = greenMaxHours or fewer   Yellow = up to yellowMaxHours   Red = under redMaxHours   Closed = redMaxHours+
+export const TIER_ORDER = ['green', 'yellow', 'red', 'closed'];
+const tierIndex = (t) => Math.max(0, TIER_ORDER.indexOf(String(t || '').toLowerCase()));
+
+export function loadTier(hours, cfg = DEFAULT_OL_SETTINGS.scheduling) {
+    const h = Number(hours) || 0;
+    if (h <= cfg.greenMaxHours) return 'green';
+    if (h <= cfg.yellowMaxHours) return 'yellow';
+    if (h < cfg.redMaxHours) return 'red';
+    return 'closed';
+}
+
+// The fullest level a day may already be in for a task to go on it. Same-day depends on the client's status
+// (Ongoing Maintenance up to Red, White Glove up to Yellow, everyone else up to Red by default); later days use one
+// limit for everybody.
+export function maxTierFor(clientStatus, sameDay, cfg = DEFAULT_OL_SETTINGS.scheduling) {
+    if (!sameDay) return cfg.laterDayMax || 'red';
+    return (cfg.sameDayMaxByStatus || {})[clientStatus] || cfg.sameDayMaxDefault || 'red';
+}
+
+// Finds the first working day, starting today (or startDate), within windowDays, whose booked hours put it at or
+// under the level this client may use. Today is held to the stricter same-day limit.
+// Returns { date: 'YYYY-MM-DD', loadHours, tier } on success, or { date: null, reason: 'no_capacity_in_window',
+// reviewer } if nothing fit — the caller hands off to a human at that point, never overbooks silently.
+export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estimatedHours, startDate, windowDays, excludeTaskId, clientStatus, config }) {
+    const cfg = { ...DEFAULT_OL_SETTINGS.scheduling, ...(config || {}) };
+    const span = Number.isFinite(windowDays) ? windowDays : (Number(cfg.windowDays) || 14);
+    const todayKey = toDayKey(new Date(new Date().setHours(0, 0, 0, 0)));   // same way the day keys below are made
     let cursor = startDate ? new Date(startDate) : new Date();
     cursor.setHours(0, 0, 0, 0);
 
-    for (let checked = 0; checked <= windowDays; ) {
+    for (let checked = 0; checked <= span; ) {
         if (!isWeekend(cursor)) {
             const dayKey = toDayKey(cursor);
             const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
-            if (load + estimate <= MAX_DAILY_HOURS) {
-                return { date: dayKey, loadHours: load };
+            const tier = loadTier(load, cfg);
+            const limit = maxTierFor(clientStatus, dayKey === todayKey, cfg);
+            if (tierIndex(tier) <= tierIndex(limit) && tier !== 'closed') {
+                return { date: dayKey, loadHours: load, tier };
             }
             checked++;
         }
         cursor = new Date(cursor.getTime() + 86400000);
     }
-    return { date: null, reason: 'no_capacity_in_window' };
+    return { date: null, reason: 'no_capacity_in_window', reviewer: cfg.reviewer || '' };
 }
 
-// The status label a caller can show for one day's load — same tiers as
-// the original mockup (amber at 4h, red past 5h) for a HUMAN-FACING nudge
-// on the picker, distinct from the 6.4h hard ceiling auto-slotting uses.
-// These stay two different numbers on purpose: 4h/5h flags a day as
-// "getting busy" early enough for a person to notice and choose
-// differently; the 6.4h ceiling is the actual "don't auto-place here"
-// cutoff auto-slotting enforces. Conflating them would either make the
-// visual warning fire too late to be useful, or make the auto-slot ceiling
-// stricter than intended.
-export function dayLoadTier(loadHours) {
-    if (loadHours > 5) return 'red';
-    if (loadHours >= 4) return 'amber';
-    return 'clear';
+// The label a caller can show for one day's load. Kept under its old name for the activation-review picker; the
+// levels now come from settings: 'clear' (Green), 'amber' (Yellow), 'red' (Red or Closed).
+export function dayLoadTier(loadHours, cfg) {
+    const t = loadTier(loadHours, cfg);
+    return t === 'green' ? 'clear' : (t === 'yellow' ? 'amber' : 'red');
 }
