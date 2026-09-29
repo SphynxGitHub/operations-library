@@ -607,7 +607,6 @@ window.buildLayout = function () {
 
     const clientTabs = [
         { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
-        { key: "client-requests", label: "Client Requests", icon: "inbox", href: "#/client-requests" },
         { key: "maintenance", label: "Maintenance & Hours", icon: "hourglass", href: "#/maintenance" },
         { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
         { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
