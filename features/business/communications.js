@@ -1358,7 +1358,7 @@ OL.renderGmailOpenClientAsks = async function(m) {
                         <span class="tiny">${esc(t.title || t.name)}</span>
                         ${String(m.linked_task_id) === String(t.id)
                             ? `<span class="tiny" style="color:var(--accent); flex-shrink:0;">Linked</span>`
-                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink({ skipArchive: true }).then(() => OL.openGmailMessageModal('${m.id}'));">This answers it</button>`}
+                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink({ skipArchive: true }).then(() => OL.openGmailMessageModal('${m.id}'));">This addresses it</button>`}
                     </div>
                 `).join('')}
             </div>
