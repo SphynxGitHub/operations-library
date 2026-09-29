@@ -26,7 +26,8 @@ export function getScopingDataForResource(resId) {
     const client = getActiveClient();
     if (!client?.projectData?.scopingSheets?.[0]) return null;
     const sheet = client.projectData.scopingSheets[0];
-    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+    // Requests are the unit on the sheet; a resource is in scope when a request covers it.
+    return sheet.lineItems.find(item => requestResourceIds(item).includes(String(resId)));
 }
 
 export function isResourceInScope(resId) {
@@ -278,14 +279,14 @@ export function renderScopingSheet() {
         if (!res) return false;
 
         const matchesSearch = res.name.toLowerCase().includes(q) || (res.description || "").toLowerCase().includes(q);
-        const matchesType = typeF === "All" || res.type === typeF;
+        const matchesType = typeF === "All" || (item.requestType || 'build') === typeF;
         const matchesStatus = statusF === "All" || item.status === statusF;
         const matchesParty = partyF === "All" || item.responsibleParty === partyF;
 
         return matchesSearch && matchesType;
     });
 
-    const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
+    const availableTypes = [...new Set(sheet.lineItems.map(i => i.requestType || 'build'))].sort();
     const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
 
     const roundGroups = {};
@@ -312,13 +313,7 @@ export function renderScopingSheet() {
             </button>
             
             ${state.adminMode === true ? `
-                <button class="btn small soft" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="plus" style="width:14px; height:14px;"></i> New Resource
-                </button>
-                <button class="btn primary" onclick="OL.addResourceToScope()" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="library" style="width:14px; height:14px;"></i> Add From Library
-                </button>
-                <button class="btn small soft" onclick="OL.openRequestLineModal()" style="display:flex; align-items:center; gap:6px;">
+                <button class="btn primary" onclick="OL.openRequestLineModal()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="plus" style="width:14px; height:14px;"></i> Add Request
                 </button>
             ` : ''}
@@ -377,7 +372,7 @@ export function renderScopingSheet() {
         
         <select class="modal-input tiny" onchange="state.scopingTypeFilter = this.value; renderScopingSheet()">
             <option value="All">All Types</option>
-            ${availableTypes.map(t => `<option value="${t}" ${typeF === t ? 'selected' : ''}>${t}</option>`).join('')}
+            ${availableTypes.map(t => `<option value="${esc(t)}" ${typeF === t ? 'selected' : ''}>${esc((getRequestTypes().find((x) => x.key === t) || {}).label || t)}</option>`).join('')}
         </select>
 
         <select class="modal-input tiny" onchange="state.scopingStatusFilter = this.value; renderScopingSheet()">
@@ -638,9 +633,16 @@ function renderScopingRowBase(item, idx, showUnits) {
 
     const combinedData = { ...(res.data || {}), ...(item.data || {}) };
     const unitsHtml = showUnits ? OL.renderUnitBadges(combinedData, res) : "";
-    const requestHoursHtml = res.isRequestLine
+    const requestHoursHtml = (res.isRequestLine && (parseFloat(item.manualHours) || 0) > 0)
         ? `<div class="tiny muted">${parseFloat(item.manualHours) || 0}h estimated</div>`
         : "";
+    // The resources this request covers, each with its own status (Pending / In Process / Built / In Review).
+    const coveredHtml = requestResourceIds(item)
+        .filter((id) => !String(id).startsWith('reqline-'))
+        .map((id) => OL.getResourceById(id))
+        .filter(Boolean)
+        .map((r) => `<span style="display:inline-flex; align-items:center; gap:5px; margin:3px 6px 0 0;">
+            <span class="tiny is-clickable" style="cursor:pointer;" onclick="OL.openResourceModal('${esc(String(r.id))}')">${OL.getLucideSVG(OL.getRegistryIcon(r.type), 11, 'var(--accent)')} ${esc(r.name || 'Untitled')}</span>${OL.renderResourceStatusPill ? OL.renderResourceStatusPill(r) : ''}</span>`).join('');
 
     const sheetForStatus = client?.projectData?.scopingSheets?.[0];
     const currentRoundNum = Math.max(parseInt(item.round, 10) || 1, 1);
@@ -738,6 +740,7 @@ function renderScopingRowBase(item, idx, showUnits) {
                 ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
+            ${coveredHtml ? `<div style="display:flex; flex-wrap:wrap; align-items:center;">${coveredHtml}</div>` : ""}
             ${unitsHtml}
         </div>
       
