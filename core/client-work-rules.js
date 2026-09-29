@@ -215,8 +215,16 @@ export function openClientItems(client, ctx) {
     const groups = new Map();
     (client?.projectData?.clientTasks || []).forEach((t) => {
         if (!t || !isOpen(t, ctx) || !isClientFacing(t, ctx) || t.consolidatedFollowUp) return;
-        // Client tasks always belong to a request; one that isn't linked to any is left out.
-        linksForTask(t).forEach((l) => {
+        // A client task not tied to any request (e.g. added directly) still counts: it goes in an "Other" group.
+        const links = linksForTask(t);
+        if (!links.length) {
+            if (!groups.has('_unlinked')) groups.set('_unlinked', { title: 'Other client tasks', resources: new Map() });
+            const g = groups.get('_unlinked');
+            if (!g.resources.has('')) g.resources.set('', { name: '', tasks: [] });
+            g.resources.get('').tasks.push(t);
+            return;
+        }
+        links.forEach((l) => {
             const item = l.requestId ? requestById(client, l.requestId) : null;
             if (!item) return;
             if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
