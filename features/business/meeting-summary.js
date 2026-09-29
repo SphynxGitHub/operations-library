@@ -875,7 +875,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                         <label class="tiny muted" style="margin:0 !important;">Message</label>
                         <button type="button" class="btn tiny soft" onclick="OL.msRefreshGreeting()" title="Rewrites the first line to name the people in To">Update greeting from recipients</button>
                     </div>
-                    <div style="margin-bottom:10px;">${OL.renderRichTextField({ id: 'ms-message', html: messageTextToHtml(draft.message, OL._msState.recordingUrl), minHeight: 260, emailTools: true, imageMaxWidth: 600 })}</div>
+                    <div style="margin-bottom:10px;">${OL.renderRichTextField({ id: 'ms-message', html: messageTextToHtml(draft.message, OL._msState.recordingUrl), minHeight: 260, grow: true, emailTools: true, imageMaxWidth: 600 })}</div>
 
                     <div style="margin-bottom:10px;">
                         <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
@@ -883,7 +883,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                     </div>
 
                     <label class="tiny muted">Closing</label>
-                    <div style="margin-bottom:14px;">${OL.renderRichTextField({ id: 'ms-closing', html: messageTextToHtml(draft.closing, ''), minHeight: 70, emailTools: true, imageMaxWidth: 600 })}</div>
+                    <div style="margin-bottom:14px;">${OL.renderRichTextField({ id: 'ms-closing', html: messageTextToHtml(draft.closing, ''), minHeight: 70, grow: true, emailTools: true, imageMaxWidth: 600 })}</div>
 
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
@@ -891,7 +891,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                     </div>
                 </div>
 
-                <aside style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(56,189,248,0.03); position:sticky; top:0; max-height:calc(100vh - 150px); overflow-y:auto;">
+                <aside style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(56,189,248,0.03);">
                     ${evt.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(evt.linked_client_id) : ''}
                     <div class="bold tiny uppercase muted" style="margin-bottom:4px;">Tasks from this meeting</div>
                     <div class="tiny muted" style="margin-bottom:10px;">

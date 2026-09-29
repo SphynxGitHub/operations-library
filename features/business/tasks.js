@@ -2980,7 +2980,7 @@ OL.renderRichTextField = function(opts) {
             </div>
             <div id="${opts.id}" contenteditable="true" class="modal-input tiny ol-richtext-body"
                  data-placeholder="${esc(opts.placeholder || '')}"
-                 style="min-height:${opts.minHeight || 90}px; max-height:520px; overflow-y:auto; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
+                 style="min-height:${opts.minHeight || 90}px; max-height:${opts.grow ? 'none' : '520px'}; overflow-y:${opts.grow ? 'visible' : 'auto'}; border-radius:0 0 6px 6px; padding:8px 10px; line-height:1.5; text-align:left; font-size:13px; white-space:normal;"
                  ${opts.emailTools ? `onpaste="OL.richHandlePaste(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
                  ondragover="OL.richHandleDragOver(event)"
                  ondrop="OL.richHandleDrop(event, '${opts.id}', ${Number(opts.imageMaxWidth) || 600})"
