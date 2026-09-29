@@ -1,8 +1,10 @@
 //======================= CORE / REQUEST BACKFILL =======================//
 // Brings scoping sheets built the old way (lines that point at a resource, with no request data behind them) up
 // to the request model. For every line in a working round that is NOT Complete:
-//   1. it becomes a request: titled (from its resource), typed (Build unless it says otherwise), with its
-//      resource added to the request (item.resourceIds), a round, and the date it came in;
+//   1. it becomes a request line, the same shape "Add Request" makes: titled (from its resource), typed (Build unless
+//      it says otherwise), carrying its own placeholder id (item.resourceId = 'reqline-...') with the resource it
+//      used to point at listed under item.resourceIds, plus a round and the date it came in. Any units set on the
+//      line itself move onto that resource, so the price does not change;
 //   2. the client tasks that already exist for its resource (task.parentResourceId, task.resourceId(s), or the
 //      resource's own dependencies list) are linked to it via task.links[], so they show under the request;
 //   3. resource statuses are brought in line with the rules in core/resource-status.js.
@@ -20,12 +22,13 @@ import { syncResourceStatuses } from './resource-status.js';
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 const isPlaceholderResource = (id) => String(id || '').startsWith('reqline-');
+const newPlaceholder = () => 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 // ctx: { lookupResource(id), closedNames, sphynxNames }
 export function backfillClientRequests(client, ctx = {}) {
     const report = {
         clientId: client?.id, clientName: client?.meta?.name || '',
-        normalized: [], linked: [], ambiguous: [], unresolved: [], skippedComplete: 0, resourceStatuses: [], maintenanceOpen: 0,
+        normalized: [], notConverted: [], linked: [], ambiguous: [], unresolved: [], skippedComplete: 0, resourceStatuses: [], maintenanceOpen: 0,
     };
     const pd = client?.projectData;
     if (!pd) return report;
@@ -65,10 +68,26 @@ export function backfillClientRequests(client, ctx = {}) {
         const folded = CONSOLIDATED_REQUEST_TYPES[item.requestType];
         if (isBlank(item.requestType)) { item.requestType = 'build'; changes.push('type=build'); }
         else if (folded) { changes.push(`type ${item.requestType} -> ${folded}`); item.requestType = folded; }
-        // The resource(s) the request covers. A request line's own placeholder is not something it "covers".
-        if (!Array.isArray(item.resourceIds)) {
-            const ids = requestResourceIds(item).filter((id) => !isPlaceholderResource(id));
-            if (ids.length) { item.resourceIds = ids; changes.push(`resource added (${ids.length})`); }
+        // The request stops being the resource: it gets its own placeholder id, and the resource(s) it used to point
+        // at are listed as what it covers. Units set on the line move onto the resource (the same numbers, so the
+        // fee is unchanged). A resource that isn't one of this project's own can't take them, so that line is left
+        // as it was and reported.
+        if (!isPlaceholderResource(item.resourceId)) {
+            const covered = requestResourceIds(item).filter((id) => !isPlaceholderResource(id));
+            const main = localResources.find((r) => String(r.id) === String(item.resourceId));
+            if (isBlank(item.resourceId) || !covered.length) {
+                // nothing to cover: leave it
+            } else if (!main) {
+                report.notConverted.push({ line: item.id, resourceId: item.resourceId, why: 'its resource is not one of this project\'s own resources' });
+            } else {
+                const units = item.data && typeof item.data === 'object' ? item.data : {};
+                if (Object.keys(units).length) { main.data = { ...(main.data || {}), ...units }; item.data = {}; }
+                item.resourceIds = covered;
+                item.resourceId = newPlaceholder();
+                changes.push(`covers ${covered.length} resource${covered.length === 1 ? '' : 's'}`);
+            }
+        } else if (!Array.isArray(item.resourceIds)) {
+            item.resourceIds = [];
         }
         const status = String(item.status || '');
         if (['Do Now', 'Do Later', 'Done'].includes(status) && !(parseInt(item.round, 10) >= 1)) { item.round = 1; changes.push('round=1'); }

@@ -10,6 +10,7 @@
 import { isTaskClosed } from './work-status.js';
 import { taskAppliesToRequest } from './task-links.js';
 import { previewClientAsks } from './activation.js';
+import { requestResourceIds } from './request-pricing.js';
 
 export const PHASES = ['before', 'implementation', 'after'];
 // The stored key stays 'implementation' (saved on tasks as task.phase) — only the label the person reads changes.
@@ -87,7 +88,7 @@ export function resourceDates(client, resourceId, ctx = {}) {
     const pd = client?.projectData || {};
     const tasks = new Map();
     (pd.scopingSheets || []).forEach((sheet) => (sheet?.lineItems || []).forEach((item) => {
-        if (item && sameId(item.resourceId, resourceId)) tasksForRequest(client, item).forEach((t) => tasks.set(t.id, t));
+        if (item && requestResourceIds(item).includes(String(resourceId))) tasksForRequest(client, item).forEach((t) => tasks.set(t.id, t));
     }));
     (pd.clientTasks || []).forEach((t) => { if (t && sameId(t.parentResourceId, resourceId)) tasks.set(t.id, t); });
     return taskDateRange([...tasks.values()]);
