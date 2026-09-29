@@ -647,7 +647,7 @@ function renderScopingRowBase(item, idx, showUnits) {
             <span style="display:inline-flex; align-items:center; gap:5px;">
                 <span class="tiny is-clickable" style="cursor:pointer;" onclick="OL.openResourceModal('${esc(String(r.id))}')">${OL.getLucideSVG(OL.getRegistryIcon(r.type), 11, 'var(--accent)')} ${esc(r.name || 'Untitled')}</span>${OL.renderResourceStatusPill ? OL.renderResourceStatusPill(r) : ''}
             </span>
-            ${String(r.description || '').trim() ? `<div class="row-note">${esc(String(r.description).trim())}</div>` : ''}
+            ${String(r.description || '').trim() ? `<div class="row-note">${OL.resourceDescriptionHtml(r.description)}</div>` : ''}
         </div>`).join('');
 
     const sheetForStatus = client?.projectData?.scopingSheets?.[0];
@@ -745,7 +745,7 @@ function renderScopingRowBase(item, idx, showUnits) {
                 <span style="display:inline-flex; flex-shrink:0;">${OL.getLucideSVG(OL.getRegistryIcon(res.type), 13, 'var(--accent)')}</span>
                 ${esc(res.name || "Manual Item")}
             </div>
-            ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
+            ${res.description ? `<div class="row-note">${OL.resourceDescriptionHtml(res.description)}</div>` : ""}
             ${coveredHtml}
             ${unitsHtml}
         </div>

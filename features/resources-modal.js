@@ -40,6 +40,17 @@ OL.openEditResourceStatusDropdown = function(event, resourceId) {
     if (window.lucide) lucide.createIcons();
 };
 
+// A description as it should appear on screen and in the PDF: formatting kept (bold, italics, lists, links, line
+// breaks) when it has any, cleaned by the app's shared sanitizer, and plain text shown as plain text with its
+// line breaks. Returns HTML that is safe to place in a page.
+OL.resourceDescriptionHtml = function(text) {
+    const raw = String(text ?? '').trim();
+    if (!raw) return '';
+    const hasMarkup = /<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/i.test(raw);
+    if (hasMarkup && typeof OL.sanitizeCommentHtml === 'function') return OL.sanitizeCommentHtml(raw);
+    return esc(raw).replace(/\r?\n/g, '<br>');
+};
+
 // Small shared pill so the card/list renderers below don't each duplicate
 // the color lookup and click wiring.
 // References (the old "Admin" type, and anything pinned into the References section) are

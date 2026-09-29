@@ -1142,8 +1142,8 @@ export function printScopingSheet() {
             // With several resources, each carries its own description in its line below instead.
             const descriptionsHtml = multi ? '' : [...new Set([res.description, ...coveredLines.map((l) => l.description)]
                 .map((d) => String(d || '').trim()).filter(Boolean))]
-                .map((d) => `<div class="item-desc">${esc(d)}</div>`).join('');
-            const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml({ ...breakdown, lines: coveredLines }, esc) : '';
+                .map((d) => `<div class="item-desc">${typeof OL.resourceDescriptionHtml === 'function' ? OL.resourceDescriptionHtml(d) : esc(d)}</div>`).join('');
+            const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml({ ...breakdown, lines: coveredLines }, esc, { descriptionHtml: OL.resourceDescriptionHtml }) : '';
 
             roundRows += `<div class="item-row">
                 <div class="item-body">
