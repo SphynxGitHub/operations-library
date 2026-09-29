@@ -101,7 +101,7 @@ OL.loadDashboardEvents = async function() {
     const windowStart = new Date(); windowStart.setHours(0, 0, 0, 0);
     const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
 
-    const cols = 'id, title, start, end, all_day, linked_client_id, assignee, assignees, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard';
+    const cols = 'id, title, start, end, all_day, linked_client_id, assignee, assignees, call_type, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard';
     const base = () => scopeQueryToBusinessClients(db.from('calendar_events')
         .select(cols)
         .gte('start', windowStart.toISOString())

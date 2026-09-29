@@ -919,7 +919,7 @@ OL.markEventCommentViewed = async function(eventId, commentId, taskId) {
     if (taskId) {
         // This comment actually lives on a child task, just rolled up onto
         // the event's thread for display — update it at its real home.
-        const evt = (state.master?.googleCalendarEvents || []).find(e => e.id === eventId) || (OL._calendarGridEvents || []).find(e => e.id === eventId);
+        const evt = (state.master?.googleCalendarEvents || []).find(e => e.id === eventId) || (OL._calendarGridEvents || []).find(e => e.id === eventId) || (OL._dashboardEventsCache || []).find(e => e.id === eventId);
         const clientId = evt?.linked_client_id;
         if (clientId) {
             await updateAndSync(() => {
@@ -949,7 +949,7 @@ OL.markEventCommentViewed = async function(eventId, commentId, taskId) {
         const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
         if (error) { alert('Failed to save: ' + error.message); return; }
 
-        [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+        [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
             const e = (list || []).find(e => e.id === eventId);
             if (e) e.comments = comments;
         });
@@ -986,7 +986,7 @@ OL.saveEditedEventComment = async function(eventId, commentId) {
     const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
     if (error) { alert('Failed to save comment: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const evt = (list || []).find(e => e.id === eventId);
         if (evt) evt.comments = comments;
     });
@@ -1006,7 +1006,7 @@ OL.deleteEventComment = async function(eventId, commentId) {
     const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
     if (error) { alert('Failed to delete comment: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const evt = (list || []).find(e => e.id === eventId);
         if (evt) evt.comments = comments;
     });
@@ -1027,7 +1027,7 @@ OL.addEventComment = async function(eventId) {
     const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
     if (error) { alert('Failed to post comment: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const evt = (list || []).find(e => e.id === eventId);
         if (evt) evt.comments = comments;
     });
@@ -1037,7 +1037,7 @@ OL.addEventComment = async function(eventId) {
 
 OL.toggleEventBillable = async function(id) {
     const list = state.master?.googleCalendarEvents || [];
-    const evt = list.find(e => e.id === id) || (OL._calendarGridEvents || []).find(e => e.id === id);
+    const evt = list.find(e => e.id === id) || (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id);
     const newValue = evt ? (evt.billable === false ? true : false) : true;
 
     // billable_manual: a person chose this, so a later call-type change
@@ -1046,7 +1046,7 @@ OL.toggleEventBillable = async function(id) {
     if (error && /billable_manual/.test(error.message || '')) ({ error } = await db.from('calendar_events').update({ billable: newValue }).eq('id', id));
     if (error) { alert('Failed to update: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) e.billable = newValue;
     });
@@ -1133,7 +1133,7 @@ OL._positionCalendarEventProjectResults = function(eventId) {
 
 OL._findLiveCalendarEvent = function(eventId) {
     return (state.master?.googleCalendarEvents || []).find(e => e.id === eventId)
-        || (OL._calendarGridEvents || []).find(e => e.id === eventId);
+        || (OL._calendarGridEvents || []).find(e => e.id === eventId) || (OL._dashboardEventsCache || []).find(e => e.id === eventId);
 };
 
 OL.setCalendarEventProjectFocus = function(eventId, value) {
@@ -1187,7 +1187,7 @@ OL.setCalendarEventClient = async function(eventId, clientId) {
     const { error } = await db.from('calendar_events').update({ linked_client_id: clientId || null }).eq('id', eventId);
     if (error) { alert('Failed to update project link: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === eventId);
         if (e) e.linked_client_id = clientId || null;
     });
@@ -1202,7 +1202,7 @@ OL.setCalendarEventClient = async function(eventId, clientId) {
 // MULTI-ASSIGNEE DROPDOWN WITH FALLBACK ROSTER
 // -------------------------------------------------------------
 OL.openEditEventAssigneeDropdown = function(event, id) {
-    const evt = (OL._calendarGridEvents || []).find(e => e.id === id)
+    const evt = (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id)
         || (state.master?.googleCalendarEvents || []).find(e => e.id === id);
     const current = evt?.assignees?.length ? evt.assignees : (evt?.assignee ? [evt.assignee] : []);
 
@@ -1235,7 +1235,7 @@ OL.openEditEventAssigneeDropdown = function(event, id) {
 };
 
 OL.openEditEventCallTypeDropdown = function(event, id) {
-    const evt = (OL._calendarGridEvents || []).find(e => e.id === id)
+    const evt = (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id)
         || (state.master?.googleCalendarEvents || []).find(e => e.id === id);
 
     const popover = OL.createPopoverContainer(event);
@@ -1274,7 +1274,7 @@ OL.setEventCallType = async function(id, callType) {
     }
     if (error) { alert('Failed to update call category: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) { e.call_type = callType || null; if ('billable' in patch) e.billable = patch.billable; }
     });
@@ -1293,7 +1293,7 @@ OL.setEventDashboardHidden = async function(id, hidden) {
     const { error } = await db.from('calendar_events').update({ hidden_from_dashboard: hidden }).eq('id', id);
     if (error) { alert('Failed to update: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) e.hidden_from_dashboard = hidden;
     });
@@ -1308,7 +1308,7 @@ OL.setEventDashboardHidden = async function(id, hidden) {
 };
 
 OL.toggleEventAssignee = async function(id, name) {
-    const evt = (OL._calendarGridEvents || []).find(e => e.id === id)
+    const evt = (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id)
         || (state.master?.googleCalendarEvents || []).find(e => e.id === id);
     const current = evt?.assignees?.length ? [...evt.assignees] : (evt?.assignee ? [evt.assignee] : []);
     const next = current.includes(name) ? current.filter(n => n !== name) : [...current, name];
@@ -1316,7 +1316,7 @@ OL.toggleEventAssignee = async function(id, name) {
     const { error } = await db.from('calendar_events').update({ assignees: next, assignee: next[0] || null }).eq('id', id);
     if (error) { alert('Failed to update: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) { e.assignees = next; e.assignee = next[0] || null; }
     });
@@ -1328,7 +1328,7 @@ OL.toggleEventAssignee = async function(id, name) {
 // AUTO-ASSIGN FROM ATTENDEES
 // -------------------------------------------------------------
 OL.autoAssignEventFromAttendees = async function(id) {
-    const evt = (OL._calendarGridEvents || []).find(e => e.id === id)
+    const evt = (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id)
         || (state.master?.googleCalendarEvents || []).find(e => e.id === id);
     if (!evt) return;
 
@@ -1359,7 +1359,7 @@ OL.autoAssignEventFromAttendees = async function(id) {
     const { error } = await db.from('calendar_events').update({ assignees: nextAssignees, assignee: nextAssignees[0] || null }).eq('id', id);
     if (error) { alert('Failed to save assignees: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) { e.assignees = nextAssignees; e.assignee = nextAssignees[0] || null; }
     });
@@ -1493,7 +1493,7 @@ OL.backfillEventAssigneesFromAttendees = async function() {
                 .update({ assignees: u.assignees, assignee: u.assignee })
                 .eq('id', u.id);
             if (updateErr) { failed++; console.error(`Failed to backfill event ${u.id}:`, updateErr.message); continue; }
-            [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+            [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
                 const e = (list || []).find(e => e.id === u.id);
                 if (e) { e.assignees = u.assignees; e.assignee = u.assignee; }
             });
@@ -1510,7 +1510,7 @@ OL.backfillEventAssigneesFromAttendees = async function() {
 
 OL.openEditEventTimeModal = function(id) {
     const list = state.master?.googleCalendarEvents || [];
-    const evt = list.find(e => e.id === id) || (OL._calendarGridEvents || []).find(e => e.id === id);
+    const evt = list.find(e => e.id === id) || (OL._calendarGridEvents || []).find(e => e.id === id) || (OL._dashboardEventsCache || []).find(e => e.id === id);
     if (!evt) return;
 
     const content = `
@@ -1532,7 +1532,7 @@ OL.setEventLoggedHours = async function(id, hoursValue) {
     const { error } = await db.from('calendar_events').update({ logged_hours: hours }).eq('id', id);
     if (error) { alert('Failed to update: ' + error.message); return; }
 
-    [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
         if (e) e.logged_hours = hours;
     });
@@ -2023,7 +2023,7 @@ OL.saveManageCalendarsSelection = async function() {
         const { error: cleanupError } = await db.from('calendar_events').delete().in('calendar_id', removedCalendarIds);
         if (cleanupError) console.error('Failed to clear events from removed calendar(s):', cleanupError.message);
         else {
-            [state.master?.googleCalendarEvents, OL._calendarGridEvents].forEach(list => {
+            [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
                 if (!Array.isArray(list)) return;
                 for (let i = list.length - 1; i >= 0; i--) {
                     if (removedCalendarIds.includes(list[i].calendar_id)) list.splice(i, 1);
