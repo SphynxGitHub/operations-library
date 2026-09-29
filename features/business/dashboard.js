@@ -102,7 +102,7 @@ OL.loadDashboardEvents = async function() {
     const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
 
     const { data, error } = await scopeQueryToBusinessClients(db.from('calendar_events')
-        .select('id, title, start, end, all_day, linked_client_id, assignee, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
+        .select('id, title, start, end, all_day, linked_client_id, assignee, assignees, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
         .gte('start', windowStart.toISOString())
         .lte('start', windowEnd.toISOString())
         .eq('hidden_from_dashboard', false), 'linked_client_id')
@@ -116,16 +116,26 @@ OL.loadDashboardEvents = async function() {
 };
 
 OL.getDashboardEventItems = function() {
-    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id)).map(e => ({
+    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id)).map(e => {
+        // An event can have several assignees (calendar_events.assignees); `assignee` is only the first of them.
+        const list = Array.isArray(e.assignees) && e.assignees.length ? e.assignees : (e.assignee ? [e.assignee] : []);
+        return {
         ...e,
         _type: 'event',
-        isUnassigned: !e.assignee,
+        isUnassigned: !list.length,
+        assignees: list,
         dueDate: e.start,
-        assignee: e.assignee || 'Unassigned',
+        assignee: list[0] || 'Unassigned',
         status: null,
         clientId: e.linked_client_id,
         clientName: e.linked_client_id ? (state.clients[e.linked_client_id]?.meta?.name || 'Project') : 'Unassigned'
-    }));
+        };
+    });
+};
+
+// One stub per person on each event, so the Assignee picker lists everyone an event is assigned to.
+OL._eventAssigneeStubs = function(eventItems) {
+    return eventItems.flatMap(e => (e.assignees || []).map(a => ({ assignee: a, isUnassigned: false })));
 };
 
 // Unarchived emails — shown on the dashboard by default for everyone (no
@@ -219,7 +229,12 @@ OL.loadDashboardErrors = async function() {
 };
 
 OL.getDashboardErrorItems = function() {
-    return (OL._dashboardErrorsCache || []).filter(r => isInBusinessScope(r.client_id)).map(r => ({
+    // An error with an open task drops out of the feed while that task is being worked; it comes back when the
+    // task is closed (or deleted) and the error is still open. Error Tracking always lists every error.
+    return (OL._dashboardErrorsCache || [])
+        .filter(r => isInBusinessScope(r.client_id))
+        .filter(r => typeof OL.isErrorHiddenFromFeed !== 'function' || !OL.isErrorHiddenFromFeed(r.id))
+        .map(r => ({
         ...r,
         _type: 'error',
         dueDate: r.occurred_at,
@@ -257,7 +272,7 @@ OL.renderDailyDashboard = function() {
     const dueTodayOrOverdue = OL.filterTasksByDueRange(openTasks.concat(eventItems), 'overdue').length
         + OL.filterTasksByDueRange(openTasks.concat(eventItems), 'today').length;
 
-    const assigneeOptions = OL.getDistinctAssignees(openTasks.concat(eventItems, requestItems).filter(i => !i.isUnassigned));
+    const assigneeOptions = OL.getDistinctAssignees(openTasks.concat(OL._eventAssigneeStubs(eventItems), requestItems).filter(i => !i.isUnassigned));
     const statusOptions = OL.getDistinctStatuses(openTasks.concat(requestItems));
     const hasUnassigned = openTasks.concat(eventItems, requestItems).some(i => i.isUnassigned);
 
@@ -531,7 +546,8 @@ OL.filterDashboardItems = function(items, assignees, status, types) {
         const isTaskOrEvent = item._type === 'task' || item._type === 'event' || item._type === 'request';
         const assigneeMatch = !isTaskOrEvent || assignees.length === 0
             || (assignees.includes('__unassigned__') && item.isUnassigned)
-            || assignees.includes(item.assignee);
+            || assignees.includes(item.assignee)
+            || (item._type === 'event' && (item.assignees || []).some(a => assignees.includes(a)));
 
         const statusMatch = (item._type !== 'task' && item._type !== 'request') || status === 'all' || (item.status || 'Pending Sphynx Action') === status;
 

@@ -267,7 +267,8 @@ OL.renderErrorLogRow = function(r, locked) {
         <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); border-left:3px solid ${accentColor}; border-radius:0 8px 8px 0; cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
                 <strong style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
-                <div onclick="event.stopPropagation();">
+                <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" onclick="event.stopPropagation();">
+                    ${OL.renderErrorTaskButton(r)}
                     <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.updateErrorStatus('${r.id}', this.value)">
                         <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                         <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
@@ -281,6 +282,7 @@ OL.renderErrorLogRow = function(r, locked) {
                 ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" title="Click to copy Client ID: ${esc(r.client_id)}" onclick="event.stopPropagation(); navigator.clipboard.writeText('${r.client_id}'); alert('Copied Client ID: ${r.client_id}');">${ic('folder')}${esc(clientName)}</span>` : ''}
                 ${r.resource_name ? `<span class="pill tiny soft">${ic('git-branch')}${esc(r.resource_name)}</span>` : ''}
                 ${r.outage ? `<span class="pill tiny" style="border:none; background:rgba(239,68,68,0.15); color:#ef4444;">${ic('alert-circle')}Outage</span>` : ''}
+                ${OL.renderErrorTaskPill(r)}
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
 
@@ -547,6 +549,7 @@ OL.openErrorDetailModal = async function(id) {
         <div class="modal-body" style="max-width:600px; width:100%;">
 
             <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:10px;">
+                ${OL.renderErrorTaskButton(r)}
                 <button type="button" class="btn tiny soft" onclick="OL.emailErrorInContext('${r.id}')" title="Open an email draft with this error's details inside it">${ic('mail')}Send email</button>
                 <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
                     <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
@@ -677,11 +680,13 @@ OL.emailErrorInContext = function(id) {
     const to = (contacts.length ? contacts : team.filter(m => m.email).slice(0, 1)).map(m => m.email).join(', ');
     const names = (contacts.length ? contacts : team.filter(m => m.email).slice(0, 1)).map(m => String(m.name || '').split(' ')[0]).filter(Boolean);
     const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    const row = (label, value) => value ? `<tr><td style="padding:2px 12px 2px 0; color:#64748b; vertical-align:top;">${esc(label)}</td><td style="padding:2px 0;">${esc(value)}</td></tr>` : '';
+    // One full-width row per field ("Automation: …") instead of a label column beside a value column — the
+    // two-column version squeezed long values into a narrow strip that wrapped word by word in most mail apps.
+    const row = (label, value) => value ? `<tr><td style="padding:3px 0;"><span style="color:#64748b;">${esc(label)}:</span> ${esc(value)}</td></tr>` : '';
     const link = r.history_link ? `<p><a href="${esc(r.history_link)}">View the run in Zapier</a></p>` : '';
     const bodyHtml = `<p>Hi ${esc(names.length ? names.join(' and ') : 'there')},</p>`
         + `<p>We noticed an error on one of your automations and wanted to let you know.</p>`
-        + `<table style="border-collapse:collapse;">${row('Automation', r.title || r.service)}${row('Service', r.service)}${row('When', occurred)}</table>`
+        + `<table role="presentation" style="border-collapse:collapse; width:100%;">${row('Automation', r.title || r.service)}${row('Service', r.service)}${row('When', occurred)}</table>`
         + (r.message ? `<p style="white-space:pre-wrap;">${esc(r.message)}</p>` : '')
         + (r.cause ? `<p><strong>Likely cause:</strong> ${esc(r.cause)}</p>` : '')
         + (r.resolution ? `<p><strong>What we did:</strong> ${esc(r.resolution)}</p>` : '')
@@ -906,6 +911,292 @@ OL.saveManualError = async function() {
     OL.closeModal();
     await OL.loadErrorLog();
     OL._rerenderErrorLog();
+};
+
+// =============================================================
+// ERROR → TASK
+//
+// "Create task" on an error card opens a prefilled task modal (title "Error: <error title>", due today). The
+// task carries the link (task.errorId, plus task.errorTitle for display), so nothing extra is stored on the
+// error row and no database change is needed.
+//
+// Feed rules (Dashboard activity feed only — Error Tracking always lists every error):
+//   • error open, no task ................ shown in the feed
+//   • error open, task open .............. hidden from the feed (the task is now the thing to work)
+//   • error open, task closed ............ back in the feed, and a prompt asks whether to complete the error
+//   • task deleted ....................... back in the feed
+// Visibility is worked out from the task's live status each time the feed renders, so it stays correct
+// however the task got closed, reopened or deleted.
+// =============================================================
+
+// errorId -> { client, task } for every task that was created from an error. Built by one scan of the tasks
+// already in memory; the cache is dropped on the next tick so a render never sees a stale answer.
+OL._errorTaskMapCache = null;
+OL.getErrorTaskMap = function() {
+    if (OL._errorTaskMapCache) return OL._errorTaskMapCache;
+    const map = new Map();
+    Object.values(state.clients || {}).forEach(client => {
+        (client?.projectData?.clientTasks || []).forEach(task => {
+            if (task?.errorId && !map.has(String(task.errorId))) map.set(String(task.errorId), { client, task });
+        });
+    });
+    OL._errorTaskMapCache = map;
+    setTimeout(() => { OL._errorTaskMapCache = null; }, 0);
+    return map;
+};
+
+OL._errorTaskIsClosed = function(task) {
+    return typeof OL.isClosedStatus === 'function' ? OL.isClosedStatus(task?.status) : task?.status === 'Done';
+};
+
+// True while an open error has an open task working it — the Dashboard feed skips these.
+OL.isErrorHiddenFromFeed = function(errorId) {
+    const hit = OL.getErrorTaskMap().get(String(errorId));
+    return !!hit && !OL._errorTaskIsClosed(hit.task);
+};
+
+// "Create task" — or "Open task" once one exists, so an error can't collect duplicate tasks by accident.
+OL.renderErrorTaskButton = function(r) {
+    const hit = OL.getErrorTaskMap().get(String(r.id));
+    if (hit) {
+        return `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openTaskInContext('${esc(String(hit.client.id))}', '${esc(String(hit.task.id))}')" title="Open the task created for this error">${ic('check-square')}Open task</button>`;
+    }
+    return `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openErrorTaskModal('${esc(String(r.id))}')" title="Create a task for this error">${ic('plus')}Create task</button>`;
+};
+
+// Small status pill for the tag row: shows the linked task's current status.
+OL.renderErrorTaskPill = function(r) {
+    const hit = OL.getErrorTaskMap().get(String(r.id));
+    if (!hit) return '';
+    const closed = OL._errorTaskIsClosed(hit.task);
+    const color = closed ? '#22c55e' : 'var(--accent)';
+    return `<span class="pill tiny soft" style="border:none; color:${color};" title="Task created for this error">${ic('check-square')}Task: ${esc(hit.task.status || 'Pending Sphynx Action')}</span>`;
+};
+
+// Banner shown at the top of the task modal for a task created from an error, with the way back.
+OL.renderTaskErrorBanner = function(task) {
+    if (!task?.errorId) return '';
+    const label = task.errorTitle ? ` — ${esc(task.errorTitle)}` : '';
+    return `
+        <div style="margin:0 24px 12px 24px; display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid rgba(245,158,11,0.35); border-radius:8px; background:rgba(245,158,11,0.08);">
+            <i data-lucide="alert-triangle" style="width:14px;height:14px;color:#f59e0b;flex-shrink:0;"></i>
+            <div class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><strong>Created from an error</strong>${label}</div>
+            <button type="button" class="btn tiny soft" style="flex-shrink:0;" onclick="OL.openErrorDetailModal('${esc(String(task.errorId))}')">${ic('alert-triangle')}Open error card</button>
+        </div>
+    `;
+};
+
+// The row from the in-memory list, or fetched when the error was opened from somewhere that never loaded it.
+OL._getErrorRowById = async function(id) {
+    let r = OL.errorLogState.rows.find(x => String(x.id) === String(id));
+    if (r) return r;
+    const { data, error } = await db.from('error_log').select('*').eq('id', id).single();
+    if (error || !data) return null;
+    OL.errorLogState.rows.push(data);
+    return data;
+};
+
+OL.openErrorTaskModal = async function(id) {
+    const r = await OL._getErrorRowById(id);
+    if (!r) { alert('Could not load that error.'); return; }
+
+    // Already has a task: open it rather than creating a second one.
+    const existing = OL.getErrorTaskMap().get(String(r.id));
+    if (existing) { OL.openTaskInContext(existing.client.id, existing.task.id); return; }
+
+    const generalId = OL.GENERAL_PROJECT_ID;
+    const clients = getBusinessScopedClients()
+        .filter(c => c.id !== generalId)
+        .sort((a, b) => String(a.meta?.name || '').localeCompare(String(b.meta?.name || '')));
+    const preselected = (r.client_id && state.clients?.[r.client_id]) ? r.client_id : '';
+    const openStatuses = (OL.getSystemStatuses ? OL.getSystemStatuses() : []).filter(s => !s.isClosed);
+    const title = `Error: ${r.title || r.service || 'Automation error'}`;
+    const today = OL.localDateStr();
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text"><i data-lucide="check-square" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;"></i>Create Task from Error</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body" style="max-width:520px; width:100%;">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                <button type="button" class="btn tiny soft" onclick="OL.openErrorDetailModal('${esc(String(r.id))}')" title="Open the error card (this form will close)">${ic('alert-triangle')}Open error card</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div>
+                    <label class="tiny muted bold">Title *</label>
+                    <input type="text" id="error-task-title" class="modal-input tiny" value="${esc(title)}">
+                </div>
+                <div>
+                    <label class="tiny muted bold">Project</label>
+                    <select id="error-task-client" class="modal-input tiny" onchange="OL.refreshErrorTaskAssignees()">
+                        <option value="" ${preselected ? '' : 'selected'}>General / Business Ops</option>
+                        ${clients.map(c => `<option value="${esc(c.id)}" ${c.id === preselected ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="tiny muted bold">Description</label>
+                    <textarea id="error-task-desc" class="modal-input tiny" rows="4">${esc(r.message || '')}</textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div>
+                        <label class="tiny muted bold">Assignee</label>
+                        <select id="error-task-assignee" class="modal-input tiny">${OL.buildQuickTaskAssigneeOptions(preselected)}</select>
+                    </div>
+                    <div>
+                        <label class="tiny muted bold">Status</label>
+                        <select id="error-task-status" class="modal-input tiny">
+                            ${(openStatuses.length ? openStatuses : [{ name: 'Pending Sphynx Action' }]).map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="tiny muted bold">Due Date</label>
+                    <input type="date" id="error-task-duedate" class="modal-input tiny" value="${today}">
+                </div>
+            </div>
+            <div class="tiny muted" style="margin-top:12px;">Once created, this error leaves your Dashboard feed until the task is closed.</div>
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                <button class="btn small primary" onclick="OL.saveErrorTask('${esc(String(r.id))}')" style="font-weight:bold;">Create Task</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+    if (window.lucide) lucide.createIcons();
+};
+
+// Project changed in the form: rebuild the assignee list for that project's team, keeping the pick if it's still there.
+OL.refreshErrorTaskAssignees = function() {
+    const clientId = document.getElementById('error-task-client')?.value || '';
+    const sel = document.getElementById('error-task-assignee');
+    if (!sel) return;
+    const previous = sel.value;
+    sel.innerHTML = OL.buildQuickTaskAssigneeOptions(clientId);
+    if ([...sel.options].some(o => o.value === previous)) sel.value = previous;
+};
+
+OL.saveErrorTask = async function(errorId) {
+    const title = document.getElementById('error-task-title')?.value.trim();
+    if (!title) { alert('Title is required.'); return; }
+
+    const description = document.getElementById('error-task-desc')?.value.trim() || '';
+    const assignee = document.getElementById('error-task-assignee')?.value || 'Sphynx Task';
+    const status = document.getElementById('error-task-status')?.value || 'Pending Sphynx Action';
+    const dueDate = document.getElementById('error-task-duedate')?.value || OL.localDateStr();
+
+    // No project picked: home it in General / Business Ops, same as the quick task creator does.
+    let clientId = document.getElementById('error-task-client')?.value || '';
+    if (!clientId) clientId = OL.ensureGeneralProject().id;
+
+    // Guard against a double-click creating two tasks for one error.
+    if (OL.getErrorTaskMap().get(String(errorId))) { OL.closeModal(); return; }
+
+    const row = OL.errorLogState.rows.find(x => String(x.id) === String(errorId));
+
+    await updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client) return;
+        if (!client.projectData) client.projectData = {};
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        client.projectData.clientTasks.unshift({
+            id: uid(),
+            title, name: title,
+            description,
+            status, assignee, dueDate,
+            isClientTask: OL.computeIsClientTask(assignee),
+            loggedHours: 0,
+            createdAt: new Date().toISOString(),
+            errorId: String(errorId),
+            errorTitle: row?.title || row?.service || ''
+        });
+    }, clientId);
+
+    OL._errorTaskMapCache = null;
+    OL.closeModal();
+    OL._rerenderErrorLog();   // Dashboard: the card drops out of the feed. Error Tracking: the card now shows the task.
+};
+
+// -------------------------------------------------------------
+// TASK CLOSED, ERROR STILL OPEN — called from the task-completion hook (features/business/tasks.js) the
+// moment a task created from an error becomes closed. The error is already back in the feed by then (see the
+// feed rules above); this asks whether to complete it too. Prompts queue up, so closing several tasks at
+// once (bulk edit) asks about each error in turn instead of stacking dialogs.
+// -------------------------------------------------------------
+OL._errorClosePromptQueue = [];
+OL._errorClosePromptOpen = false;
+
+OL.onErrorTaskClosed = function(clientId, task) {
+    if (!task?.errorId) return;
+    OL._errorTaskMapCache = null;
+    const errorId = String(task.errorId);
+    if (!OL._errorClosePromptQueue.some(q => q.errorId === errorId)) {
+        OL._errorClosePromptQueue.push({ errorId, taskTitle: task.title || task.name || 'Task' });
+    }
+    // Wait for the status change to finish saving and re-rendering before asking.
+    setTimeout(() => OL._drainErrorClosePrompts(), 150);
+};
+
+OL._drainErrorClosePrompts = async function() {
+    if (OL._errorClosePromptOpen) return;
+    const next = OL._errorClosePromptQueue.shift();
+    if (!next) return;
+
+    OL._errorClosePromptOpen = true;
+    try {
+        const { data: err } = await db.from('error_log').select('id, title, service, status').eq('id', next.errorId).maybeSingle();
+        // Gone, or already completed: nothing to ask.
+        if (!err || err.status === 'resolved') { OL._finishErrorClosePrompt(); return; }
+        OL._showErrorClosePrompt(err, next.taskTitle);
+    } catch (e) {
+        console.error('Could not check the error for a closed task:', e);
+        OL._finishErrorClosePrompt();
+    }
+};
+
+OL._showErrorClosePrompt = function(err, taskTitle) {
+    document.getElementById('error-close-prompt')?.remove();
+    const id = esc(String(err.id));
+    const wrap = document.createElement('div');
+    wrap.id = 'error-close-prompt';
+    // Its own layer above the modal layer, so it never replaces a task modal that is open behind it.
+    wrap.style.cssText = 'position:fixed; inset:0; z-index:20000; display:flex; align-items:center; justify-content:center; background:rgba(2,6,23,0.6);';
+    wrap.onclick = () => OL.dismissErrorClosePrompt();
+    wrap.innerHTML = `
+        <div class="card" style="max-width:440px; width:90vw; padding:20px; cursor:default;" onclick="event.stopPropagation();">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:bold;">
+                <i data-lucide="alert-triangle" style="width:16px;height:16px;color:#f59e0b;"></i> Complete this error too?
+            </div>
+            <div class="small" style="line-height:1.5; margin-bottom:6px;">
+                The task <strong>${esc(taskTitle)}</strong> is closed, but the error <strong>${esc(err.title || err.service || 'this error')}</strong> is still open.
+            </div>
+            <div class="tiny muted" style="margin-bottom:16px;">If you leave it open, it stays in your Dashboard feed until it's marked complete.</div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button class="btn small soft" onclick="OL.dismissErrorClosePrompt()">Leave open</button>
+                <button class="btn small soft" onclick="OL.dismissErrorClosePrompt(); OL.openErrorDetailModal('${id}')">Open error card</button>
+                <button class="btn small primary" style="font-weight:bold;" onclick="OL.completeErrorFromPrompt('${id}')">Complete error</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(wrap);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL._finishErrorClosePrompt = function() {
+    document.getElementById('error-close-prompt')?.remove();
+    OL._errorClosePromptOpen = false;
+    if (OL._errorClosePromptQueue.length) setTimeout(() => OL._drainErrorClosePrompts(), 0);
+};
+
+// Leave open: the error stays in the feed (it already came back when the task closed); refresh so it shows.
+OL.dismissErrorClosePrompt = function() {
+    OL._finishErrorClosePrompt();
+    OL._rerenderErrorLog();
+};
+
+OL.completeErrorFromPrompt = async function(id) {
+    await OL.updateErrorStatus(id, 'resolved');   // stamps the resolution date, refreshes whichever page is showing
+    OL._finishErrorClosePrompt();
 };
 
 window.OL.renderBusinessErrorLog = OL.renderBusinessErrorLog;

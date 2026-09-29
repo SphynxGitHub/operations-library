@@ -915,6 +915,10 @@ OL.handleTaskCompletionCascade = function(client, task, previousStatus) {
 
     task.completedAt = new Date().toISOString();
 
+    // A task created from an error just closed: the error returns to the Dashboard feed and the person is
+    // asked whether to complete it too (see ERROR → TASK in features/business/error-log.js).
+    if (task.errorId && typeof OL.onErrorTaskClosed === 'function') OL.onErrorTaskClosed(client.id, task);
+
     const tasks = client.projectData?.clientTasks || [];
     tasks.forEach(other => {
         if (other.dueRelativeTo?.taskId === task.id) {
@@ -2094,6 +2098,7 @@ OL.renderInContextTaskModal = function(client, task) {
                 </div>
             </div>
 
+            ${typeof OL.renderTaskErrorBanner === 'function' ? OL.renderTaskErrorBanner(task) : ''}
             ${OL.renderTaskParentRequestBanner(client, task)}
 
             <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
