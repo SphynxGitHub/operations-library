@@ -2311,6 +2311,18 @@ function askAssigneeOptions(client, kind) {
     return ['Client Task', ...team];
 }
 
+// Client tasks have no due dates of their own (the client follow-up chases them), so the date boxes only show
+// for a third-party ask, where the date schedules Sphynx's own follow-up.
+function syncAskDueFields() {
+    const kind = document.getElementById('ask-kind')?.value || 'review';
+    const showDue = (ASK_KINDS[kind] || ASK_KINDS.review).owner === 'third_party';
+    document.querySelectorAll('#ask-lines .ask-line').forEach((row) => {
+        const due = row.querySelector('.ask-due');
+        if (due) { due.style.display = showDue ? '' : 'none'; if (!showDue) due.value = ''; }
+        row.style.gridTemplateColumns = showDue ? '1fr 130px auto' : '1fr auto';
+    });
+}
+
 function askLineHtml() {
     return `
         <div class="ask-line" style="display:grid; grid-template-columns: 1fr 130px auto; gap:8px; align-items:center; margin-bottom:8px;">
@@ -2368,6 +2380,7 @@ export function openAskModal(itemId, blockFor = null) {
         </div>
     `;
     openModal(html);
+    syncAskDueFields();
 }
 
 export function addAskLine() {
@@ -2376,6 +2389,7 @@ export function addAskLine() {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = askLineHtml();
     box.appendChild(wrapper.firstElementChild);
+    syncAskDueFields();
 }
 
 export function refreshAskAssignees() {
@@ -2385,6 +2399,7 @@ export function refreshAskAssignees() {
     if (!client || !select) return;
     select.innerHTML = askAssigneeOptions(client, kind)
         .map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    syncAskDueFields();
 }
 
 export async function saveAsks(itemId) {
@@ -2423,7 +2438,7 @@ export async function saveAsks(itemId) {
             description: `For: ${label}`,
             status: kindInfo.taskStatus,
             assignee,
-            dueDate: l.due,
+            dueDate: isThirdParty ? l.due : '',   // client tasks have no due dates of their own
             isClientTask: !isThirdParty,
             loggedHours: 0,
             parentTaskId: null,

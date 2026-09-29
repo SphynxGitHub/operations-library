@@ -1,4 +1,5 @@
 import { esc, uid, state, updateAndSync, getActiveClient } from '../core/data.js';
+import { taskAssignees } from '../core/task-assignees.js';
 
 //============= CLIENT WORKSPACE TASK MANAGER ===============//
 
@@ -7,7 +8,10 @@ OL.clientTaskFilterState = {
     status: 'Open',     // 'Open' | 'Closed' | 'All' | Specific Status
     assignee: 'All',   // 'All' | 'Sphynx' | 'Client' | '3rdParty' | Member Name
     dateRange: 'All',  // 'All' | 'Overdue' | 'Today' | 'Week' | 'Month'
-    groupBy: 'request' // 'request' | 'status' | 'assignee' | 'none'
+    groupBy: 'request', // 'request' | 'status' | 'assignee' | 'none'
+    // Tasks the client owns are gathered into one "Waiting on <client>" group, whatever the grouping above:
+    // 'bottom' | 'top' | 'off' (mixed in with the rest). A per-browser preference.
+    clientGroup: (() => { try { const v = localStorage.getItem('ol_client_task_group_v1'); return ['top', 'bottom', 'off'].includes(v) ? v : 'bottom'; } catch (e) { return 'bottom'; } })()
 };
 
 export function renderClientTaskManager() {
@@ -23,8 +27,17 @@ export function renderClientTaskManager() {
         clientId: client.id,
         clientName: client.meta?.name || 'Workspace',
         resourceName: t.resourceName || t.category || 'General Resource',
-        loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
+        loggedHours: Number(t.loggedHours || t.hoursLogged || 0),
+        assignees: taskAssignees(t),
+        dueDate: OL.taskIsClientOwned(t, client) ? '' : t.dueDate   // client tasks have no due dates of their own
     }));
+
+    // Once the client follow-up is marked done it stays done until the next one is due; say so up here, since the
+    // finished task itself is hidden by the default "Open Items" filter.
+    const closedNamesNow = (OL.getSystemStatuses ? OL.getSystemStatuses() : []).filter(x => x.isClosed).map(x => x.name);
+    const fuTask = tasks.find(t => t.consolidatedFollowUp);
+    const fuWaitUntil = (fuTask && closedNamesNow.concat('Done').includes(fuTask.status) && fuTask.nextFollowUpDue) || client.projectData.followUpSnoozeUntil || '';
+    const fuWaiting = fuWaitUntil && OL.localDateStr() < fuWaitUntil;
 
     const totalLoggedHours = tasks.reduce((sum, t) => sum + t.loggedHours, 0);
     const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
@@ -36,6 +49,9 @@ export function renderClientTaskManager() {
                 <div class="small muted">Deliverable tracking, status updates, and time logs for ${esc(client.meta?.name)}</div>
             </div>
             <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                ${fuWaiting ? `<div class="pill tiny soft" title="The client follow-up was marked done. It comes back on this date if the client still has items open." style="font-weight:bold; display:flex; align-items:center; gap:6px; color:#22c55e;">
+                    <i data-lucide="check-circle" style="width:14px;height:14px;"></i> Followed up · next ${esc(OL.formatDayKey ? OL.formatDayKey(fuWaitUntil, { month: 'short', day: 'numeric' }) : fuWaitUntil)}
+                </div>` : ''}
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
                     <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h
                 </div>
@@ -52,7 +68,7 @@ export function renderClientTaskManager() {
 
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
-                    <select id="client-quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
+                    <select id="client-quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;" onchange="OL.syncQuickDueField('client-quick-task-assignee', 'client-quick-task-duedate')">
                         <option value="Sphynx Task" selected>Sphynx Task</option>
                         <option value="Client Task">Client Task</option>
                         ${(state.master?.sphynxTeam || []).length ? `
@@ -133,6 +149,16 @@ export function renderClientTaskManager() {
                         <option value="none" ${OL.clientTaskFilterState.groupBy === 'none' ? 'selected' : ''}>Flat List</option>
                     </select>
                 </div>
+
+                <div style="display: flex; gap: 8px; align-items: center;" title="Tasks the client owns are gathered into one group">
+                    <i data-lucide="user" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Client tasks:</span>
+                    <select class="modal-input tiny" style="width: auto;" onchange="OL.setClientTaskFilter('clientGroup', this.value)">
+                        <option value="bottom" ${OL.clientTaskFilterState.clientGroup === 'bottom' ? 'selected' : ''}>Group at bottom</option>
+                        <option value="top" ${OL.clientTaskFilterState.clientGroup === 'top' ? 'selected' : ''}>Group at top</option>
+                        <option value="off" ${OL.clientTaskFilterState.clientGroup === 'off' ? 'selected' : ''}>Don't group</option>
+                    </select>
+                </div>
             </div>
 
             <!-- TASK LIST CONTAINER (REUSES 2-LINE ROW RENDERER) -->
@@ -149,15 +175,17 @@ export function renderClientTaskManager() {
 
 OL.setClientTaskFilter = function(key, val) {
     OL.clientTaskFilterState[key] = val;
+    if (key === 'clientGroup') { try { localStorage.setItem('ol_client_task_group_v1', val); } catch (e) { /* preference only */ } }
     renderClientTaskManager();
 };
 
 OL.renderFilteredClientTaskGroups = function(tasks) {
-    const { query, status, assignee, groupBy } = OL.clientTaskFilterState;
+    const { query, status, assignee, groupBy, clientGroup } = OL.clientTaskFilterState;
     const now = new Date();
     const todayStr = OL.localDateStr(now);
     const masterStatuses = OL.getSystemStatuses ? OL.getSystemStatuses() : [];
     const closedStatusNames = masterStatuses.filter(s => s.isClosed).map(s => s.name);
+    const client = getActiveClient();
 
     let filtered = tasks.filter(t => {
         const titleMatch = (t.title || t.name || '').toLowerCase().includes(query.toLowerCase());
@@ -168,11 +196,13 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         else if (status === 'Closed') statusMatch = closedStatusNames.includes(t.status) || t.status === 'Done';
         else if (status !== 'All') statusMatch = (t.status || 'Pending Sphynx Action') === status;
 
+        // A task shared by several people matches if ANY of them fits.
         let assigneeMatch = true;
-        if (assignee === 'Sphynx') assigneeMatch = OL.isSphynxAssignee(t.assignee);
-        else if (assignee === 'Client') assigneeMatch = OL.computeIsClientTask(t.assignee);
-        else if (assignee === '3rdParty') assigneeMatch = (OL.thirdPartyAssignees || []).includes(t.assignee);
-        else if (assignee !== 'All') assigneeMatch = t.assignee === assignee;
+        const people = t.assignees && t.assignees.length ? t.assignees : [t.assignee];
+        if (assignee === 'Sphynx') assigneeMatch = people.some(a => OL.isSphynxAssignee(a));
+        else if (assignee === 'Client') assigneeMatch = people.some(a => OL.computeIsClientTask(a));
+        else if (assignee === '3rdParty') assigneeMatch = people.some(a => (OL.thirdPartyAssignees || []).includes(a));
+        else if (assignee !== 'All') assigneeMatch = people.includes(assignee);
 
         return (titleMatch || resourceMatch) && statusMatch && assigneeMatch;
     });
@@ -181,36 +211,50 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         return `<div class="p-20 muted text-center">No matching tasks in this workspace.</div>`;
     }
 
-    if (groupBy === 'none') {
-        return `<div style="display:grid; gap:8px;">${OL.sortTasksWithSubtasksNested(filtered).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
-    }
+    // Tasks the client owns are pulled out into their own group, pinned to the top or bottom, whatever the
+    // grouping below is. "Don't group" leaves them mixed in.
+    const pinned = clientGroup === 'top' || clientGroup === 'bottom';
+    const clientOwned = pinned ? filtered.filter(t => OL.taskIsClientOwned(t, client)) : [];
+    const clientIds = new Set(clientOwned.map(t => t.id));
+    const rest = pinned ? filtered.filter(t => !clientIds.has(t.id)) : filtered;
 
-    const client = getActiveClient();
-    const groups = {};
-    const reqMeta = {};
-    filtered.forEach(task => {
-        let groupKey = 'Other';
-        if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
-        else if (groupBy === 'assignee') groupKey = task.assignee || 'Sphynx Task';
-        else if (groupBy === 'request') {
-            const item = task.requestLineItemId ? OL.findRequestItem(client, task.requestLineItemId) : null;
-            if (item) {
-                groupKey = 'req:' + item.id;
-                reqMeta[groupKey] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'build', round: Math.max(parseInt(item.round, 10) || 1, 1), status: item.status || '' };
-            } else groupKey = 'No Request';
+    const renderRest = () => {
+        if (!rest.length) return '';
+        if (groupBy === 'none') {
+            return `<div style="display:grid; gap:8px; margin-bottom:20px;">${OL.sortTasksWithSubtasksNested(rest).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
         }
 
-        if (!groups[groupKey]) groups[groupKey] = [];
-        groups[groupKey].push(task);
-    });
+        const groups = {};
+        const reqMeta = {};
+        rest.forEach(task => {
+            let groupKey = 'Other';
+            if (groupBy === 'status') groupKey = task.status || 'Pending Sphynx Action';
+            else if (groupBy === 'assignee') {
+                if (task.assignees && task.assignees.length > 1) {
+                    task.assignees.forEach(a => { (groups[a] = groups[a] || []).push(task); });   // shown under each person on it
+                    return;
+                }
+                groupKey = task.assignee || 'Sphynx Task';
+            }
+            else if (groupBy === 'request') {
+                const item = task.requestLineItemId ? OL.findRequestItem(client, task.requestLineItemId) : null;
+                if (item) {
+                    groupKey = 'req:' + item.id;
+                    reqMeta[groupKey] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'build', round: Math.max(parseInt(item.round, 10) || 1, 1), status: item.status || '' };
+                } else groupKey = 'No Request';
+            }
 
-    // Requests first (as parents), loose tasks last.
-    const entries = Object.entries(groups).sort(([a], [b]) => (a === 'No Request') - (b === 'No Request'));
+            if (!groups[groupKey]) groups[groupKey] = [];
+            groups[groupKey].push(task);
+        });
 
-    return entries.map(([groupKey, groupTasks]) => {
-        const req = reqMeta[groupKey];
-        const groupTitle = req ? req.title : groupKey;
-        return `
+        // Requests first (as parents), loose tasks last.
+        const entries = Object.entries(groups).sort(([a], [b]) => (a === 'No Request') - (b === 'No Request'));
+
+        return entries.map(([groupKey, groupTasks]) => {
+            const req = reqMeta[groupKey];
+            const groupTitle = req ? req.title : groupKey;
+            return `
         <div style="margin-bottom: 20px; padding: 14px; background: ${req ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${req ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
             <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: ${req ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display:flex; align-items:center; gap:8px; ${req ? 'cursor:pointer;' : ''}" ${req ? `onclick="OL.openRequestFromTask('${esc(client?.id || '')}', '${esc(req.id)}')" title="Open this request"` : ''}>
@@ -226,7 +270,25 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
             </div>
         </div>
     `;
-    }).join('');
+        }).join('');
+    };
+
+    const clientBlock = !clientOwned.length ? '' : `
+        <div style="margin-bottom: 20px; padding: 14px; background: rgba(251,191,36,0.05); border: 1px solid rgba(251,191,36,0.3); border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: #fbbf24; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span onclick="event.stopPropagation();">${OL.renderGroupSelectCheckbox(clientOwned)}</span>
+                <i data-lucide="user" style="width:13px;height:13px;"></i>
+                <span>Waiting on ${esc(client?.meta?.name || 'the client')}</span>
+                <span class="pill tiny soft" style="font-size:10px;">${clientOwned.length}</span>
+                <span class="muted" style="text-transform:none; letter-spacing:0; font-weight:500; font-size:11px;">No due dates. The client follow-up chases these.</span>
+            </div>
+            <div style="display: grid; gap: 8px;">
+                ${OL.sortTasksWithSubtasksNested(clientOwned).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+            </div>
+        </div>
+    `;
+
+    return clientGroup === 'top' ? clientBlock + renderRest() : renderRest() + clientBlock;
 };
 
 OL.isSphynxAssignee = function(assignee) {
@@ -246,7 +308,8 @@ OL.createClientQuickTask = function(clientId) {
     const title = document.getElementById('client-quick-task-title')?.value;
     const assignee = document.getElementById('client-quick-task-assignee')?.value || 'Sphynx Task';
     const status = document.getElementById('client-quick-task-status')?.value || 'Pending Sphynx Action';
-    const dueDate = document.getElementById('client-quick-task-duedate')?.value || '';
+    // Client tasks have no due date of their own.
+    const dueDate = OL.computeIsClientTask(assignee) ? '' : (document.getElementById('client-quick-task-duedate')?.value || '');
 
     if (!title) return;
 
@@ -304,7 +367,7 @@ OL.openClientCreateTaskModal = function(clientId) {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div>
                         <label class="tiny muted bold">Assignee</label>
-                        <select id="new-deliverable-assignee" class="modal-input tiny">
+                        <select id="new-deliverable-assignee" class="modal-input tiny" onchange="OL.syncQuickDueField('new-deliverable-assignee', 'new-deliverable-duedate', 'new-deliverable-due-wrap')">
                             <option value="Sphynx Task" selected>Sphynx Task</option>
                             <option value="Client Task">Client Task</option>
                             ${(client.projectData?.teamMembers || []).map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
@@ -320,7 +383,7 @@ OL.openClientCreateTaskModal = function(clientId) {
                         </select>
                     </div>
                 </div>
-                <div>
+                <div id="new-deliverable-due-wrap">
                     <label class="tiny muted bold">Due Date</label>
                     <input type="date" id="new-deliverable-duedate" class="modal-input tiny">
                 </div>
@@ -341,7 +404,8 @@ OL.saveClientCreateTask = function(clientId) {
     const description = document.getElementById('new-deliverable-desc')?.value.trim() || '';
     const assignee = document.getElementById('new-deliverable-assignee')?.value || 'Sphynx Task';
     const status = document.getElementById('new-deliverable-status')?.value || 'Pending Sphynx Action';
-    const dueDate = document.getElementById('new-deliverable-duedate')?.value || '';
+    // Client tasks have no due date of their own.
+    const dueDate = OL.computeIsClientTask(assignee) ? '' : (document.getElementById('new-deliverable-duedate')?.value || '');
 
     updateAndSync(() => {
         const client = state.clients[clientId];
