@@ -29,7 +29,7 @@ export const CONSOLIDATED_REQUEST_TYPES = { audit: 'revision', troubleshoot: 're
 
 // Where a working round stands. Anything pre-approval collapses into Drafting — there's no separate
 // "presented to the client" or "revising the scope" state to track any more.
-export const SHEET_STATUSES = ['Drafting', 'Approved', 'On Hold', 'Declined'];
+export const SHEET_STATUSES = ['Drafting', 'Approved', 'Declined', 'On Hold', 'Complete'];
 // Old statuses a round might still carry from before this consolidation, and what they fold into.
 export const CONSOLIDATED_SHEET_STATUSES = { 'Awaiting Go-Ahead': 'Drafting', 'Presented': 'Drafting', 'Revising': 'Drafting', 'Confirming Final Scope': 'Drafting' };
 
@@ -70,8 +70,9 @@ export function getCurrentRound(sheet, isReal = () => true) {
 export function isRoundApproved(sheet, round) {
     const key = String(round);
     const entry = sheet?.roundApprovals?.[key];
-    if (entry && entry.status) return entry.status === 'Approved';
-    return sheet?.status === 'Approved';
+    // A Complete round was approved and has been worked through, so it still counts as approved.
+    if (entry && entry.status) return entry.status === 'Approved' || entry.status === 'Complete';
+    return sheet?.status === 'Approved' || sheet?.status === 'Complete';
 }
 
 // True for a Do Now line in the current round of a sheet whose round is approved.

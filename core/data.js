@@ -226,6 +226,14 @@ export function persist() {
                     console.warn('Request activation rules failed:', activationErr);
                 }
 
+                // Resource statuses follow the rounds and tasks (Pending -> In Process -> Built -> In Review), so
+                // they are brought up to date before this save captures the client.
+                try {
+                    if (window.OL && typeof window.OL.syncResourceStatuses === 'function') window.OL.syncResourceStatuses(client);
+                } catch (statusErr) {
+                    console.warn('Resource status sync failed:', statusErr);
+                }
+
                 // Staff save each task's resolved billable status with it, so client logins count the
                 // same maintenance hours without needing the billing rules.
                 try {

@@ -1,44 +1,44 @@
 //======================= CORE / REQUEST BACKFILL =======================//
-// Repairs scoping sheets that were built the old way (line items that point at resources, with no request
-// data behind them) and are already in process, so their client tasks show up under the right request.
+// Brings scoping sheets built the old way (lines that point at a resource, with no request data behind them) up
+// to the request model. For every line in a working round that is NOT Complete:
+//   1. it becomes a request: titled (from its resource), typed (Build unless it says otherwise), with its
+//      resource added to the request (item.resourceIds), a round, and the date it came in;
+//   2. the client tasks that already exist for its resource (task.parentResourceId, task.resourceId(s), or the
+//      resource's own dependencies list) are linked to it via task.links[], so they show under the request;
+//   3. resource statuses are brought in line with the rules in core/resource-status.js.
+// NO tasks are created: the request's tasks come at activation. Rounds marked Complete are left alone, and so are
+// Pending (Backlog) and Don't Do lines.
 //
-// Three things go wrong on those sheets, and this fixes each one:
-//   1. The line has no request fields (requestType, resourceIds, round), so the request window and the
-//      printed sheet read it as an empty request.
-//   2. The client tasks that already exist belong to a RESOURCE (task.parentResourceId, task.resourceId(s),
-//      or a resource's own dependencies list) but have no task.links[] entry, so tasksForRequest()
-//      never finds them and "What we need from you" stays empty.
-//   3. The line is Do Now in an approved round but was never activated, so the SOP's client asks were never
-//      created. Only the CLIENT ASKS are created here (never the "Build/revise" task, since the work is
-//      already under way), skipping any ask a linked task already covers, and the line is then stamped
-//      activatedAt so it doesn't come up for activation review and create duplicates.
-//
-// Pure function on one client. The caller decides whether it runs on a copy (dry run) or inside
-// updateAndSync (apply). Safe to run twice: everything it adds, it checks for first.
+// Pure function on one client. The caller decides whether it runs on a copy (dry run) or inside updateAndSync
+// (apply). Safe to run twice: everything it adds, it checks for first.
 
 import { addLink, linksForTask } from './task-links.js';
 import { requestResourceIds } from './request-pricing.js';
-import { getCurrentRound, CONSOLIDATED_REQUEST_TYPES } from './requests.js';
-import { isMaintenanceSheet } from './maintenance.js';
-import { buildActivationPlan, commitActivationPlan } from './activation.js';
-import { tasksForRequest } from './request-tasks.js';
+import { getCurrentRound, roundStatusOf, CONSOLIDATED_REQUEST_TYPES } from './requests.js';
+import { isMaintenanceSheet, maintenanceSheetOf } from './maintenance.js';
+import { syncResourceStatuses } from './resource-status.js';
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
-const lc = (v) => String(v ?? '').trim().toLowerCase();
 const isPlaceholderResource = (id) => String(id || '').startsWith('reqline-');
 
-// ctx: { askTemplates, roles, assigneeByType, uid, now, lookupResource(id), activate }
-// Mutates client.projectData and returns a report of what changed.
-export function backfillClientRequests(client, ctx) {
-    const report = { clientId: client?.id, clientName: client?.meta?.name || '', normalized: [], linked: [], ambiguous: [], asksCreated: [], activated: [] };
+// ctx: { lookupResource(id), closedNames, sphynxNames }
+export function backfillClientRequests(client, ctx = {}) {
+    const report = {
+        clientId: client?.id, clientName: client?.meta?.name || '',
+        normalized: [], linked: [], ambiguous: [], unresolved: [], skippedComplete: 0, resourceStatuses: [], maintenanceOpen: 0,
+    };
     const pd = client?.projectData;
     if (!pd) return report;
-    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
-    const tasks = pd.clientTasks;
+    const tasks = Array.isArray(pd.clientTasks) ? pd.clientTasks : [];
     const localResources = pd.localResources || [];
     const lookup = ctx.lookupResource || ((id) => localResources.find((r) => r.id === id) || null);
 
-    // ---- the real lines on each (non-maintenance) sheet ----
+    // Requests still kept on the old maintenance sheet or the standalone list have no home once the Client
+    // Requests tab is gone. They are counted, never moved silently — see OL.migrateClientRequestsToBacklog.
+    const open = (i) => i && !['Done', "Don't Do"].includes(String(i.status || ''));
+    report.maintenanceOpen = ((maintenanceSheetOf(pd)?.lineItems || []).filter(open).length) + ((pd.clientRequests || []).filter(open).length);
+
+    // ---- the lines to work on ----
     const lines = [];   // { sheet, item, title }
     (pd.scopingSheets || []).forEach((sheet) => {
         if (!sheet || isMaintenanceSheet(sheet)) return;
@@ -46,32 +46,42 @@ export function backfillClientRequests(client, ctx) {
             if (!item || typeof item !== 'object' || isBlank(item.id)) return;
             const status = String(item.status || '');
             if (status === 'Backlog' || /^Don.t Do$/i.test(status)) return;
+            const r = parseInt(item.round, 10);
+            if (roundStatusOf(sheet, Number.isFinite(r) && r >= 1 ? r : 1) === 'Complete') { report.skippedComplete++; return; }
             const resource = isBlank(item.resourceId) ? null : lookup(item.resourceId);
             const title = !isBlank(item.name) ? String(item.name).trim() : (resource?.name || '');
-            if (!title) return;   // empty shell: no name and the resource is gone
+            if (!title) { report.unresolved.push({ line: item.id, resourceId: item.resourceId || '' }); return; }   // reported, never guessed
             lines.push({ sheet, item, title });
         });
     });
 
-    // ---- 1. give each line its request fields ----
+    // ---- 1. each line becomes a request ----
     lines.forEach(({ item }) => {
         const changes = [];
+        const resource = isBlank(item.resourceId) ? null : lookup(item.resourceId);
+        if (isBlank(item.name) && resource && !isPlaceholderResource(item.resourceId) && !isBlank(resource.name)) {
+            item.name = String(resource.name).trim(); changes.push('title from resource');
+        }
         const folded = CONSOLIDATED_REQUEST_TYPES[item.requestType];
-        if (isBlank(item.requestType)) { item.requestType = 'build'; changes.push('requestType=build'); }
-        else if (folded) { changes.push(`requestType ${item.requestType} -> ${folded}`); item.requestType = folded; }
+        if (isBlank(item.requestType)) { item.requestType = 'build'; changes.push('type=build'); }
+        else if (folded) { changes.push(`type ${item.requestType} -> ${folded}`); item.requestType = folded; }
+        // The resource(s) the request covers. A request line's own placeholder is not something it "covers".
         if (!Array.isArray(item.resourceIds)) {
-            const ids = requestResourceIds(item);
-            if (ids.length) { item.resourceIds = ids; changes.push(`resourceIds=[${ids.length}]`); }
+            const ids = requestResourceIds(item).filter((id) => !isPlaceholderResource(id));
+            if (ids.length) { item.resourceIds = ids; changes.push(`resource added (${ids.length})`); }
         }
         const status = String(item.status || '');
-        if ((status === 'Do Now' || status === 'Do Later' || status === 'Done') && !(parseInt(item.round, 10) >= 1)) {
-            item.round = 1; changes.push('round=1');
+        if (['Do Now', 'Do Later', 'Done'].includes(status) && !(parseInt(item.round, 10) >= 1)) { item.round = 1; changes.push('round=1'); }
+        // When it came in: the line's own creation time, or the time in its id (li-<ms>). Never today's date.
+        if (isBlank(item.receivedAt)) {
+            const fromId = /^li-(\d{12,})$/.exec(String(item.id));
+            const at = !isBlank(item.createdDate) ? String(item.createdDate) : (fromId ? new Date(Number(fromId[1])).toISOString() : '');
+            if (at && !Number.isNaN(Date.parse(at))) { item.receivedAt = at.slice(0, 10); changes.push('received date'); }
         }
         if (changes.length) report.normalized.push({ request: item.name || item.id, changes });
     });
 
-    // ---- 2. link the tasks that belong to a resource but not to a request ----
-    // Which resource(s) each unlinked task belongs to: its own fields, plus any resource that lists it as a dependency.
+    // ---- 2. link existing tasks that belong to a resource but not to a request ----
     const taskResources = new Map();   // taskId -> Set(resourceId)
     const addRes = (taskId, resId) => {
         if (isBlank(taskId) || isBlank(resId)) return;
@@ -87,8 +97,8 @@ export function backfillClientRequests(client, ctx) {
     });
     localResources.forEach((r) => (r?.dependencies || []).forEach((d) => { if (d && d.type === 'task') addRes(d.id, r.id); }));
 
-    // Which request a resource points at. The current round's Do Now line wins; otherwise a resource with exactly
-    // one line is unambiguous; anything else is reported and left alone rather than guessed.
+    // A resource on exactly one request is unambiguous. On several, the current round's Do Now request wins.
+    // Anything else is reported and left alone rather than guessed.
     const currentBySheet = new Map(lines.map(({ sheet }) => [sheet, getCurrentRound({ lineItems: lines.filter((l) => l.sheet === sheet).map((l) => l.item), roundApprovals: sheet.roundApprovals, status: sheet.status })]));
     const isCurrentDoNow = ({ sheet, item }) => {
         const r = parseInt(item.round, 10);
@@ -105,7 +115,7 @@ export function backfillClientRequests(client, ctx) {
         if (!t || t.consolidatedFollowUp || linksForTask(t).length) return;   // already linked (or the follow-up, which is never on a request)
         const resIds = taskResources.get(String(t.id));
         if (!resIds || !resIds.size) return;
-        const byRequest = new Map();   // request id -> resource ids for it
+        const byRequest = new Map();
         const unresolved = [];
         resIds.forEach((resId) => {
             const line = requestForResource(resId);
@@ -116,37 +126,14 @@ export function backfillClientRequests(client, ctx) {
         });
         byRequest.forEach((resourceIds, requestId) => addLink(t, requestId, resourceIds));
         if (byRequest.size) {
-            // A client's own task with no phase reads as "During"; it belongs under "Before" like every other ask.
             if (isBlank(t.phase) && !t.askKind && (t.isClientTask || t.assignee === 'Client Task')) t.phase = 'before';
             report.linked.push({ task: t.title || t.name || t.id, requests: [...byRequest.keys()] });
         }
         if (unresolved.length) report.ambiguous.push({ task: t.title || t.name || t.id, resources: unresolved });
     });
 
-    // ---- 3. create the client asks the SOP would have made, for lines already in progress ----
-    if (ctx.activate !== false) {
-        lines.forEach((line) => {
-            const { item } = line;
-            if (!isCurrentDoNow(line) || item.activatedAt) return;
-            const resources = requestResourceIds(item).map((id) => lookup(id)).filter(Boolean);
-            const requestType = isBlank(item.requestType) ? 'build' : String(item.requestType);
-            const resourceType = resources[0]?.type || '';
-            const plan = buildActivationPlan({
-                item, resources, requestType, resourceType, askTemplates: ctx.askTemplates,
-                client, roles: ctx.roles || [], assigneeByType: ctx.assigneeByType || {}, uid: ctx.uid,
-            });
-            // Client asks only, and none that a task already on this request covers.
-            const have = new Set(tasksForRequest(client, item).map((t) => lc(t.title || t.name)));
-            plan.forEach((row) => { row.included = row.kind === 'ask' && !have.has(lc(row.title)); });
-            const result = commitActivationPlan(plan, {
-                requestId: item.id, requestType, resourceType, askTemplates: ctx.askTemplates,
-                uid: ctx.uid, now: ctx.now, clientTasks: tasks,
-            });
-            item.activatedAt = ctx.now;
-            report.activated.push(item.name || line.title);
-            if (result.createdTaskIds.length) report.asksCreated.push({ request: item.name || line.title, count: result.createdTaskIds.length });
-        });
-    }
+    // ---- 3. resource statuses ----
+    report.resourceStatuses = syncResourceStatuses(client, { closedNames: ctx.closedNames, sphynxNames: ctx.sphynxNames });
 
     return report;
 }
