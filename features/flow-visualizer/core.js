@@ -6251,16 +6251,25 @@ export async function toggleScopingStatus(resId) {
         }
     });
 
-    // 3. Update the Array
+    // 3. Update the Array. Requests are the unit on the scoping sheet and resources are linked to them, so "in scope"
+    // means "covered by a request": switching it on makes a Pending request covering the resource (promote it into a
+    // round from the sheet), and switching it off takes the resource off the requests that cover it, leaving the
+    // request itself in place.
     if (existingItem) {
-        client.projectData.scopingSheets[0].lineItems = sheet.lineItems.filter(item => String(item.resourceId) !== targetId);
+        sheet.lineItems.forEach((item) => {
+            if (Array.isArray(item.resourceIds)) item.resourceIds = item.resourceIds.filter((id) => String(id) !== targetId);
+            if (String(item.resourceId) === targetId) item.resourceId = 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        });
     } else {
         const res = OL.getResourceById(targetId);
         client.projectData.scopingSheets[0].lineItems.push({
             id: `li-${Date.now()}`,
-            resourceId: targetId,
-            name: res?.name || "New Resource",
-            rate: 0, units: 0, total: 0
+            resourceId: 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            resourceIds: [targetId],
+            name: res?.name || "New request",
+            requestType: 'build', status: 'Backlog', round: null, responsibleParty: 'Sphynx',
+            teamMode: 'everyone', teamIds: [], data: {}, manualHours: 0, dependencies: [],
+            receivedAt: new Date().toISOString().slice(0, 10),
         });
     }
 
