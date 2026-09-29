@@ -89,11 +89,11 @@ export function renderDependencySection(clientId, kind, id) {
     const blocked = isBlocked(clientId, item);
 
     const row = (d, removable) => `
-        <div style="display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:4px; background:rgba(255,255,255,0.02);">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:5px 6px; border-radius:4px; background:rgba(255,255,255,0.02); min-width:0;">
             <i data-lucide="${KIND_ICON[d.kind]}" style="width:12px;height:12px; flex-shrink:0; color:${d.kind === 'request' ? '#64c6a2' : 'var(--accent)'};"></i>
-            <span class="tiny" style="flex:1; min-width:0; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; ${isDone(d.kind, d.item) ? 'text-decoration:line-through; opacity:0.6;' : ''}"
+            <span class="tiny" style="flex:1 1 140px; min-width:0; cursor:pointer; white-space:normal; overflow-wrap:anywhere; ${isDone(d.kind, d.item) ? 'text-decoration:line-through; opacity:0.6;' : ''}"
                   onclick="OL.openDependencyTarget('${esc(clientId)}', '${d.kind}', '${esc(String(d.id))}')">${esc(titleOf(clientId, d.kind, d.item))}</span>
-            <span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(KIND_LABEL[d.kind])} · ${esc(statusText(d.kind, d.item))}</span>
+            <span class="pill tiny soft" style="font-size:9px; flex-shrink:0; white-space:nowrap; margin-left:auto;">${esc(KIND_LABEL[d.kind])} · ${esc(statusText(d.kind, d.item))}</span>
             ${removable ? `<button class="btn tiny soft" style="padding:1px 5px; flex-shrink:0;" title="Remove" onclick="OL.removeBlockedBy('${esc(clientId)}', '${kind}', '${esc(String(id))}', '${d.kind}', '${esc(String(d.id))}')">✕</button>` : ''}
         </div>`;
 
@@ -140,7 +140,7 @@ export function renderDependencySection(clientId, kind, id) {
             ${blocked ? `<span class="pill tiny" style="font-size:9px; color:#f59e0b; border:1px solid #f59e0b;"><i data-lucide="lock" style="width:9px;height:9px;"></i> Blocked</span>` : ''}
         </div>
         <div class="tiny muted" style="margin-bottom:4px;">Waiting on</div>
-        <div style="display:grid; gap:3px; margin-bottom:8px;">
+        <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:3px; margin-bottom:8px;">
             ${blockedBy.length ? blockedBy.map((d) => row(d, true)).join('') : '<span class="tiny muted">Nothing — ready to work.</span>'}
             ${blockedBy.some((d) => d.kind === 'task' && d.item?.askKind && !isDone('task', d.item))
                 ? `<div class="tiny muted" style="padding:3px 6px;"><i data-lucide="clock" style="width:10px;height:10px;"></i> Waiting on the client for one of these — this is treated the same as flipping the task to a "Pending Client ..." status.</div>` : ''}
@@ -165,7 +165,7 @@ export function renderDependencySection(clientId, kind, id) {
         ${holdsUpHtml}
         ${blocking.length ? `
             <div class="tiny muted" style="margin:10px 0 4px;">Blocking</div>
-            <div style="display:grid; gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
+            <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
     </div>`;
 }
 
