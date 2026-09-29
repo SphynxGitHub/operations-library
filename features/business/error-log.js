@@ -1013,51 +1013,55 @@ OL.openErrorTaskModal = async function(id) {
     const title = `Error: ${r.title || r.service || 'Automation error'}`;
     const today = OL.localDateStr();
 
+    // .modal-input has no width of its own and its "tiny" size centers text, so every field is sized and aligned
+    // explicitly here; labels are blocks so they sit above their field instead of beside it.
+    const F = 'display:block; width:100%; box-sizing:border-box; text-align:left; font-size:13px; padding:8px 10px; border-radius:8px;';
+    const L = 'display:block; margin-bottom:4px;';
     const html = `
         <div class="modal-head">
             <div class="modal-title-text"><i data-lucide="check-square" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;"></i>Create Task from Error</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:520px; width:100%;">
-            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-                <button type="button" class="btn tiny soft" onclick="OL.openErrorDetailModal('${esc(String(r.id))}')" title="Open the error card (this form will close)">${ic('alert-triangle')}Open error card</button>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <div>
-                    <label class="tiny muted bold">Title *</label>
-                    <input type="text" id="error-task-title" class="modal-input tiny" value="${esc(title)}">
+        <div class="modal-body" style="width:min(560px, 92vw); box-sizing:border-box;">
+            <div style="display:flex; flex-direction:column; gap:14px; width:100%;">
+                <div style="display:flex; justify-content:flex-start;">
+                    <button type="button" class="btn tiny soft" onclick="OL.openErrorDetailModal('${esc(String(r.id))}')" title="Open the error card (this form will close)">${ic('alert-triangle')}Open error card</button>
                 </div>
-                <div>
-                    <label class="tiny muted bold">Project</label>
-                    <select id="error-task-client" class="modal-input tiny" onchange="OL.refreshErrorTaskAssignees()">
+                <div style="width:100%;">
+                    <label class="tiny muted bold" style="${L}">Title *</label>
+                    <input type="text" id="error-task-title" class="modal-input" style="${F}" value="${esc(title)}">
+                </div>
+                <div style="width:100%;">
+                    <label class="tiny muted bold" style="${L}">Project</label>
+                    <select id="error-task-client" class="modal-input" style="${F}" onchange="OL.refreshErrorTaskAssignees()">
                         <option value="" ${preselected ? '' : 'selected'}>General / Business Ops</option>
                         ${clients.map(c => `<option value="${esc(c.id)}" ${c.id === preselected ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
                     </select>
                 </div>
-                <div>
-                    <label class="tiny muted bold">Description</label>
-                    <textarea id="error-task-desc" class="modal-input tiny" rows="4">${esc(r.message || '')}</textarea>
+                <div style="width:100%;">
+                    <label class="tiny muted bold" style="${L}">Description</label>
+                    <textarea id="error-task-desc" class="modal-input" rows="6" style="${F} resize:vertical; min-height:110px; line-height:1.45; font-family:inherit;">${esc(r.message || '')}</textarea>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <div>
-                        <label class="tiny muted bold">Assignee</label>
-                        <select id="error-task-assignee" class="modal-input tiny">${OL.buildQuickTaskAssigneeOptions(preselected)}</select>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%;">
+                    <div style="min-width:0;">
+                        <label class="tiny muted bold" style="${L}">Assignee</label>
+                        <select id="error-task-assignee" class="modal-input" style="${F}">${OL.buildQuickTaskAssigneeOptions(preselected)}</select>
                     </div>
-                    <div>
-                        <label class="tiny muted bold">Status</label>
-                        <select id="error-task-status" class="modal-input tiny">
+                    <div style="min-width:0;">
+                        <label class="tiny muted bold" style="${L}">Status</label>
+                        <select id="error-task-status" class="modal-input" style="${F}">
                             ${(openStatuses.length ? openStatuses : [{ name: 'Pending Sphynx Action' }]).map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}
                         </select>
                     </div>
                 </div>
-                <div>
-                    <label class="tiny muted bold">Due Date</label>
-                    <input type="date" id="error-task-duedate" class="modal-input tiny" value="${today}">
+                <div style="width:100%;">
+                    <label class="tiny muted bold" style="${L}">Due Date</label>
+                    <input type="date" id="error-task-duedate" class="modal-input" style="${F} max-width:220px;" value="${today}">
                 </div>
-            </div>
-            <div class="tiny muted" style="margin-top:12px;">Once created, this error leaves your Dashboard feed until the task is closed.</div>
-            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-                <button class="btn small primary" onclick="OL.saveErrorTask('${esc(String(r.id))}')" style="font-weight:bold;">Create Task</button>
+                <div class="tiny muted">Once created, this error leaves your Dashboard feed until the task is closed.</div>
+                <div style="display:flex; justify-content:flex-end; width:100%;">
+                    <button class="btn small primary" onclick="OL.saveErrorTask('${esc(String(r.id))}')" style="font-weight:bold; padding:8px 18px;">Create Task</button>
+                </div>
             </div>
         </div>
     `;

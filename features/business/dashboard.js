@@ -101,14 +101,24 @@ OL.loadDashboardEvents = async function() {
     const windowStart = new Date(); windowStart.setHours(0, 0, 0, 0);
     const windowEnd = new Date(); windowEnd.setDate(windowEnd.getDate() + 60);
 
-    const { data, error } = await scopeQueryToBusinessClients(db.from('calendar_events')
-        .select('id, title, start, end, all_day, linked_client_id, assignee, assignees, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard')
+    const cols = 'id, title, start, end, all_day, linked_client_id, assignee, assignees, billable, logged_hours, duration_hours_snapshot, comments, hidden_from_dashboard';
+    const base = () => scopeQueryToBusinessClients(db.from('calendar_events')
+        .select(cols)
         .gte('start', windowStart.toISOString())
-        .lte('start', windowEnd.toISOString())
-        .eq('hidden_from_dashboard', false), 'linked_client_id')
+        .lte('start', windowEnd.toISOString()), 'linked_client_id')
         .order('start', { ascending: true });
 
-    if (error) { console.error('Failed to load dashboard events:', error.message); OL._dashboardEventsCache = []; return; }
+    // Only events someone chose to hide are left out. `eq(..., false)` would also drop every event whose flag is
+    // NULL (newly synced rows, if the column has no default), so NULL counts as "not hidden".
+    let { data, error } = await base().or('hidden_from_dashboard.is.null,hidden_from_dashboard.eq.false');
+
+    if (error) {
+        console.error('Failed to load dashboard events:', error.message);
+        // Don't let one bad column or filter empty the whole feed: retry plainly and hide flagged events here instead.
+        const retry = await base();
+        if (retry.error) { console.error('Dashboard events retry failed:', retry.error.message); OL._dashboardEventsCache = []; return; }
+        data = (retry.data || []).filter(e => e.hidden_from_dashboard !== true);
+    }
     OL._dashboardEventsCache = data || [];
     if (typeof OL.applyEventTimeRecalculation === 'function') await OL.applyEventTimeRecalculation(OL._dashboardEventsCache);
     // Events nobody toggled by hand follow the Billable Rules.
