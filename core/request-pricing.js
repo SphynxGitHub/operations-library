@@ -55,7 +55,7 @@ export function priceRequest(item, resources, ctx = {}) {
     const lines = list.map((res, i) => {
         const units = pricedUnits(res, i === 0 ? item?.data : null, vars);
         const base = units.reduce((sum, u) => sum + u.count * u.value, 0);
-        return { resourceId: String(res.id), name: res.name || '', type: res.type || '', isShell: !!res.isShell, units, base, fee: Math.round(base * multiplier) };
+        return { resourceId: String(res.id), name: res.name || '', type: res.type || '', description: String(res.description || '').trim(), isShell: !!res.isShell, units, base, fee: Math.round(base * multiplier) };
     });
     const anyUnits = lines.some((l) => l.units.length > 0);
     const hours = parseFloat(item?.manualHours) || 0;
@@ -72,7 +72,7 @@ export function renderRequestResourcesHtml(breakdown, esc = (s) => String(s ?? '
     const money = (n) => `$${Number(n).toLocaleString('en-US')}`;
     const rows = breakdown.lines.map((l) => {
         const units = l.units.map((u) => `${u.count} ${esc(u.label)}`).join(' · ');
-        return `<div class="res-line"><span class="res-name">${esc(l.name)}${l.type ? ` <span class="res-type">${esc(l.type)}</span>` : ''}${units ? ` <span class="res-units">${units}</span>` : ''}</span><span class="res-fee">${money(l.fee)}</span></div>`;
+        return `<div class="res-line"><span class="res-name">${esc(l.name)}${l.type ? ` <span class="res-type">${esc(l.type)}</span>` : ''}${units ? ` <span class="res-units">${units}</span>` : ''}${l.description ? `<span class="res-desc">${esc(l.description)}</span>` : ''}</span><span class="res-fee">${money(l.fee)}</span></div>`;
     });
     if (breakdown.hoursFee > 0) rows.push(`<div class="res-line"><span class="res-name">Estimated time <span class="res-units">${breakdown.hours} hour${breakdown.hours === 1 ? '' : 's'}</span></span><span class="res-fee">${money(breakdown.hoursFee)}</span></div>`);
     return `<div class="res-lines">${rows.join('')}</div>`;
@@ -82,6 +82,7 @@ export const REQUEST_RESOURCES_CSS = `
 .res-lines { margin-top: 5px; border-top: 1px dashed #e2e8f0; padding-top: 3px; }
 .res-line { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; font-size: 9px; color: #334155; }
 .res-name { flex: 1; }
+.res-desc { display: block; margin-top: 1px; font-size: 9px; font-style: italic; color: #64748b; line-height: 1.4; }
 .res-type { font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid #e2e8f0; border-radius: 3px; padding: 0 5px; color: #475569; margin-left: 4px; }
 .res-units { color: #94a3b8; margin-left: 6px; }
 .res-fee { font-variant-numeric: tabular-nums; font-weight: 700; color: #0f172a; white-space: nowrap; }`;
