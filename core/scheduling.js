@@ -19,6 +19,8 @@
 // estimate stays under the ceiling. If nothing fits within the push-out
 // window, this returns no date at all — the caller's job is to then ask a
 // human to pick manually, never to silently overbook someone.
+import { taskAssignees } from './task-assignees.js';
+
 
 export const WORKDAY_HOURS = 8;
 export const CAPACITY_RATIO = 0.8;
@@ -60,7 +62,7 @@ export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId) {
     if (!assignee) return 0;
     return (tasks || []).reduce((sum, t) => {
         if (!t || t.id === excludeTaskId) return sum;
-        if (t.assignee !== assignee) return sum;
+        if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         if ((t.dueDate || '').slice(0, 10) !== dayKey) return sum;
         const closed = t.status === 'Done' || t.status === 'Completed' || t.completed;
         if (closed) return sum;

@@ -13,9 +13,10 @@
 //      that isn't in the past, otherwise the day after the last one was completed. A task left on Pending
 //      Sphynx Action is never touched by this, no matter what it depends on.
 //   2. One consolidated client follow-up task per project (not per task or round): lists everything open on
-//      the client, request by request and resource by resource. It closes when nothing is open, reopens with
-//      the same history when something new arrives, and comes back with a new date each time a touchpoint is
-//      marked done while items are still open.
+//      the client, request by request and resource by resource. It closes when nothing is open and reopens
+//      with the same history when something new arrives. When a PERSON marks it done, it stays done until the
+//      next follow-up is due (every N days, task.nextFollowUpDue), then comes back if items are still open.
+//      Deleting it does the same (project.followUpSnoozeUntil) instead of the rule just making a new one.
 //   3. Stale implementation tasks (no status change for 10+ days) get a "status note" task for the
 //      implementer, due a day before the next follow-up; its latest comment appears on the follow-up as a
 //      "status to share" line.
@@ -250,7 +251,7 @@ function followUpDescription(client, groups, notes) {
         lines.push('', `${g.title}`);
         g.resources.forEach((r) => {
             if (r.name) lines.push(`  ${r.name}`);
-            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}${t.dueDate ? ` (due ${day(t.dueDate)})` : ''}`));
+            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}`));   // client tasks have no due dates of their own
         });
     });
     if (notes.length) {
@@ -320,21 +321,42 @@ export function reconcileClientFollowUp(client, ctx) {
         return out;
     }
 
+    // A person marked the touchpoint done (or deleted the task): it stays out of the way until the next follow-up is
+    // due, rather than coming straight back. The wait rides on the closed task (nextFollowUpDue) or, for a deleted
+    // one, on the project (followUpSnoozeUntil). Re-opening it by hand ends the wait. A follow-up the RULE closed
+    // (nothing was waiting) is not parked: it reopens as soon as something new arrives.
+    if (fu && isOpen(fu, ctx)) delete fu.nextFollowUpDue;
+    let parkedUntil = '';
+    if (fu && !isOpen(fu, ctx) && !fu.autoClosed) {
+        if (!fu.nextFollowUpDue) {
+            fu.nextFollowUpDue = addDays(day(fu.completedAt) || ctx.today, every);
+            (fu.followUpLog = fu.followUpLog || []).push({ at: fu.completedAt || ctx.now, event: 'touchpoint done', note: `Next follow-up ${fu.nextFollowUpDue}.` });
+        }
+        parkedUntil = fu.nextFollowUpDue;
+    }
+    if (pd.followUpSnoozeUntil && pd.followUpSnoozeUntil > parkedUntil) parkedUntil = pd.followUpSnoozeUntil;
+    if (parkedUntil && ctx.today < parkedUntil) return out;      // still waiting for the next follow-up date
+    const wasParked = !!parkedUntil;
+    delete pd.followUpSnoozeUntil;
+    const dueNow = wasParked ? ctx.today : nextDue;              // coming back on its date means it is due today
+
     const description = followUpDescription(client, groups, notes);
     if (!fu) {
         fu = {
             id: ctx.uid(), title: `Client follow-up: ${client.meta?.name || 'client'}`, name: `Client follow-up: ${client.meta?.name || 'client'}`,
-            description, status: FOLLOW_UP_STATUS, assignee: communicationAssignee(client, ctx), dueDate: nextDue,
+            description, status: FOLLOW_UP_STATUS, assignee: communicationAssignee(client, ctx), dueDate: dueNow,
             isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'followup', createdAt: ctx.now,
             askKind: 'follow_up', consolidatedFollowUp: true, followUpLog: [{ at: ctx.now, event: 'created' }], links: [],
         };
         pd.clientTasks.unshift(fu);
         out.created.push(fu.id);
     } else if (!isOpen(fu, ctx)) {
-        // Closed by a person (a touchpoint done) or by the rule (it was empty): either way, more is waiting, so it comes back.
-        (fu.followUpLog = fu.followUpLog || []).push({ at: fu.completedAt || ctx.now, event: fu.autoClosed ? 'closed' : 'touchpoint done' });
+        // Closed by the rule (it was empty) or its wait is over: more is waiting, so it comes back.
+        fu.followUpLog = fu.followUpLog || [];
+        if (fu.autoClosed) fu.followUpLog.push({ at: fu.completedAt || ctx.now, event: 'closed' });
         fu.followUpLog.push({ at: ctx.now, event: 'reopened' });
-        fu.status = FOLLOW_UP_STATUS; fu.completedAt = ''; fu.autoClosed = false; fu.dueDate = nextDue; fu.description = description;
+        fu.status = FOLLOW_UP_STATUS; fu.completedAt = ''; fu.autoClosed = false; fu.dueDate = dueNow; fu.description = description;
+        delete fu.nextFollowUpDue;
         out.reopened.push(fu.id);
     } else if (fu.description !== description) {
         fu.description = description;
@@ -525,6 +547,14 @@ function contextNow(extra = {}) {
 }
 
 export function runClientWorkRulesFor(client) { return runClientWorkRules(client, contextNow()); }
+
+// The follow-up task was deleted: don't make a new one until the next follow-up would have been due.
+export function snoozeClientFollowUp(client) {
+    const ctx = contextNow();
+    if (!client?.projectData) return '';
+    client.projectData.followUpSnoozeUntil = addDays(ctx.today, ctx.followUpEveryDays || DEFAULT_FOLLOW_UP_EVERY_DAYS);
+    return client.projectData.followUpSnoozeUntil;
+}
 export function onClientBecameOngoing(client) {
     const ctx = contextNow({ justConverted: true });
     reconcileQuarterlyCheckIns(client, ctx);
@@ -552,7 +582,7 @@ export async function sweepClientWorkRules() {
         for (const client of Object.values(state.clients || {})) {
             if (!client || client._metaOnly || !client.projectData || client.meta?.status === 'Partner') continue;
             out.checked++;
-            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup]);
+            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup, client.projectData.followUpSnoozeUntil]);
             const before = snap();
             try {
                 // Ongoing Maintenance: read the plan periods so the two reminders before a period ends exist even
@@ -655,4 +685,4 @@ export function openClientTasksForId(clientId, taskId) {
     return openClientTasksFor(client, t, contextNow());
 }
 
-Object.assign(window.OL, { sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
+Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
