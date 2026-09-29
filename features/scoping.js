@@ -417,7 +417,8 @@ export function renderScopingSheet() {
     <div id="grand-totals-area"></div>
     `;
 
-    renderGrandTotals(sheet.lineItems, baseRate);
+    // Pending requests aren't in a round yet, so they are not part of the sheet's totals.
+    renderGrandTotals(sheet.lineItems.filter((i) => String(i?.status || '') !== 'Backlog'), baseRate);
     
     if (window.lucide) {
         window.lucide.createIcons();

@@ -1068,8 +1068,10 @@ export function printScopingSheet() {
     const vars = state.master.rates?.variables || {};
 
     // Group items by round
+    // Pending requests (status Backlog) are not in a round yet, so they are not on the printed rounds or in its totals.
+    const printable = (sheet.lineItems || []).filter(item => String(item.status || '') !== 'Backlog');
     const roundGroups = {};
-    (sheet.lineItems || []).forEach(item => {
+    printable.forEach(item => {
         const r = String(item.round || '1');
         if (!roundGroups[r]) roundGroups[r] = [];
         roundGroups[r].push(item);
@@ -1130,10 +1132,13 @@ export function printScopingSheet() {
             })();
 
             // A request that covers several resources lists each one with its own price (its fees add up to the request's).
+            // A request's own 'reqline-' placeholder is the request itself, not a resource it covers, so it never gets
+            // a line of its own: one resource prints as the request alone, several list each with its price.
             const breakdown = typeof OL.getRequestPriceBreakdown === 'function' ? OL.getRequestPriceBreakdown(item, res) : null;
-            const multi = !!(breakdown && breakdown.lines.length > 1);
-            const requestTitle = multi ? (String(item.name || '').trim() || res.name) : res.name;
-            const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml(breakdown, esc) : '';
+            const coveredLines = breakdown ? breakdown.lines.filter((l) => !String(l.resourceId).startsWith('reqline-')) : [];
+            const multi = coveredLines.length > 1;
+            const requestTitle = String(item.name || '').trim() || res.name;
+            const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml({ ...breakdown, lines: coveredLines }, esc) : '';
 
             roundRows += `<div class="item-row">
                 <div class="item-body">
@@ -1161,6 +1166,24 @@ export function printScopingSheet() {
             ${roundRows}
         </div>`;
     });
+
+    // The bottom totals use the same arithmetic as the in-app sheet (renderGrandTotals in scoping.js), so what prints is
+    // what the sheet shows: Approved is the Do Now lines Sphynx or Joint pay for, less any round adjustments and the
+    // project-wide adjustment; Adjustments is everything between Gross and Approved (Do Later lines, discounts).
+    let netAfterRounds = totalApproved;
+    Object.entries(sheet.roundDiscounts || {}).forEach(([rNum, rDisc]) => {
+        const roundSubtotal = printable
+            .filter(i => String(i.round) === String(rNum) && (i.status || '').toLowerCase() === 'do now')
+            .reduce((sum, i) => { const r = OL.getResourceById(i.resourceId); return sum + (r ? rowNet(i, r) : 0); }, 0);
+        netAfterRounds -= (rDisc && rDisc.type === '%')
+            ? Math.round(roundSubtotal * ((parseFloat(rDisc.value) || 0) / 100))
+            : (parseFloat(rDisc && rDisc.value) || 0);
+    });
+    const globalValue = client.projectData.totalDiscountValue || 0;
+    const globalType = client.projectData.totalDiscountType || '$';
+    const globalAdjustment = globalType === '%' ? Math.round(netAfterRounds * (globalValue / 100)) : Math.min(netAfterRounds, globalValue);
+    const finalApproved = netAfterRounds - globalAdjustment;
+    const totalAdjustments = totalGross - finalApproved;
 
     // The last page: what the client has to do (nothing is added when there is nothing).
     const clientPage = typeof OL.clientTasksPrintPage === 'function' ? OL.clientTasksPrintPage(client) : { css: '', html: '' };
@@ -1222,20 +1245,20 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
 .gt-label { font-size: 9px; font-weight: 700; text-transform: uppercase;
             letter-spacing: 0.06em; color: #64748b; display: block; margin-bottom: 2px; }
 .gt-val { font-size: 16px; font-weight: 800; color: #64748b; }
-.gt-val.net { color: #0f172a; }
+.gt-val.adj { color: #0ea5e9; }
 .gt-val.approved { font-size: 22px; color: #15803d; }
 ${typeof OL.requestResourcesPrintCss === 'string' ? OL.requestResourcesPrintCss : ''}
 ${clientPage.css}
 </style></head><body>
 <div class="print-header">
   <div><div class="ph-title">${esc(clientName)}</div><div class="ph-sub">Scoping Sheet</div></div>
-  <div class="ph-meta">Generated ${date}<br>${(sheet.lineItems||[]).length} items</div>
+  <div class="ph-meta">Generated ${date}<br>${printable.length} items</div>
 </div>
 ${rowsHtml}
 <div class="grand-total">
   <div><span class="gt-label">Gross</span><span class="gt-val">$${totalGross.toLocaleString()}</span></div>
-  <div><span class="gt-label">Net</span><span class="gt-val net">$${totalNet.toLocaleString()}</span></div>
-  <div><span class="gt-label">Approved</span><span class="gt-val approved">$${totalApproved.toLocaleString()}</span></div>
+  <div><span class="gt-label">Adjustments</span><span class="gt-val adj">-$${totalAdjustments.toLocaleString()}</span></div>
+  <div><span class="gt-label">Approved</span><span class="gt-val approved">$${finalApproved.toLocaleString()}</span></div>
 </div>
 ${clientPage.html}
 </body></html>`;
