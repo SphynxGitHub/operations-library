@@ -12,7 +12,7 @@
 
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
 import { addLink } from '../../core/task-links.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, tasksForEvent, nextStepsText, nextStepsHtml, tidyEmailHtml, assembleBody, greetingNames, joinNames, messageTextToHtml } from '../../core/meeting-summary.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -479,7 +479,12 @@ function assigneeOptionsHtml(client, current) {
 // Tasks from this meeting are included by default; ANY other open task on
 // the project can be ticked in too (reminders from earlier meetings, work
 // waiting on the client, etc.). st.excluded / st.included hold the choices.
-const meetingTasks = () => tasksForEvent(OL._msState.client.projectData.clientTasks, OL._msState.evt.id, closedStatusNames());
+// Requests linked to this meeting: a task linked to one of them came out of the same meeting.
+const requestIdsForMeeting = () => (OL._msState.client.projectData.scopingSheets || [])
+    .flatMap(sh => sh?.lineItems || [])
+    .filter(i => i && String(i.linkedEventId || '') === String(OL._msState.evt.id))
+    .map(i => String(i.id));
+const meetingTasks = () => tasksForEvent(OL._msState.client.projectData.clientTasks, OL._msState.evt.id, closedStatusNames(), { requestIds: requestIdsForMeeting() });
 const otherOpenTasks = () => {
     const st = OL._msState;
     const closed = new Set(closedStatusNames());
@@ -598,8 +603,8 @@ function renderMsNextSteps() {
     const st = OL._msState;
     const el = document.getElementById('ms-nextsteps-preview');
     if (!el) return;
-    const text = nextStepsText(msTasks(), st.client.meta?.name || '');
-    el.textContent = text || '(No next steps section: nothing is ticked "Include in summary".)';
+    const html = nextStepsHtml(msTasks(), st.client.meta?.name || '');
+    el.innerHTML = html || '<span class="muted">(No next steps section: nothing is ticked "Include in summary".)</span>';
 }
 
 OL.msUpdateTask = async function(taskId, field, value) {
@@ -713,9 +718,10 @@ OL.msSend = async function() {
     const body = assembleBody({
         message: OL.htmlToPlainTextWithLinks(messageHtml), nextSteps, closing: OL.htmlToPlainTextWithLinks(closingHtml)
     });
-    const bodyHtml = [messageHtml, nextSteps ? esc(nextSteps).replace(/\n/g, '<br>') : '', closingHtml]
-        .filter(part => String(part).trim()).join('<br><br>');
+    const bodyHtml = tidyEmailHtml([messageHtml, nextStepsHtml(msTasks(), st.client.meta?.name || ''), closingHtml]
+        .filter(part => String(part).trim()).join('<br><br>'));
     if (!to || !subject || !body.trim()) { alert('To, subject and message are all required.'); return; }
+    if (!nextSteps && !confirm('This email has no NEXT STEPS section, because no task from this meeting is ticked \"Include in summary\".\n\nSend it without one?')) return;
 
     const btn = document.getElementById('ms-send-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
@@ -822,7 +828,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
 
                     <div style="margin-bottom:10px;">
                         <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
-                        <pre id="ms-nextsteps-preview" style="white-space:pre-wrap; margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></pre>
+                        <div id="ms-nextsteps-preview" style="margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></div>
                     </div>
 
                     <label class="tiny muted">Closing</label>
