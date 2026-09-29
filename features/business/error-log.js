@@ -434,14 +434,21 @@ OL.assignErrorResource = async function(id, resourceId) {
 
 // Status dropdown — also stamps/clears Resolution Date automatically
 // (never overwrites a Resolution Date you've already set by hand).
-OL.updateErrorStatus = async function(id, newStatus) {
+OL.updateErrorStatus = async function(id, newStatus, opts = {}) {
+    // Completing an error needs its cause, resolution and notes (see COMPLETE ERROR below). opts.skipGate is
+    // only set by that flow itself, once the fields are filled in; opts.extra carries them into the same update.
+    if (newStatus === 'resolved' && !opts.skipGate) {
+        await OL.requestCompleteError(id);
+        return false;
+    }
+
     const row = OL.errorLogState.rows.find(r => r.id === id);
-    const updates = { status: newStatus };
+    const updates = { status: newStatus, ...(opts.extra || {}) };
     if (newStatus === 'resolved' && !row?.resolution_date) updates.resolution_date = new Date().toISOString();
     if (newStatus === 'open') updates.resolution_date = null;
 
     const { error } = await db.from('error_log').update(updates).eq('id', id);
-    if (error) { alert('Failed to update status: ' + error.message); return; }
+    if (error) { alert('Failed to update status: ' + error.message); return false; }
 
     if (OL.errorLogState.statusFilter !== 'all') {
         // toggled out of the current filter view — just reload
@@ -451,6 +458,7 @@ OL.updateErrorStatus = async function(id, newStatus) {
         if (row) Object.assign(row, updates);
         OL._rerenderErrorLog();
     }
+    return true;
 };
 
 // Same as above, but for use inside the detail modal — re-opens the modal
@@ -1174,7 +1182,7 @@ OL._showErrorClosePrompt = function(err, taskTitle) {
             <div class="small" style="line-height:1.5; margin-bottom:6px;">
                 The task <strong>${esc(taskTitle)}</strong> is closed, but the error <strong>${esc(err.title || err.service || 'this error')}</strong> is still open.
             </div>
-            <div class="tiny muted" style="margin-bottom:16px;">If you leave it open, it stays in your Dashboard feed until it's marked complete.</div>
+            <div class="tiny muted" style="margin-bottom:16px;">You'll be asked for the cause, resolution and notes before it closes. If you leave it open, it stays in your Dashboard feed until it's marked complete.</div>
             <div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
                 <button class="btn small soft" onclick="OL.dismissErrorClosePrompt()">Leave open</button>
                 <button class="btn small soft" onclick="OL.dismissErrorClosePrompt(); OL.openErrorDetailModal('${id}')">Open error card</button>
@@ -1198,10 +1206,153 @@ OL.dismissErrorClosePrompt = function() {
     OL._rerenderErrorLog();
 };
 
+// "Complete error" on the prompt: swap it for the cause / resolution / notes form (or complete straight away if
+// those are already filled in). The queue moves on to the next prompt only once this one is finished or cancelled.
 OL.completeErrorFromPrompt = async function(id) {
-    await OL.updateErrorStatus(id, 'resolved');   // stamps the resolution date, refreshes whichever page is showing
-    OL._finishErrorClosePrompt();
+    document.getElementById('error-close-prompt')?.remove();
+    await OL.requestCompleteError(id, { onDone: () => OL._finishErrorClosePrompt() });
 };
+
+// =============================================================
+// COMPLETE ERROR — cause, resolution and notes are required before an error can be marked complete, so a
+// closed error never goes into the log without the write-up. Every route to "resolved" (the task-closed prompt,
+// the status dropdown on a card, the dropdown in the detail modal) goes through OL.requestCompleteError, which
+// completes straight away when all three are already filled in and otherwise asks for them first.
+// =============================================================
+OL._errorNeedsCloseoutNotes = function(row) {
+    return !(row?.cause || '').trim() || !(row?.resolution || '').trim() || !(row?.notes || '').trim();
+};
+
+// opts.onDone(success) runs once the flow ends: true = the error is now complete, false = it was left open.
+OL.requestCompleteError = async function(id, opts = {}) {
+    const done = (ok) => { if (typeof opts.onDone === 'function') opts.onDone(ok); return ok; };
+
+    // Read the latest from the database — notes typed in another tab or just saved on blur count.
+    const { data: row } = await db.from('error_log').select('id, title, service, cause, resolution, notes, status').eq('id', id).maybeSingle();
+    if (!row) { alert('Could not load that error.'); return done(false); }
+    if (row.status === 'resolved') return done(true);
+
+    if (!OL._errorNeedsCloseoutNotes(row)) {
+        const ok = await OL.updateErrorStatus(id, 'resolved', { skipGate: true });
+        return done(ok !== false);
+    }
+
+    OL._rerenderErrorLog();   // a dropdown that was just flipped to "Complete" goes back to Open until the form is submitted
+    OL._showErrorCompleteForm(row, opts);
+    return false;
+};
+
+OL._showErrorCompleteForm = function(row, opts = {}) {
+    document.getElementById('error-complete-form')?.remove();
+    OL._errorCompleteCtx = { id: row.id, opts };
+    const id = esc(String(row.id));
+    const F = 'display:block; width:100%; box-sizing:border-box; text-align:left; font-size:13px; padding:8px 10px; border-radius:8px; font-family:inherit; line-height:1.45;';
+    const L = 'display:block; margin-bottom:4px;';
+    const tplSelect = (targetId, list) => `
+        <select class="tiny" style="border:none; background:transparent; color:var(--accent); cursor:pointer;" onchange="OL._ecfInsertTemplate('${targetId}', this.value); this.selectedIndex=0;">
+            <option value="">+ Insert template...</option>
+            ${list.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+        </select>`;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'error-complete-form';
+    // Its own layer above everything (including the close prompt and any task modal behind it). Clicking the
+    // backdrop does nothing on purpose, so typed text is never lost by accident; Cancel is the way out.
+    wrap.style.cssText = 'position:fixed; inset:0; z-index:20001; display:flex; align-items:center; justify-content:center; background:rgba(2,6,23,0.65);';
+    wrap.innerHTML = `
+        <div class="card" style="width:min(580px, 92vw); max-height:90vh; overflow-y:auto; padding:22px; box-sizing:border-box; cursor:default;">
+            <div style="display:flex; align-items:center; gap:8px; font-weight:bold; margin-bottom:4px;">
+                <i data-lucide="check-circle" style="width:16px;height:16px;color:#22c55e;"></i> Complete this error
+            </div>
+            <div class="tiny muted" style="margin-bottom:16px; line-height:1.5;">
+                <strong>${esc(row.title || row.service || 'Untitled Error')}</strong> — log what happened before it's closed. All three are required.
+            </div>
+            <div style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label class="tiny muted bold">Cause <span style="color:#ef4444;">*</span></label>
+                        ${tplSelect('ecf-cause', CAUSE_TEMPLATES)}
+                    </div>
+                    <textarea id="ecf-cause" class="modal-input" rows="3" style="${F} resize:vertical;" placeholder="What caused this?">${esc(row.cause || '')}</textarea>
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label class="tiny muted bold">Resolution <span style="color:#ef4444;">*</span></label>
+                        ${tplSelect('ecf-resolution', RESOLUTION_TEMPLATES)}
+                    </div>
+                    <textarea id="ecf-resolution" class="modal-input" rows="3" style="${F} resize:vertical;" placeholder="How was it fixed?">${esc(row.resolution || '')}</textarea>
+                </div>
+                <div>
+                    <label class="tiny muted bold" style="${L}">Additional Notes <span style="color:#ef4444;">*</span></label>
+                    <div style="position:relative;">
+                        <div id="task-comment-editor-notes-done-${id}" contenteditable="true" class="modal-input"
+                             style="${F} min-height:70px; max-height:200px; overflow-y:auto;"
+                             oninput="OL.handleCommentMentionInput(this, 'notes-done-${id}')"
+                             onkeydown="OL.handleCommentMentionKeydown(event, 'notes-done-${id}')">${esc(row.notes || '')}</div>
+                        <div id="comment-mention-dropdown-notes-done-${id}"></div>
+                    </div>
+                    <div class="tiny muted" style="margin-top:4px;">Anything worth knowing next time — type @ to mention a teammate.</div>
+                </div>
+                <div id="ecf-error" class="tiny" style="color:#ef4444; display:none;"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn small soft" onclick="OL.cancelErrorCompleteForm()">Cancel</button>
+                    <button id="ecf-submit" class="btn small primary" style="font-weight:bold;" onclick="OL.submitErrorCompleteForm()">Complete error</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(wrap);
+    if (window.lucide) lucide.createIcons();
+    // Land on the first empty field.
+    const first = ['ecf-cause', 'ecf-resolution'].map(x => document.getElementById(x)).find(el => el && !el.value.trim())
+        || document.getElementById(`task-comment-editor-notes-done-${row.id}`);
+    first?.focus();
+};
+
+OL._ecfInsertTemplate = function(targetId, template) {
+    if (!template) return;
+    const ta = document.getElementById(targetId);
+    if (!ta) return;
+    ta.value = ta.value.trim() ? `${ta.value}\n${template}` : template;
+    ta.focus();
+};
+
+OL.cancelErrorCompleteForm = function() {
+    const ctx = OL._errorCompleteCtx;
+    document.getElementById('error-complete-form')?.remove();
+    OL._errorCompleteCtx = null;
+    if (ctx?.opts && typeof ctx.opts.onDone === 'function') ctx.opts.onDone(false);
+};
+
+OL.submitErrorCompleteForm = async function() {
+    const ctx = OL._errorCompleteCtx;
+    if (!ctx) return;
+    const cause = document.getElementById('ecf-cause')?.value.trim() || '';
+    const resolution = document.getElementById('ecf-resolution')?.value.trim() || '';
+    const notes = (document.getElementById(`task-comment-editor-notes-done-${ctx.id}`)?.innerText || '').trim();
+
+    const missing = [!cause && 'Cause', !resolution && 'Resolution', !notes && 'Additional Notes'].filter(Boolean);
+    const errEl = document.getElementById('ecf-error');
+    if (missing.length) {
+        if (errEl) { errEl.textContent = `Please fill in: ${missing.join(', ')}.`; errEl.style.display = 'block'; }
+        return;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    const btn = document.getElementById('ecf-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    const mentions = OL.extractMentions ? OL.extractMentions(notes) : [];
+    const ok = await OL.updateErrorStatus(ctx.id, 'resolved', { skipGate: true, extra: { cause, resolution, notes, notes_mentions: mentions } });
+    if (ok === false) {   // the save failed (an alert already said why): keep the form open so nothing typed is lost
+        if (btn) { btn.disabled = false; btn.textContent = 'Complete error'; }
+        return;
+    }
+    document.getElementById('error-complete-form')?.remove();
+    OL._errorCompleteCtx = null;
+    if (typeof ctx.opts.onDone === 'function') ctx.opts.onDone(true);
+};
+
 
 window.OL.renderBusinessErrorLog = OL.renderBusinessErrorLog;
 window.OL.renderClientErrorLog = OL.renderClientErrorLog;
