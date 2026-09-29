@@ -1068,7 +1068,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
     let threadMsgs = [];
     if (m.thread_id) {
         const { data: tm } = await db.from('gmail_messages')
-            .select('id, sender, date, snippet, body').eq('thread_id', m.thread_id)
+            .select('id, sender, date, snippet, body, linked_client_id').eq('thread_id', m.thread_id)
             .order('date', { ascending: false }).limit(50);
         threadMsgs = tm || [];
         const newest = threadMsgs[0];
@@ -1078,6 +1078,9 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
         }
     }
     const olderMsgs = threadMsgs.filter((x) => String(x.id) !== String(id));
+    // The newest reply is often not linked to a client yet while an earlier message in the thread is, so the
+    // open-asks panel falls back to the client the thread is linked to.
+    const askClientId = m.linked_client_id || (threadMsgs.find((x) => x.linked_client_id) || {}).linked_client_id || '';
     const showQuoted = !!OL._gmailShowQuoted;
     const latestHtml = m.body_html ? (showQuoted ? { latest: m.body_html, hasQuoted: OL._splitQuotedHtml(m.body_html).hasQuoted } : OL._splitQuotedHtml(m.body_html)) : null;
     const latestPlain = OL._latestPlain(m, showQuoted);
@@ -1202,7 +1205,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
 
     openModal(html);
     OL.renderGmailLinkSummary();
-    OL.renderGmailOpenClientAsks(m);
+    OL.renderGmailOpenClientAsks({ ...m, linked_client_id: askClientId });
     OL.renderGmailPieceLinks(m);
     OL.renderGmailAttachments(m);
     OL.attachExcerptSelectionHandler(m.id);
@@ -1442,6 +1445,14 @@ OL.renderExcerptLinkPicker = function() {
     const requests = requestPool.filter((r) => matchTitle(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))).slice(0, 30);
     const resources = resourcePool.filter((r) => matchTitle(r.name)).slice(0, 30);
 
+    // Picks are looked up by position rather than written into the onclick text, so a title containing an
+    // apostrophe or quote (e.g. "Review Anthony's email") can't break the handler.
+    const titleOfRequest = (r) => (OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title));
+    OL._excerptPickLists = {
+        task: tasks.map((t) => ({ id: t.id, label: t.title || t.name })),
+        request: requests.map((r) => ({ id: r.id, label: titleOfRequest(r) })),
+        resource: resources.map((r) => ({ id: r.id, label: r.name })),
+    };
     const pick = (type, id, label) => { OL._excerptLinkState.targetType = type; OL._excerptLinkState.targetId = id; OL._excerptLinkState.targetLabel = label; OL.renderExcerptLinkPicker(); };
 
     const content = `
@@ -1485,19 +1496,19 @@ OL.renderExcerptLinkPicker = function() {
                     <div>
                         <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Tasks</div>
                         <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${tasks.length ? tasks.map((t) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("task", ${JSON.stringify(t.id)}, ${JSON.stringify(t.title || t.name)})'>${esc(t.title || t.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                            ${tasks.length ? tasks.map((t, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('task', ${i})">${esc(t.title || t.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
                         </div>
                     </div>
                     <div>
                         <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Requests</div>
                         <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${requests.length ? requests.map((r) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("request", ${JSON.stringify(r.id)}, ${JSON.stringify(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))})'>${esc(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                            ${requests.length ? requests.map((r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('request', ${i})">${esc(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))}</div>`).join('') : `<div class="tiny muted">None</div>`}
                         </div>
                     </div>
                     <div>
                         <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Resources</div>
                         <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${resources.length ? resources.map((r) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick='OL.__excerptPick("resource", ${JSON.stringify(r.id)}, ${JSON.stringify(r.name)})'>${esc(r.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                            ${resources.length ? resources.map((r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('resource', ${i})">${esc(r.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
                         </div>
                     </div>
                 </div>
@@ -1523,6 +1534,11 @@ OL.renderExcerptLinkPicker = function() {
         </div>
     `;
     OL.showOverlayModal(content);
+};
+
+OL.__excerptPickIdx = function(type, index) {
+    const item = OL._excerptPickLists?.[type]?.[index];
+    if (item) OL.__excerptPick(type, item.id, item.label);
 };
 
 // Bridge for the inline onclick handlers above (keeps the picker's own
