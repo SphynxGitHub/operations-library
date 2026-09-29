@@ -1326,15 +1326,27 @@ window.OL.openGmailMessageModal = OL.openGmailMessageModal;
 // email is entirely about one open ask"). For an email answering more than
 // one thing at once, or answering only part of its body, use excerpt
 // linking below instead.
-OL.renderGmailOpenClientAsks = function(m) {
+OL.renderGmailOpenClientAsks = async function(m) {
     const container = document.getElementById('gmail-open-client-asks');
     if (!container) return;
     const clientId = m.linked_client_id;
     if (!clientId) { container.innerHTML = ''; return; }
-    // Same lookup the compose window and meeting summary sidebars use (features/rollup.js), so a task shows up
-    // here exactly when it would show up there — catches asks marked isClientTask without an askKind, which
-    // the narrower askKind-only check used to miss.
-    const tasks = typeof OL.openClientTasksForClient === 'function' ? OL.openClientTasksForClient(clientId, { limit: 20 }) : [];
+    // The client's tasks live in its project data, which isn't loaded until the client is opened — an email
+    // opened from the inbox can find it still metadata-only, so load it first.
+    const loaded = state.clients?.[clientId];
+    if ((!loaded || loaded._metaOnly || !loaded.projectData) && typeof OL.loadFullClient === 'function') {
+        try { await OL.loadFullClient(clientId); } catch (e) { console.warn('Could not load client for open asks:', e); }
+    }
+    if (!document.getElementById('gmail-open-client-asks')) return;   // modal was closed meanwhile
+    const client = state.clients?.[clientId];
+    // Everything the client is being waited on for: real asks (askKind) plus any open task assigned to the client
+    // — the same set the Tasks page shows under "Waiting on <client>".
+    const closed = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter((s) => s.isClosed).map((s) => s.name).concat('Done');
+    const tasks = (client?.projectData?.clientTasks || [])
+        .filter((t) => t && !t.consolidatedFollowUp && t.askKind !== 'follow_up' && !closed.includes(t.status)
+            && (t.askKind || t.isClientTask === true || (typeof OL.taskIsClientOwned === 'function' && OL.taskIsClientOwned({ ...t, clientId }, client))))
+        .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')))
+        .slice(0, 20);
     if (!tasks.length) { container.innerHTML = ''; return; }
 
     container.innerHTML = `
