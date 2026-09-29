@@ -1138,13 +1138,18 @@ export function printScopingSheet() {
             const coveredLines = breakdown ? breakdown.lines.filter((l) => !String(l.resourceId).startsWith('reqline-')) : [];
             const multi = coveredLines.length > 1;
             const requestTitle = String(item.name || '').trim() || res.name;
+            // Under a request that covers one resource: the request's own notes (if any) and that resource's description.
+            // With several resources, each carries its own description in its line below instead.
+            const descriptionsHtml = multi ? '' : [...new Set([res.description, ...coveredLines.map((l) => l.description)]
+                .map((d) => String(d || '').trim()).filter(Boolean))]
+                .map((d) => `<div class="item-desc">${esc(d)}</div>`).join('');
             const resourcesHtml = multi && typeof OL.renderRequestResourcesHtml === 'function' ? OL.renderRequestResourcesHtml({ ...breakdown, lines: coveredLines }, esc) : '';
 
             roundRows += `<div class="item-row">
                 <div class="item-body">
                     <div class="item-main">
                         <div class="item-name">${esc(requestTitle)}</div>
-                        ${res.description && !multi ? `<div class="item-desc">${esc(res.description)}</div>` : ''}
+                        ${descriptionsHtml}
                         ${multi ? '' : unitBadgesHtml(item)}
                         ${resourcesHtml}
                         ${pricingHtml}

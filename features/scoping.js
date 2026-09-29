@@ -637,13 +637,18 @@ function renderScopingRowBase(item, idx, showUnits) {
     const requestHoursHtml = (res.isRequestLine && (parseFloat(item.manualHours) || 0) > 0)
         ? `<div class="tiny muted">${parseFloat(item.manualHours) || 0}h estimated</div>`
         : "";
-    // The resources this request covers, each with its own status (Pending / In Process / Built / In Review).
+    // The resources this request covers, each with its own status (Pending / In Process / Built / In Review) and
+    // its description underneath.
     const coveredHtml = requestResourceIds(item)
         .filter((id) => !String(id).startsWith('reqline-'))
         .map((id) => OL.getResourceById(id))
         .filter(Boolean)
-        .map((r) => `<span style="display:inline-flex; align-items:center; gap:5px; margin:3px 6px 0 0;">
-            <span class="tiny is-clickable" style="cursor:pointer;" onclick="OL.openResourceModal('${esc(String(r.id))}')">${OL.getLucideSVG(OL.getRegistryIcon(r.type), 11, 'var(--accent)')} ${esc(r.name || 'Untitled')}</span>${OL.renderResourceStatusPill ? OL.renderResourceStatusPill(r) : ''}</span>`).join('');
+        .map((r) => `<div style="margin-top:4px;">
+            <span style="display:inline-flex; align-items:center; gap:5px;">
+                <span class="tiny is-clickable" style="cursor:pointer;" onclick="OL.openResourceModal('${esc(String(r.id))}')">${OL.getLucideSVG(OL.getRegistryIcon(r.type), 11, 'var(--accent)')} ${esc(r.name || 'Untitled')}</span>${OL.renderResourceStatusPill ? OL.renderResourceStatusPill(r) : ''}
+            </span>
+            ${String(r.description || '').trim() ? `<div class="row-note">${esc(String(r.description).trim())}</div>` : ''}
+        </div>`).join('');
 
     const sheetForStatus = client?.projectData?.scopingSheets?.[0];
     const currentRoundNum = Math.max(parseInt(item.round, 10) || 1, 1);
@@ -741,7 +746,7 @@ function renderScopingRowBase(item, idx, showUnits) {
                 ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
-            ${coveredHtml ? `<div style="display:flex; flex-wrap:wrap; align-items:center;">${coveredHtml}</div>` : ""}
+            ${coveredHtml}
             ${unitsHtml}
         </div>
       
