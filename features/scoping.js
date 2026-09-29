@@ -11,6 +11,8 @@ import { addLink } from '../core/task-links.js';
 import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
+import { backfillClientRequests } from '../core/request-backfill.js';
+import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
 
 // Names of task statuses that count as finished (falls back to Done).
 function closedStatusNames() {
@@ -2524,6 +2526,42 @@ export async function repairBrokenReqlineRequests(clientIds) {
     return results;
 }
 
+// ---- ONE-TIME REPAIR: in-process sheets built on resources, with no request data behind them ----
+// Gives each line its request fields, links the client tasks that belong to its resources (task.parentResourceId,
+// task.resourceId(s), or a resource's dependencies list) to the request via task.links[], and creates the SOP's
+// client asks for lines that are Do Now in the current approved round but were never activated. Only client asks are
+// created (never the "Build/revise" task), any ask already covered by a linked task is skipped, and the line is then
+// stamped activatedAt so it doesn't come up for activation review. Safe to run twice. Console-only:
+//   OL.backfillRequestsFromResources()                                   // dry run, all clients
+//   OL.backfillRequestsFromResources(null, { apply: true })              // do it, all clients
+//   OL.backfillRequestsFromResources(['c-123'], { apply: true })         // just these
+//   OL.backfillRequestsFromResources(null, { apply: true, activate: false })  // link only, create no asks
+export async function backfillRequestsFromResources(clientIds, { apply = false, activate = true } = {}) {
+    const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
+    const askTemplates = (state.master?.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
+    const results = [];
+    for (const clientId of ids) {
+        await loadFullClient(clientId).catch(() => null);
+        const client = state.clients?.[clientId];
+        if (!client?.projectData) continue;
+        const lookup = (id) => (client.projectData.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
+        const ctx = {
+            askTemplates, roles: state.master?.roles || [], assigneeByType: state.master?.assigneeByType || {},
+            uid, now: new Date().toISOString(), lookupResource: lookup, activate,
+        };
+        let report;
+        if (apply) {
+            await updateAndSync(() => { report = backfillClientRequests(client, ctx); }, clientId);
+        } else {
+            // Dry run: same code on a throwaway copy, so nothing real is touched.
+            report = backfillClientRequests({ ...client, projectData: JSON.parse(JSON.stringify(client.projectData)) }, ctx);
+        }
+        if (report && (report.normalized.length || report.linked.length || report.ambiguous.length || report.activated.length)) results.push(report);
+    }
+    console.log(apply ? 'Backfill applied:' : 'DRY RUN — nothing changed. Re-run with { apply: true }:', results);
+    return results;
+}
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getScopingDataForResource, isResourceInScope, getScopingWorkflowContext, renderRoundGroup, calculateBaseFeeWithMultiplier,
@@ -2539,7 +2577,7 @@ Object.assign(window.OL, {
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,
-    repairBrokenReqlineRequests
+    repairBrokenReqlineRequests, backfillRequestsFromResources
 });
 
 window.renderScopingSheet = renderScopingSheet;
