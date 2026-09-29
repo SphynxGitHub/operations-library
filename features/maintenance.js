@@ -784,7 +784,10 @@ export async function deleteMaintenanceRequest(itemId) {
 // resources) array. Leaves the maintenance sheet's plan/hours tracking
 // (grants, periods) completely untouched — this only moves the request
 // line items.
-export async function migrateClientRequestsToBacklog(clientIds) {
+// Second argument { includeClosed = true }: Done / Don't Do requests move too (as-is, status and round kept) so the
+// tasks still linked to them have a parent on a real sheet. Every field on the request is carried over, not just a
+// fixed list (Drive files, comments and anything else stay on it); only the fields below are set or defaulted.
+export async function migrateClientRequestsToBacklog(clientIds, { includeClosed = true } = {}) {
     const results = [];
     const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
     for (const clientId of ids) {
@@ -800,8 +803,9 @@ export async function migrateClientRequestsToBacklog(clientIds) {
             const mainSheet = pd.scopingSheets.find((s) => !isMaintenanceSheet(s));
             if (!mainSheet) { results.push({ clientId, clientName: client.meta?.name, moved: [] }); return; }
 
-            const isOpen = (i) => i && String(i.status || '') !== 'Done' && !/^Don.t Do$/i.test(String(i.status || ''));
-            const fromSheet = (mSheet?.lineItems || []).filter(isOpen);
+            const isOpen = (i) => !!i && (includeClosed || (String(i.status || '') !== 'Done' && !/^Don.t Do$/i.test(String(i.status || ''))));
+            const mainIds = new Set((mainSheet.lineItems || []).map((i) => String(i?.id)));
+            const fromSheet = (mSheet?.lineItems || []).filter((i) => isOpen(i) && !mainIds.has(String(i.id)));
             // Same de-dupe renderClientRequests already does: a standalone
             // item whose id also shows up on some scoping sheet is the
             // same request, not a second one.
@@ -818,7 +822,9 @@ export async function migrateClientRequestsToBacklog(clientIds) {
                 const resourceId = item.resourceId || ('reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
                 const hasStatus = !!String(item.status || '').trim();
                 if (!Array.isArray(mainSheet.lineItems)) mainSheet.lineItems = [];
+                const isClosed = String(item.status || '') === 'Done' || /^Don.t Do$/i.test(String(item.status || ''));
                 mainSheet.lineItems.push({
+                    ...item,
                     id: item.id,
                     resourceId,
                     ...(Array.isArray(item.resourceIds) && item.resourceIds.length ? { resourceIds: item.resourceIds } : {}),
@@ -826,7 +832,7 @@ export async function migrateClientRequestsToBacklog(clientIds) {
                     requestType: item.requestType || 'build',
                     status: hasStatus ? item.status : 'Backlog',
                     responsibleParty: item.responsibleParty || 'Sphynx',
-                    round: hasStatus ? (item.round ?? 1) : null,
+                    round: hasStatus ? (item.round ?? (isClosed ? null : 1)) : null,
                     teamMode: item.teamMode || 'everyone',
                     teamIds: item.teamIds || [],
                     data: item.data || {},
