@@ -71,6 +71,35 @@ export function greetingNames(recipients, { sphynxEmails = [], people = [] } = {
     return names;
 }
 
+// Tasks tied to this meeting in any way (its event, or a request linked to it), open or closed, without the
+// summary task itself and the client follow-up.
+function tiedToEvent(t, eventId) {
+    return !!t && [t.linkedEventId, t.parentEventId].some((id) => id != null && String(id) === String(eventId))
+        && !t.meetingSummaryEventId && t.askKind !== 'follow_up';
+}
+
+// What Zoom recorded for this meeting that is not a task now: the action items stored on the meeting, plus the lines of
+// the summary's own "Next steps" list, each once. A task made from one of them counts whether it is open or done, so
+// finished work is never offered again; an item whose task was deleted is offered again.
+export function zoomItemsNotYetTasks({ summary, actionItems, tasks, eventId }) {
+    const known = new Set((tasks || []).filter((t) => tiedToEvent(t, eventId)).map((t) => String(t.title || t.name || '').trim().toLowerCase()));
+    const seen = new Set();
+    const out = [];
+    [...(Array.isArray(actionItems) ? actionItems : []).map((x) => String(x || '').trim()), ...splitNextStepsSection(summary).items].forEach((item) => {
+        const key = String(item || '').trim().toLowerCase();
+        if (!key || known.has(key) || seen.has(key)) return;
+        seen.add(key);
+        out.push(String(item).trim());
+    });
+    return out;
+}
+
+// Tasks from this meeting that are already closed (so the list of open ones leaves them out).
+export function closedTasksForEvent(tasks, eventId, closedNames) {
+    const closed = Array.isArray(closedNames) && closedNames.length ? closedNames : ['Done'];
+    return (tasks || []).filter((t) => tiedToEvent(t, eventId) && closed.includes(String(t.status || '')));
+}
+
 // Open tasks that came out of this meeting, excluding the summary task itself and follow-ups.
 // opts.requestIds: ids of the requests linked to this meeting. A task linked to one of those requests (task.links[],
 // or the older requestLineItemId) came out of the same meeting, even when it was never stamped with the event itself.
@@ -114,9 +143,18 @@ function shortDate(startIso) {
 const NEXT_STEPS_LABEL = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:next\s+steps?|action\s+items?|follow[\s-]?ups?)\s*(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*$/i;
 const BULLET_LINE = /^\s*(?:[-*•▪◦‣–—]|\d+[.)])\s+\S/;
 
-export function stripNextStepsSection(text) {
+// Splits Zoom's summary into what stays in the SUMMARY and the lines of its "Next steps" section.
+// Returns { kept, items }: kept is the summary without that section, items are its lines as plain text (one per
+// bullet or line, a bullet's indented continuation joined onto it).
+export function splitNextStepsSection(text) {
     const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
+    const items = [];
+    const take = (line, listy) => {
+        if (BULLET_LINE.test(line)) items.push(line.replace(/^\s*(?:[-*•▪◦‣–—]|\d+[.)])\s+/, '').trim());
+        else if (listy && /^\s+\S/.test(line) && items.length) items[items.length - 1] += ' ' + line.trim();
+        else if (line.trim()) items.push(line.trim());
+    };
     for (let i = 0; i < lines.length; i++) {
         if (!NEXT_STEPS_LABEL.test(lines[i])) { out.push(lines[i]); continue; }
 
@@ -126,6 +164,7 @@ export function stripNextStepsSection(text) {
             const listy = BULLET_LINE.test(lines[i]);
             while (i < lines.length && lines[i].trim()) {                 // the block right below the heading
                 if (listy && !BULLET_LINE.test(lines[i]) && !/^\s+\S/.test(lines[i])) break;   // (indented lines continue a bullet)
+                take(lines[i], listy);
                 i++;
             }
             if (listy) {                                                  // a bulleted list can be split by blank lines
@@ -134,14 +173,18 @@ export function stripNextStepsSection(text) {
                     while (j < lines.length && !lines[j].trim()) j++;
                     if (j < lines.length && BULLET_LINE.test(lines[j])) {
                         i = j;
-                        while (i < lines.length && lines[i].trim() && (BULLET_LINE.test(lines[i]) || /^\s+\S/.test(lines[i]))) i++;
+                        while (i < lines.length && lines[i].trim() && (BULLET_LINE.test(lines[i]) || /^\s+\S/.test(lines[i]))) { take(lines[i], true); i++; }
                     } else break;
                 }
             }
         }
         i--;   // the loop's own i++ moves to the first line that was kept
     }
-    return out.join('\n');
+    return { kept: out.join('\n'), items };
+}
+
+export function stripNextStepsSection(text) {
+    return splitNextStepsSection(text).kept;
 }
 
 function tidySummary(text) {
