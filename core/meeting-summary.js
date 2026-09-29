@@ -98,7 +98,54 @@ function shortDate(startIso) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// Zoom's own summary ends with a "Next steps" list (the sync adds one when Zoom sends it separately), and the email
+// has its own NEXT STEPS section built from the meeting's linked tasks. Showing both says everything twice, so the
+// SUMMARY part of the email drops the summary's version — the stored summary is left whole.
+//
+// A section is a line that is only the label ("Next steps", "Next steps:", "## Next steps", "**Action items**",
+// "Follow-ups"), plus what belongs to it: the paragraph right below, or a whole list of bullets. It ends at the
+// first line that is neither blank nor a bullet, so whatever comes after (a new heading, another paragraph) stays.
+const NEXT_STEPS_LABEL = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:next\s+steps?|action\s+items?|follow[\s-]?ups?)\s*(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*$/i;
+const BULLET_LINE = /^\s*(?:[-*•▪◦‣–—]|\d+[.)])\s+\S/;
+
+export function stripNextStepsSection(text) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+        if (!NEXT_STEPS_LABEL.test(lines[i])) { out.push(lines[i]); continue; }
+
+        i++;
+        while (i < lines.length && !lines[i].trim()) i++;               // blank lines under the heading
+        if (i < lines.length) {
+            const listy = BULLET_LINE.test(lines[i]);
+            while (i < lines.length && lines[i].trim()) {                 // the block right below the heading
+                if (listy && !BULLET_LINE.test(lines[i]) && !/^\s+\S/.test(lines[i])) break;   // (indented lines continue a bullet)
+                i++;
+            }
+            if (listy) {                                                  // a bulleted list can be split by blank lines
+                for (;;) {
+                    let j = i;
+                    while (j < lines.length && !lines[j].trim()) j++;
+                    if (j < lines.length && BULLET_LINE.test(lines[j])) {
+                        i = j;
+                        while (i < lines.length && lines[i].trim() && (BULLET_LINE.test(lines[i]) || /^\s+\S/.test(lines[i]))) i++;
+                    } else break;
+                }
+            }
+        }
+        i--;   // the loop's own i++ moves to the first line that was kept
+    }
+    return out.join('\n');
+}
+
 function tidySummary(text) {
+    const original = String(text || '');
+    const stripped = stripNextStepsSection(original);
+    // A summary that was nothing but next steps would leave an empty SUMMARY; keep the prompt instead.
+    return tidySummaryText(stripped.trim() || !original.trim() ? stripped : '(Add a short summary of the meeting here.)');
+}
+
+function tidySummaryText(text) {
     return String(text || '')
         .replace(/\r\n?/g, '\n')
         .replace(/[ \t]+\n/g, '\n')
