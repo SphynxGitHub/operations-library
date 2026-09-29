@@ -94,7 +94,7 @@ export function loadTier(hours, cfg = DEFAULT_OL_SETTINGS.scheduling) {
 
 // The fullest level a day may already be in for this client's status. The same limit applies on every day checked.
 export function maxTierFor(clientStatus, cfg = DEFAULT_OL_SETTINGS.scheduling) {
-    return (cfg.maxTierByStatus || {})[clientStatus] || cfg.maxTierDefault || 'red';
+    return (cfg.maxTierByStatus || {})[clientStatus] || cfg.maxTierDefault || 'green';
 }
 
 // Who is asked to place a task by hand when no day fits: the reviewer set in settings, else the person the task is

@@ -48,7 +48,7 @@ export const DEFAULT_OL_SETTINGS = {
         // The fullest level a day may already be in for a task to be placed on it — for the client's status, on
         // EVERY day the automation checks (today and any later day). Closed is never allowed.
         maxTierByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
-        maxTierDefault: 'red',
+        maxTierDefault: 'green',
         windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
         // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
         // assigned to (approving their own task); otherwise the fallback.
