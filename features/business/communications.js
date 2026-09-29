@@ -992,14 +992,101 @@ OL._wrapEmailImagesForLightbox = function(html) {
     });
 };
 
-OL.openGmailMessageModal = async function(id) {
-    const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
+// ---- latest-message-only view: split a message into what's new vs. the quoted earlier emails it carries ----
+// Replies quote the whole chain below the new text. The read modal shows only the new part (with a toggle for the
+// rest); the earlier emails themselves are listed separately under "Earlier in this thread".
+OL._splitQuotedText = function(text) {
+    const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    let cut = -1;
+    for (let i = 0; i < lines.length; i++) {
+        const l = lines[i], next = (lines[i + 1] || '').trim();
+        const isWrote = /^\s*On\s.{5,300}$/i.test(l) && (/wrote:\s*$/i.test(l) || /^wrote:\s*$/i.test(next));
+        const isOrig = /^\s*-{2,}\s*(Original|Forwarded) Message\s*-{2,}/i.test(l) || /^\s*_{8,}\s*$/.test(l);
+        const isFromBlock = /^\s*From:\s.+/i.test(l) && lines.slice(i + 1, i + 5).some((x) => /^\s*(Sent|Date):\s/i.test(x));
+        if (isWrote || isOrig || isFromBlock || /^\s*>/.test(l)) { cut = i; break; }
+    }
+    if (cut <= 0) return { latest: lines.join('\n').trim(), quoted: '', hasQuoted: false };
+    const latest = lines.slice(0, cut).join('\n').trim();
+    if (!latest) return { latest: lines.join('\n').trim(), quoted: '', hasQuoted: false };
+    return { latest, quoted: lines.slice(cut).join('\n'), hasQuoted: true };
+};
+
+OL._splitQuotedHtml = function(html) {
+    try {
+        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+        let removed = 0;
+        // Outlook: everything from the reply marker on is the quoted chain.
+        doc.querySelectorAll('#appendonsend, #divRplyFwdMsg').forEach((el) => {
+            if (!el.isConnected) return;
+            const prev = el.previousElementSibling;
+            while (el.nextSibling) { el.nextSibling.remove(); }
+            if (prev && prev.tagName === 'HR') prev.remove();
+            el.remove(); removed++;
+        });
+        doc.querySelectorAll('.gmail_quote, .gmail_extra, blockquote[type="cite"], .yahoo_quoted, #mail-app-auto-quote, .moz-cite-prefix').forEach((el) => {
+            if (!el.isConnected) return;
+            el.remove(); removed++;
+        });
+        if (!removed || !(doc.body?.textContent || '').trim()) return { latest: html, hasQuoted: false };
+        return { latest: doc.documentElement.outerHTML, hasQuoted: true };
+    } catch (e) { return { latest: html, hasQuoted: false }; }
+};
+
+// Plain-text version of just the new part of a message (or all of it when showQuoted).
+OL._latestPlain = function(m, showQuoted) {
+    const body = m.body || '';
+    if (OL._looksLikeHtml(body)) {
+        const sp = OL._splitQuotedHtml(body);
+        return { text: OL._stripHtmlForPreview(showQuoted ? body : sp.latest) || m.snippet || '', hasQuoted: sp.hasQuoted };
+    }
+    const sp = OL._splitQuotedText(body);
+    return { text: (showQuoted ? String(body).trim() : sp.latest) || m.snippet || '', hasQuoted: sp.hasQuoted };
+};
+
+OL.toggleGmailQuoted = function() {
+    OL._gmailShowQuoted = !OL._gmailShowQuoted;
+    const id = OL._gmailLinkState?.emailId;
+    if (id) OL.openGmailMessageModal(id, { keepQuoted: true });
+};
+
+OL.toggleGmailThreadList = function() {
+    const box = document.getElementById('gmail-thread-older');
+    const btn = document.getElementById('gmail-thread-toggle');
+    if (!box) return;
+    const show = box.style.display === 'none';
+    box.style.display = show ? 'grid' : 'none';
+    if (btn) btn.setAttribute('data-open', show ? '1' : '0');
+    if (btn) btn.querySelector('span').textContent = show ? 'Hide earlier emails' : btn.getAttribute('data-label');
+};
+
+OL.openGmailMessageModal = async function(id, opts = {}) {
+    if (!opts.keepQuoted) OL._gmailShowQuoted = false;
+    let { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
+
+    // The modal always shows the most recent email in the thread, even if an older one was clicked.
+    let threadMsgs = [];
+    if (m.thread_id) {
+        const { data: tm } = await db.from('gmail_messages')
+            .select('id, sender, date, snippet, body').eq('thread_id', m.thread_id)
+            .order('date', { ascending: false }).limit(50);
+        threadMsgs = tm || [];
+        const newest = threadMsgs[0];
+        if (newest && newest.id !== m.id && new Date(newest.date || 0) > new Date(m.date || 0)) {
+            const { data: full } = await db.from('gmail_messages').select('*').eq('id', newest.id).single();
+            if (full) { m = full; id = full.id; }
+        }
+    }
+    const olderMsgs = threadMsgs.filter((x) => String(x.id) !== String(id));
+    const showQuoted = !!OL._gmailShowQuoted;
+    const latestHtml = m.body_html ? (showQuoted ? { latest: m.body_html, hasQuoted: OL._splitQuotedHtml(m.body_html).hasQuoted } : OL._splitQuotedHtml(m.body_html)) : null;
+    const latestPlain = OL._latestPlain(m, showQuoted);
+    const hasQuoted = latestHtml ? latestHtml.hasQuoted : latestPlain.hasQuoted;
 
     OL._gmailLinkState = {
         emailId: id,
         sender: m.sender || '', // kept for the "add sender as team member?" prompt on manual link
-        emailBody: OL._stripHtmlForPreview(m.body) || m.snippet || '', // copied into a new task's description below, still editable there
+        emailBody: OL._latestPlain(m, false).text, // latest email only; copied into a new task's description below, still editable there
         clientId: m.linked_client_id || '',
         resourceId: m.linked_resource_id || '',
         taskId: m.linked_task_id || '',
@@ -1064,6 +1151,7 @@ OL.openGmailMessageModal = async function(id) {
                 <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.deleteGmailMessage('${m.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i> Delete</button>
             </div>
 
+            ${hasQuoted ? `<div style="margin-bottom:8px;"><button class="btn tiny soft" style="font-size:10px;" onclick="OL.toggleGmailQuoted()">${showQuoted ? 'Hide quoted earlier messages' : 'Show quoted earlier messages'}</button></div>` : ''}
             <div id="gmail-attachments"></div>
 
             <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:24px; align-items:start;">
@@ -1080,18 +1168,34 @@ OL.openGmailMessageModal = async function(id) {
                     <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:65vh; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
                 ` : `
                     <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; height:65vh; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
-                        ${esc(OL._stripHtmlForPreview(m.body) || m.snippet || 'No preview available for this message.')}
+                        ${esc(latestPlain.text || 'No preview available for this message.')}
                     </div>
                     <div id="gmail-piece-links"></div>
                 `}
 
                 <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
-                    <div id="gmail-suggestions"></div>
                     <div id="gmail-open-client-asks"></div>
                     <div id="gmail-thread-link-suggestion"></div>
                     <div id="gmail-link-summary"></div>
                 </div>
             </div>
+            ${olderMsgs.length ? `
+                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:12px;">
+                    <button id="gmail-thread-toggle" class="btn tiny soft" data-label="Show ${olderMsgs.length} earlier email${olderMsgs.length === 1 ? '' : 's'} in this thread" onclick="OL.toggleGmailThreadList()">
+                        <i data-lucide="messages-square" style="width:11px;height:11px;"></i> <span>Show ${olderMsgs.length} earlier email${olderMsgs.length === 1 ? '' : 's'} in this thread</span>
+                    </button>
+                    <div id="gmail-thread-older" style="display:none; gap:8px; margin-top:10px;">
+                        ${olderMsgs.map((o) => {
+                            const parsed = OL._parseSenderHeader(o.sender);
+                            const who = parsed?.name || o.sender || 'Unknown';
+                            const txt = OL._latestPlain(o, false).text || 'No preview available.';
+                            return `<details style="border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                                <summary class="tiny" style="cursor:pointer;"><strong>${esc(who)}</strong> · ${o.date ? esc(new Date(o.date).toLocaleString()) : 'Unknown date'}</summary>
+                                <div style="white-space:pre-wrap; line-height:1.5; font-size:12px; max-height:260px; overflow:auto; margin-top:8px; min-width:0;">${esc(txt)}</div>
+                            </details>`;
+                        }).join('')}
+                    </div>
+                </div>` : ''}
         </div>
     `;
     OL._gmailLinkSelectedEvent = null; // resolved just below if this email already has a linked event
@@ -1103,21 +1207,13 @@ OL.openGmailMessageModal = async function(id) {
     OL.renderGmailAttachments(m);
     OL.attachExcerptSelectionHandler(m.id);
     OL.loadThreadLinkSuggestion(m);
-    if (m.classified_at) {
-        OL.renderGmailSuggestions(m);
-    } else {
-        // Fire-and-forget — the heuristic decides in-function whether this
-        // is even worth an API call; renderGmailSuggestions gets called
-        // again from inside classifyEmailCandidates once a result is in,
-        // only if this same email is still the one open.
-        OL.classifyEmailCandidates(m.id);
-    }
+    // No auto-extracted suggestions: linking is done by highlighting text in the email (latest message only).
 
     if (m.body_html) {
         const frame = document.getElementById('gmail-body-html-frame');
         if (frame) {
             // Ensure image URLs with leading // get explicit https:
-            let processedHtml = m.body_html.replace(/src=["']\/\//gi, 'src="https://');
+            let processedHtml = latestHtml.latest.replace(/src=["']\/\//gi, 'src="https://');
 
             // Click-to-expand images: the iframe is intentionally sandboxed
             // without allow-scripts (this is untrusted external HTML), so a
