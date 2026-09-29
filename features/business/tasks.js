@@ -2174,7 +2174,7 @@ OL.renderInContextTaskModal = function(client, task) {
             ${typeof OL.renderTaskErrorBanner === 'function' ? OL.renderTaskErrorBanner(task) : ''}
             ${OL.renderTaskParentRequestBanner(client, task)}
 
-            <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
+            <div class="modal-body" style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start; max-height:none; overflow:visible;">
                 <div style="min-width:0;">
                     
                     <!-- REARRANGED HEADER TAGS -->
