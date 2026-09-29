@@ -1339,28 +1339,45 @@ OL.renderGmailOpenClientAsks = async function(m) {
     }
     if (!document.getElementById('gmail-open-client-asks')) return;   // modal was closed meanwhile
     const client = state.clients?.[clientId];
-    // Everything the client is being waited on for: real asks (askKind) plus any open task assigned to the client
-    // — the same set the Tasks page shows under "Waiting on <client>".
+    // Every open task on the project, grouped by who it's waiting on: the client, a 3rd party, or Sphynx.
     const closed = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter((s) => s.isClosed).map((s) => s.name).concat('Done');
-    const tasks = (client?.projectData?.clientTasks || [])
-        .filter((t) => t && !t.consolidatedFollowUp && t.askKind !== 'follow_up' && !closed.includes(t.status)
-            && (t.askKind || t.isClientTask === true || (typeof OL.taskIsClientOwned === 'function' && OL.taskIsClientOwned({ ...t, clientId }, client))))
-        .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')))
-        .slice(0, 20);
-    if (!tasks.length) { container.innerHTML = ''; return; }
+    const groupOf = (t) => {
+        if (typeof OL.taskIsClientOwned === 'function' && OL.taskIsClientOwned({ ...t, clientId }, client)) return 'client';
+        const key = typeof OL.classifyTask === 'function' ? OL.classifyTask({ assignee: t.assignee, clientId }, client)?.key : 'sphynx';
+        return key === 'client' ? 'client' : (key === 'thirdparty' || key === 'partner') ? 'thirdparty' : 'sphynx';
+    };
+    const open = (client?.projectData?.clientTasks || [])
+        .filter((t) => t && !t.consolidatedFollowUp && t.askKind !== 'follow_up' && !closed.includes(t.status))
+        .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+    if (!open.length) { container.innerHTML = ''; return; }
+    const GROUPS = [
+        { key: 'client', label: 'Waiting on the client' },
+        { key: 'thirdparty', label: 'Waiting on a 3rd party' },
+        { key: 'sphynx', label: 'Sphynx tasks' },
+    ];
+    const buckets = { client: [], thirdparty: [], sphynx: [] };
+    open.forEach((t) => buckets[groupOf(t)].push(t));
+
+    const row = (t) => {
+        const linked = String(m.linked_task_id) === String(t.id);
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; ${linked ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}">
+                <span class="tiny" style="min-width:0; overflow-wrap:anywhere;">${esc(t.title || t.name)}</span>
+                ${linked
+                    ? `<span class="tiny" style="color:var(--accent); flex-shrink:0;">Linked</span>`
+                    : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${esc(String(t.id))}', '${esc(clientId)}'); OL.saveGmailLink({ skipArchive: true }).then(() => OL.openGmailMessageModal('${esc(String(m.id))}'));">Addresses this</button>`}
+            </div>`;
+    };
 
     container.innerHTML = `
         <div style="margin-bottom:16px; padding:10px 12px; background:rgba(var(--accent-rgb), 0.05); border:1px solid var(--line); border-radius:8px;">
-            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Open asks for this client</label>
-            <div style="display:grid; gap:4px;">
-                ${tasks.map((t) => `
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; ${String(m.linked_task_id) === String(t.id) ? 'border-color:var(--accent); background:rgba(var(--accent-rgb),0.08);' : ''}">
-                        <span class="tiny">${esc(t.title || t.name)}</span>
-                        ${String(m.linked_task_id) === String(t.id)
-                            ? `<span class="tiny" style="color:var(--accent); flex-shrink:0;">Linked</span>`
-                            : `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.setGmailLinkTask('${t.id}', '${clientId}'); OL.saveGmailLink({ skipArchive: true }).then(() => OL.openGmailMessageModal('${m.id}'));">This addresses it</button>`}
-                    </div>
-                `).join('')}
+            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Open tasks for this client</label>
+            <div style="display:grid; gap:10px; max-height:340px; overflow:auto;">
+                ${GROUPS.filter((g) => buckets[g.key].length).map((g) => `
+                    <div>
+                        <div class="tiny muted" style="margin-bottom:4px;">${g.label} (${buckets[g.key].length})</div>
+                        <div style="display:grid; gap:4px;">${buckets[g.key].map(row).join('')}</div>
+                    </div>`).join('')}
             </div>
         </div>
     `;
