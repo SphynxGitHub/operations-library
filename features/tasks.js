@@ -1,5 +1,6 @@
 import { esc, uid, state, updateAndSync, getActiveClient } from '../core/data.js';
 import { taskAssignees } from '../core/task-assignees.js';
+import { requestIdsForTask } from '../core/task-links.js';
 
 //============= CLIENT WORKSPACE TASK MANAGER ===============//
 
