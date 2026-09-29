@@ -40,14 +40,20 @@ export const DEFAULT_OL_SETTINGS = {
         assignee: 'Anthony',
     },
     scheduling: {
-        greenMaxHours: 3,     // Green: this many booked hours or fewer
-        yellowMaxHours: 4,    // Yellow: over Green, up to this
-        redMaxHours: 5,       // Red: over Yellow, under this. This many or more is Closed.
-        sameDayMaxByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
-        sameDayMaxDefault: 'red',
-        laterDayMax: 'red',
-        windowDays: 14,       // working days to look ahead before handing it to a person
-        reviewer: '',         // who gets asked to place it by hand when nothing fits
+        // A day's booked hours (meetings + tasks already due) put it in a level:
+        //   Green = under 3h   Yellow = 3h to 3:59   Red = 4h to 4:59   Closed (gray) = 5h or more
+        greenUnderHours: 3,
+        yellowUnderHours: 4,
+        redUnderHours: 5,
+        // The fullest level a day may already be in for a task to be placed on it — for the client's status, on
+        // EVERY day the automation checks (today and any later day). Closed is never allowed.
+        maxTierByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
+        maxTierDefault: 'red',
+        windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
+        // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
+        // assigned to (approving their own task); otherwise the fallback.
+        reviewer: '',
+        fallbackReviewer: 'Arielle',
     },
     // Master Library sections (resource types) whose resources may be linked from an email. Empty = none.
     emailLinkableResourceTypes: [],

@@ -8,6 +8,13 @@ import { getOlSettings, DEFAULT_OL_SETTINGS } from '../../core/ol-settings.js';
 
 const TIER_OPTIONS = [['green', 'Green'], ['yellow', 'Yellow'], ['red', 'Red']];
 
+// A setting stored as a first name ("Arielle") shows as the matching roster member.
+const resolveMember = (name) => {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return '';
+    const hit = (state.master?.sphynxTeam || []).find((m) => String(m.name || '').toLowerCase() === n) || (state.master?.sphynxTeam || []).find((m) => String(m.name || '').toLowerCase().startsWith(n + ' '));
+    return hit ? hit.name : name;
+};
 const teamNames = () => (state.master?.sphynxTeam || []).map((m) => m.name).filter(Boolean);
 
 function librarySections() {
@@ -61,16 +68,17 @@ OL.renderOlSettingsPanel = function() {
             field('Task title', text('os-ic-title', ic.taskTitle)) +
             field('Assigned to', personSelect('os-ic-assignee', ic.assignee, 'Sphynx Task (no one in particular)')))}
 
-        ${section('Scheduling levels', 'How busy a day is, from meetings plus tasks already due that day. Used when tasks are given a date automatically.',
-            `<div style="display:flex; gap:16px; flex-wrap:wrap;">${field('Green: up to (hours)', numIn('os-sc-green', sc.greenMaxHours))}${field('Yellow: up to (hours)', numIn('os-sc-yellow', sc.yellowMaxHours))}${field('Red: under (hours)', numIn('os-sc-red', sc.redMaxHours), 'This many hours or more = Closed.')}</div>` +
+        ${section('Scheduling levels', 'How busy a day is, from meetings plus tasks already due that day. When a task is given a date automatically, it goes on the first day whose level the client is allowed to use — the same rule on every day it checks, today or later.',
+            `<div style="display:flex; gap:16px; flex-wrap:wrap;">${field('Green: under (hours)', numIn('os-sc-green', sc.greenUnderHours))}${field('Yellow: under (hours)', numIn('os-sc-yellow', sc.yellowUnderHours))}${field('Red: under (hours)', numIn('os-sc-red', sc.redUnderHours), 'This many hours or more = Closed (gray). Never used.')}</div>` +
             `<div style="font-weight:600; font-size:12px; margin:6px 0;">Busiest a day can already be for a task to be placed on it</div>` +
             `<div style="display:flex; gap:16px; flex-wrap:wrap;">` +
-                field('Same day: Ongoing Maintenance', tierSelect('os-sc-om', sc.sameDayMaxByStatus['Ongoing Maintenance'] || sc.sameDayMaxDefault)) +
-                field('Same day: White Glove', tierSelect('os-sc-wg', sc.sameDayMaxByStatus['White Glove'] || sc.sameDayMaxDefault)) +
-                field('Same day: everyone else', tierSelect('os-sc-other', sc.sameDayMaxDefault)) +
-                field('Any later day', tierSelect('os-sc-later', sc.laterDayMax)) +
+                field('Ongoing Maintenance clients', tierSelect('os-sc-om', sc.maxTierByStatus['Ongoing Maintenance'] || sc.maxTierDefault)) +
+                field('White Glove clients', tierSelect('os-sc-wg', sc.maxTierByStatus['White Glove'] || sc.maxTierDefault)) +
+                field('Everyone else', tierSelect('os-sc-other', sc.maxTierDefault)) +
             `</div>` +
-            `<div style="display:flex; gap:16px; flex-wrap:wrap;">${field('Look ahead (working days)', numIn('os-sc-window', sc.windowDays))}${field('If nothing fits, ask', personSelect('os-sc-reviewer', sc.reviewer, 'Whoever is reviewing the activation'), 'Shown on the task row so a person picks the date.')}</div>`)}
+            `<div style="display:flex; gap:16px; flex-wrap:wrap;">${field('Look ahead (working days)', numIn('os-sc-window', sc.windowDays), 'Starts today, then each next day.')}` +
+                field('If nothing fits, ask', personSelect('os-sc-reviewer', sc.reviewer, 'The person the task is assigned to'), 'They pick the date by hand.') +
+                field('…or, if it has no named person', personSelect('os-sc-fallback', resolveMember(sc.fallbackReviewer), 'No one'), 'Used when the task is assigned to "Sphynx Task" or no one.') + `</div>`)}
 
         ${section('Email links from the Master Library', 'Which Master Library sections can be linked when writing an email ("From Master Library" in the compose window). Only resources in the ticked sections are offered.',
             librarySections().length
@@ -91,8 +99,8 @@ OL.saveOlSettings = function() {
     const d = DEFAULT_OL_SETTINGS;
     const cur = getOlSettings();
 
-    const green = num('os-sc-green', d.scheduling.greenMaxHours), yellow = num('os-sc-yellow', d.scheduling.yellowMaxHours), red = num('os-sc-red', d.scheduling.redMaxHours);
-    if (!(green <= yellow && yellow < red)) { alert('The levels need to go up: Green hours ≤ Yellow hours < Red hours.'); return; }
+    const green = num('os-sc-green', d.scheduling.greenUnderHours), yellow = num('os-sc-yellow', d.scheduling.yellowUnderHours), red = num('os-sc-red', d.scheduling.redUnderHours);
+    if (!(green < yellow && yellow < red)) { alert('The levels need to go up: Green hours < Yellow hours < Red hours.'); return; }
     if (!state.masterHasOlSettings) { alert('Run the ol_settings migration first — settings cannot be saved until that column exists.'); return; }
 
     const next = {
@@ -106,10 +114,10 @@ OL.saveOlSettings = function() {
         },
         introCall: { enabled: on('os-ic-enabled'), titleKeywords: v('os-ic-words'), daysBefore: num('os-ic-days', d.introCall.daysBefore), taskTitle: v('os-ic-title'), assignee: v('os-ic-assignee') },
         scheduling: {
-            greenMaxHours: green, yellowMaxHours: yellow, redMaxHours: red,
-            sameDayMaxByStatus: { ...(cur.scheduling.sameDayMaxByStatus || {}), 'Ongoing Maintenance': v('os-sc-om'), 'White Glove': v('os-sc-wg') },
-            sameDayMaxDefault: v('os-sc-other'), laterDayMax: v('os-sc-later'),
-            windowDays: Math.max(1, Math.round(num('os-sc-window', d.scheduling.windowDays))), reviewer: v('os-sc-reviewer'),
+            greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,
+            maxTierByStatus: { ...(cur.scheduling.maxTierByStatus || {}), 'Ongoing Maintenance': v('os-sc-om'), 'White Glove': v('os-sc-wg') },
+            maxTierDefault: v('os-sc-other'),
+            windowDays: Math.max(1, Math.round(num('os-sc-window', d.scheduling.windowDays))), reviewer: v('os-sc-reviewer'), fallbackReviewer: v('os-sc-fallback'),
         },
         emailLinkableResourceTypes: [...document.querySelectorAll('.os-link-type:checked')].map((el) => el.dataset.type),
     };

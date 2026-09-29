@@ -15,7 +15,7 @@
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
-import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, MAX_DAILY_HOURS } from '../../core/scheduling.js';
+import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 
 const resourceLookup = (client) => (id) =>
@@ -54,18 +54,24 @@ OL.openActivationReview = async function(clientId, itemId) {
     OL.renderActivationReviewStep();
 };
 
-// How busy the assignee is on a row's due date: meetings + tasks already due that day, plus the other included
-// rows in this plan for the same person and day, plus this row's own estimate. Amber from 4 hours, red over 5
-// (the auto-slotter itself stops at 6.4).
+// How busy the assignee is on a row's due date, before this row: meetings + tasks already due that day, plus the
+// other included rows in this plan for the same person and day. The level (Green under 3h, Yellow 3h-3:59, Red 4h-4:59,
+// Closed 5h+ — cut-offs are settings) is the same one the auto-slotter uses, and `over` says whether it is past what
+// this client's status may use.
 function rowLoad(st, row) {
     if (!st || row.kind !== 'implementation' || !row.assignee || !row.dueDate) return null;
     const day = String(row.dueDate).slice(0, 10);
     const base = dailyLoadHours(st.calendarEvents, st.existingTasks, row.assignee, day);
     const others = (st.plan || []).filter((r) => r !== row && r.included && r.kind === 'implementation' && r.assignee === row.assignee && String(r.dueDate || '').slice(0, 10) === day)
         .reduce((sum, r) => sum + (Number(r.estimatedHours) || 0), 0);
-    const hours = base + others + (Number(row.estimatedHours) || 0);
-    return { hours, tier: dayLoadTier(hours) };
+    const hours = base + others;
+    const cfg = getOlSettings().scheduling;
+    const level = loadTier(hours, cfg);
+    const limit = maxTierFor(state.clients?.[st.clientId]?.meta?.status, cfg);
+    return { hours, tier: dayLoadTier(hours, cfg), level, over: level === 'closed' || TIER_ORDER.indexOf(level) > TIER_ORDER.indexOf(limit), limit };
 }
+
+const LEVEL_STYLE = { green: ['#16a34a', 'Green'], yellow: ['#ca8a04', 'Yellow'], red: ['#ef4444', 'Red'], closed: ['#6b7280', 'Closed'] };
 
 function rowHTML(st, row) {
     const isAsk = row.kind === 'ask';
@@ -85,7 +91,7 @@ function rowHTML(st, row) {
                                onchange="OL.setActivationRowDueDate('${row.id}', this.value)">
                         <span class="tiny" style="color:${row.estimatedHours ? 'var(--text-muted, #94a3b8)' : 'inherit'};">${row.estimatedHours ? `est. ${row.estimatedHours}h` : ''}</span>
                     </div>
-                    ${(() => { const l = rowLoad(st, row); if (!l || l.tier === 'clear') return ''; const c = l.tier === 'red' ? '#ef4444' : '#f59e0b'; return `<div class="tiny" style="color:${c}; margin-top:2px;">${l.tier === 'red' ? 'Very busy' : 'Getting busy'}: ${l.hours.toFixed(1)}h booked that day.</div>`; })()}
+                    ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked that day${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
                     ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next ${getOlSettings().scheduling.windowDays} working days — ${esc(row.reviewer || 'a person')} needs to pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}

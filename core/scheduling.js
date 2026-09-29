@@ -19,13 +19,13 @@
 // estimate stays under the ceiling. If nothing fits within the push-out
 // window, this returns no date at all — the caller's job is to then ask a
 // human to pick manually, never to silently overbook someone.
-import { taskAssignees } from './task-assignees.js';
+import { taskAssignees, isGenericAssignee } from './task-assignees.js';
 import { DEFAULT_OL_SETTINGS } from './ol-settings.js';
 
 
 export const WORKDAY_HOURS = 8;
 export const CAPACITY_RATIO = 0.8;
-export const MAX_DAILY_HOURS = WORKDAY_HOURS * CAPACITY_RATIO;   // 6.4
+export const MAX_DAILY_HOURS = WORKDAY_HOURS * CAPACITY_RATIO;   // 6.4 — no longer used for slotting; levels come from settings
 
 // Tasks track loggedHours (worked, after the fact) but not an upfront
 // estimate — this is the field that makes scheduling possible at all.
@@ -78,36 +78,41 @@ export function dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeT
 }
 
 // ---- Priority levels (Green / Yellow / Red / Closed) ----
-// A day's booked hours (meetings + tasks already due) put it in a level. The levels, and how full a day may be
-// before a task is placed on it, are settings (core/ol-settings.js > scheduling), not constants:
-//   Green  = greenMaxHours or fewer   Yellow = up to yellowMaxHours   Red = under redMaxHours   Closed = redMaxHours+
+// A day's booked hours (meetings + tasks already due) put it in a level. The cut-offs are settings
+// (core/ol-settings.js > scheduling), not constants:
+//   Green  = under 3h        Yellow = 3h to 3:59      Red = 4h to 4:59      Closed (gray) = 5h or more
 export const TIER_ORDER = ['green', 'yellow', 'red', 'closed'];
 const tierIndex = (t) => Math.max(0, TIER_ORDER.indexOf(String(t || '').toLowerCase()));
 
 export function loadTier(hours, cfg = DEFAULT_OL_SETTINGS.scheduling) {
-    const h = Number(hours) || 0;
-    if (h <= cfg.greenMaxHours) return 'green';
-    if (h <= cfg.yellowMaxHours) return 'yellow';
-    if (h < cfg.redMaxHours) return 'red';
+    const h = Math.round((Number(hours) || 0) * 100) / 100;   // 2.999999h of float noise is not "under 3"
+    if (h < cfg.greenUnderHours) return 'green';
+    if (h < cfg.yellowUnderHours) return 'yellow';
+    if (h < cfg.redUnderHours) return 'red';
     return 'closed';
 }
 
-// The fullest level a day may already be in for a task to go on it. Same-day depends on the client's status
-// (Ongoing Maintenance up to Red, White Glove up to Yellow, everyone else up to Red by default); later days use one
-// limit for everybody.
-export function maxTierFor(clientStatus, sameDay, cfg = DEFAULT_OL_SETTINGS.scheduling) {
-    if (!sameDay) return cfg.laterDayMax || 'red';
-    return (cfg.sameDayMaxByStatus || {})[clientStatus] || cfg.sameDayMaxDefault || 'red';
+// The fullest level a day may already be in for this client's status. The same limit applies on every day checked.
+export function maxTierFor(clientStatus, cfg = DEFAULT_OL_SETTINGS.scheduling) {
+    return (cfg.maxTierByStatus || {})[clientStatus] || cfg.maxTierDefault || 'red';
+}
+
+// Who is asked to place a task by hand when no day fits: the reviewer set in settings, else the person the task is
+// assigned to (they approve their own), else the fallback. "Sphynx Task" / "Client Task" are buckets, not people.
+export function reviewerFor(assignee, cfg = DEFAULT_OL_SETTINGS.scheduling) {
+    if (String(cfg.reviewer || '').trim()) return String(cfg.reviewer).trim();
+    if (assignee && !isGenericAssignee(assignee)) return String(assignee).trim();
+    return String(cfg.fallbackReviewer || '').trim();
 }
 
 // Finds the first working day, starting today (or startDate), within windowDays, whose booked hours put it at or
-// under the level this client may use. Today is held to the stricter same-day limit.
+// under the level this client's status may use — the same limit on every day checked. Closed days are never used.
 // Returns { date: 'YYYY-MM-DD', loadHours, tier } on success, or { date: null, reason: 'no_capacity_in_window',
 // reviewer } if nothing fit — the caller hands off to a human at that point, never overbooks silently.
 export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estimatedHours, startDate, windowDays, excludeTaskId, clientStatus, config }) {
     const cfg = { ...DEFAULT_OL_SETTINGS.scheduling, ...(config || {}) };
     const span = Number.isFinite(windowDays) ? windowDays : (Number(cfg.windowDays) || 14);
-    const todayKey = toDayKey(new Date(new Date().setHours(0, 0, 0, 0)));   // same way the day keys below are made
+    const limit = maxTierFor(clientStatus, cfg);
     let cursor = startDate ? new Date(startDate) : new Date();
     cursor.setHours(0, 0, 0, 0);
 
@@ -116,20 +121,19 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
             const dayKey = toDayKey(cursor);
             const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
             const tier = loadTier(load, cfg);
-            const limit = maxTierFor(clientStatus, dayKey === todayKey, cfg);
-            if (tierIndex(tier) <= tierIndex(limit) && tier !== 'closed') {
+            if (tier !== 'closed' && tierIndex(tier) <= tierIndex(limit)) {
                 return { date: dayKey, loadHours: load, tier };
             }
             checked++;
         }
         cursor = new Date(cursor.getTime() + 86400000);
     }
-    return { date: null, reason: 'no_capacity_in_window', reviewer: cfg.reviewer || '' };
+    return { date: null, reason: 'no_capacity_in_window', reviewer: reviewerFor(assignee, cfg) };
 }
 
-// The label a caller can show for one day's load. Kept under its old name for the activation-review picker; the
-// levels now come from settings: 'clear' (Green), 'amber' (Yellow), 'red' (Red or Closed).
+// The label a caller can show for one day's load, from the same cut-offs: 'clear' (Green), 'amber' (Yellow),
+// 'red' (Red), 'closed' (gray).
 export function dayLoadTier(loadHours, cfg) {
     const t = loadTier(loadHours, cfg);
-    return t === 'green' ? 'clear' : (t === 'yellow' ? 'amber' : 'red');
+    return t === 'green' ? 'clear' : (t === 'yellow' ? 'amber' : t);
 }
