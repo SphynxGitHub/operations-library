@@ -4,6 +4,9 @@
 // the right. Only checked items go into the email; nothing here changes any task's status — sending is just
 // sending. A due date on the "Add a task" control is scheduling detail for whoever owns it, never shown in
 // the email body itself (see core/meeting-summary.js's taskLine for the same rule on meeting summaries).
+// Client tasks have no due dates of their own at all, so the "Ask the client" box here has no date field.
+// "Mark followed up" (or the box ticked when sending) closes the follow-up task; it then stays done until the
+// next follow-up is due (core/client-work-rules.js) instead of coming straight back.
 
 import { state, esc, uid, db, updateAndSync } from '../../core/data.js';
 
@@ -102,6 +105,9 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
 
     const st = OL._cfState;
     const intro = warmIntro(st.clientName, firstName(contact?.name));
+    const alreadyClosed = typeof OL.isClosedStatus === 'function' && OL.isClosedStatus(task.status);
+    const followedUp = alreadyClosed && !!task.nextFollowUpDue;
+    const everyDays = Number(state.master?.followUpEveryDays) || 3;
 
     const html = `
         <style>
@@ -110,6 +116,7 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
         </style>
         <div class="modal-head">
             <div class="modal-title-text">✉️ Client follow-up — ${esc(st.clientName)}</div>
+            ${followedUp ? `<span class="pill tiny soft" style="color:#22c55e; display:inline-flex; align-items:center; gap:4px; margin-left:10px;">✓ Followed up · next ${esc(OL.formatDayKey ? OL.formatDayKey(task.nextFollowUpDue || '', { month: 'short', day: 'numeric' }) : (task.nextFollowUpDue || ''))}</span>` : ''}
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -130,9 +137,16 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
                         <pre id="cf-sections-preview" style="white-space:pre-wrap; margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></pre>
                     </div>
 
-                    <div style="display:flex; justify-content:flex-end; gap:10px;">
-                        <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                        <button id="cf-send-btn" class="btn primary" onclick="OL.cfSend()">Send</button>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                        ${alreadyClosed ? '<span></span>' : `
+                        <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Closes this follow-up. It comes back on its own if the client still has items open when the next one is due.">
+                            <input type="checkbox" id="cf-mark-done" checked> Mark followed up after sending (next in ${everyDays} days)
+                        </label>`}
+                        <div style="display:flex; justify-content:flex-end; gap:10px;">
+                            ${alreadyClosed ? '' : `<button class="btn soft" onclick="OL.cfMarkFollowedUp()" title="Close this follow-up without sending an email (you called, for instance)">Mark followed up</button>`}
+                            <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                            <button id="cf-send-btn" class="btn primary" onclick="OL.cfSend()">Send</button>
+                        </div>
                     </div>
                 </div>
 
@@ -143,13 +157,12 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
                     <div style="border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:10px;">
                         <div class="tiny muted" style="margin-bottom:4px;">Ask the client for something new</div>
                         <input id="cf-new-title" type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box;" placeholder="What do you need?">
-                        <div style="display:grid; grid-template-columns: minmax(0,1fr) auto; gap:6px; margin-top:6px; align-items:center;">
-                            <select id="cf-new-kind" class="modal-input tiny">
+                        <div style="margin-top:6px;">
+                            <select id="cf-new-kind" class="modal-input tiny" style="width:100%;">
                                 <option value="document">Document</option>
                                 <option value="review">Review</option>
                                 <option value="feedback">Feedback</option>
                             </select>
-                            <input id="cf-new-due" type="date" class="modal-input tiny" style="width:auto;" title="Due date — not shown in the email, just scheduling">
                         </div>
                         <button type="button" class="btn tiny soft full-width" style="margin-top:6px;" onclick="OL.cfAddClientAsk()">+ Add</button>
                     </div>
@@ -178,12 +191,11 @@ OL.cfAddClientAsk = async function() {
     const title = (document.getElementById('cf-new-title')?.value || '').trim();
     if (!title) { alert('Say what you need.'); return; }
     const kind = document.getElementById('cf-new-kind')?.value || 'document';
-    const dueDate = document.getElementById('cf-new-due')?.value || '';
     const statusFor = { document: 'Pending Client Document', review: 'Pending Client Review', feedback: 'Pending Client Feedback' };
     const now = new Date().toISOString();
     const task = {
         id: uid(), title, name: title, description: '', status: statusFor[kind] || 'Pending Client Document',
-        assignee: 'Client Task', dueDate, isClientTask: true, loggedHours: 0, parentTaskId: null,
+        assignee: 'Client Task', dueDate: '', isClientTask: true, loggedHours: 0, parentTaskId: null,
         createdBy: 'client-followup', createdAt: now, askKind: kind,
     };
     await updateAndSync(() => { st.client.projectData.clientTasks.unshift(task); }, st.clientId);
@@ -192,7 +204,6 @@ OL.cfAddClientAsk = async function() {
     st.checked.clientAsks.add(task.id);
 
     const titleInput = document.getElementById('cf-new-title'); if (titleInput) titleInput.value = '';
-    const dueInput = document.getElementById('cf-new-due'); if (dueInput) dueInput.value = '';
     renderSidebar();
 };
 
@@ -224,7 +235,23 @@ OL.cfSend = async function() {
         }
     }, st.clientId);
 
+    const markDone = document.getElementById('cf-mark-done')?.checked;
     OL.closeModal();
+    if (markDone) OL._cfCloseFollowUp(st.clientId, st.taskId);
 };
 
-Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend });
+// Closes the follow-up task through the same path as the status menu (so completion steps run). The save that
+// follows parks it until the next follow-up is due.
+OL._cfCloseFollowUp = function(clientId, taskId) {
+    const closedName = ((typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).find((s) => s.isClosed) || {}).name || 'Done';
+    OL.updateGlobalTaskStatus(clientId, taskId, closedName);
+};
+
+OL.cfMarkFollowedUp = function() {
+    const st = OL._cfState;
+    if (!st) return;
+    OL.closeModal();
+    OL._cfCloseFollowUp(st.clientId, st.taskId);
+};
+
+Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend, cfMarkFollowedUp: OL.cfMarkFollowedUp });

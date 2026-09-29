@@ -3,6 +3,7 @@ import { getCurrentRound } from '../../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
 import { assigneeForRole } from '../../core/testing.js';
 import { findRequestForTask } from '../../core/request-links.js';
+import { taskAssignees } from '../../core/task-assignees.js';
 
 // -------------------------------------------------------------
 // TASK STREAM FILTER STATE
@@ -85,6 +86,8 @@ OL.getDashboardMasterTasks = function() {
                 clientId: c.id,
                 teamMembers: teamMembers,
                 assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
+                assignees: taskAssignees({ assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'), assignees: t.assignees }),
+                dueDate: OL.taskIsClientOwned(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
                 taskType: taskType,
                 resourceName: t.resourceName || t.category || 'General Resource',
                 loggedHours: Number(t.loggedHours || t.hoursLogged || 0)
@@ -557,7 +560,7 @@ OL.filterDashboardItems = function(items, assignees, status, types) {
         const assigneeMatch = !isTaskOrEvent || assignees.length === 0
             || (assignees.includes('__unassigned__') && item.isUnassigned)
             || assignees.includes(item.assignee)
-            || (item._type === 'event' && (item.assignees || []).some(a => assignees.includes(a)));
+            || (item.assignees || []).some(a => assignees.includes(a));   // events and shared tasks: any of their people
 
         const statusMatch = (item._type !== 'task' && item._type !== 'request') || status === 'all' || (item.status || 'Pending Sphynx Action') === status;
 
@@ -649,6 +652,14 @@ OL.groupDashboardItems = function(items, by) {
     const groups = new Map();
 
     items.forEach(item => {
+        // A task shared by several people appears under each of them.
+        if (by === 'assignee' && Array.isArray(item.assignees) && item.assignees.length > 1) {
+            item.assignees.forEach(a => {
+                if (!groups.has(a)) groups.set(a, { key: a, label: a, items: [], reqInfo: null, sortKey: null, overdue: false });
+                groups.get(a).items.push(item);
+            });
+            return;
+        }
         let key = 'Other', label = 'Other', reqInfo = null, sortKey = null, overdue = false;
         if (by === 'client') { key = label = item.clientName || 'Client'; }
         else if (by === 'status') { key = label = (item._type === 'task' || item._type === 'request') ? (item.status || 'Pending Sphynx Action') : (item._type === 'event' ? 'Scheduled Events' : item._type === 'email' ? 'Emails' : 'Errors'); }

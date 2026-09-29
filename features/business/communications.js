@@ -2307,8 +2307,9 @@ OL._composeTaskListHtml = function() {
     const tasks = st.includedTaskIds.map(id => (client.projectData?.clientTasks || []).find(t => String(t.id) === String(id))).filter(Boolean);
     const isClient = (t) => t.isClientTask || (OL.computeIsClientTask && OL.computeIsClientTask(t.assignee));
     const line = (t) => {
-        const who = t.assignee && !['Sphynx Task', 'Client Task'].includes(t.assignee) ? ` (${t.assignee})` : '';
-        const due = t.dueDate ? `, due ${OL.formatDayKey(OL.localDayKey(t.dueDate), { month: 'short', day: 'numeric' })}` : '';
+        const names = (OL.getTaskAssignees ? OL.getTaskAssignees(t) : [t.assignee]).filter(n => n && !['Sphynx Task', 'Client Task'].includes(n));
+        const who = names.length ? ` (${names.join(', ')})` : '';
+        const due = t.dueDate && !(OL.taskIsClientOwned && OL.taskIsClientOwned(t, client)) ? `, due ${OL.formatDayKey(OL.localDayKey(t.dueDate), { month: 'short', day: 'numeric' })}` : '';
         return `${t.title || t.name}${who}${due}`;
     };
     const groups = [['Sphynx', tasks.filter(t => !isClient(t))], [client.meta?.name || 'Your team', tasks.filter(isClient)]].filter(([, l]) => l.length);

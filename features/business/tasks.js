@@ -2,6 +2,7 @@ import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBu
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
+import { taskAssignees, applyTaskAssignees, toggledAssignees, isGenericAssignee } from '../../core/task-assignees.js';
 
 //============= GLOBAL TASK & TIME MANAGER ===============//
 
@@ -127,7 +128,7 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
 // -------------------------------------------------------------
 OL.getDistinctAssignees = function(tasks) {
     const names = new Set();
-    tasks.forEach(t => { if (t.assignee) names.add(t.assignee); });
+    tasks.forEach(t => { taskAssignees(t).forEach(a => names.add(a)); });
     return [...names].sort();
 };
 
@@ -139,7 +140,8 @@ OL.getDistinctStatuses = function(tasks) {
 
 OL.filterTasksByAssigneeStatus = function(tasks, assignee, status) {
     return tasks.filter(t => {
-        const assigneeMatch = (assignee === 'all') || (t.assignee || 'Sphynx Task') === assignee;
+        const people = taskAssignees(t);
+        const assigneeMatch = (assignee === 'all') || (people.length ? people : ['Sphynx Task']).includes(assignee);
         const statusMatch = (status === 'all') || (t.status || 'Pending Sphynx Action') === status;
         return assigneeMatch && statusMatch;
     });
@@ -226,6 +228,11 @@ OL.deleteTask = function(clientId, taskId, skipConfirm = false) {
         const client = state.clients?.[clientId];
         if (!client || !client.projectData?.clientTasks) return;
 
+        // Deleting the client follow-up parks it until the next follow-up would have been due, rather than the
+        // rules making a new one on the very next save (core/client-work-rules.js).
+        const doomed = client.projectData.clientTasks.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+        if (doomed?.consolidatedFollowUp && typeof OL.snoozeClientFollowUp === 'function') OL.snoozeClientFollowUp(client);
+
         client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
             String(t.id) !== String(taskId) && String(t.key) !== String(taskId)
         );
@@ -260,6 +267,9 @@ OL.bulkDeleteTasks = function() {
             if (!client?.projectData?.clientTasks) return;
 
             const idSet = new Set(taskIds.map(String));
+            if (client.projectData.clientTasks.some(t => t.consolidatedFollowUp && (idSet.has(String(t.id)) || idSet.has(String(t.key)))) && typeof OL.snoozeClientFollowUp === 'function') {
+                OL.snoozeClientFollowUp(client);   // see deleteTask
+            }
             client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
                 !idSet.has(String(t.id)) && !idSet.has(String(t.key))
             );
@@ -344,6 +354,14 @@ OL.classifyTask = function(task, client) {
     return CLIENT;   // any other named person on a project is the client's
 };
 
+// A task the CLIENT owns (nobody on it is Sphynx, a partner or a vendor). Those don't have due dates of their
+// own: the client follow-up chases them, so a date on one only creates noise (and false "overdue"s).
+OL.taskIsClientOwned = function(task, client) {
+    const people = taskAssignees(task);
+    if (!people.length) return task?.isClientTask === true;
+    return people.every(a => OL.classifyTask({ assignee: a, clientId: task?.clientId }, client || state.clients?.[task?.clientId]).key === 'client');
+};
+
 // Kept for callers that only need "is this Sphynx staff?"
 OL.isSphynxAssignee = function(assignee) {
     if (!assignee) return true;
@@ -403,10 +421,12 @@ OL.buildTaskFilterAssigneeOptions = function(tasks, selected) {
     const byClient = new Map();
     (tasks || []).forEach(t => {
         if (t.taskClass !== 'client') return;
-        const a = String(t.assignee || '').trim();
-        if (!a || ['client task', 'client'].includes(lc(a))) return;
-        if (!byClient.has(t.clientName)) byClient.set(t.clientName, []);
-        byClient.get(t.clientName).push(a);
+        (t.assignees && t.assignees.length ? t.assignees : [t.assignee]).forEach(name => {
+            const a = String(name || '').trim();
+            if (!a || ['client task', 'client'].includes(lc(a))) return;
+            if (!byClient.has(t.clientName)) byClient.set(t.clientName, []);
+            byClient.get(t.clientName).push(a);
+        });
     });
     [...byClient.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0]))).forEach(([name, people]) => {
         html += group(`${name} Team`, people.sort());
@@ -437,6 +457,8 @@ OL.renderBusinessTaskManager = function() {
                 clientId: c.id,
                 teamMembers: teamMembers,
                 assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
+                assignees: taskAssignees({ assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'), assignees: t.assignees }),
+                dueDate: OL.taskIsClientOwned(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
                 taskType: cls.label,
                 taskClass: cls.key,
                 taskPartnerId: cls.partnerId || null,
@@ -512,7 +534,7 @@ OL.renderBusinessTaskManager = function() {
         
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
-                    <select id="quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;">
+                    <select id="quick-task-assignee" class="modal-input tiny" style="padding-left:26px; width:100%;" onchange="OL.syncQuickDueField('quick-task-assignee', 'quick-task-duedate')">
                         ${OL.buildQuickTaskAssigneeOptions('')}
                     </select>
                 </div>
@@ -739,11 +761,14 @@ OL.renderFilteredTaskGroups = function(allTasks) {
 
         let assigneeMatch = true;
         const cls = t.taskClass ? { key: t.taskClass, partnerId: t.taskPartnerId } : OL.classifyTask(t);
-        if (assignee === 'Sphynx') assigneeMatch = cls.key === 'sphynx';
-        else if (assignee === 'Client') assigneeMatch = cls.key === 'client';
-        else if (assignee === '3rdParty') assigneeMatch = cls.key === 'thirdparty';
-        else if (String(assignee).startsWith('partner:')) assigneeMatch = cls.key === 'partner' && String(cls.partnerId) === String(assignee).slice(8);
-        else if (assignee !== 'All') assigneeMatch = t.assignee === assignee;
+        // A task shared by several people matches a category or person filter if ANY of them fits.
+        const people = t.assignees && t.assignees.length > 1 ? t.assignees : null;
+        const classes = people ? people.map(a => OL.classifyTask({ assignee: a, clientId: t.clientId }, state.clients?.[t.clientId])) : [cls];
+        if (assignee === 'Sphynx') assigneeMatch = classes.some(k => k.key === 'sphynx');
+        else if (assignee === 'Client') assigneeMatch = classes.some(k => k.key === 'client');
+        else if (assignee === '3rdParty') assigneeMatch = classes.some(k => k.key === 'thirdparty');
+        else if (String(assignee).startsWith('partner:')) assigneeMatch = classes.some(k => k.key === 'partner' && String(k.partnerId) === String(assignee).slice(8));
+        else if (assignee !== 'All') assigneeMatch = (people || [t.assignee]).includes(assignee);
 
         let dateMatch = true;
         if (dateRange !== 'All') {
@@ -813,6 +838,10 @@ OL.renderFilteredTaskGroups = function(allTasks) {
             }
         }
 
+        if (groupBy === 'assignee' && task.assignees && task.assignees.length > 1) {
+            task.assignees.forEach(a => { (groups[a] = groups[a] || []).push(task); });   // shown under each person on it
+            return;
+        }
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(task);
     });
@@ -1087,6 +1116,27 @@ OL.computeAssigneeAvatar = function(assignee) {
 // can override with its own avatarColor.
 OL.TEAM_AVATAR_COLORS = { chad: '#3b82f6', anthony: '#8b5cf6' };
 
+// Several people on one task: up to three overlapping avatars and a "+N" for the rest. Click opens the picker.
+OL.renderMultiAssigneeAvatars = function(t) {
+    const people = taskAssignees(t);
+    const shown = people.slice(0, 3);
+    const dot = (name, i) => {
+        const a = OL.computeAssigneeAvatar(name);
+        const named = !isGenericAssignee(name) && !(OL.thirdPartyAssignees || []).includes(name);
+        return `<div style="width:24px; height:24px; border-radius:50%; background:${a.avatarBg}; color:${a.avatarColor}; ${a.avatarBorder ? `border:2px solid ${a.avatarBorder}; box-sizing:border-box;` : (named ? 'border:none;' : `border:1px solid ${a.avatarColor};`)} box-shadow:0 0 0 2px var(--bg-card, #1e293b); font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; margin-left:${i ? '-8px' : '0'}; position:relative; z-index:${10 - i};">${a.avatarContent}</div>`;
+    };
+    const more = people.length > shown.length
+        ? `<div style="width:24px; height:24px; border-radius:50%; background:rgba(148,163,184,0.25); color:var(--text); font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; margin-left:-8px; box-shadow:0 0 0 2px var(--bg-card, #1e293b); position:relative;">+${people.length - shown.length}</div>` : '';
+    return `<div title="Assignees: ${esc(people.join(', '))}" style="display:flex; align-items:center; cursor:pointer;" onclick="OL.openEditTaskAssigneeDropdown(event, '${t.clientId}', '${t.id}')">${shown.map(dot).join('')}${more}</div>`;
+};
+
+// The client follow-up task, once marked done, stays out of the way until the next follow-up is due.
+OL.renderFollowUpDonePill = function(t) {
+    if (!t?.consolidatedFollowUp || !t.nextFollowUpDue || !OL.isClosedStatus(t.status)) return '';
+    const when = OL.formatDayKey ? OL.formatDayKey(t.nextFollowUpDue, { month: 'short', day: 'numeric' }) : t.nextFollowUpDue;
+    return `<span class="pill tiny soft" title="Marked done — it comes back on ${esc(t.nextFollowUpDue)} if the client still has items open" style="font-size:10px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0; color:#22c55e;"><i data-lucide="check-circle" style="width:10px;height:10px;pointer-events:none;"></i> Followed up · next ${esc(when)}</span>`;
+};
+
 OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const is3rdParty = (OL.thirdPartyAssignees || []).includes(t.assignee);
     const isGenericSphynx = t.assignee === 'Sphynx Task' || t.assignee === 'Sphynx';
@@ -1099,7 +1149,9 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const masterStatuses = OL.getSystemStatuses();
     const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
     const dotColor = activeStatusObj.color;
-    const isOverdue = !!t.dueDate && OL.localDayKey(t.dueDate) < (todayStr || OL.localDateStr()) && !activeStatusObj.isClosed && t.status !== 'Done';
+    // Client tasks have no due dates of their own (the client follow-up chases them), so no date and never "overdue".
+    const dueless = OL.taskIsClientOwned(t, state.clients?.[t.clientId]);
+    const isOverdue = !dueless && !!t.dueDate && OL.localDayKey(t.dueDate) < (todayStr || OL.localDateStr()) && !activeStatusObj.isClosed && t.status !== 'Done';
 
     const { avatarBg, avatarColor, avatarContent, avatarBorder } = OL.computeAssigneeAvatar(t.assignee);
 
@@ -1161,6 +1213,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                         <i data-lucide="message-square" style="width:10px;height:10px; pointer-events:none;"></i> ${t.comments.length}
                     </span>
                 ` : ''}
+                ${OL.renderFollowUpDonePill(t)}
             </div>
 
             <!-- Workspace Tag -->
@@ -1188,8 +1241,8 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     ${t.clickupComments.length}
                 </span>` : ''}
 
-                <!-- Due Date -->
-                <div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
+                <!-- Due Date (not for client tasks) -->
+                ${dueless ? '' : `<div onclick="event.stopPropagation();" style="position:relative; display:flex; align-items:center;">
                     ${t.dueRelativeTo ? `
                         <span class="pill tiny soft ${isOverdue ? 'due-overdue' : ''}" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-size:10px;" onclick="OL.openDueDateDropdown(event, '${t.clientId}', '${t.id}')" title="Due ${t.dueRelativeTo.offsetDays}d after '${esc(t.dueRelativeTo.predecessorTitle)}' completes">
                             <i data-lucide="link" style="width:10px;height:10px;"></i>
@@ -1204,7 +1257,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                                style="width:125px; padding-left:22px; border:none; background:transparent; font-size:11px; color:${isOverdue ? '#ef4444' : 'inherit'}; font-weight:${isOverdue ? 'bold' : 'normal'};"
                                onchange="OL.updateGlobalTaskDueDate('${t.clientId}', '${t.id}', this.value)">
                     `}
-                </div>
+                </div>`}
             </div>
 
             <div style="display:flex; align-items:center; gap:10px;">
@@ -1239,11 +1292,11 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
 
                 <!-- Assignee Avatar -->
                 <div onclick="event.stopPropagation();" style="display:flex; justify-content:center; position:relative;">
-                    <div title="Assignee: ${esc(t.assignee)}" 
+                    ${taskAssignees(t).length > 1 ? OL.renderMultiAssigneeAvatars(t) : `<div title="Assignee: ${esc(t.assignee)}" 
                          style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; ${avatarBorder ? `border:2px solid ${avatarBorder}; box-sizing:border-box;` : (isNamedPerson ? 'border:none;' : `border:1px solid ${avatarColor};`)} font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; cursor:pointer;"
                          onclick="OL.openEditTaskAssigneeDropdown(event, '${t.clientId}', '${t.id}')">
                         ${avatarContent}
-                    </div>
+                    </div>`}
                 </div>
             </div>
         </div>
@@ -1409,10 +1462,9 @@ OL.applyBulkTaskEdit = function() {
                     }
                 }
                 if (newAssignee) {
-                    const previousAssignee = task.assignee;
-                    task.assignee = newAssignee;
-                    task.isClientTask = OL.computeIsClientTask(newAssignee);
-                    if (newAssignee !== previousAssignee && typeof OL.notifyEvent === 'function') {
+                    // Bulk assign gives the task to that one person (replacing everyone who was on it).
+                    const { added } = applyTaskAssignees(task, [newAssignee], OL.computeIsClientTask);
+                    if (added.length && typeof OL.notifyEvent === 'function') {
                         OL.notifyEvent('newAssignment', newAssignee, {
                             subject: `You were assigned "${task.title || task.name}"`,
                             body: `Assigned on ${client?.meta?.name || 'a project'}.`
@@ -1422,7 +1474,7 @@ OL.applyBulkTaskEdit = function() {
                 if (newBillableVal !== '') {
                     task.billable = (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task, client)) ? false : newBillableVal === 'true';
                 }
-                if (newDueDate) {
+                if (newDueDate && !OL.taskIsClientOwned(task, client)) {   // client tasks have no due dates of their own
                     task.dueDate = newDueDate;
                 }
             });
@@ -1537,44 +1589,44 @@ OL.openEditTaskStatusQuickDropdown = function(event, clientId, taskId) {
     if (window.lucide) lucide.createIcons();
 };
 
-// 👥 Assignee Selection Popover
-OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
-    const popover = OL.createPopoverContainer(event);
+// 👥 Assignee Selection Popover — several people can be picked (a checkmark shows who is on the task).
+OL._taskAssigneePopoverHTML = function(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const task = (client?.projectData?.clientTasks || []).find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const on = new Set(taskAssignees(task).map(a => a.toLowerCase()));
     const teamOptions = OL.getClientTeamOptions(clientId);
-
-    popover.innerHTML = `
-        <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Assign Task</div>
+    const btn = (name, icon, color) => {
+        const picked = on.has(String(name).trim().toLowerCase());
+        return `
+            <button class="btn tiny ${picked ? 'primary' : 'soft'}" style="display:flex; align-items:center; gap:6px; text-align:left;" data-name="${esc(name)}"
+                    onclick="event.stopPropagation(); OL.toggleTaskAssignee('${clientId}', '${taskId}', this.dataset.name);">
+                <i data-lucide="${picked ? 'check' : icon}" style="width:12px;height:12px;${picked ? '' : `color:${color};`}"></i> ${esc(name)}
+            </button>`;
+    };
+    return `
+        <div class="tiny bold uppercase muted" style="padding:2px 4px;">Assign Task</div>
+        <div class="tiny muted" style="margin-bottom:6px; padding:0 4px;">Pick more than one to share it.</div>
         <div style="display:grid; gap:4px; max-height:260px; overflow-y:auto;">
-            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Sphynx Task');">
-                <i data-lucide="zap" style="width:12px;height:12px;color:var(--accent);"></i> Sphynx Task
-            </button>
-            <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', 'Client Task');">
-                <i data-lucide="user" style="width:12px;height:12px;color:#ec4899;"></i> Client Task
-            </button>
+            ${btn('Sphynx Task', 'zap', 'var(--accent)')}
+            ${btn('Client Task', 'user', '#ec4899')}
             ${(state.master?.sphynxTeam || []).length > 0 ? `
                 <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Sphynx Team</div>
-                ${state.master.sphynxTeam.map(m => `
-                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}');">
-                        <i data-lucide="shield-check" style="width:12px;height:12px;color:var(--accent);"></i> ${esc(m.name)}
-                    </button>
-                `).join('')}
+                ${state.master.sphynxTeam.map(m => btn(m.name, 'shield-check', 'var(--accent)')).join('')}
             ` : ''}
             ${teamOptions.length > 0 ? `
                 <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Client Team</div>
-                ${teamOptions.map(m => `
-                    <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(m.name)}');">
-                        <i data-lucide="user" style="width:12px;height:12px;color:#ec4899;"></i> ${esc(m.name)}
-                    </button>
-                `).join('')}
+                ${teamOptions.map(m => btn(m.name, 'user', '#ec4899')).join('')}
             ` : ''}
             <div class="tiny muted uppercase bold" style="margin-top:6px; padding:2px 4px;">Vendors / 3rd Party</div>
-            ${OL.thirdPartyAssignees.map(tp => `
-                <button class="btn tiny soft" style="display:flex; align-items:center; gap:6px; text-align:left;" onclick="OL.closePopoverDropdown(); OL.updateGlobalTaskAssignee('${clientId}', '${taskId}', '${esc(tp)}');">
-                    <i data-lucide="wrench" style="width:12px;height:12px;color:#a855f7;"></i> ${esc(tp)}
-                </button>
-            `).join('')}
+            ${(OL.thirdPartyAssignees || []).map(tp => btn(tp, 'wrench', '#a855f7')).join('')}
         </div>
+        <button class="btn tiny soft" style="width:100%; margin-top:8px;" onclick="OL.closePopoverDropdown()">Done</button>
     `;
+};
+
+OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
+    const popover = OL.createPopoverContainer(event);
+    popover.innerHTML = OL._taskAssigneePopoverHTML(clientId, taskId);
     if (window.lucide) lucide.createIcons();
 };
 
@@ -1715,8 +1767,9 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
 };
 
 // 👥 Persist Assignee Change to Supabase State
+// `newAssignee` is one name, or a list of names when several people share the task (core/task-assignees.js).
 OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
-    console.log(`📡 Updating Assignee for Task [${taskId}] in Client [${clientId}] -> ${newAssignee}`);
+    console.log(`📡 Updating Assignee for Task [${taskId}] in Client [${clientId}] -> ${[].concat(newAssignee).join(', ')}`);
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
@@ -1734,15 +1787,13 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         );
 
         if (task) {
-            const previousAssignee = task.assignee;
-            task.assignee = newAssignee;
-            task.isClientTask = OL.computeIsClientTask(newAssignee);
-            console.log(`✅ Assignee updated successfully for [${taskId}] -> ${newAssignee}`);
-            if (newAssignee !== previousAssignee && typeof OL.notifyEvent === 'function') {
-                OL.notifyEvent('newAssignment', newAssignee, {
+            const { list, added } = applyTaskAssignees(task, newAssignee, OL.computeIsClientTask);
+            console.log(`✅ Assignee updated successfully for [${taskId}] -> ${list.join(', ')}`);
+            if (typeof OL.notifyEvent === 'function') {
+                added.forEach(name => OL.notifyEvent('newAssignment', name, {
                     subject: `You were assigned "${task.title || task.name}"`,
                     body: `Assigned on ${client?.meta?.name || 'a project'}.`
-                });
+                }));
             }
         } else {
             console.error("❌ Task not found in client workspace:", taskId);
@@ -1751,6 +1802,16 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
 
     // Re-render immediately to reflect state
     OL.refreshTaskView();
+};
+
+// Clicking a name in the picker adds or removes that person; the picker stays open so several can be chosen.
+OL.toggleTaskAssignee = function(clientId, taskId, name) {
+    const client = state.clients?.[clientId];
+    const task = (client?.projectData?.clientTasks || []).find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    if (!task) return;
+    OL.updateGlobalTaskAssignee(clientId, taskId, toggledAssignees(taskAssignees(task), name));
+    const pop = document.getElementById('task-popover-dropdown');
+    if (pop) { pop.innerHTML = OL._taskAssigneePopoverHTML(clientId, taskId); if (window.lucide) lucide.createIcons(); }
 };
 
 // Every change to a task's time also records an itemized entry in task.timeLog
@@ -1929,6 +1990,18 @@ OL.updateQuickTaskTeamDropdown = function(clientId) {
     if (!assigneeSelect) return;
     // Picking a project first adds that project's own team (and its partner's) to the list.
     assigneeSelect.innerHTML = OL.buildQuickTaskAssigneeOptions(clientId);
+    OL.syncQuickDueField('quick-task-assignee', 'quick-task-duedate');
+};
+
+// Client tasks don't have due dates, so the date box is hidden while a client assignee is picked.
+OL.syncQuickDueField = function(assigneeId, dueId, wrapId) {
+    const a = document.getElementById(assigneeId)?.value || 'Sphynx Task';
+    const due = document.getElementById(dueId);
+    if (!due) return;
+    const hide = OL.computeIsClientTask(a);
+    const box = (wrapId && document.getElementById(wrapId)) || due;   // hide the label too when there is one
+    box.style.display = hide ? 'none' : '';
+    if (hide) due.value = '';
 };
 
 OL.navigateToClientProject = function(clientId) {
@@ -2120,7 +2193,7 @@ OL.renderInContextTaskModal = function(client, task) {
                             </span>
                             <span class="pill tiny soft" style="font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:${is3rdParty ? '#38bdf8' : (isClientAssigned ? '#fbbf24' : 'var(--accent)')}"
                                   onclick="OL.openEditTaskAssigneeDropdown(event, '${client?.id}', '${task.id}')">
-                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee: ${esc(task.assignee || 'Sphynx Task')}
+                                <i data-lucide="pencil" style="width:10px;height:10px;"></i> Assignee${taskAssignees(task).length > 1 ? 's' : ''}: ${esc(taskAssignees(task).join(', ') || 'Sphynx Task')}
                             </span>
                         </div>
                     </div>
@@ -2224,10 +2297,14 @@ OL.renderInContextTaskModal = function(client, task) {
                     </div>
 
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
+                        ${OL.taskIsClientOwned(task, client) ? `
+                        <div title="The client follow-up chases client tasks, so they don't need a date">
+                            <strong class="muted">Due Date:</strong> <span class="muted">Not needed for client tasks</span>
+                        </div>` : `
                         <div style="cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${client?.id}', '${task.id}')">
                             <strong class="muted">Due Date:</strong> ${task.dueDate ? OL.formatDayKey(OL.localDayKey(task.dueDate), {}) : (task.dueRelativeTo ? 'Relative (see below)' : 'Unscheduled')}
                             <i data-lucide="pencil" style="width:10px;height:10px; opacity:0.5; margin-left:4px;"></i>
-                        </div>
+                        </div>`}
                         <div>
                             <strong class="muted">Repeats:</strong>
                             <select class="modal-input tiny" style="width:auto; display:inline-block; padding:2px 6px;" onchange="OL.setTaskRecurrence('${client?.id}', '${task.id}', this.value)">
@@ -4132,7 +4209,8 @@ OL.createGlobalQuickTask = function() {
     const title = document.getElementById('quick-task-title')?.value;
     const assignee = document.getElementById('quick-task-assignee')?.value || 'Sphynx Task';
     const status = document.getElementById('quick-task-status')?.value || 'Pending Sphynx Action';
-    const dueDate = document.getElementById('quick-task-duedate')?.value || '';
+    // Client tasks have no due date of their own.
+    const dueDate = OL.computeIsClientTask(assignee) ? '' : (document.getElementById('quick-task-duedate')?.value || '');
 
     if (!title) {
         alert("Please provide a task title.");
