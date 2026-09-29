@@ -11,31 +11,28 @@
 import { state, esc, num, uid, getActiveClient, persist, db } from '../core/data.js';
 import { evaluateCondition, renderFieldInput } from '../core/field-schema.js';
 import { renderDependencyRow } from './scoping.js';
+import { RESOURCE_STATUSES, RESOURCE_STATUS_COLORS, normalizeResourceStatus } from '../core/resource-status.js';
 
-// Gives resources the same status pipeline tasks use (same list, same
-// colors, same default of "Pending Sphynx Action" when unset) rather than
-// a separate resource-specific list -- resources previously had no status
-// of their own at all, only the unrelated "Scoping Status" a resource
-// picks up once it's added to a proposal's scoping sheet (Do Now/Do
-// Later/etc., a different lifecycle entirely, left untouched below).
+// A resource's own status: Pending, In Process, Built or In Review (core/resource-status.js). Pending when it is
+// created; In Process / Built / In Review follow its requests and tasks automatically, and can also be set by hand.
+// This is separate from the request's own Do Now / Do Later / Don't Do / Done and from task statuses.
 OL.openEditResourceStatusDropdown = function(event, resourceId) {
     const data = OL.getCurrentProjectData();
     const res = data?.resources?.find(r => String(r.id) === String(resourceId));
     if (OL.isReferenceResource(res)) return;   // references have no status
     const popover = OL.createPopoverContainer(event);
-    const currentStatus = res?.status || 'Pending Sphynx Action';
-    const statuses = OL.getSystemStatuses();
+    const currentStatus = normalizeResourceStatus(res?.status);
 
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Update Status</div>
         <div style="display:grid; gap:4px; max-height:260px; overflow-y:auto;">
-            ${statuses.map(s => `
+            ${RESOURCE_STATUSES.map(name => `
                 <button class="btn tiny soft"
-                        style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; justify-content:flex-start; padding:6px 8px; ${currentStatus === s.name ? 'border:1px solid var(--accent); background:rgba(var(--accent-rgb),0.1);' : ''}"
-                        onclick="OL.handleResourceSave('${resourceId}', 'status', '${esc(s.name)}'); OL.closePopoverDropdown();">
-                    <span style="width:8px; height:8px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
-                    <span style="flex:1;">${esc(s.name)}</span>
-                    ${currentStatus === s.name ? '<i data-lucide="check" style="width:12px;height:12px;color:var(--accent);"></i>' : ''}
+                        style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; justify-content:flex-start; padding:6px 8px; ${currentStatus === name ? 'border:1px solid var(--accent); background:rgba(var(--accent-rgb),0.1);' : ''}"
+                        onclick="OL.handleResourceSave('${resourceId}', 'status', '${esc(name)}'); OL.closePopoverDropdown();">
+                    <span style="width:8px; height:8px; border-radius:50%; background:${RESOURCE_STATUS_COLORS[name]}; flex-shrink:0;"></span>
+                    <span style="flex:1;">${esc(name)}</span>
+                    ${currentStatus === name ? '<i data-lucide="check" style="width:12px;height:12px;color:var(--accent);"></i>' : ''}
                 </button>
             `).join('')}
         </div>
@@ -53,9 +50,8 @@ OL.isReferenceResource = function(res) {
 
 OL.renderResourceStatusPill = function(res) {
     if (OL.isReferenceResource(res)) return '';
-    const statusName = res.status || 'Pending Sphynx Action';
-    const statusObj = (OL.getSystemStatuses() || []).find(s => s.name === statusName);
-    const color = statusObj?.color || 'var(--accent)';
+    const statusName = normalizeResourceStatus(res.status);
+    const color = RESOURCE_STATUS_COLORS[statusName] || 'var(--accent)';
     return `<span class="pill tiny" style="background:${color}22; color:${color}; border:1px solid ${color}44; font-size:8px; font-weight:bold; padding:2px 6px; cursor:pointer; white-space:nowrap;" onclick="event.stopPropagation(); OL.openEditResourceStatusDropdown(event, '${res.id}')" title="Click to change status">${esc(statusName)}</span>`;
 };
 

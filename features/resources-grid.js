@@ -1284,8 +1284,8 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
             (pd.localResources || []).forEach((r) => {
                 if (!r || scopedResourceIds.has(String(r.id))) return;
                 if (typeof OL.isReferenceResource === 'function' && OL.isReferenceResource(r)) return;
-                if (r.status === 'Done') return;
-                r.status = 'Done';
+                if (r.status === 'Built') return;
+                r.status = 'Built';   // resource statuses are Pending / In Process / Built / In Review
                 marked.push(r.name || r.id);
             });
         }, clientId);

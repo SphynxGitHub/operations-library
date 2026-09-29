@@ -7,12 +7,13 @@
 // dependency management.
 
 import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
-import { addLink } from '../core/task-links.js';
+import { addLink, taskAppliesToRequest } from '../core/task-links.js';
 import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 import { backfillClientRequests } from '../core/request-backfill.js';
-import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
+import { syncResourceStatuses } from '../core/resource-status.js';
+import { isClientFacing } from '../core/request-tasks.js';
 
 // Names of task statuses that count as finished (falls back to Done).
 function closedStatusNames() {
@@ -108,7 +109,7 @@ function renderBacklogSection(client, sheet) {
         <div class="card-section" style="margin-bottom:20px; border:1px solid var(--line); border-radius:8px; overflow:hidden;">
             <div style="padding:10px 14px; background:rgba(148,163,184,0.08); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px;">
                 <i data-lucide="inbox" style="width:14px; height:14px; color:var(--muted);"></i>
-                <span class="tiny bold uppercase muted">Pending / Backlog</span>
+                <span class="tiny bold uppercase muted">Pending</span>
                 <span class="tiny muted">(${items.length})</span>
             </div>
             <div>
@@ -2273,6 +2274,11 @@ export async function setRoundApprovalStatus(round, newStatus) {
     const next = newStatus || '';
     if (next === previous) return;
 
+    if (next === 'Complete') {
+        const stillOpen = (sheet.lineItems || []).filter((i) => i && (parseInt(i.round, 10) || 1) === Number(round) && String(i.status || '') === 'Do Now');
+        if (stillOpen.length && !confirm(`Round ${round} still has ${stillOpen.length} request${stillOpen.length === 1 ? '' : 's'} marked Do Now. Mark the round Complete anyway?`)) { renderScopingSheet(); return; }
+    }
+
     await OL.updateAndSync(() => {
         const now = new Date().toISOString();
         if (!sheet.roundApprovals) sheet.roundApprovals = {};
@@ -2334,10 +2340,38 @@ function askLineHtml() {
         </div>`;
 }
 
+// Tasks that already exist for this client and are not on this request yet, for linking instead of creating new.
+// The client's own tasks come first, then Sphynx's; finished ones are left out.
+function linkableTasksFor(client, item) {
+    const closed = closedStatusNames();
+    const ctx = { sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).concat(OL.thirdPartyAssignees || []) };
+    return (client.projectData?.clientTasks || [])
+        .filter((t) => t && !t.consolidatedFollowUp && t.askKind !== 'follow_up' && !closed.includes(String(t.status || '')) && !taskAppliesToRequest(t, item.id))
+        .map((t) => ({ task: t, client: isClientFacing(t, ctx) }))
+        .sort((a, b) => (Number(b.client) - Number(a.client)) || String(a.task.title || a.task.name || '').localeCompare(String(b.task.title || b.task.name || '')));
+}
+
+function existingTasksPickerHtml(client, item) {
+    const list = linkableTasksFor(client, item);
+    if (!list.length) return '';
+    return `
+        <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line);">
+            <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Or link tasks you've already created</div>
+            <div style="max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:4px;">
+                ${list.map(({ task, client: isClient }) => `
+                    <label class="tiny" style="display:flex; align-items:center; gap:8px; padding:4px 6px; cursor:pointer;">
+                        <input type="checkbox" class="ask-link-existing" value="${esc(String(task.id))}">
+                        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(task.title || task.name || 'Task')}</span>
+                        <span class="pill tiny soft" style="font-size:9px;">${isClient ? 'Client' : 'Sphynx'}</span>
+                    </label>`).join('')}
+            </div>
+        </div>`;
+}
+
 export function openAskModal(itemId, blockFor = null) {
     const client = getActiveClient();
-    const sheet = client?.projectData?.scopingSheets?.[0];
-    const item = sheet?.lineItems?.find(i => String(i.id) === String(itemId));
+    // Any sheet (or the standalone list), not just the first one: the Requests tab lists all of them.
+    const item = client && OL.findRequestItem ? OL.findRequestItem(client, itemId) : null;
     if (!client || !item) return;
     // If opened from a Dependencies picker ("Ask the client for something new…"), the new ask task(s) also get
     // added as what that task/request/resource is waiting on — see saveAsks.
@@ -2375,9 +2409,10 @@ export function openAskModal(itemId, blockFor = null) {
 
             <div id="ask-lines">${askLineHtml()}${askLineHtml()}</div>
             <button type="button" class="btn tiny soft" onclick="OL.addAskLine()">+ Add another</button>
+            ${existingTasksPickerHtml(client, item)}
 
             <div style="display:flex; gap:10px; margin-top:16px;">
-                <button class="btn primary flex-1" onclick="OL.saveAsks('${item.id}')">Create tasks</button>
+                <button class="btn primary flex-1" onclick="OL.saveAsks('${item.id}')">Save</button>
             </div>
         </div>
     `;
@@ -2406,8 +2441,7 @@ export function refreshAskAssignees() {
 
 export async function saveAsks(itemId) {
     const client = getActiveClient();
-    const sheet = client?.projectData?.scopingSheets?.[0];
-    const item = sheet?.lineItems?.find(i => String(i.id) === String(itemId));
+    const item = client && OL.findRequestItem ? OL.findRequestItem(client, itemId) : null;
     if (!client || !item) return;
     const blockFor = OL._askModalBlockFor;
 
@@ -2420,8 +2454,9 @@ export async function saveAsks(itemId) {
         due: row.querySelector('.ask-due')?.value || '',
     })).filter(l => l.title);
 
-    if (!lines.length) {
-        alert('Add at least one thing you need.');
+    const linkIds = Array.from(document.querySelectorAll('.ask-link-existing:checked')).map((el) => el.value);
+    if (!lines.length && !linkIds.length) {
+        alert('Add at least one thing you need, or pick a task to link.');
         return;
     }
 
@@ -2432,6 +2467,15 @@ export async function saveAsks(itemId) {
 
     await OL.updateAndSync(() => {
         if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+
+        // Tasks that already exist are linked to the request rather than copied. A client task with no phase yet
+        // goes under "Before", like every other ask.
+        linkIds.forEach((id) => {
+            const t = client.projectData.clientTasks.find((x) => String(x.id) === String(id));
+            if (!t) return;
+            addLink(t, item.id, []);
+            if (!t.phase && (t.askKind || t.isClientTask || t.assignee === 'Client Task')) t.phase = 'before';
+        });
 
         const asks = lines.map(l => ({
             id: uid(),
@@ -2452,7 +2496,7 @@ export async function saveAsks(itemId) {
 
         // Client asks feed the project's ONE consolidated follow-up task (core/client-work-rules.js), which the save
         // creates or updates — no separate follow-up per batch. Third-party asks still get their own follow-up.
-        if (isThirdParty) {
+        if (isThirdParty && asks.length) {
             const followUpTitle = `Follow up with ${assignee}: ${label}`;
             const followUp = {
                 id: uid(), title: followUpTitle, name: followUpTitle,
@@ -2479,7 +2523,9 @@ export async function saveAsks(itemId) {
 
     OL._askModalBlockFor = null;
     OL.closeModal();
-    renderScopingSheet();
+    // Redraw whichever page the ask was started from (the Requests tab or the scoping sheet).
+    if (String(window.location.hash || '').includes('client-requests') && typeof OL.renderClientRequests === 'function') OL.renderClientRequests();
+    else renderScopingSheet();
     if (blockFor && typeof OL._refreshDependencySection === 'function') OL._refreshDependencySection(client.id, blockFor.kind, blockFor.id);
 }
 
@@ -2526,29 +2572,31 @@ export async function repairBrokenReqlineRequests(clientIds) {
     return results;
 }
 
-// ---- ONE-TIME REPAIR: in-process sheets built on resources, with no request data behind them ----
-// Gives each line its request fields, links the client tasks that belong to its resources (task.parentResourceId,
-// task.resourceId(s), or a resource's dependencies list) to the request via task.links[], and creates the SOP's
-// client asks for lines that are Do Now in the current approved round but were never activated. Only client asks are
-// created (never the "Build/revise" task), any ask already covered by a linked task is skipped, and the line is then
-// stamped activatedAt so it doesn't come up for activation review. Safe to run twice. Console-only:
-//   OL.backfillRequestsFromResources()                                   // dry run, all clients
-//   OL.backfillRequestsFromResources(null, { apply: true })              // do it, all clients
-//   OL.backfillRequestsFromResources(['c-123'], { apply: true })         // just these
-//   OL.backfillRequestsFromResources(null, { apply: true, activate: false })  // link only, create no asks
-export async function backfillRequestsFromResources(clientIds, { apply = false, activate = true } = {}) {
+// ---- ONE-TIME REPAIR: bring sheets built from resources up to the request model ----
+// Every line in a working round that is not Complete becomes a request (titled from its resource, typed, with the
+// resource added to it, dated), the client tasks that already exist for its resources are linked to it, and resource
+// statuses are brought in line with the rules in core/resource-status.js. No tasks are created (that happens at
+// activation). Safe to run twice. Console-only:
+//   OL.backfillRequestsFromResources()                            // dry run, all clients
+//   OL.backfillRequestsFromResources(null, { apply: true })       // do it, all clients
+//   OL.backfillRequestsFromResources(['c-123'], { apply: true })  // just these
+// The report lists, per client: normalized (requests fixed), linked / ambiguous (tasks), unresolved (lines with no name
+// and no resource), resourceStatuses (what changed), and maintenanceOpen (requests still kept on the old Client
+// Requests / maintenance sheet, which need OL.migrateClientRequestsToBacklog before that tab goes away).
+export function statusCtx() {
+    const closed = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter((st) => st.isClosed).map((st) => st.name);
+    return { closedNames: closed.length ? closed : ['Done'], sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).concat(OL.thirdPartyAssignees || []) };
+}
+
+export async function backfillRequestsFromResources(clientIds, { apply = false } = {}) {
     const ids = (clientIds && clientIds.length) ? clientIds : Object.keys(state.clients || {});
-    const askTemplates = (state.master?.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
     const results = [];
     for (const clientId of ids) {
         await loadFullClient(clientId).catch(() => null);
         const client = state.clients?.[clientId];
         if (!client?.projectData) continue;
         const lookup = (id) => (client.projectData.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
-        const ctx = {
-            askTemplates, roles: state.master?.roles || [], assigneeByType: state.master?.assigneeByType || {},
-            uid, now: new Date().toISOString(), lookupResource: lookup, activate,
-        };
+        const ctx = { ...statusCtx(), lookupResource: lookup };
         let report;
         if (apply) {
             await updateAndSync(() => { report = backfillClientRequests(client, ctx); }, clientId);
@@ -2556,11 +2604,14 @@ export async function backfillRequestsFromResources(clientIds, { apply = false, 
             // Dry run: same code on a throwaway copy, so nothing real is touched.
             report = backfillClientRequests({ ...client, projectData: JSON.parse(JSON.stringify(client.projectData)) }, ctx);
         }
-        if (report && (report.normalized.length || report.linked.length || report.ambiguous.length || report.activated.length)) results.push(report);
+        if (report && (report.normalized.length || report.linked.length || report.ambiguous.length || report.unresolved.length || report.resourceStatuses.length || report.maintenanceOpen)) results.push(report);
     }
     console.log(apply ? 'Backfill applied:' : 'DRY RUN — nothing changed. Re-run with { apply: true }:', results);
     return results;
 }
+
+// Called from persist() (core/data.js) just before a client saves, so resource statuses follow the rounds and tasks.
+OL.syncResourceStatuses = function(client) { return syncResourceStatuses(client, statusCtx()); };
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
@@ -2577,7 +2628,7 @@ Object.assign(window.OL, {
     setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,
-    repairBrokenReqlineRequests, backfillRequestsFromResources
+    repairBrokenReqlineRequests, backfillRequestsFromResources, statusCtx
 });
 
 window.renderScopingSheet = renderScopingSheet;

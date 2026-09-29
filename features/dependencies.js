@@ -8,6 +8,7 @@
 // (Resources keep their older, separate "dependencies" list untouched.)
 
 import { state, esc, updateAndSync } from '../core/data.js';
+import { isClientFacing } from '../core/request-tasks.js';
 
 const KIND_ICON = { task: 'check-square', request: 'git-pull-request', resource: 'database' };
 const KIND_LABEL = { task: 'Task', request: 'Request', resource: 'Resource' };
@@ -115,6 +116,22 @@ export function renderDependencySection(clientId, kind, id) {
             .slice(0, q ? 20 : 30);
     }
 
+    // On a client task: the client's open Sphynx tasks, so one can be marked as waiting on this.
+    let holdsUpHtml = '';
+    const sphynxCtx = { sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).concat(OL.thirdPartyAssignees || []) };
+    if (kind === 'task' && isClientFacing(item, sphynxCtx)) {
+        const already = new Set(blocking.filter((b) => b.kind === 'task').map((b) => String(b.id)));
+        const sphynxTasks = (project(clientId)?.clientTasks || [])
+            .filter((t) => t && String(t.id) !== String(id) && !isClientFacing(t, sphynxCtx) && !t.consolidatedFollowUp && t.askKind !== 'follow_up' && !isDone('task', t) && !already.has(String(t.id)))
+            .sort((a, b) => String(a.title || a.name || '').localeCompare(String(b.title || b.name || '')));
+        holdsUpHtml = `
+            <div class="tiny muted" style="margin:10px 0 4px;">Sphynx tasks waiting on this</div>
+            <select class="modal-input tiny" style="width:100%;" onchange="if (this.value) OL.addBlockingTask('${esc(clientId)}', '${esc(String(id))}', this.value)">
+                <option value="">${sphynxTasks.length ? '+ Pick a Sphynx task that can\'t move until the client does this…' : 'No open Sphynx tasks for this client'}</option>
+                ${sphynxTasks.map((t) => `<option value="${esc(String(t.id))}">${esc(t.title || t.name || 'Task')}</option>`).join('')}
+            </select>`;
+    }
+
     return `
     <div id="deps-${esc(key)}" style="margin-bottom:20px; background:rgba(255,255,255,0.02); padding:14px; border-radius:6px; border:1px solid ${blocked ? '#f59e0b' : 'var(--line)'};">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -145,6 +162,7 @@ export function renderDependencySection(clientId, kind, id) {
                 </div>`).join('') : '<span class="tiny muted">No matches in this project.</span>'}
         </div>` : ''}
         </div>
+        ${holdsUpHtml}
         ${blocking.length ? `
             <div class="tiny muted" style="margin:10px 0 4px;">Blocking</div>
             <div style="display:grid; gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
@@ -201,6 +219,24 @@ document.addEventListener('mousedown', (e) => {
 OL.setDependencySearch = function (clientId, kind, id, value) {
     OL._depSearch[`${kind}-${id}`] = value;
     OL.reRenderPreservingFocus ? OL.reRenderPreservingFocus(() => refresh(clientId, kind, id)) : refresh(clientId, kind, id);
+};
+
+// From a client task: mark a Sphynx task as waiting on it. The link lives on the Sphynx task (its "Waiting on"
+// list), so this adds the client task there and redraws the client task's own Dependencies section.
+OL.addBlockingTask = function (clientId, clientTaskId, sphynxTaskId) {
+    if (createsCycle(clientId, 'task', sphynxTaskId, 'task', clientTaskId)) {
+        alert('That would create a loop — this client task is already waiting on that Sphynx task.');
+        return;
+    }
+    updateAndSync(() => {
+        const t = findItem(clientId, 'task', sphynxTaskId);
+        if (!t) return;
+        if (!t.blockedBy) t.blockedBy = [];
+        if (!t.blockedBy.some((d) => d.kind === 'task' && String(d.id) === String(clientTaskId))) {
+            t.blockedBy.push({ kind: 'task', id: clientTaskId, addedDate: new Date().toISOString() });
+        }
+    }, clientId);
+    refresh(clientId, 'task', clientTaskId);
 };
 
 OL.addBlockedBy = function (clientId, kind, id, depKind, depId) {
