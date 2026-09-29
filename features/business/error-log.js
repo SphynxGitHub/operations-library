@@ -269,7 +269,7 @@ OL.renderErrorLogRow = function(r, locked) {
                 <strong style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
                 <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" onclick="event.stopPropagation();">
                     ${OL.renderErrorTaskButton(r)}
-                    <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.updateErrorStatus('${r.id}', this.value)">
+                    <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.onErrorStatusSelect(this, '${r.id}')">
                         <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                         <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
                     </select>
@@ -439,6 +439,7 @@ OL.updateErrorStatus = async function(id, newStatus, opts = {}) {
     // only set by that flow itself, once the fields are filled in; opts.extra carries them into the same update.
     if (newStatus === 'resolved' && !opts.skipGate) {
         await OL.requestCompleteError(id);
+        OL._rerenderErrorLog();   // safety net for any caller that flipped a control to "Complete" first
         return false;
     }
 
@@ -559,7 +560,7 @@ OL.openErrorDetailModal = async function(id) {
             <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:10px;">
                 ${OL.renderErrorTaskButton(r)}
                 <button type="button" class="btn tiny soft" onclick="OL.emailErrorInContext('${r.id}')" title="Open an email draft with this error's details inside it">${ic('mail')}Send email</button>
-                <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.updateErrorStatusAndRefreshModal('${r.id}', this.value)">
+                <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.onErrorStatusSelect(this, '${r.id}', true)">
                     <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                     <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>
                 </select>
@@ -1143,7 +1144,7 @@ OL.onErrorTaskClosed = function(clientId, task) {
     OL._errorTaskMapCache = null;
     const errorId = String(task.errorId);
     if (!OL._errorClosePromptQueue.some(q => q.errorId === errorId)) {
-        OL._errorClosePromptQueue.push({ errorId, taskTitle: task.title || task.name || 'Task' });
+        OL._errorClosePromptQueue.push({ errorId, taskTitle: task.title || task.name || 'Task', closedAt: task.completedAt || new Date().toISOString() });
     }
     // Wait for the status change to finish saving and re-rendering before asking.
     setTimeout(() => OL._drainErrorClosePrompts(), 150);
@@ -1159,6 +1160,7 @@ OL._drainErrorClosePrompts = async function() {
         const { data: err } = await db.from('error_log').select('id, title, service, status').eq('id', next.errorId).maybeSingle();
         // Gone, or already completed: nothing to ask.
         if (!err || err.status === 'resolved') { OL._finishErrorClosePrompt(); return; }
+        OL._errorClosePromptCurrent = next;
         OL._showErrorClosePrompt(err, next.taskTitle);
     } catch (e) {
         console.error('Could not check the error for a closed task:', e);
@@ -1182,7 +1184,7 @@ OL._showErrorClosePrompt = function(err, taskTitle) {
             <div class="small" style="line-height:1.5; margin-bottom:6px;">
                 The task <strong>${esc(taskTitle)}</strong> is closed, but the error <strong>${esc(err.title || err.service || 'this error')}</strong> is still open.
             </div>
-            <div class="tiny muted" style="margin-bottom:16px;">You'll be asked for the cause, resolution and notes before it closes. If you leave it open, it stays in your Dashboard feed until it's marked complete.</div>
+            <div class="tiny muted" style="margin-bottom:16px;">You'll be asked for the cause and resolution before it closes. If you leave it open, it stays in your Dashboard feed until it's marked complete.</div>
             <div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
                 <button class="btn small soft" onclick="OL.dismissErrorClosePrompt()">Leave open</button>
                 <button class="btn small soft" onclick="OL.dismissErrorClosePrompt(); OL.openErrorDetailModal('${id}')">Open error card</button>
@@ -1210,19 +1212,50 @@ OL.dismissErrorClosePrompt = function() {
 // those are already filled in). The queue moves on to the next prompt only once this one is finished or cancelled.
 OL.completeErrorFromPrompt = async function(id) {
     document.getElementById('error-close-prompt')?.remove();
-    await OL.requestCompleteError(id, { onDone: () => OL._finishErrorClosePrompt() });
+    const closedAt = OL._errorClosePromptCurrent?.closedAt;
+    await OL.requestCompleteError(id, { fromTask: { closedAt }, onDone: () => OL._finishErrorClosePrompt() });
 };
 
 // =============================================================
-// COMPLETE ERROR — cause, resolution and notes are required before an error can be marked complete, so a
-// closed error never goes into the log without the write-up. Every route to "resolved" (the task-closed prompt,
-// the status dropdown on a card, the dropdown in the detail modal) goes through OL.requestCompleteError, which
-// completes straight away when all three are already filled in and otherwise asks for them first.
+// COMPLETE ERROR — cause and resolution are required before an error can be marked complete, so a closed error
+// never goes into the log without its write-up. Notes are optional. Every route to "resolved" (the task-closed
+// prompt, the status dropdown on a card, the dropdown in the detail modal) goes through OL.requestCompleteError,
+// which completes straight away when both are already filled in and otherwise asks for them first.
+//
+// The dropdowns are reset to "Open" the moment "Complete" is picked (OL.onErrorStatusSelect) and only become
+// "Complete" once the form is submitted, so cancelling leaves the error exactly as it was.
 // =============================================================
-OL._errorNeedsCloseoutNotes = function(row) {
-    return !(row?.cause || '').trim() || !(row?.resolution || '').trim() || !(row?.notes || '').trim();
+OL._errorNeedsCloseout = function(row) {
+    return !(row?.cause || '').trim() || !(row?.resolution || '').trim();
 };
 
+// Notes get a "Completed from task on <date>." line when the error is being completed because its task closed.
+OL._withTaskCompletionNote = function(existingNotes, closedAt) {
+    const when = new Date(closedAt || Date.now()).toLocaleDateString([], { dateStyle: 'medium' });
+    const line = `Completed from task on ${when}.`;
+    const cur = (existingNotes || '').trim();
+    if (!cur) return line;
+    return cur.includes(line) ? cur : `${cur}\n${line}`;
+};
+
+// A status dropdown changed. "Complete" is never applied by the dropdown itself: it snaps back to Open and the
+// form (or, if cause and resolution are already filled in, a straight completion) takes over.
+OL.onErrorStatusSelect = function(selectEl, id, inModal = false) {
+    const value = selectEl.value;
+    if (value === 'resolved') {
+        selectEl.value = 'open';
+        return OL.requestCompleteError(id, { onDone: (ok) => { if (ok && inModal) OL._refreshErrorModalAfterStatusChange(id); } });
+    }
+    return inModal ? OL.updateErrorStatusAndRefreshModal(id, value) : OL.updateErrorStatus(id, value);
+};
+
+OL._refreshErrorModalAfterStatusChange = function(id) {
+    const stillPresent = OL.errorLogState.rows.find(r => r.id === id);
+    if (stillPresent) OL.openErrorDetailModal(id);
+    else OL.closeModal();
+};
+
+// opts.fromTask: { closedAt } — set when completing because the error's task was closed.
 // opts.onDone(success) runs once the flow ends: true = the error is now complete, false = it was left open.
 OL.requestCompleteError = async function(id, opts = {}) {
     const done = (ok) => { if (typeof opts.onDone === 'function') opts.onDone(ok); return ok; };
@@ -1232,13 +1265,15 @@ OL.requestCompleteError = async function(id, opts = {}) {
     if (!row) { alert('Could not load that error.'); return done(false); }
     if (row.status === 'resolved') return done(true);
 
-    if (!OL._errorNeedsCloseoutNotes(row)) {
-        const ok = await OL.updateErrorStatus(id, 'resolved', { skipGate: true });
+    const notes = opts.fromTask ? OL._withTaskCompletionNote(row.notes, opts.fromTask.closedAt) : (row.notes || '');
+
+    if (!OL._errorNeedsCloseout(row)) {
+        const extra = notes !== (row.notes || '') ? { notes, notes_mentions: OL.extractMentions ? OL.extractMentions(notes) : [] } : undefined;
+        const ok = await OL.updateErrorStatus(id, 'resolved', { skipGate: true, extra });
         return done(ok !== false);
     }
 
-    OL._rerenderErrorLog();   // a dropdown that was just flipped to "Complete" goes back to Open until the form is submitted
-    OL._showErrorCompleteForm(row, opts);
+    OL._showErrorCompleteForm({ ...row, notes }, opts);
     return false;
 };
 
@@ -1265,7 +1300,7 @@ OL._showErrorCompleteForm = function(row, opts = {}) {
                 <i data-lucide="check-circle" style="width:16px;height:16px;color:#22c55e;"></i> Complete this error
             </div>
             <div class="tiny muted" style="margin-bottom:16px; line-height:1.5;">
-                <strong>${esc(row.title || row.service || 'Untitled Error')}</strong> — log what happened before it's closed. All three are required.
+                <strong>${esc(row.title || row.service || 'Untitled Error')}</strong> — log what happened before it's closed. Cause and resolution are required.
             </div>
             <div style="display:flex; flex-direction:column; gap:14px;">
                 <div>
@@ -1283,7 +1318,7 @@ OL._showErrorCompleteForm = function(row, opts = {}) {
                     <textarea id="ecf-resolution" class="modal-input" rows="3" style="${F} resize:vertical;" placeholder="How was it fixed?">${esc(row.resolution || '')}</textarea>
                 </div>
                 <div>
-                    <label class="tiny muted bold" style="${L}">Additional Notes <span style="color:#ef4444;">*</span></label>
+                    <label class="tiny muted bold" style="${L}">Additional Notes <span style="font-weight:normal;">(optional)</span></label>
                     <div style="position:relative;">
                         <div id="task-comment-editor-notes-done-${id}" contenteditable="true" class="modal-input"
                              style="${F} min-height:70px; max-height:200px; overflow-y:auto;"
@@ -1331,7 +1366,7 @@ OL.submitErrorCompleteForm = async function() {
     const resolution = document.getElementById('ecf-resolution')?.value.trim() || '';
     const notes = (document.getElementById(`task-comment-editor-notes-done-${ctx.id}`)?.innerText || '').trim();
 
-    const missing = [!cause && 'Cause', !resolution && 'Resolution', !notes && 'Additional Notes'].filter(Boolean);
+    const missing = [!cause && 'Cause', !resolution && 'Resolution'].filter(Boolean);
     const errEl = document.getElementById('ecf-error');
     if (missing.length) {
         if (errEl) { errEl.textContent = `Please fill in: ${missing.join(', ')}.`; errEl.style.display = 'block'; }
@@ -1342,7 +1377,7 @@ OL.submitErrorCompleteForm = async function() {
     const btn = document.getElementById('ecf-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
 
-    const mentions = OL.extractMentions ? OL.extractMentions(notes) : [];
+    const mentions = notes && OL.extractMentions ? OL.extractMentions(notes) : [];
     const ok = await OL.updateErrorStatus(ctx.id, 'resolved', { skipGate: true, extra: { cause, resolution, notes, notes_mentions: mentions } });
     if (ok === false) {   // the save failed (an alert already said why): keep the form open so nothing typed is lost
         if (btn) { btn.disabled = false; btn.textContent = 'Complete error'; }
