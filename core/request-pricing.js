@@ -67,12 +67,14 @@ export function priceRequest(item, resources, ctx = {}) {
 // The resources of a request as they appear on the client's printed sheet: each with its own price (its units
 // and its fee), and the hours when the request is priced by time. Empty for a request with only one resource,
 // which prints as it always has. esc escapes text for the page.
-export function renderRequestResourcesHtml(breakdown, esc = (s) => String(s ?? '')) {
+export function renderRequestResourcesHtml(breakdown, esc = (s) => String(s ?? ''), opts = {}) {
+    // How a resource's description is written into the page: the caller's renderer (which keeps formatting), else escaped.
+    const descHtml = typeof opts.descriptionHtml === 'function' ? opts.descriptionHtml : esc;
     if (!breakdown || breakdown.lines.length < 2) return '';
     const money = (n) => `$${Number(n).toLocaleString('en-US')}`;
     const rows = breakdown.lines.map((l) => {
         const units = l.units.map((u) => `${u.count} ${esc(u.label)}`).join(' · ');
-        return `<div class="res-line"><span class="res-name">${esc(l.name)}${l.type ? ` <span class="res-type">${esc(l.type)}</span>` : ''}${units ? ` <span class="res-units">${units}</span>` : ''}${l.description ? `<span class="res-desc">${esc(l.description)}</span>` : ''}</span><span class="res-fee">${money(l.fee)}</span></div>`;
+        return `<div class="res-line"><span class="res-name">${esc(l.name)}${l.type ? ` <span class="res-type">${esc(l.type)}</span>` : ''}${units ? ` <span class="res-units">${units}</span>` : ''}${l.description ? `<div class="res-desc">${descHtml(l.description)}</div>` : ''}</span><span class="res-fee">${money(l.fee)}</span></div>`;
     });
     if (breakdown.hoursFee > 0) rows.push(`<div class="res-line"><span class="res-name">Estimated time <span class="res-units">${breakdown.hours} hour${breakdown.hours === 1 ? '' : 's'}</span></span><span class="res-fee">${money(breakdown.hoursFee)}</span></div>`);
     return `<div class="res-lines">${rows.join('')}</div>`;
@@ -83,6 +85,9 @@ export const REQUEST_RESOURCES_CSS = `
 .res-line { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; font-size: 9px; color: #334155; }
 .res-name { flex: 1; }
 .res-desc { display: block; margin-top: 1px; font-size: 9px; font-style: italic; color: #64748b; line-height: 1.4; }
+.res-desc p, .item-desc p { margin: 0 0 2px; }
+.res-desc ul, .res-desc ol, .item-desc ul, .item-desc ol { margin: 2px 0; padding-left: 14px; }
+.res-desc a, .item-desc a { color: #0369a1; }
 .res-type { font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid #e2e8f0; border-radius: 3px; padding: 0 5px; color: #475569; margin-left: 4px; }
 .res-units { color: #94a3b8; margin-left: 6px; }
 .res-fee { font-variant-numeric: tabular-nums; font-weight: 700; color: #0f172a; white-space: nowrap; }`;
