@@ -237,11 +237,19 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
                 groupKey = task.assignee || 'Sphynx Task';
             }
             else if (groupBy === 'request') {
-                const item = task.requestLineItemId ? OL.findRequestItem(client, task.requestLineItemId) : null;
-                if (item) {
-                    groupKey = 'req:' + item.id;
-                    reqMeta[groupKey] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'build', round: Math.max(parseInt(item.round, 10) || 1, 1), status: item.status || '' };
-                } else groupKey = 'No Request';
+                // Read links[] (falling back to the legacy requestLineItemId), the same way the rest of the app does.
+                // A task linked to several requests is shown under each of them.
+                const items = requestIdsForTask(task).map(id => OL.findRequestItem(client, id)).filter(Boolean);
+                if (items.length) {
+                    items.forEach(item => {
+                        const key = 'req:' + item.id;
+                        reqMeta[key] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'build', round: Math.max(parseInt(item.round, 10) || 1, 1), status: item.status || '' };
+                        if (!groups[key]) groups[key] = [];
+                        if (!groups[key].includes(task)) groups[key].push(task);
+                    });
+                    return;
+                }
+                groupKey = 'No Request';
             }
 
             if (!groups[groupKey]) groups[groupKey] = [];
