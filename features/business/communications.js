@@ -1582,8 +1582,8 @@ OL.confirmExcerptLink = async function() {
     OL._excerptLinkState = null;
     OL._pendingSuggestionLink = null;
     OL.closeModal();
-    if (updatePayload.suggestions && await OL._maybeAutoArchiveAfterSuggestions(st.messageId)) return;
     OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
+    if (updatePayload.suggestions) OL._maybePromptArchiveAfterSuggestions(st.messageId);
 };
 
 // ---- showing what's already linked, with jump-to-target and unlink ----
@@ -1907,8 +1907,8 @@ OL.linkGmailSuggestion = async function(messageId, suggestionId) {
     const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'linked' } : s);
 
     await db.from('gmail_messages').update({ piece_links: pieceLinks, suggestions }).eq('id', messageId);
-    if (await OL._maybeAutoArchiveAfterSuggestions(messageId)) return;
     OL.openGmailMessageModal(messageId);
+    OL._maybePromptArchiveAfterSuggestions(messageId);
 };
 
 // For a suggestion with no ready-made match (new_request/revision, or a
@@ -1924,22 +1924,59 @@ OL.openExcerptLinkPickerForSuggestion = function(messageId, suggestionId) {
     });
 };
 
-// Auto-archive rule for suggestions: once every suggested item on an email has been linked or dismissed, the
-// email is dealt with, so it's archived (only this message, in the app and in Gmail). An email with nothing
-// suggested is never archived by this — and a quick one-item link ("This answers it") doesn't archive on its
-// own either; see saveGmailLink for the other rule (linked to a project AND another item).
-// Returns true if it archived, so the caller knows not to reopen the email.
-OL._maybeAutoArchiveAfterSuggestions = async function(messageId) {
+// Archive rule for suggestions: once every suggested item on an email has been linked or dismissed, the email is
+// dealt with — so the app ASKS whether to archive it (only this message, in the app and in Gmail). It never archives
+// on its own. An email with nothing suggested never triggers this, and a quick one-item link ("This answers it")
+// doesn't either; see saveGmailLink for the other trigger (linked to a project AND another item).
+OL._maybePromptArchiveAfterSuggestions = async function(messageId) {
     const { data: m, error } = await db.from('gmail_messages').select('suggestions, archived').eq('id', messageId).single();
-    if (error || !m || m.archived) return false;
+    if (error || !m || m.archived) return;
     const list = Array.isArray(m.suggestions) ? m.suggestions : [];
-    if (!list.length) return false;
-    if (!list.every((s) => s && (s.status === 'linked' || s.status === 'dismissed'))) return false;
-    OL.closeModal();
-    await OL.archiveGmailMessage(messageId, true, { wholeThread: false, skipClose: true });
-    await OL.loadGmailFeed();
-    OL._refreshAfterGmailAction();
-    return true;
+    if (!list.length) return;
+    if (!list.every((s) => s && (s.status === 'linked' || s.status === 'dismissed'))) return;
+    OL.promptArchiveEmail(messageId, 'suggestions');
+};
+
+// The confirmation itself. Its own layer above any open modal (the email is usually still open behind it), and
+// clicking outside means "not now" — nothing is archived unless "Archive" is pressed.
+OL._archivePromptFor = null;
+OL.promptArchiveEmail = async function(messageId, reason) {
+    if (OL._archivePromptFor === messageId) return;   // already asking about this one
+    const { data: m } = await db.from('gmail_messages').select('id, subject, archived').eq('id', messageId).maybeSingle();
+    if (!m || m.archived) return;
+
+    OL._archivePromptFor = messageId;
+    document.getElementById('archive-email-prompt')?.remove();
+    const why = reason === 'suggestions'
+        ? 'Every suggested item on it has been linked or dismissed.'
+        : "It's linked to a project and to another item, so it looks dealt with.";
+    const wrap = document.createElement('div');
+    wrap.id = 'archive-email-prompt';
+    wrap.style.cssText = 'position:fixed; inset:0; z-index:20000; display:flex; align-items:center; justify-content:center; background:rgba(2,6,23,0.6);';
+    wrap.onclick = () => OL.answerArchivePrompt(false);
+    wrap.innerHTML = `
+        <div class="card" style="max-width:420px; width:90vw; padding:20px; cursor:default;" onclick="event.stopPropagation();">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:bold;">
+                <i data-lucide="archive" style="width:16px;height:16px;color:var(--accent);"></i> Archive this email?
+            </div>
+            <div class="small" style="line-height:1.5; margin-bottom:6px;">${esc(why)}</div>
+            <div class="tiny muted" style="margin-bottom:16px;">${m.subject ? `<strong>${esc(m.subject)}</strong><br>` : ''}It will be archived here and in Gmail. Other messages in the conversation aren't touched.</div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn small soft" onclick="OL.answerArchivePrompt(false)">Not now</button>
+                <button class="btn small primary" style="font-weight:bold;" onclick="OL.answerArchivePrompt(true)">Archive</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.answerArchivePrompt = async function(archive) {
+    const id = OL._archivePromptFor;
+    document.getElementById('archive-email-prompt')?.remove();
+    OL._archivePromptFor = null;
+    if (!archive || !id) return;
+    // Same as the Archive button: this message only, in the app and in Gmail; closes its modal and refreshes the list.
+    await OL.archiveGmailMessage(id, true, { wholeThread: false });
 };
 
 OL.dismissGmailSuggestion = async function(messageId, suggestionId) {
@@ -1947,8 +1984,8 @@ OL.dismissGmailSuggestion = async function(messageId, suggestionId) {
     if (fetchErr) return;
     const suggestions = (m.suggestions || []).map((s) => s.id === suggestionId ? { ...s, status: 'dismissed' } : s);
     await db.from('gmail_messages').update({ suggestions }).eq('id', messageId);
-    if (await OL._maybeAutoArchiveAfterSuggestions(messageId)) return;
     OL.openGmailMessageModal(messageId);
+    OL._maybePromptArchiveAfterSuggestions(messageId);
 };
 
 // -------------------------------------------------------------
@@ -3352,19 +3389,15 @@ OL.saveGmailLink = async function({ skipArchive = false } = {}) {
         }
     }
 
-    // 4. Archive THIS email if the link is specific enough AND this wasn't
-    // a quick, partial link (skipArchive — see the "This answers it"
-    // button, and note below on the fuller suggested-items rule). Only
-    // this message — the rest of the conversation is left exactly as it
-    // is.
-    if (!skipArchive && st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
-        OL.closeModal();
-        await OL.archiveGmailMessage(st.emailId, true, { wholeThread: false, skipClose: true });
-    } else {
-        OL.closeModal();
-    }
+    OL.closeModal();
     await OL.loadGmailFeed();
     OL._refreshAfterGmailAction();
+    // 4. If the link is specific enough (a project AND another item) and this wasn't a quick, partial link
+    // (skipArchive — see the "This answers it" button, and the suggested-items rule above), ASK whether to archive
+    // THIS email. Nothing is archived unless it's confirmed, and the rest of the conversation is never touched.
+    if (!skipArchive && st.clientId && (st.taskId || st.eventId || st.resourceId || st.requestId)) {
+        OL.promptArchiveEmail(st.emailId, 'linked');
+    }
     // Then SUGGEST (never do) the same for the thread's other messages.
     const { note: _omitNote, ...threadLinks } = updatePayload;
     OL.promptThreadFollowUp(st.emailId, threadLinks);
