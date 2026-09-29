@@ -13,6 +13,7 @@
 //   Best, <sender>
 
 import { taskAssignees } from './task-assignees.js';
+import { linksForTask } from './task-links.js';
 const PLACEHOLDER_ASSIGNEES = ['Sphynx Task', 'Client Task'];
 
 const lower = (v) => String(v || '').trim().toLowerCase();
@@ -71,10 +72,14 @@ export function greetingNames(recipients, { sphynxEmails = [], people = [] } = {
 }
 
 // Open tasks that came out of this meeting, excluding the summary task itself and follow-ups.
-export function tasksForEvent(tasks, eventId, closedNames) {
+// opts.requestIds: ids of the requests linked to this meeting. A task linked to one of those requests (task.links[],
+// or the older requestLineItemId) came out of the same meeting, even when it was never stamped with the event itself.
+export function tasksForEvent(tasks, eventId, closedNames, opts = {}) {
     const closed = Array.isArray(closedNames) && closedNames.length ? closedNames : ['Done'];
+    const requestIds = new Set((opts.requestIds || []).map(String));
+    const viaRequest = (t) => requestIds.size > 0 && linksForTask(t).some((l) => requestIds.has(String(l.requestId)));
     return (tasks || []).filter(t => t
-        && (String(t.linkedEventId) === String(eventId) || String(t.parentEventId) === String(eventId))
+        && (String(t.linkedEventId) === String(eventId) || String(t.parentEventId) === String(eventId) || viaRequest(t))
         && !t.meetingSummaryEventId
         && t.askKind !== 'follow_up'
         && !closed.includes(String(t.status || '')));
@@ -173,6 +178,20 @@ export function nextStepsText(tasks, clientName) {
     return `NEXT STEPS\n\n${blocks.join('\n\n')}`;
 }
 
+// The Next steps section as the email's HTML: a bold heading, a bold label for each group, real bullets. Built from
+// the same tasks as nextStepsText, so the preview, the plain-text copy and the sent email always agree.
+export function nextStepsHtml(tasks, clientName) {
+    const sphynxTasks = (tasks || []).filter(t => t.isClientTask !== true);
+    const clientTasks = (tasks || []).filter(t => t.isClientTask === true);
+    if (!sphynxTasks.length && !clientTasks.length) return '';
+    const label = (t) => {
+        const names = taskAssignees(t).filter(n => !PLACEHOLDER_ASSIGNEES.includes(n));
+        return `${escHtml(String(t.title || t.name || 'Task').trim())}${names.length ? ` (${escHtml(names.join(', '))})` : ''}`;
+    };
+    const group = (name, list) => `<div style="margin:10px 0 0 0;"><b>${escHtml(name)}</b></div><ul style="margin:4px 0 0 0; padding-left:24px;">${list.map(t => `<li>${label(t)}</li>`).join('')}</ul>`;
+    return `<div><b>NEXT STEPS</b></div>${sphynxTasks.length ? group('Sphynx', sphynxTasks) : ''}${clientTasks.length ? group(clientName || 'Client', clientTasks) : ''}`;
+}
+
 // Joins the three parts of the email with a blank line between, skipping empty ones.
 export function assembleBody({ message, nextSteps, closing }) {
     return [message, nextSteps, closing]
@@ -187,11 +206,18 @@ export const RECORDING_LINE = 'Here is the recording of our session';
 
 const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// A heading line: only capital letters, spaces and a little punctuation ("SUMMARY", "HELPFUL RESOURCES", "NEXT STEPS").
+// Headings are bold by default, wherever they appear in the message.
+const HEADING_LINE = /^[A-Z][A-Z0-9 &/,'’-]{2,}$/;
+const isHeadingLine = (line) => HEADING_LINE.test(String(line || '').trim()) && /[A-Z]{2}/.test(line);
+const linesToHtml = (text) => String(text || '').split('\n')
+    .map((line) => (isHeadingLine(line) ? `<b>${escHtml(line.trim())}</b>` : escHtml(line))).join('<br>');
+
 // The message text as editor HTML, with the recording line already a real link, so what
 // you see in the editor is what gets sent.
 export function messageTextToHtml(text, recordingUrl) {
     const url = String(recordingUrl || '').trim();
-    let html = escHtml(text).replace(/\n/g, '<br>');
+    let html = linesToHtml(text);
     if (url && /^https?:\/\//i.test(url)) html = html.replace(escHtml(RECORDING_LINE), `<a href="${escHtml(url)}">${escHtml(RECORDING_LINE)}</a>`);
     return html;
 }
@@ -204,9 +230,9 @@ export function renderEmailBodies(body, recordingUrl) {
     const hasLine = !!url && /^https?:\/\//i.test(url) && String(body || '').includes(RECORDING_LINE);
     // (a trailing period is dropped in the text copy so it can't end up inside the address)
     const text = hasLine ? String(body).replace(new RegExp(`${RECORDING_LINE}\\.?`), `${RECORDING_LINE}: ${url}`) : String(body || '');
-    let html = escHtml(body);
+    let html = linesToHtml(body);
     if (hasLine) html = html.replace(escHtml(RECORDING_LINE), `<a href="${escHtml(url)}">${escHtml(RECORDING_LINE)}</a>`);
-    html = `<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5;">${html.replace(/\n/g, '<br>')}</div>`;
+    html = `<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5;">${html}</div>`;
     return { text, html };
 }
 
@@ -220,16 +246,17 @@ export function buildSummaryDraft(input) {
     const meetingDate = formatMeetingDate(input.start);
 
     const recordingUrl = String(input.recordingUrl || '').trim();
-    // Thanks / recording / summary intro, one per line (the recording line only when there is one).
+    // The thanks and the "below is a summary" sentence read as one paragraph (no line break between them); the
+    // recording line, when there is one, follows on its own line.
     const intro = [
-        `Thanks for taking the time to meet with us${meetingDate ? ` on ${meetingDate}` : ''}.`,
+        `Thanks for taking the time to meet with us${meetingDate ? ` on ${meetingDate}` : ''}. Below is a summary of what we covered and the next steps.`,
         ...(recordingUrl ? [`${RECORDING_LINE}.`] : []),
-        'Below is a summary of what we covered and the next steps.',
     ].join('\n');
+    // One line break under a header, not a blank line: the summary starts right beneath SUMMARY.
     const message = [
         `Hi ${joinNames(names) || 'there'},`,
         intro,
-        `SUMMARY\n\n${tidySummary(input.summary)}`,
+        `SUMMARY\n${tidySummary(input.summary)}`,
     ].join('\n\n');
 
     const nextSteps = nextStepsText(input.tasks, input.clientName);
@@ -247,4 +274,18 @@ export function buildSummaryDraft(input) {
         closing,
         body: assembleBody({ message, nextSteps, closing }),
     };
+}
+
+// Spacing for the email that goes out, whatever the editor produced: no blank line between a heading and what is
+// under it, no stray line breaks in front of a list, and lists with a small, even margin.
+export function tidyEmailHtml(html) {
+    const BR = '(?:<br\\s*\\/?>\\s*)';
+    let out = String(html || '');
+    // a bold heading followed by two or more line breaks -> one
+    out = out.replace(new RegExp(`(<(b|strong)>\\s*[A-Z][A-Z0-9 &/,'’-]{2,}\\s*<\\/\\2>)${BR}{2,}`, 'g'), '$1<br>');
+    // line breaks right before a list are the list's own gap, not extra
+    out = out.replace(new RegExp(`${BR}+(?=<(?:ul|ol)\\b)`, 'gi'), '');
+    // lists without their own style get a small even margin (the editor's clean-up strips styles from them)
+    out = out.replace(/<(ul|ol)(?![^>]*\bstyle=)([^>]*)>/gi, '<$1 style="margin:6px 0 10px 0; padding-left:24px;"$2>');
+    return out;
 }
