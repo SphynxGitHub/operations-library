@@ -60,7 +60,7 @@ OL.renderSphynxTeamPage = function() {
                                 <i data-lucide="pen-tool" style="width:14px;height:14px;color:var(--accent); flex-shrink:0; margin-top:2px;"></i>
                                 <div>
                                     <strong class="tiny uppercase bold" style="display:block; font-size:9px; color:var(--muted);">Email Signature</strong>
-                                    <span style="font-size:11px; font-style:italic;">${esc(m.signature || 'No email signature set')}</span>                                 </div>                             </div>                         </div>                     </div>                      <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
+                                    <span style="font-size:11px;" class="ol-richtext-view">${OL.signatureHtmlFor(m)}</span>                                 </div>                             </div>                         </div>                     </div>                      <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
                         </span>
                         
                         <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
@@ -143,10 +143,8 @@ OL.openSphynxMemberModal = function(memberId = null) {
                             <input type="number" id="tm-rate" class="modal-input tiny" value="${member?.rate || 150}" style="width:100%;">
                         </div>
                     </div>
-                    <div>
-                        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:4px;">Email Signature Text</label>
-                        <textarea id="tm-signature" class="modal-input tiny" placeholder="Micah Porter | Senior Strategist at Sphynx Agency" style="width:100%; height:60px;">${esc(member?.signature || '')}</textarea>
-                    </div>
+                    ${memberId ? OL.signaturePanelHtml('tm', { memberId, showInclude: false }) : `
+                    <div class="tiny muted" style="padding:8px 10px; border:1px dashed var(--line); border-radius:6px;">Save the team member first, then come back to Edit to set their email signature. Until then a default made from their name and email is used.</div>`}
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
                     <button type="button" class="btn tiny soft" onclick="OL.closeModal()">Cancel</button>
@@ -164,7 +162,6 @@ OL.saveSphynxTeamMember = function(memberId) {
     const phone = document.getElementById('tm-phone')?.value || '';
     const role = document.getElementById('tm-role')?.value || 'Senior Strategist';
     const rate = parseFloat(document.getElementById('tm-rate')?.value) || 150;
-    const signature = document.getElementById('tm-signature')?.value || '';
 
     if (!name || !email) return;
 
@@ -180,7 +177,6 @@ OL.saveSphynxTeamMember = function(memberId) {
                 m.phone = phone;
                 m.role = role;
                 m.rate = rate;
-                m.signature = signature;
             }
         } else {
             state.master.sphynxTeam.push({
@@ -190,7 +186,6 @@ OL.saveSphynxTeamMember = function(memberId) {
                 phone: phone,
                 role: role,
                 rate: rate,
-                signature: signature,
                 active: true,
                 createdAt: new Date().toISOString()
             });

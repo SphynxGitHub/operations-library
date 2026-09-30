@@ -66,10 +66,11 @@ serve(async (req) => {
       }),
     });
 
-    if (res.status === 401) return json({ error: "reauth_required", message: "Zoom rejected the connection. Reconnect Zoom on the Calendar tab." }, 401);
-    if (res.status === 400 || res.status === 403) {
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
       const detail = await res.json().catch(() => ({}));
       const scopeProblem = /scope/i.test(String(detail?.message || ""));
+      // A 401 that is not about scopes is a dead connection; a scope complaint (Zoom sends it as 400, 401 or 403) is a missing permission.
+      if (res.status === 401 && !scopeProblem) return json({ error: "reauth_required", message: "Zoom rejected the connection. Reconnect Zoom on the Calendar tab." }, 401);
       return json({
         error: scopeProblem ? "insufficient_scope" : "zoom_refused",
         message: scopeProblem

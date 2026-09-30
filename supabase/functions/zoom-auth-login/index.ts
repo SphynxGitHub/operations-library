@@ -25,6 +25,8 @@
 // app) created in the Zoom App Marketplace with these scopes granted:
 //   meeting:read:summary   -- AI Companion meeting summaries
 //   meeting:read:list_meetings
+//   meeting:write:meeting   -- creating meetings from the Calendar tab's New meeting window
+//                              (after adding a scope, reconnect Zoom on the Calendar tab)
 //   meeting:read:list_past_participants  (optional, not currently used)
 //
 // Env vars needed (set with `supabase secrets set`):

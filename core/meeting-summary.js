@@ -296,9 +296,9 @@ export function buildSummaryDraft(input) {
     const tpl = input.templates || {};
     const senderName = String(input.senderName || '').trim() || 'The Sphynx team';
     const tvars = { date: meetingDate, title: String(input.title || 'Meeting').trim(), sender: senderName };
-    const fillT = (text) => String(text)
-        .replace(/\s+on \{date\}/g, tvars.date ? ` on ${tvars.date}` : '')
-        .replace(/\{(\w+)\}/g, (m, k) => (k in tvars ? tvars[k] : m));
+    const fillT = (text, vars = tvars) => String(text)
+        .replace(/\s+on \{date\}/g, vars.date ? ` on ${vars.date}` : '')
+        .replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
     const intro = [
         fillT(tpl.intro || 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.'),
         ...(recordingUrl ? [`${RECORDING_LINE}.`] : []),
@@ -312,7 +312,9 @@ export function buildSummaryDraft(input) {
 
     const nextSteps = nextStepsText(input.tasks, input.clientName);
 
-    const closing = fillT(tpl.closing || 'Best,\n{sender}');
+    // input.signatureAttached: the sender's signature goes at the end of the email and carries their name, so
+    // {sender} in the closing fills in blank (older saved templates end with it) instead of printing the name twice.
+    const closing = fillT(tpl.closing || 'Best,\n{sender}', input.signatureAttached ? { ...tvars, sender: '' } : tvars).replace(/\s+$/, '');
 
     const date = shortDate(input.start);
     return {

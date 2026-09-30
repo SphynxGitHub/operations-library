@@ -10,17 +10,18 @@ import { state } from './data.js';
 
 export const DEFAULT_OL_SETTINGS = {
     templates: {
-        // {date} = the meeting date, {title} = the meeting title, {sender} = whoever is sending.
+        // {date} = the meeting date, {title} = the meeting title, {sender} = whoever is sending. The sender's signature
+        // (Sphynx Team page) is added under every email and carries their name, so closings are just the sign-off word.
         meetingSummary: {
             subject: 'Summary: {title} ({date})',
             intro: 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.',
-            closing: 'Best,\n{sender}',
+            closing: 'Best,',
         },
         // {client} = the project name, {sender} = whoever is sending.
         clientFollowUp: {
             subject: '{client} — checking in on open items',
             intro: 'Touching base with you regarding the open items on your project. Please see below:',
-            closing: 'Thank you,\n{sender}',
+            closing: 'Thank you,',
         },
     },
     // A working round that sits in Drafting this long gets a task to follow up with the client or change its status.

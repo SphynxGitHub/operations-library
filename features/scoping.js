@@ -101,6 +101,7 @@ function renderPendingActivationsBanner(client) {
 // round-1 fallback and get silently swept into Round 1's pricing/approval
 // math as if already scheduled. See core/requests.js's buildDesired and
 // nextOpenRound.
+const tasksLinked = (client, item) => (client?.projectData?.clientTasks || []).filter((t) => t && taskAppliesToRequest(t, item.id)).length;
 function renderBacklogSection(client, sheet) {
     const items = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog');
     if (!items.length) return '';
@@ -124,7 +125,10 @@ function renderBacklogSection(client, sheet) {
                                 <strong>${esc(title)}</strong> <span class="muted">· ${esc(typeLabel)}</span>
                                 ${item.notes ? `<div class="tiny muted" style="margin-top:2px;">${esc(item.notes)}</div>` : ''}
                             </div>
-                            ${isAdmin ? `<button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
+                            <div style="display:flex; gap:6px; flex-shrink:0;">
+                                <button class="btn tiny soft" title="Link existing tasks (including client tasks) to this request" onclick="OL.openLinkTasksModal('${esc(item.id)}')">Link tasks${tasksLinked(client, item) ? ` (${tasksLinked(client, item)})` : ''}</button>
+                                ${isAdmin ? `<button class="btn tiny primary" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
+                            </div>
                         </div>
                     `;
                 }).join('')}
@@ -1989,6 +1993,7 @@ export function openRequestLineModal(itemId) {
                         </select>
                         <input id="rq-task-due" type="date" class="modal-input tiny" style="width:auto;">
                         <button type="button" class="btn tiny soft" onclick="OL.rqAddTask('${esc(String(item.id))}')">Add task</button>
+                        <button type="button" class="btn tiny soft" title="Link tasks that already exist, including the client's" onclick="OL.rqLinkExisting('${esc(String(item.id))}')">Link existing…</button>
                     </div>
                 </div>` : ''}
 
@@ -2032,6 +2037,15 @@ function requestRolesSectionHtml(client, item) {
                 }).join('')}
             </div>
         </div>`;
+}
+
+// Opens the link-existing-tasks picker from the request window, keeping anything typed in the window first.
+export function rqLinkExisting(itemId) {
+    const client = getActiveClient();
+    const item = (client?.projectData?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => i && String(i.id) === String(itemId));
+    if (!item) return;
+    applyRequestFormToItem(item);
+    OL.openLinkTasksModal(String(item.id));
 }
 
 // Adds an internal (Sphynx) task straight from the request window. It is linked to this request, sits under
@@ -2634,7 +2648,7 @@ Object.assign(window.OL, {
     getDependencyStatus, openDependencyManager, filterDependencySearch,
     createAndLinkTaskDependency, addDependency, removeDependencyById,
     openRequestLineModal, saveRequestLine, applyRequestFormToItem, getRequestPriceBreakdown, setSheetStatus, clearLegacySheetStatus, consolidateTypesAndStatuses, rqAddTask,
-    setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse,
+    setRoundApprovalStatus, addBacklogItemToSheet, moveItemRound, toggleRoundCollapse, rqLinkExisting,
     openAskModal, addAskLine, refreshAskAssignees, saveAsks,
     getScopingLineItemById, openRequestDetailDrawer, updateRequestDescription, loadLinkedEmailsForRequest,
     repairBrokenReqlineRequests, backfillRequestsFromResources, statusCtx

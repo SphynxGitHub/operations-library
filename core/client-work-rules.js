@@ -700,15 +700,19 @@ function labelFor(client, task) {
 }
 
 // Everything the consolidated follow-up's compose window needs, in the four sections the email is built from:
-//   1. clientAsks         — open client-facing tasks: what the CLIENT owes us. {id, title, description}
-//   2. pendingReview      — implementation tasks currently on "Pending Client Review": work sitting with the
-//                           client to review/approve. {id, label, note} — note is the task's own description,
-//                           or its title if it has none, since there's no separate status note for these.
+//   1. clientAsks         — open client-facing tasks the client owes us (documents, feedback, actions), NOT
+//                           reviews/confirmations — those have their own section below. {id, title, description}
+//   2. pendingReview      — everything sitting with the client to review or confirm: client asks of kind "review"
+//                           (or on "Pending Client Review"), plus implementation tasks on "Pending Client Review".
+//                           {id, label, note} — label is what the email shows (the task's name for a client ask;
+//                           the resource/request name for an implementation task); note is only sidebar context.
 //   3. sphynxStalled      — implementation tasks stale 10+ days, still Sphynx's to do. {id, label, note} — note
 //                           is the implementer's status-note comment (see the stale-task prompt, above).
 //   4. thirdPartyStalled  — the same, for tasks on a "Pending Third Party ..." status.
 // "Stalled" here always means a written status note exists — an implementer's comment on the prompt task this
 // module already creates — not just "old and Pending Sphynx Action", so nothing is shown without an actual note.
+// The email itself lists task NAMES only (sections 1 and 2 never include descriptions) — see sectionsText in
+// features/business/client-followup.js.
 export function followUpEmailData(client, ctx) {
     const all = client?.projectData?.clientTasks || [];
 
@@ -717,12 +721,21 @@ export function followUpEmailData(client, ctx) {
         if (!links.length) return true;   // not tied to a request (e.g. added directly from this window) — always eligible
         return links.some((l) => { const item = l.requestId ? requestById(client, l.requestId) : null; return item && requestIsFollowUpEligible(client, item); });
     };
-    const clientAsks = all.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask)
-        && t.askKind !== 'follow_up' && isOpen(t, ctx) && clientAskEligible(t))
-        .map((t) => ({ id: t.id, title: t.title || t.name || 'Task', description: (t.description || '').replace(/^For:\s*/, '').trim() }));
+    // A client ask that is really "please review / confirm this" belongs with the pending-review work, not with the
+    // documents and feedback the client owes us.
+    const isReviewAsk = (t) => t.askKind === 'review' || t.status === 'Pending Client Review';
+    const openClientAsks = all.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask)
+        && t.askKind !== 'follow_up' && isOpen(t, ctx) && clientAskEligible(t));
+    const taskName = (t) => t.title || t.name || 'Task';
 
-    const pendingReview = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')
+    const clientAsks = openClientAsks.filter((t) => !isReviewAsk(t))
+        .map((t) => ({ id: t.id, title: taskName(t), description: (t.description || '').replace(/^For:\s*/, '').trim() }));
+
+    const reviewAsks = openClientAsks.filter(isReviewAsk)
+        .map((t) => ({ id: t.id, label: taskName(t), note: (t.description || '').replace(/^For:\s*/, '').trim() }));
+    const reviewWork = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')
         .map((t) => ({ id: t.id, label: labelFor(client, t), note: (t.description || t.title || t.name || '').trim() }));
+    const pendingReview = [...reviewAsks, ...reviewWork];
 
     const sphynxStalled = [];
     const thirdPartyStalled = [];

@@ -61,12 +61,12 @@ OL.renderOlSettingsPanel = function() {
         ${section('Meeting summary email', 'The email that goes out after a meeting. The summary and the next steps are filled in from the meeting and its tasks; this is the wording around them.',
             field('Subject', text('os-ms-subject', t.meetingSummary.subject), 'Fills in: {title} {date}') +
             field('Opening line', area('os-ms-intro', t.meetingSummary.intro), 'Fills in: {date} {title} {sender}. If a meeting has no date, " on {date}" drops out by itself.') +
-            field('Closing', area('os-ms-closing', t.meetingSummary.closing, 2), 'Fills in: {sender}'))}
+            field('Closing', area('os-ms-closing', t.meetingSummary.closing, 2), 'Your signature is added under the closing and carries your name, so {sender} fills in blank when a signature is attached.'))}
 
         ${section('Client follow-up email', 'The consolidated "checking in on open items" email sent from the Client follow-up task.',
             field('Subject', text('os-cf-subject', t.clientFollowUp.subject), 'Fills in: {client} {sender}') +
             field('Opening line', area('os-cf-intro', t.clientFollowUp.intro), 'Comes right after "Hi [first name],". Fills in: {client} {sender}') +
-            field('Closing', area('os-cf-closing', t.clientFollowUp.closing, 2), 'Fills in: {sender} {client}'))}
+            field('Closing', area('os-cf-closing', t.clientFollowUp.closing, 2), 'Your signature is added under the closing and carries your name, so {sender} fills in blank when a signature is attached. Also fills in: {client}'))}
 
         ${section('Working rounds left in Drafting', 'When a working round sits in Drafting too long, a task is created to follow up with the client or change the round\'s status (Approved, Declined or On Hold) to record the outcome.',
             `<div style="margin-bottom:10px;">${check('os-df-enabled', d.enabled !== false, 'Create these follow-up tasks')}</div>` +

@@ -2139,11 +2139,11 @@ OL.dismissGmailSuggestion = async function(messageId, suggestionId) {
 // refresh after a successful send, rather than this guessing at what's
 // currently on screen.
 OL.openComposeEmailModal = function(options = {}) {
+    // Addresses arrive as text ("a@x.com, b@y.com", or "Name <a@x.com>"); the window shows them as chips.
+    const addrList = (v) => (Array.isArray(v) ? v : String(v || '').split(/[,;]+/))
+        .map((x) => { const t = String(x).trim(); const m = t.match(/<([^>]+)>/); return m ? m[1].trim() : t; }).filter(Boolean);
     OL._composeState = {
         title: options.title || '',
-        to: options.to || '',
-        cc: options.cc || '',
-        bcc: options.bcc || '',
         subject: options.subject || '',
         body: options.body || '',
         bodyHtml: options.bodyHtml || '',
@@ -2160,7 +2160,6 @@ OL.openComposeEmailModal = function(options = {}) {
         includedTaskIds: [],  // open project tasks ticked "include" — listed in the email
         attachments: [],      // from your computer: { filename, mimeType, contentBase64, size }
         projectFiles: [],     // from the project (Drive): { name, url } — sent as links
-        includeSignature: true,
         onSent: typeof options.onSent === 'function' ? options.onSent : null,
         docked: !!options.docked,
         suggestedPeople: options.suggestedPeople || []
@@ -2168,108 +2167,76 @@ OL.openComposeEmailModal = function(options = {}) {
     const st = OL._composeState;
     const isReply = !!st.replyToMessageId;
     const templates = state.master?.emailTemplates || [];
-    const startHtml = st.bodyHtml || (st.body ? OL.plainTextToHtml(st.body) : '');
+    const startHtml = options.bodyHtml || (options.body ? OL.plainTextToHtml(options.body) : '');
+    OL.initRecipients('compose', {
+        to: addrList(options.to), cc: addrList(options.cc), bcc: addrList(options.bcc),
+        directory: OL.personDirectory(st.linked_client_id ? state.clients?.[st.linked_client_id] : null,
+            [['Suggested', st.suggestedPeople.map((p) => p.email)]]),
+        onChange: () => OL.renderComposeTaskPicker(),   // the project's open tasks follow who the email is going to
+    });
 
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">${st.title ? esc(st.title) : (isReply ? '↩ Reply' : '✉️ Compose Email')}</div>
-            ${st.docked ? `<button class="btn tiny soft" title="Minimize" onclick="OL.toggleComposeDockMinimized()">▁</button>` : ''}
-            <button class="btn small soft" onclick="OL.closeCompose()">Close</button>
-        </div>
-        <div class="modal-body" style="max-width:760px; width:100%;">
-            <div style="display:grid; gap:10px;">
-                ${st.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(st.linked_client_id) : ''}
-                <div class="tiny muted">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:2px;">To</label>
-                    <input type="text" id="compose-email-to" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.to)}" placeholder="name@example.com"
-                           onchange="OL.renderComposeTaskPicker()" onblur="OL.renderComposeTaskPicker()">
-                    ${st.suggestedPeople.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${st.suggestedPeople.slice(0, 10).map(p => `<button type="button" class="btn tiny soft" style="font-size:10px;" title="${esc(p.email)}" onclick="OL.addComposeRecipient('${esc(p.email)}')">+ ${esc(p.name || p.email)}</button>`).join('')}</div>` : ''}
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <div>
-                        <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Cc</label>
-                        <input type="text" id="compose-email-cc" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.cc)}" placeholder="optional, comma-separated">
-                    </div>
-                    <div>
-                        <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Bcc</label>
-                        <input type="text" id="compose-email-bcc" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.bcc)}" placeholder="optional">
-                    </div>
-                </div>
-                <div>
-                    <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Subject</label>
-                    <input type="text" id="compose-email-subject" class="modal-input" style="width:100%; box-sizing:border-box;" value="${esc(st.subject)}">
-                </div>
-                <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; gap:8px; flex-wrap:wrap;">
-                        <label class="tiny muted bold">Message</label>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <select class="modal-input tiny" style="width:auto;" onchange="if(this.value){ OL.applyEmailTemplate(this.value); this.value=''; }">
-                                <option value="">${templates.length ? 'Insert template…' : 'No templates yet'}</option>
-                                ${templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}
-                            </select>
-                            <button type="button" class="btn tiny soft" onclick="OL.saveComposeAsTemplate()" title="Save this subject + message as a reusable template">Save as template</button>
-                            <button type="button" class="btn tiny soft" onclick="OL.openEmailTemplatesManager()" title="Edit or delete templates"><i data-lucide="settings-2" style="width:11px;height:11px;"></i></button>
-                        </div>
-                    </div>
-                    ${OL.renderRichTextField({ id: 'compose-email-body', html: startHtml, minHeight: 200, placeholder: 'Write your message…', emailTools: true, imageMaxWidth: 600 })}
-                </div>
-
-                <div style="padding:8px 10px; border:1px dashed var(--line); border-radius:6px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                        <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                            <input type="checkbox" id="compose-include-signature" checked onchange="OL._composeState.includeSignature = this.checked; OL.renderComposeSignaturePreview();">
-                            <span class="bold">Signature</span>
-                        </label>
-                        <button type="button" class="btn tiny soft" onclick="OL.openMySignatureEditor()">Edit my signature</button>
-                    </div>
-                    <div id="compose-signature-preview" class="tiny muted ol-richtext-view" style="margin-top:6px;"></div>
-                </div>
-
-                <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
-                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                        <span class="tiny bold"><i data-lucide="paperclip" style="width:11px;height:11px;"></i> Attachments</span>
-                        <label class="btn tiny soft" style="cursor:pointer;">From computer
-                            <input type="file" multiple style="display:none;" onchange="OL.addComposeAttachments(this.files); this.value='';">
-                        </label>
-                        <button type="button" class="btn tiny soft" onclick="OL.openComposeProjectFilePicker()">From project files</button>
-                        <button type="button" class="btn tiny soft" onclick="OL.openComposeLibraryPicker()" title="Link a resource from the Master Library (only the sections chosen for email linking)">From Master Library</button>
-                        <span class="tiny muted">PDF, images, Office docs, CSV/TXT · up to 5 files, 10 MB each</span>
-                    </div>
-                    <div id="compose-attachments-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;"></div>
-                    <div id="compose-project-file-picker"></div>
-                </div>
-
-                <div id="compose-task-picker"></div>
-
-                ${st.quoted || st.quotedHtml ? `
-                    <details>
-                        <summary class="tiny muted" style="cursor:pointer;">Quoted original message (included when sent)</summary>
-                        <div class="tiny muted" style="white-space:pre-wrap; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; margin-top:4px; max-height:200px; overflow:auto;">${esc(st.quoted || '')}</div>
-                    </details>
-                ` : ''}
-                ${!isReply ? `
-                    <div>
-                        <label class="tiny muted bold" style="display:block; margin-bottom:2px;">Link to Project (optional)</label>
-                        <select id="compose-email-client" class="modal-input tiny" onchange="OL.renderComposeTaskPicker()">
-                            <option value="">— No project —</option>
-                            ${Object.values(state.clients || {})
-                                .filter(c => c?.meta?.name)
-                                .sort((a, b) => (a.meta.name || '').localeCompare(b.meta.name || ''))
-                                .map(c => `<option value="${c.id}" ${st.linked_client_id === c.id ? 'selected' : ''}>${esc(c.meta.name)}</option>`)
-                                .join('')}
-                        </select>
-                    </div>
-                ` : (st.linked_client_id && state.clients?.[st.linked_client_id] ? `
-                    <div class="tiny muted">Will stay linked to <strong>${esc(state.clients[st.linked_client_id].meta?.name || 'this project')}</strong>, same as the original email.</div>
-                ` : '')}
-                <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button class="btn small soft" onclick="OL.closeCompose()">Cancel</button>
-                    <button class="btn small primary" id="compose-email-send-btn" onclick="OL.sendComposedEmail()"><i data-lucide="send" style="width:12px;height:12px;"></i> Send</button>
-                </div>
+    const belowHtml = `
+        <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span class="tiny bold"><i data-lucide="paperclip" style="width:11px;height:11px;"></i> Attachments</span>
+                <label class="btn tiny soft" style="cursor:pointer; display:inline-flex !important; margin:0 !important;">From computer
+                    <input type="file" multiple style="display:none !important;" onchange="OL.addComposeAttachments(this.files); this.value='';">
+                </label>
+                <button type="button" class="btn tiny soft" onclick="OL.openComposeProjectFilePicker()">From project files</button>
+                <button type="button" class="btn tiny soft" onclick="OL.openComposeLibraryPicker()" title="Link a resource from the Master Library (only the sections chosen for email linking)">From Master Library</button>
+                <span class="tiny muted">PDF, images, Office docs, CSV/TXT · up to 5 files, 10 MB each</span>
             </div>
+            <div id="compose-attachments-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;"></div>
+            <div id="compose-project-file-picker"></div>
         </div>
-    `;
+
+        <div id="compose-task-picker" style="margin-bottom:10px;"></div>
+
+        ${st.quoted || st.quotedHtml ? `
+            <details style="margin-bottom:10px;">
+                <summary class="tiny muted" style="cursor:pointer;">Quoted original message (included when sent)</summary>
+                <div class="tiny muted" style="white-space:pre-wrap; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; margin-top:4px; max-height:200px; overflow:auto;">${esc(st.quoted || '')}</div>
+            </details>
+        ` : ''}
+        ${!isReply ? `
+            <div style="margin-bottom:10px;">
+                <label class="tiny muted bold">Link to Project (optional)</label>
+                <select id="compose-email-client" class="modal-input tiny" onchange="OL.renderComposeTaskPicker()">
+                    <option value="">— No project —</option>
+                    ${Object.values(state.clients || {})
+                        .filter(c => c?.meta?.name)
+                        .sort((a, b) => (a.meta.name || '').localeCompare(b.meta.name || ''))
+                        .map(c => `<option value="${c.id}" ${st.linked_client_id === c.id ? 'selected' : ''}>${esc(c.meta.name)}</option>`)
+                        .join('')}
+                </select>
+            </div>
+        ` : (st.linked_client_id && state.clients?.[st.linked_client_id] ? `
+            <div class="tiny muted" style="margin-bottom:10px;">Will stay linked to <strong>${esc(state.clients[st.linked_client_id].meta?.name || 'this project')}</strong>, same as the original email.</div>
+        ` : '')}`;
+
+    const html = OL.composeShellHtml({
+        prefix: 'compose',
+        title: st.title || (isReply ? '↩ Reply' : '✉️ Compose Email'),
+        headExtraHtml: st.docked ? `<button class="btn tiny soft" title="Minimize" onclick="OL.toggleComposeDockMinimized()">▁</button>` : '',
+        closeAction: 'OL.closeCompose()',
+        introHtml: st.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(st.linked_client_id) : '',
+        fromHtml: `<div class="tiny muted" style="margin-bottom:10px;">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>`,
+        showBcc: true,
+        subject: st.subject,
+        greeting: false,
+        messageHtml: startHtml, messageMinHeight: 200, messagePlaceholder: 'Write your message…',
+        messageToolbarHtml: `
+            <select class="modal-input tiny" style="width:auto !important;" onchange="if(this.value){ OL.applyEmailTemplate(this.value); this.value=''; }">
+                <option value="">${templates.length ? 'Insert template…' : 'No templates yet'}</option>
+                ${templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}
+            </select>
+            <button type="button" class="btn tiny soft" onclick="OL.saveComposeAsTemplate()" title="Save this subject + message as a reusable template">Save as template</button>
+            <button type="button" class="btn tiny soft" onclick="OL.openEmailTemplatesManager()" title="Edit or delete templates"><i data-lucide="settings-2" style="width:11px;height:11px;"></i></button>`,
+        recipientsExtraHtml: st.suggestedPeople.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin:-4px 0 10px;">${st.suggestedPeople.slice(0, 10).map(p => `<button type="button" class="btn tiny soft" style="font-size:10px;" title="${esc(p.email)}" onclick="OL.addComposeRecipient('${esc(p.email)}')">+ ${esc(p.name || p.email)}</button>`).join('')}</div>` : '',
+        belowHtml,
+        sendAction: 'OL.sendComposedEmail()',
+        maxWidth: '760px',
+    });
     if (st.docked) {
         // Docked panel (bottom-right) — sits over whatever you're looking at,
         // including an open task/meeting/request window, without closing it.
@@ -2282,11 +2249,11 @@ OL.openComposeEmailModal = function(options = {}) {
     } else {
         OL.showOverlayModal(html);
     }
-    OL.renderComposeSignaturePreview();
+    OL.renderAllRecipients('compose', ['to', 'cc', 'bcc']);
     OL.renderComposeAttachments();
     OL.renderComposeTaskPicker();
     if (window.lucide) lucide.createIcons();
-    document.getElementById(isReply ? 'compose-email-body' : 'compose-email-to')?.focus();
+    document.getElementById(isReply ? 'compose-message' : 'compose-to-input')?.focus();
 };
 
 // ---- Closing / docking ----
@@ -2354,14 +2321,7 @@ OL.openContextCompose = function(explicit) {
     OL.openComposeEmailModal(opts);
 };
 
-OL.addComposeRecipient = function(email) {
-    const el = document.getElementById('compose-email-to');
-    if (!el) return;
-    const list = el.value.split(',').map(x => x.trim()).filter(Boolean);
-    if (!list.some(x => x.toLowerCase() === email.toLowerCase())) list.push(email);
-    el.value = list.join(', ');
-    OL.renderComposeTaskPicker();
-};
+OL.addComposeRecipient = function(email) { OL.addRecipient('compose', 'to', email); };
 
 // Floating ✉️ button + Alt+E, for staff.
 (function installComposeLauncher() {
@@ -2392,8 +2352,8 @@ OL._composeProjectId = function() {
     const picked = document.getElementById('compose-email-client')?.value;
     if (picked) return picked;
     if (st.linked_client_id) return st.linked_client_id;
-    const emails = ((document.getElementById('compose-email-to')?.value || '') + ',' + (document.getElementById('compose-email-cc')?.value || ''))
-        .toLowerCase().match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || [];
+    const r = OL.getRecipients('compose');
+    const emails = (r.to + ',' + r.cc).toLowerCase().match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || [];
     if (!emails.length) return '';
     const hit = Object.values(state.clients || {}).find(c => (c.projectData?.teamMembers || []).some(m => emails.includes(String(m.email || '').toLowerCase())));
     return hit?.id || '';
@@ -2462,45 +2422,7 @@ OL._composeTaskListHtml = function() {
     };
 };
 
-// ---- Signature: one per Sphynx team member, picked by who's signed in ----
-OL._myTeamCard = function() {
-    const me = OL.getCurrentUserName ? OL.getCurrentUserName() : state.currentUser?.name;
-    return (state.master?.sphynxTeam || []).find(m => m.name === me) || null;
-};
-OL.getMySignatureHtml = function() {
-    const card = OL._myTeamCard();
-    if (card?.emailSignatureHtml) return OL.sanitizeCommentHtml(card.emailSignatureHtml, { images: true });
-    if (!card) return '';
-    // Sensible default until someone writes their own.
-    return [`<strong>${esc(card.name)}</strong>`, card.title || card.role ? esc(card.title || card.role) : '', 'Sphynx Automation', card.email ? esc(card.email) : '']
-        .filter(Boolean).join('<br>');
-};
-OL.renderComposeSignaturePreview = function() {
-    const box = document.getElementById('compose-signature-preview');
-    if (!box) return;
-    const on = OL._composeState?.includeSignature !== false;
-    const sig = OL.getMySignatureHtml();
-    box.innerHTML = on ? (sig || '<em>No team card found for the signed-in account — add yourself on the Sphynx Team page to get a signature.</em>') : '<em>Not included.</em>';
-};
-OL.openMySignatureEditor = function() {
-    const card = OL._myTeamCard();
-    const box = document.getElementById('compose-signature-preview');
-    if (!card || !box) { alert('The signed-in account has no Sphynx Team card yet, so there is nowhere to save a signature.'); return; }
-    box.innerHTML = `
-        ${OL.renderRichTextField({ id: 'compose-signature-editor', html: OL.getMySignatureHtml(), minHeight: 80, emailTools: true, imageMaxWidth: 300 })}
-        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
-            <button type="button" class="btn tiny soft" onclick="OL.renderComposeSignaturePreview()">Cancel</button>
-            <button type="button" class="btn tiny primary" onclick="OL.saveMySignature()">Save signature</button>
-        </div>`;
-    if (window.lucide) lucide.createIcons();
-};
-OL.saveMySignature = function() {
-    const card = OL._myTeamCard();
-    const ed = document.getElementById('compose-signature-editor');
-    if (!card || !ed) return;
-    updateAndSync(() => { card.emailSignatureHtml = OL.sanitizeCommentHtml(ed.innerHTML, { images: true }); });
-    OL.renderComposeSignaturePreview();
-};
+// The signature (one per Sphynx team member) lives in features/business/compose-shared.js, shared by every email window.
 
 // ---- Attachments ----
 OL.COMPOSE_ALLOWED_TYPES = {
@@ -2648,7 +2570,7 @@ OL.toggleComposeProjectFile = function(i, on) {
 OL._fillTemplateFields = function(text) {
     const st = OL._composeState || {};
     const client = state.clients?.[st.linked_client_id || document.getElementById('compose-email-client')?.value || ''];
-    const toEmail = (document.getElementById('compose-email-to')?.value || '').split(',')[0].trim().toLowerCase();
+    const toEmail = (OL.getRecipients('compose').toList[0] || '').trim().toLowerCase();
     const contact = (client?.projectData?.teamMembers || []).find(m => (m.email || '').toLowerCase() === toEmail);
     const me = OL.getCurrentUserName ? OL.getCurrentUserName() : '';
     const map = {
@@ -2662,8 +2584,8 @@ OL._fillTemplateFields = function(text) {
 OL.applyEmailTemplate = function(id) {
     const t = (state.master?.emailTemplates || []).find(x => x.id === id);
     if (!t) return;
-    const ed = document.getElementById('compose-email-body');
-    const subj = document.getElementById('compose-email-subject');
+    const ed = document.getElementById('compose-message');
+    const subj = document.getElementById('compose-subject');
     if (subj && t.subject && !subj.value.trim()) subj.value = OL._fillTemplateFields(t.subject).replace(/&amp;/g, '&');
     if (ed) ed.innerHTML = OL._fillTemplateFields(OL.sanitizeCommentHtml(t.html || '', { images: true })) + (ed.innerHTML.trim() ? '<br>' + ed.innerHTML : '');
 };
@@ -2671,8 +2593,8 @@ OL.saveComposeAsTemplate = function() {
     if (!state.masterHasEmailTemplates) { alert('Run the email_templates migration first — templates can’t be saved until that column exists.'); return; }
     const name = prompt('Template name:');
     if (!name) return;
-    const html = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '', { images: true });
-    const subject = document.getElementById('compose-email-subject')?.value || '';
+    const html = OL.sanitizeCommentHtml(document.getElementById('compose-message')?.innerHTML || '', { images: true });
+    const subject = document.getElementById('compose-subject')?.value || '';
     updateAndSync(() => {
         if (!state.master.emailTemplates) state.master.emailTemplates = [];
         state.master.emailTemplates.push({ id: 'et-' + Date.now(), name: name.trim(), subject, html, createdBy: OL.getCurrentUserName ? OL.getCurrentUserName() : '' });
@@ -2712,23 +2634,20 @@ OL.deleteEmailTemplate = function(id) {
 // signature, then the quoted original (Gmail collapses it as usual).
 OL._buildComposeBody = function() {
     const st = OL._composeState || {};
-    const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-email-body')?.innerHTML || '', { images: true });
-    let html = msgHtml;
+    const msgHtml = OL.sanitizeCommentHtml(document.getElementById('compose-message')?.innerHTML || '', { images: true });
     const taskList = OL._composeTaskListHtml();
-    html += taskList.html;
-    if (st.projectFiles?.length) {
-        html += `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `📎 <a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>`;
-    }
-    const sig = st.includeSignature !== false ? OL.getMySignatureHtml() : '';
-    if (sig) html += `<br><div class="gmail_signature" style="color:#555;">--<br>${sig}</div>`;
-    if (st.quoted || st.quotedHtml) {
-        html += `<br><div class="gmail_quote">${st.quotedMeta ? `<div>${esc(st.quotedMeta)}</div>` : ''}<blockquote class="gmail_quote" style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${st.quotedHtml ? OL.sanitizeCommentHtml(st.quotedHtml) : OL.plainTextToHtml(st.quoted)}</blockquote></div>`;
-    }
-    let text = OL.htmlToPlainText(msgHtml) + taskList.text;
-    if (st.projectFiles?.length) text += '\n\nFiles:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n');
-    if (sig) text += '\n\n--\n' + OL.htmlToPlainText(sig);
-    if (st.quoted) text += `\n\n${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n');
-    return { html, text, messageText: OL.htmlToPlainText(msgHtml) };
+    const files = st.projectFiles?.length;
+    const built = OL.assembleEmail({
+        messageHtml: msgHtml,
+        sectionsHtml: taskList.html, sectionsText: taskList.text.trim(),
+        extraHtml: files ? `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `📎 <a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>` : '',
+        extraText: files ? 'Files:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n') : '',
+        signature: OL.signatureParts(OL.signatureIncluded('compose')),
+        quotedHtml: (st.quoted || st.quotedHtml)
+            ? `<br><div class="gmail_quote">${st.quotedMeta ? `<div>${esc(st.quotedMeta)}</div>` : ''}<blockquote class="gmail_quote" style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${st.quotedHtml ? OL.sanitizeCommentHtml(st.quotedHtml) : OL.plainTextToHtml(st.quoted)}</blockquote></div>` : '',
+        quotedText: st.quoted ? `${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n') : '',
+    }, { gap: '' });   // the task list and file block carry their own spacing
+    return { html: built.html, text: built.text, messageText: built.messageText };
 };
 
 // The send function only accepts signed-in Sphynx admins and team members, so every call
@@ -2829,62 +2748,30 @@ window.OL.sendGmailMessage = OL.sendGmailMessage;
 
 OL.sendComposedEmail = async function() {
     const st = OL._composeState || {};
-    const to = (document.getElementById('compose-email-to')?.value || '').trim();
-    const subject = (document.getElementById('compose-email-subject')?.value || '').trim();
+    OL.commitRecipients('compose');
+    const r = OL.getRecipients('compose');
+    const subject = (document.getElementById('compose-subject')?.value || '').trim();
     const built = OL._buildComposeBody();
-    const body = built.text;
-    const cc = (document.getElementById('compose-email-cc')?.value || '').trim();
-    const bcc = (document.getElementById('compose-email-bcc')?.value || '').trim();
     const clientSelect = document.getElementById('compose-email-client');
     const linkedClientId = clientSelect ? clientSelect.value : st.linked_client_id;
 
-    if (!to || !subject || !built.messageText.trim()) {
+    if (!r.to || !subject || !built.messageText.trim()) {
         alert('To, subject, and message are all required.');
         return;
     }
-
-    const btn = document.getElementById('compose-email-send-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
-
-    try {
-        const response = await fetch('https://kexnnpwjerrnsmifauuo.supabase.co/functions/v1/send-gmail-message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(await OL.getAuthHeaders()) },
-            body: JSON.stringify({
-                to, cc: cc || undefined, bcc: bcc || undefined, subject, body, bodyHtml: built.html,
-                attachments: (st.attachments || []).map(a => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 })),
-                threadId: st.threadId || undefined,
-                replyToMessageId: st.replyToMessageId || undefined,
-                linked_client_id: linkedClientId || st.linked_client_id || null,
-                linked_resource_id: st.linked_resource_id || null,
-                linked_task_id: st.linked_task_id || null,
-                linked_event_id: st.linked_event_id || null,
-                linked_request_id: st.linked_request_id || null
-            })
-        });
-
-        const result = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-            if (result.error === 'unauthorized' || result.error === 'forbidden') {
-                alert(OL.sendAuthErrorMessage(result));
-            } else if (response.status === 401 || result.error === 'reauth_required') {
-                alert('The connected Gmail account needs to be reconnected before sending will work — click "Connect Google Account" again to grant send permission, then retry.');
-            } else {
-                alert(result.message || 'Failed to send email.');
-            }
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="send" style="width:12px;height:12px;"></i> Send'; if (window.lucide) lucide.createIcons(); }
-            return;
-        }
-
-        OL.closeCompose();
-        OL._warnIfSentAsPlainText(result, !!built.html);
-        if (typeof st.onSent === 'function') st.onSent(result);
-    } catch (err) {
-        console.error('Failed to send email:', err);
-        alert('Failed to send email — see console for details.');
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="send" style="width:12px;height:12px;"></i> Send'; if (window.lucide) lucide.createIcons(); }
-    }
+    const { ok, result } = await OL.sendCompose('compose', { to: r.to, cc: r.cc, bcc: r.bcc, subject, body: built.text, bodyHtml: built.html }, {
+        attachments: (st.attachments || []).map(a => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 })),
+        threadId: st.threadId || undefined,
+        replyToMessageId: st.replyToMessageId || undefined,
+        linked_client_id: linkedClientId || st.linked_client_id || null,
+        linked_resource_id: st.linked_resource_id || null,
+        linked_task_id: st.linked_task_id || null,
+        linked_event_id: st.linked_event_id || null,
+        linked_request_id: st.linked_request_id || null
+    });
+    if (!ok) return;
+    OL.closeCompose();
+    if (typeof st.onSent === 'function') st.onSent(result);
 };
 
 // Reply, from an open email's own modal.

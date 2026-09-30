@@ -5,6 +5,7 @@
 // event, so the meeting's action items appear under it as After. The logic is in core/request-tasks.js.
 
 import { state, esc, db, getActiveClient, updateAndSync } from '../core/data.js';
+import { addLink, removeLink, taskAppliesToRequest, requestIdsForTask } from '../core/task-links.js';
 import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
 import { requestResourceIds as requestResourceIdsOf } from '../core/request-pricing.js';
 import {
@@ -180,6 +181,85 @@ export async function linkRequestMeeting(itemId, eventId) {
     refreshScopingIfOpen();
 }
 
+
+// ---------------- linking existing tasks to a request ----------------
+// Any task on the project — Sphynx's own or the client's — can be linked to a request, including a Pending one that
+// is not in a round yet. Tasks already linked show ticked; ticking or unticking links or unlinks it right away.
+// A task can be linked to several requests. Follow-up tasks, status notes and meeting-summary tasks are housekeeping
+// the app makes itself, so they are not offered.
+const requestItemById = (client, id) => (client?.projectData?.scopingSheets || []).flatMap((s) => s?.lineItems || []).find((i) => i && String(i.id) === String(id));
+const requestName = (client, item) => (item?.name && String(item.name).trim()) || (typeof OL.getResourceById === 'function' ? OL.getResourceById(item?.resourceId)?.name : '') || 'Request';
+
+function linkableTasks(client, item, q, showDone) {
+    const ctx = ctxFor();
+    const closed = new Set(ctx.closedNames);
+    const needle = String(q || '').trim().toLowerCase();
+    return (client?.projectData?.clientTasks || [])
+        .filter((t) => t && !t.consolidatedFollowUp && !t.statusNoteFor && !t.meetingSummaryEventId)
+        .filter((t) => showDone || !closed.has(t.status) || taskAppliesToRequest(t, item.id))
+        .filter((t) => !needle || `${t.title || t.name || ''} ${t.assignee || ''}`.toLowerCase().includes(needle))
+        .map((t) => ({ t, linked: taskAppliesToRequest(t, item.id), client: isClientFacing(t, ctx) }))
+        .sort((a, b) => (b.linked - a.linked) || (b.client - a.client) || String(a.t.title || a.t.name || '').localeCompare(String(b.t.title || b.t.name || '')));
+}
+
+function linkPickerHtml(client, item) {
+    const st = OL._linkTasksState || {};
+    const rows = linkableTasks(client, item, st.q, st.showDone);
+    const pending = String(item.status || '') === 'Backlog';
+    const linkedClient = rows.some((r) => r.linked && r.client);
+    return `
+        <div class="modal-head"><div class="modal-title-text">🔗 Link tasks to: ${esc(requestName(client, item))}</div><div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeLinkTasksModal()">Done</button></div>
+        <div class="modal-body" style="max-width:640px;">
+            <div class="tiny muted" style="margin-bottom:8px;">Tick a task to link it to this request; untick to unlink. This includes the client's tasks.${pending ? ' This request is Pending (not in a round yet).' : ''}</div>
+            ${pending && linkedClient ? `<div class="tiny" style="margin-bottom:8px; padding:6px 8px; border:1px solid #f59e0b; color:#f59e0b; border-radius:6px;">A client task linked only to a Pending request is left out of client follow-up emails until the request is added to a round.</div>` : ''}
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                <input id="lt-search" type="text" class="modal-input tiny" style="flex:1;" placeholder="Search tasks…" value="${esc(st.q || '')}" oninput="OL.linkTasksSearch(this.value)">
+                <label class="tiny" style="display:flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${st.showDone ? 'checked' : ''} onchange="OL.linkTasksShowDone(this.checked)"> Show completed</label>
+            </div>
+            <div style="max-height:380px; overflow:auto; display:grid; gap:2px;">
+                ${rows.map(({ t, linked, client: isC }) => {
+                    const others = requestIdsForTask(t).filter((id) => String(id) !== String(item.id)).map((id) => requestName(client, requestItemById(client, id)));
+                    return `<label style="display:flex; align-items:flex-start; gap:8px; padding:5px 6px; border-radius:4px; cursor:pointer; font-size:12px;">
+                        <input type="checkbox" style="margin-top:2px;" ${linked ? 'checked' : ''} onchange="OL.toggleRequestTaskLink('${esc(String(item.id))}', '${esc(String(t.id))}', this.checked)">
+                        <span style="flex:1; min-width:0;">${esc(t.title || t.name || 'Task')}
+                            ${isC ? '<span class="pill tiny" style="font-size:9px; border:1px solid #f59e0b; color:#f59e0b;">Client</span>' : ''}
+                            <span class="muted" style="display:block; font-size:11px;">${esc(t.assignee || 'Unassigned')} · ${esc(t.status || 'Pending')}${others.length ? ` · also on: ${esc(others.join(', '))}` : ''}</span>
+                        </span></label>`;
+                }).join('') || '<div class="tiny muted">No tasks match.</div>'}
+            </div>
+        </div>`;
+}
+
+export function openLinkTasksModal(itemId) {
+    const client = getActiveClient();
+    const item = requestItemById(client, itemId);
+    if (!client || !item) return;
+    OL._linkTasksState = { itemId: String(itemId), q: '', showDone: false };
+    OL.showOverlayModal(linkPickerHtml(client, item));
+    if (window.lucide) lucide.createIcons();
+}
+function repaintLinkPicker() {
+    const st = OL._linkTasksState; if (!st) return;
+    const client = getActiveClient(); const item = requestItemById(client, st.itemId); if (!item) return;
+    const run = () => OL.showOverlayModal(linkPickerHtml(client, item));
+    if (typeof OL.reRenderPreservingFocus === 'function') OL.reRenderPreservingFocus(run); else run();
+}
+export function linkTasksSearch(q) { if (OL._linkTasksState) { OL._linkTasksState.q = q; repaintLinkPicker(); } }
+export function linkTasksShowDone(on) { if (OL._linkTasksState) { OL._linkTasksState.showDone = !!on; repaintLinkPicker(); } }
+export async function toggleRequestTaskLink(itemId, taskId, on) {
+    const client = getActiveClient();
+    const task = (client?.projectData?.clientTasks || []).find((t) => t && String(t.id) === String(taskId));
+    if (!client || !task) return;
+    await updateAndSync(() => { if (on) addLink(task, itemId, []); else removeLink(task, itemId); }, client.id);
+    repaintLinkPicker();
+}
+export function closeLinkTasksModal() {
+    OL._linkTasksState = null;
+    OL.closeModal();
+    refreshScopingIfOpen();
+}
+
 // ---------------- a task's phase ----------------
 export async function setTaskPhase(clientId, taskId, phase) {
     const client = state.clients?.[clientId];
@@ -220,4 +300,5 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     requestTasksPanelHtml, requestTasksRowHtml, toggleRequestTasks, linkRequestMeeting, loadClientEvents,
     setTaskPhase, taskPhaseSelectHtml, getResourceDates, clientTasksPrintPage,
+    openLinkTasksModal, linkTasksSearch, linkTasksShowDone, toggleRequestTaskLink, closeLinkTasksModal,
 });

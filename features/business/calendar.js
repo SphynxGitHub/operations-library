@@ -1633,7 +1633,15 @@ OL.saveNewMeeting = async function() {
             });
             const zbody = await zres.json().catch(() => ({}));
             if (!zres.ok || !zbody.joinUrl) {
-                if (status) status.textContent = zbody.message || 'Could not create the Zoom meeting, so nothing was scheduled.';
+                if (status) {
+                    status.textContent = zbody.message || 'Could not create the Zoom meeting, so nothing was scheduled.';
+                    if (zbody.error === 'insufficient_scope' || zbody.error === 'reauth_required') {
+                        const b = document.createElement('button');
+                        b.type = 'button'; b.className = 'btn tiny soft'; b.style.marginLeft = '8px'; b.textContent = 'Reconnect Zoom';
+                        b.onclick = () => OL.initiateZoomAuth();
+                        status.appendChild(b);
+                    }
+                }
                 if (btn) btn.disabled = false;
                 return;
             }

@@ -86,7 +86,7 @@ export function roundStatusHtml(client, sheet, round, isCurrent = true) {
 }
 
 // ---------------- the review email ----------------
-export function draftReviewEmail({ names, round, start, end, days, followUpEveryDays, link, senderName }) {
+export function draftReviewEmail({ names, round, start, end, days, followUpEveryDays, link, senderName, signatureAttached }) {
     const who = names && names.length ? (names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]) : 'there';
     return [
         `Hi ${who},`,
@@ -94,7 +94,8 @@ export function draftReviewEmail({ names, round, start, end, days, followUpEvery
         `Review period: ${start} to ${end} (${days} days)`,
         `HOW TO REVIEW\n1. Open your checklist: ${link}\n2. Go through each item and tick it off. The checklist is also attached as a PDF if you would rather print it.\n3. If something does not work or does not look right, reply to this email and tell us what you saw. We will fix it.\n4. If you would like something changed or added, tell us and we will scope it as a new request.`,
         `We will check in with you about every ${followUpEveryDays} days during the review. Once it ends, we will move on to the next round.`,
-        `Best,\n${senderName || 'The Sphynx team'}`,
+        // the sender's signature (added when the email is sent) carries their name, so it isn't repeated here
+        signatureAttached ? 'Best,' : `Best,\n${senderName || 'The Sphynx team'}`,
     ].join('\n\n');
 }
 
@@ -134,45 +135,32 @@ export async function openReviewNotification(key, clientId) {
     const token = OL._reviewDraft && OL._reviewDraft.key === key ? OL._reviewDraft.token : newToken();
     OL._reviewDraft = { key, token, clientId: client.id };
     const sender = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
+    const signatureAttached = !!OL.signatureHtmlFor(OL.myTeamCard());
     const message = draftReviewEmail({ names: contacts.map(firstName).filter(Boolean), round: st.round, start: st.reviewStart, end: st.reviewEnd,
-        days: st.reviewDays, followUpEveryDays: st.followUpEveryDays, link: checklistLink(token), senderName: sender });
+        days: st.reviewDays, followUpEveryDays: st.followUpEveryDays, link: checklistLink(token), senderName: sender, signatureAttached });
     const steps = checklist.sections.reduce((n, s) => n + s.steps.length, 0);
-    openModal(`
-        <style>
-            .rv label { display:block !important; margin:0 0 4px !important; font-size:12px !important; }
-            .rv input[type="text"], .rv input[type="date"], .rv input[type="number"], .rv textarea { display:block !important; width:100% !important; box-sizing:border-box !important; font-size:13px !important; font-family:inherit !important; margin:0 !important; }
-        </style>
-        <div class="modal-head">
-            <div class="modal-title-text">📨 Notify client: Round ${esc(st.round)} review</div>
-            <div class="spacer"></div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-        </div>
-        <div class="modal-body rv" style="max-width:820px; box-sizing:border-box;">
-            <div class="tiny muted" style="margin-bottom:12px;">
+    OL.initRecipients('rv', { to: contacts.map((m) => m.email).filter(Boolean), directory: OL.personDirectory(client) });
+    openModal(OL.composeShellHtml({
+        prefix: 'rv',
+        title: `📨 Notify client: Round ${st.round} review`,
+        introHtml: `<div class="tiny muted" style="margin-bottom:12px;">
                 Every request in this round has passed testing (concluded ${esc(st.concludedAt)}). Check the dates, edit the email, and send.
                 Sending starts the review and creates the check-in tasks. The client's checklist has ${steps} step${steps === 1 ? '' : 's'} in ${checklist.sections.length} section${checklist.sections.length === 1 ? '' : 's'}, with no results.
-            </div>
+            </div>`,
+        topHtml: `
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:6px;">
                 <div><label class="tiny muted">Review starts</label><input id="rv-start" type="date" class="modal-input" value="${esc(st.reviewStart)}" oninput="OL.rvRecalc()"></div>
                 <div><label class="tiny muted">Length (days)</label><input id="rv-days" type="number" min="1" class="modal-input" value="${esc(st.reviewDays)}" oninput="OL.rvRecalc()"></div>
                 <div><label class="tiny muted">Check in every (days)</label><input id="rv-every" type="number" min="1" class="modal-input" value="${esc(st.followUpEveryDays)}" oninput="OL.rvRecalc()"></div>
             </div>
-            <div id="rv-end" class="tiny muted" style="margin-bottom:12px;">Review ends ${esc(st.reviewEnd)}</div>
-            <label class="tiny muted">To</label>
-            <input id="rv-to" type="text" class="modal-input" style="margin-bottom:8px;" value="${esc(contacts.map((m) => m.email).join(', '))}" placeholder="Client contact email(s), comma-separated">
-            <label class="tiny muted">Cc</label>
-            <input id="rv-cc" type="text" class="modal-input" style="margin-bottom:8px;" placeholder="optional">
-            <label class="tiny muted">Subject</label>
-            <input id="rv-subject" type="text" class="modal-input" style="margin-bottom:8px;" value="${esc(`Round ${st.round} is ready for your review: ${client.meta?.name || ''}`)}">
-            <label class="tiny muted">Message</label>
-            <div style="margin-bottom:6px;">${OL.renderRichTextField({ id: 'rv-body', html: OL.plainTextToLinkedHtml(message), minHeight: 300, emailTools: true, imageMaxWidth: 600 })}</div>
-            <div class="tiny muted" style="margin-bottom:12px;">If you change the dates above, use "Refresh dates in the message" to update the text. The PDF is attached automatically.</div>
-            <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button class="btn soft" onclick="OL.rvRefreshMessage()">Refresh dates in the message</button>
-                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button id="rv-send" class="btn primary" onclick="OL.sendReviewNotification()">Send</button>
-            </div>
-        </div>`);
+            <div id="rv-end" class="tiny muted" style="margin-bottom:12px;">Review ends ${esc(st.reviewEnd)}</div>`,
+        subject: `Round ${st.round} is ready for your review: ${client.meta?.name || ''}`,
+        messageHtml: OL.plainTextToLinkedHtml(message), messageMinHeight: 300,
+        middleHtml: '<div class="tiny muted" style="margin-bottom:12px;">If you change the dates above, use "Refresh dates in the message" to update the text. The PDF is attached automatically.</div>',
+        footerButtonsHtml: '<button class="btn soft" onclick="OL.rvRefreshMessage()">Refresh dates in the message</button>',
+        sendAction: 'OL.sendReviewNotification()', maxWidth: '820px',
+    }));
+    OL.renderAllRecipients('rv');
     if (window.lucide) lucide.createIcons();
 }
 
@@ -191,8 +179,8 @@ export function rvRefreshMessage() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !(days >= 1) || !(every >= 1)) { alert('Enter a start date, a length and a check-in spacing first.'); return; }
     const names = primaryContacts(client).map(firstName).filter(Boolean);
     const sender = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
-    const ed = document.getElementById('rv-body');
-    if (ed) ed.innerHTML = OL.plainTextToLinkedHtml(draftReviewEmail({ names, round: st.round, start, end: reviewEndFor(start, days), days, followUpEveryDays: every, link: checklistLink(draft.token), senderName: sender }));
+    const ed = document.getElementById('rv-message');
+    if (ed) ed.innerHTML = OL.plainTextToLinkedHtml(draftReviewEmail({ names, round: st.round, start, end: reviewEndFor(start, days), days, followUpEveryDays: every, link: checklistLink(draft.token), senderName: sender, signatureAttached: !!OL.signatureHtmlFor(OL.myTeamCard()) }));
 }
 
 export async function sendReviewNotification() {
@@ -200,13 +188,12 @@ export async function sendReviewNotification() {
     const client = await clientFor(draft.clientId);
     const st = client?.projectData?.roundStates?.[draft.key];
     if (!st || st.status !== 'ready_to_notify') { alert('This review was already started.'); return; }
-    const bodyHtml = OL.sanitizeCommentHtml(document.getElementById('rv-body')?.innerHTML || '', { images: true });
-    const body = OL.htmlToPlainTextWithLinks(bodyHtml);
-    const to = val('rv-to').trim(), cc = val('rv-cc').trim(), subject = val('rv-subject').trim();
+    const built = OL.collectCompose('rv');
+    const { to, cc, subject } = built;
     const start = val('rv-start'), days = Number(val('rv-days')), every = Number(val('rv-every'));
-    if (!to || !subject || !body.trim()) { alert('To, subject and message are all required.'); return; }
+    if (!to || !subject || !built.messageText.trim()) { alert('To, subject and message are all required.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !(days >= 1) || !(every >= 1)) { alert('Enter a valid start date, review length and check-in spacing.'); return; }
-    if (!body.includes(checklistLink(draft.token))) { if (!confirm('The message no longer contains the checklist link. Send it anyway?')) return; }
+    if (!built.messageText.includes(checklistLink(draft.token))) { if (!confirm('The message no longer contains the checklist link. Send it anyway?')) return; }
 
     const btn = document.getElementById('rv-send');
     const setBusy = (busy) => { if (btn) { btn.disabled = busy; btn.textContent = busy ? 'Sending...' : 'Send'; } };
@@ -235,8 +222,7 @@ export async function sendReviewNotification() {
     if (insertErr) { console.error(insertErr); setBusy(false); alert(`Could not publish the checklist page (${insertErr.message}). Run 014_client_checklists.sql in Supabase, then try again. Nothing was sent.`); return; }
 
     const filename = `Testing checklist - Round ${st.round}.pdf`;
-    const { ok } = await OL.sendGmailMessage({
-        to, cc: cc || undefined, subject, body, bodyHtml,
+    const { ok } = await OL.sendCompose('rv', built, {
         attachments: [{ filename, mimeType: 'application/pdf', contentBase64: pdfBase64 }],
         linked_client_id: client.id, linked_task_id: st.notifyTaskId,
     });
