@@ -714,7 +714,8 @@ export function renderIntakePage() {
             </div>
             <div class="header-actions">
                 ${ob.completed ? `<button class="btn small soft" onclick="OL.intakeApplyApps()" title="Add anything new in the answers to this project: applications, naming patterns, folders and compliance documents. Nothing already there is removed.">Apply answers to project</button>` : ''}
-                <button class="btn small soft" onclick="window.print()">Print / Save PDF</button>
+                <button class="btn small soft" onclick="OL.printIntake(true)" title="An empty copy of the questionnaire to send someone to fill in on paper">Blank form</button>
+                <button class="btn small soft" onclick="OL.printIntake()" title="Opens the print dialog — choose Save as PDF there. Only answered questions are included.">Print / Save PDF</button>
                 <button class="btn small primary" onclick="OL.openIntakeWizard(${ob.completed ? 0 : ob.stepIndex})">${ob.completed ? 'Review / edit answers' : (answered ? 'Resume' : 'Start questionnaire')}</button>
             </div>
         </div>
@@ -729,5 +730,134 @@ export async function intakeApplyApps() {
     alert(line ? `Added to this project: ${line}.` : 'Everything in the answers is already in the project.');
 }
 
+
+// ---- printing / saving as PDF ------------------------------------------------------------------------------------
+// Builds a standalone document (no sidebar or buttons) in the same way the How-To guide and the scoping sheet print, and
+// opens the browser's print dialog in a hidden frame — "Save as PDF" there gives a text PDF that can be searched and
+// copied from. Two versions: the answers (unanswered questions are left out, as on the Jotform PDF) and a BLANK form to
+// send someone to fill in on paper. API keys never appear on either: the answers version only says a key is stored.
+const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const PRINT_CSS = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-size: 11.5px; line-height: 1.5; color: #0f172a; background: #fff; padding: 0 4px; }
+@page { size: letter portrait; margin: 16mm 15mm 18mm; @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #94a3b8; } }
+.doc-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px; }
+.brand { font-size: 17px; font-weight: 300; letter-spacing: 0.32em; color: #14b8a6; }
+.brand small { display: block; font-size: 7px; letter-spacing: 0.5em; color: #0f172a; font-weight: 600; margin-top: 2px; }
+.doc-title { text-align: right; }
+.doc-title h1 { font-size: 21px; font-weight: 800; }
+.doc-title .sub { font-size: 10.5px; color: #64748b; margin-top: 2px; }
+.who { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; padding-bottom: 12px; border-bottom: 1px solid #cbd5e1; margin-bottom: 4px; }
+.who .k { font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
+.section { margin-top: 16px; }
+.section h2 { font-size: 15px; font-weight: 800; padding-bottom: 5px; border-bottom: 1px solid #94a3b8; margin-bottom: 9px; break-after: avoid; page-break-after: avoid; }
+.section .note { font-size: 10px; color: #64748b; margin: -4px 0 8px; font-style: italic; }
+.q { margin-bottom: 9px; break-inside: avoid; page-break-inside: avoid; }
+.q .l { font-weight: 700; font-size: 11.5px; break-after: avoid; page-break-after: avoid; }
+.q .a { color: #334155; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 1px; }
+.q .a a { color: #0369a1; }
+.chip { display: inline-block; background: #e2e8f0; color: #334155; padding: 2px 9px; border-radius: 4px; font-size: 11px; margin: 2px 4px 0 0; }
+ul.list { margin: 2px 0 0 16px; }
+ul.list li { margin: 1px 0; }
+.q.long .a { border-left: 3px solid #e2e8f0; padding-left: 9px; }
+/* blank form */
+.line { border-bottom: 1px solid #94a3b8; height: 20px; margin-top: 4px; }
+.box { border: 1px solid #94a3b8; border-radius: 3px; margin-top: 4px; }
+.opts { margin-top: 3px; } .opts span { display: inline-block; margin-right: 16px; }
+.hint { font-size: 10px; color: #64748b; font-weight: 400; }
+.foot { margin-top: 18px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 9.5px; color: #94a3b8; }
+@media print { .q, .section h2 { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+`;
+
+function printAnswerHtml(q, answers) {
+    const v = answers[q.key];
+    if (q.type === 'yesno') return v ? `<span class="chip">${escHtml(v)}</span>` : '';
+    if (q.type === 'select') return v ? `<span class="chip">${escHtml(v)}</span>` : '';
+    if (q.type === 'apps') {
+        if (!v || typeof v !== 'object') return '';
+        if (v.none) return `<span class="chip">Don't currently use</span>`;
+        const names = (v.apps || []).map((id) => (state.master?.apps || []).find((a) => String(a.id) === String(id))?.name).filter(Boolean);
+        return [...names, ...String(v.other || '').split(/[,\n;]+/).map((x) => x.trim()).filter(Boolean)].map((n) => `<span class="chip">${escHtml(n)}</span>`).join('');
+    }
+    if (q.type === 'keys') {
+        const stored = answers.systemKeys?.stored || {};
+        const names = Object.keys(stored).map((id) => SYNC_SYSTEMS.find((x) => x.id === id)?.name || id);
+        return names.length ? `<ul class="list">${names.map((n) => `<li>${escHtml(n)} — API access shared (the key itself is stored securely and is not shown)</li>`).join('')}</ul>` : '';
+    }
+    if (q.type === 'files') {
+        const list = Array.isArray(answers.workflowFiles) ? answers.workflowFiles : [];
+        return list.length ? `<ul class="list">${list.map((f) => `<li>${f.url ? `<a href="${escHtml(f.url)}">${escHtml(f.name)}</a>` : escHtml(f.name)}</li>`).join('')}</ul>` : '';
+    }
+    if (q.type === 'docs') {
+        if (!v || typeof v !== 'object') return '';
+        const rows = COMPLIANCE_DOCS.filter((d) => v.have?.[d.name]).map((d) => `<li>${escHtml(d.label)}${v.urls?.[d.name] ? ` — <a href="${escHtml(v.urls[d.name])}">${escHtml(v.urls[d.name])}</a>` : ''}</li>`);
+        String(v.other || '').split(/[,\n;]+/).map((x) => x.trim()).filter(Boolean).forEach((o) => rows.push(`<li>${escHtml(o)}</li>`));
+        return rows.length ? `<ul class="list">${rows.join('')}</ul>` : '';
+    }
+    return isBlank(v) ? '' : escHtml(v).replace(/\n/g, '<br>');
+}
+
+function printBlankHtml(q) {
+    if (q.type === 'keys') return '';                          // never on paper
+    if (q.type === 'files') return '<div class="hint">Attach any workflow documents (PDF) when you return this form.</div>';
+    if (q.type === 'yesno') return '<div class="opts"><span>☐ Yes</span><span>☐ No</span></div>';
+    if (q.type === 'select') return `<div class="opts">${q.options.map((o) => `<span>☐ ${escHtml(o)}</span>`).join('')}</div>`;
+    if (q.type === 'docs') return `<div class="opts">${q.docs.map((d) => `<div>☐ ${escHtml(d.label)} <span class="hint">link: ____________________</span></div>`).join('')}<div class="line"></div></div>`;
+    if (q.type === 'textarea') return `<div class="box" style="height:${q.tall ? 120 : 56}px;"></div>`;
+    return '<div class="line"></div>';
+}
+
+export function buildIntakePrintHtml(client, ob, { blank = false } = {}) {
+    const a = ob.answers || {};
+    const when = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
+    const date = when(blank ? new Date().toISOString() : (ob.completedAt || new Date().toISOString()));
+    const name = client?.meta?.name || '';
+    // The contact step is the Name / Email block under the header, so it isn't repeated as a section.
+    const sections = INTAKE_STEPS.filter((st) => st.key !== 'contact' && (blank || stepVisible(st, a))).map((step) => {
+        const qs = step.questions.filter((q) => blank || !(q.showIf && !q.showIf(a)));
+        const body = qs.map((q) => {
+            if (blank) {
+                const inner = printBlankHtml(q);
+                if (!inner && q.type === 'keys') return '';
+                return `<div class="q"><div class="l">${escHtml(q.label)}${q.hint ? ` <span class="hint">${escHtml(q.hint)}</span>` : ''}${q.showIf ? ' <span class="hint">(if it applies)</span>' : ''}</div>${inner}</div>`;
+            }
+            const ans = printAnswerHtml(q, a);
+            if (!ans) return '';                               // unanswered questions are left off, like the Jotform PDF
+            return `<div class="q ${q.type === 'textarea' && String(a[q.key] || '').length > 200 ? 'long' : ''}"><div class="l">${escHtml(q.label)}</div><div class="a">${ans}</div></div>`;
+        }).filter(Boolean).join('');
+        if (!body) return '';
+        const note = blank && step.showIf ? '<div class="note">Advisory firms only.</div>' : '';
+        return `<div class="section"><h2>${escHtml(step.title)}</h2>${note}${body}</div>`;
+    }).join('');
+
+    const contact = primaryContactOf(client);
+    const who = blank ? `<div><div class="k">Name</div><div class="line"></div></div><div><div class="k">Email</div><div class="line"></div></div>`
+        : `<div><div class="k">Name</div><div>${escHtml(a.name || contact.name || '')}</div></div><div><div class="k">Email</div><div>${escHtml(a.email || contact.email || '')}</div></div>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escHtml(`Introductory Questionnaire${name && !blank ? ' — ' + name : ''}`)}</title><style>${PRINT_CSS}</style></head><body>
+<div class="doc-head">
+  <div class="brand">SPHYNX<small>AUTOMATION</small></div>
+  <div class="doc-title"><h1>Introductory Questionnaire</h1><div class="sub">${escHtml(blank ? 'Please complete and return' : [name, date].filter(Boolean).join(' · '))}</div></div>
+</div>
+<div class="who">${who}</div>
+${sections || '<p style="margin-top:20px;color:#64748b;">Nothing has been answered yet.</p>'}
+<div class="foot">${escHtml(blank ? 'Sphynx Automation' : `${name ? name + ' · ' : ''}Introductory Questionnaire · ${ob.completed ? 'Completed' : 'In progress'} ${date}`)}</div>
+</body></html>`;
+}
+
+// Opens the print dialog from a hidden frame (not a popup, so popup blockers can't stop it).
+export function printIntake(blank = false) {
+    const client = getActiveClient(); if (!client) return;
+    const html = buildIntakePrintHtml(client, intakeOf(client), { blank });
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0;';
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    const go = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } finally { setTimeout(() => frame.remove(), 60000); } };
+    setTimeout(go, 400);    // let fonts and images settle
+}
+
 window.OL = window.OL || {};
-Object.assign(window.OL, { openIntakeWizard, intakeNext, intakeBack, intakeSaveAndClose, intakePickYesNo, intakeRefresh, renderIntakePage, intakeApplyApps, intakeAddSystem, intakeUploadFiles, intakeRemoveFile });
+Object.assign(window.OL, { printIntake, openIntakeWizard, intakeNext, intakeBack, intakeSaveAndClose, intakePickYesNo, intakeRefresh, renderIntakePage, intakeApplyApps, intakeAddSystem, intakeUploadFiles, intakeRemoveFile });
