@@ -15,7 +15,7 @@
 // the redraw waits until you leave it. Scroll position is kept. The flow
 // visualizer and the how-to guide editor are never redrawn from here (they manage their own state).
 
-import { db, state } from './data.js';
+import { db, state, ensureProjectLists } from './data.js';
 
 let timer = null;
 let waitingForBlur = false;
@@ -90,9 +90,12 @@ function mergeClientRow(row) {
     if (!c) return false;               // not loaded in this tab; nothing to update
     if (c._metaOnly && row.meta) { c.meta = row.meta; return true; }
     if (hasLocalUnsaved(row.id)) return false;
-    const incoming = JSON.stringify(row.project_data || {});
+    // Normalise the incoming copy the same way loading does, so a project that is merely missing empty lists in the
+    // database doesn't look "changed" against the in-memory copy (which has them) on every check.
+    const incomingData = row.project_data ? ensureProjectLists({ ...row.project_data }) : null;
+    const incoming = JSON.stringify(incomingData || {});
     if (incoming === JSON.stringify(c.projectData || {}) && JSON.stringify(row.meta || {}) === JSON.stringify(c.meta || {})) return false;
-    if (row.project_data) c.projectData = row.project_data;
+    if (incomingData) c.projectData = incomingData;
     if (row.meta) c.meta = row.meta;
     return true;
 }

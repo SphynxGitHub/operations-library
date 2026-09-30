@@ -99,6 +99,16 @@ function showSyncErrorToast(message) {
     window._olSyncErrorToastTimer = setTimeout(() => { el.remove(); }, 12000);
 }
 
+// Projects saved before some lists existed (or created another way) can be missing them, and much of the app
+// calls .find/.push on them directly. Every load path runs the project through this so they are always there —
+// the same lists a brand-new project is created with (see below where new clients are made). Only ever ADDS a
+// missing list; an existing one (even empty) is left exactly as it is.
+export function ensureProjectLists(pd) {
+    if (!pd || typeof pd !== 'object') return pd;
+    ['localResources', 'localApps', 'localAnalyses', 'localFunctions', 'localHowTo'].forEach((k) => { if (!Array.isArray(pd[k])) pd[k] = []; });
+    return pd;
+}
+
 // ---- persist: debounced write of master + active client to Supabase ----
 export function persist() {
     // NOTE: window.IS_GUEST is set to true for any non-admin session —
@@ -452,7 +462,7 @@ export async function sync() {
                     meta: c.meta || { name: clientId, status: 'Discovery' },
                     modules: c.modules || { checklist: true, apps: true, functions: true, resources: true },
                     permissions: c.permissions || {},
-                    projectData: c.project_data || c.projectData || { localResources: [], clientTasks: [] },
+                    projectData: ensureProjectLists(c.project_data || c.projectData || { localResources: [], clientTasks: [] }),
                     sharedMasterIds: c.shared_master_ids || c.sharedMasterIds || [],
                     businessModules: c.business_modules || {},
                     authUserId: c.auth_user_id || null
@@ -551,7 +561,7 @@ export async function loadFullClient(clientId) {
             meta: data.meta || { name: data.id, status: 'Active' },
             modules: data.modules,
             permissions: data.permissions,
-            projectData: data.project_data || data.projectData || { localResources: [], clientTasks: [] },
+            projectData: ensureProjectLists(data.project_data || data.projectData || { localResources: [], clientTasks: [] }),
             sharedMasterIds: data.shared_master_ids || data.sharedMasterIds || [],
             businessModules: data.business_modules || state.clients[clientId]?.businessModules || {}
         };
@@ -873,7 +883,7 @@ export async function importMasterBackup(event) {
                     meta: clientData.meta || { name: _id, status: 'Active' },
                     modules: clientData.modules,
                     permissions: clientData.permissions,
-                    projectData: clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] },
+                    projectData: ensureProjectLists(clientData.project_data ?? clientData.projectData ?? { localResources: [], clientTasks: [] }),
                     sharedMasterIds: clientData.shared_master_ids ?? clientData.sharedMasterIds ?? [],
                     businessModules: clientData.business_modules ?? clientData.businessModules ?? {}
                 };
