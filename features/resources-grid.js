@@ -106,8 +106,8 @@ function _renderResourceManagerImpl() {
                     </div>
                 </div>
 
-                <button class="btn primary" onclick="OL.bulkImportZaps()" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="zap" style="width:14px; height:14px;"></i> Bulk Zaps
+                <button class="btn primary" onclick="OL.openZapImport()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="zap" style="width:14px; height:14px;"></i> Import Zaps
                 </button>
                 <button class="btn primary" onclick="OL.openImportHub()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="plug-2" style="width:14px; height:14px;"></i> Import Hub
