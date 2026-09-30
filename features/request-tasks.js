@@ -9,7 +9,7 @@ import { addLink, removeLink, taskAppliesToRequest, requestIdsForTask } from '..
 import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
 import { requestResourceIds as requestResourceIdsOf } from '../core/request-pricing.js';
 import {
-    groupRequestTasks, resourceDates, taskPhase, clientTasksByRequest, renderClientTasksAppendix, CLIENT_TASKS_CSS,
+    groupRequestTasks, resourceDates, taskPhase, clientTasksByRequest, renderClientTasksAppendix, CLIENT_TASKS_CSS, isClientFacing,
     PHASES, PHASE_LABELS,
 } from '../core/request-tasks.js';
 

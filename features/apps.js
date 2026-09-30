@@ -1365,9 +1365,9 @@ export function filterMapList(query, mode) {
     // 1. Resolve current item to find existing mappings
     let currentItem = null;
     if (isVaultMode) {
-        currentItem = (mode === 'functions' ? state.master.apps : state.master.functions).find(i => i.id === contextId);
+        currentItem = ((mode === 'functions' ? state.master?.apps : state.master?.functions) || []).find(i => i.id === contextId);
     } else {
-        currentItem = (mode === 'functions' ? client?.projectData?.localApps : client?.projectData?.localFunctions).find(i => i.id === contextId || i.masterRefId === contextId);
+        currentItem = ((mode === 'functions' ? client?.projectData?.localApps : client?.projectData?.localFunctions) || []).find(i => i.id === contextId || i.masterRefId === contextId);
     }
 
     const mappedIds = (currentItem?.functionIds || currentItem?.appIds || []).map(m => String(m.id || m));
@@ -1484,10 +1484,10 @@ export async function executeCreateAndMap(name, mode, analysisId = null) {
 
             // Save to Library
             if (isVault) state.master.apps.push(newApp);
-            else if (client) client.projectData.localApps.push(newApp);
+            else if (client) (client.projectData.localApps ||= []).push(newApp);
 
             // Link to the Matrix
-            const source = isVault ? state.master.analyses : client.projectData.localAnalyses;
+            const source = (isVault ? state.master.analyses : (client.projectData.localAnalyses ||= [])) || [];
             const anly = source.find(a => a.id === (analysisId || state.activeMatrixId));
             if (anly) {
                 if (!anly.apps) anly.apps = [];
@@ -1504,14 +1504,14 @@ export async function executeCreateAndMap(name, mode, analysisId = null) {
                 capabilities: []
             };
             if (isVault) state.master.apps.push(newApp);
-            else if (client) client.projectData.localApps.push(newApp);
+            else if (client) (client.projectData.localApps ||= []).push(newApp);
         } 
         // --- SCENARIO 3: Original 'functions' mode (Create Function from App Modal) ---
         else {
             const newId = (isVault ? 'fn-' : 'local-fn-') + Date.now();
             const newFn = { id: newId, name: name, description: "" };
             if (isVault) state.master.functions.push(newFn);
-            else if (client) client.projectData.localFunctions.push(newFn);
+            else if (client) (client.projectData.localFunctions ||= []).push(newFn);
             
             OL.toggleAppFunction(contextId, newId);
         }
