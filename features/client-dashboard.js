@@ -342,7 +342,7 @@ export function renderClientDashboard() {
 // Guided setup for a new client project: name, main contact, starting status, which tabs they see, and whether
 // to make the Drive folder now. Everything is filled in and created in one step (createNewClient below).
 const WIZARD_MODULES = [
-    { id: 'checklist', label: 'Tasks' }, { id: 'apps', label: 'Apps' }, { id: 'functions', label: 'Functions' },
+    { id: 'checklist', label: 'Tasks' }, { id: 'intake', label: 'Intake' }, { id: 'apps', label: 'Apps' }, { id: 'functions', label: 'Functions' },
     { id: 'resources', label: 'Resources' }, { id: 'scoping', label: 'Scoping' }, { id: 'analysis', label: 'Analysis' },
     { id: 'how-to', label: 'How-To' }, { id: 'team', label: 'Team' },
 ];
@@ -399,7 +399,7 @@ export async function createNewClient({ name, contact = '', email = '', status =
       createdDate: new Date().toISOString(),
       status,
     },
-    modules: Object.fromEntries(['checklist', 'apps', 'functions', 'resources', 'scoping', 'analysis', 'how-to', 'team'].map((id) => [id, modules.includes(id)])),
+    modules: Object.fromEntries(['checklist', 'intake', 'apps', 'functions', 'resources', 'scoping', 'analysis', 'how-to', 'team'].map((id) => [id, modules.includes(id)])),
     permissions: {
       apps: "full",
       functions: "full",
@@ -779,6 +779,7 @@ export function openClientProfileModal(clientId) {
             <div id="module-selection" class="card-section" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px 16px;">
                 ${[
                     { id: 'checklist', label: 'Tasks' },
+                    { id: 'intake', label: 'Intake Questionnaire' },
                     { id: 'apps', label: 'Apps' },
                     { id: 'functions', label: 'Functions' },
                     { id: 'resources', label: 'Resources' },
@@ -965,6 +966,7 @@ export function openPartnerClientModulesModal(clientId) {
             <div class="card-section">
                 ${[
                     { id: 'checklist', label: 'Tasks' },
+                    { id: 'intake', label: 'Intake Questionnaire' },
                     { id: 'apps', label: 'Apps' },
                     { id: 'functions', label: 'Functions' },
                     { id: 'resources', label: 'Resources' },

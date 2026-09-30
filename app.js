@@ -33,6 +33,7 @@ import './core/billable.js';
 import './core/recurrence.js';
 import './core/client-work-rules.js';
 import './features/dependencies.js';
+import './features/intake.js';
 import './features/rollup.js';
 import './core/live-refresh.js';
 
@@ -607,6 +608,7 @@ window.buildLayout = function () {
 
     const clientTabs = [
         { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
+        { key: "intake", label: "Intake Questionnaire", icon: "file-text", href: "#/intake" },
         { key: "maintenance", label: "Maintenance & Hours", icon: "hourglass", href: "#/maintenance" },
         { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
         { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
@@ -1043,6 +1045,7 @@ window.handleRoute = function () {
             if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
             else if (typeof ol.renderHowToLibrary === 'function') ol.renderHowToLibrary();
         }
+        else if (hash.includes("intake") && typeof OL.renderIntakePage === 'function') OL.renderIntakePage();
         else if (hash.includes("team")) renderTeamManager();
         else if (hash.includes("client-errors") && typeof OL.renderClientErrorLog === 'function') OL.renderClientErrorLog();
         else if (hash.includes("data")) {
