@@ -1,3 +1,4 @@
+import { groupResources, groupsHtml, flattenGroups } from '../../core/resource-groups.js';
 import { esc, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getRequestTypes } from '../../core/requests.js';
 import { getOlSettings } from '../../core/ol-settings.js';
@@ -1473,7 +1474,8 @@ OL.renderExcerptLinkPicker = function() {
     const matchTitle = (v) => String(v || '').toLowerCase().includes(query);
     const tasks = taskPool.filter((t) => matchTitle(t.title || t.name)).slice(0, 30);
     const requests = requestPool.filter((r) => matchTitle(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))).slice(0, 30);
-    const resources = resourcePool.filter((r) => matchTitle(r.name)).slice(0, 30);
+    const resourceGroups = groupResources(resourcePool, st.query || '', { extra: (r) => r._clientName });
+    const resources = flattenGroups(resourceGroups).slice(0, 60);
 
     // Picks are looked up by position rather than written into the onclick text, so a title containing an
     // apostrophe or quote (e.g. "Review Anthony's email") can't break the handler.
@@ -1537,8 +1539,8 @@ OL.renderExcerptLinkPicker = function() {
                     </div>
                     <div>
                         <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Resources</div>
-                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${resources.length ? resources.map((r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('resource', ${i})">${esc(r.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
+                        <div style="max-height:200px; overflow:auto;">
+                            ${groupsHtml(resourceGroups.map((g) => ({ label: g.label, items: g.items.filter((r) => resources.includes(r)) })).filter((g) => g.items.length), (r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('resource', ${i})">${esc(r.name)}</div>`, { query: st.query || '', empty: 'None' })}
                         </div>
                     </div>
                 </div>
@@ -2518,7 +2520,7 @@ OL.openComposeLibraryPicker = function() {
         <div style="margin-top:6px; border-top:1px dashed var(--line); padding-top:6px;">
             <div class="tiny bold" style="margin-bottom:4px;">Master Library <span class="muted" style="font-weight:normal;">— ${types.map(esc).join(', ')}</span></div>
             <input type="text" class="modal-input tiny" placeholder="Search these sections…" oninput="OL._renderComposeLibraryList(this.value)" style="margin-bottom:4px;">
-            <div id="compose-library-list" style="max-height:180px; overflow:auto; display:grid; gap:3px;"></div>
+            <div id="compose-library-list" style="max-height:220px; overflow:auto;"></div>
         </div>`;
     OL._renderComposeLibraryList('');
 };
@@ -2536,15 +2538,18 @@ OL._renderComposeLibraryList = function(query) {
         if (!withUrl.length) { noLink++; return; }
         withUrl.forEach((f) => rows.push({ name: f.name && f.name !== r.name ? `${r.name} — ${f.name}` : (r.name || 'Resource'), url: f.url, type: r.type }));
     });
-    const shown = rows.filter((r) => !q || r.name.toLowerCase().includes(q) || String(r.type).toLowerCase().includes(q))
-        .sort((a, b) => a.name.localeCompare(b.name));
-    OL._composeLibraryOptions = shown.slice(0, 60);
-    list.innerHTML = (OL._composeLibraryOptions.length ? OL._composeLibraryOptions.map((r, i) => `
+    // Grouped by section (resource type), searched by name and section.
+    const groups = groupResources(rows.map((r) => ({ ...r })), q);
+    OL._composeLibraryOptions = flattenGroups(groups).slice(0, 200);
+    const allowed = new Set(OL._composeLibraryOptions);
+    const shownGroups = groups.map((g) => ({ label: g.label, items: g.items.filter((r) => allowed.has(r)) })).filter((g) => g.items.length);
+    const total = flattenGroups(groups).length;
+    list.innerHTML = groupsHtml(shownGroups, (r, i) => `
             <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                 <input type="checkbox" ${st.projectFiles.some((p) => p.url === r.url) ? 'checked' : ''} onchange="OL.toggleComposeLibraryLink(${i}, this.checked)">
-                <span style="flex:1;">${esc(r.name)}</span><span class="muted" style="font-size:9px;">${esc(r.type)}</span>
-            </label>`).join('') : '<span class="tiny muted">Nothing matches.</span>')
-        + (shown.length > 60 ? `<div class="tiny muted">Showing the first 60 of ${shown.length} — type to narrow.</div>` : '')
+                <span style="flex:1;">${esc(r.name)}</span>
+            </label>`, { query: q, empty: 'Nothing matches.' })
+        + (total > 200 ? `<div class="tiny muted">Showing the first 200 of ${total} — type to narrow.</div>` : '')
         + (noLink ? `<div class="tiny muted">${noLink} resource${noLink === 1 ? '' : 's'} in these sections ${noLink === 1 ? 'has' : 'have'} no document link yet.</div>` : '');
 };
 OL.toggleComposeLibraryLink = function(i, on) {
@@ -2980,9 +2985,10 @@ OL.renderGmailLinkStep = function() {
     
     resourcePool.sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
 
-    const filteredResources = resourceQuery
-        ? resourcePool.filter(r => (r.name || '').toLowerCase().includes(resourceQuery))
-        : resourcePool;
+    // Grouped by type; the search looks at name, type, description and (across all projects) the project name. Within a
+    // group the most recently touched come first.
+    const resourceGroups = groupResources(resourcePool, resourceQuery, { extra: (r) => r._clientName, keepOrder: true });
+    const filteredResources = flattenGroups(resourceGroups);
 
     const selectedResource = st.resourceId
         ? (selectedClient?.projectData?.localResources || []).find(r => r.id === st.resourceId)
@@ -3085,13 +3091,12 @@ OL.renderGmailLinkStep = function() {
                 <input type="text" id="gmail-link-resource-search" class="modal-input tiny" placeholder="Search resources...${selectedClient ? '' : ' (all projects)'}" value="${esc(st.resourceQuery || '')}"
                        onfocus="OL.setGmailLinkFocus('resourceFocused', true)" oninput="OL.setGmailLinkResourceQuery(this.value)">
                 ${st.resourceFocused ? `
-                    <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
-                        ${filteredResources.length ? filteredResources.map(r => `
+                    <div style="max-height:260px; overflow:auto; margin-top:6px;">
+                        ${groupsHtml(resourceGroups, (r) => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkResource('${r.id}', '${r._clientId}')">
                                 <span>${esc(r.name)}${(r.isArchived || r.archived) ? `<span class="pill tiny danger">Archived</span>` : ''}</span>
                                 ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(r._clientName || '')}</span>` : ''}
-                            </div>
-                        `).join('') : `<div class="tiny muted" style="padding:8px;">No matching resources.</div>`}
+                            </div>`, { query: resourceQuery })}
                     </div>
                 ` : ''}
             `}

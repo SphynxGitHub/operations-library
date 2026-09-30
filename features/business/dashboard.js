@@ -311,6 +311,10 @@ OL.renderDailyDashboard = function() {
     const TYPE_LABELS = { task: 'Tasks', request: 'Requests', email: 'Emails', event: 'Events', comment: 'Comments', error: 'Errors' };
     const typesSummary = OL.dashboardTaskState.types.length === Object.keys(TYPE_LABELS).length ? 'All' : OL.dashboardTaskState.types.map(t => TYPE_LABELS[t]).join(', ') || 'None';
 
+    // The dashboard redraws as its data loads; keep the search box focused (and its cursor) if someone is typing in it.
+    const searchWasFocused = document.activeElement && document.activeElement.id === 'global-search-input';
+    const searchCursor = searchWasFocused ? document.activeElement.selectionStart : null;
+
     main.innerHTML = `
         <div class="section-header" id="daily-dashboard-shell">
             <div>
@@ -318,6 +322,8 @@ OL.renderDailyDashboard = function() {
                 <div class="small muted">Overview of operations, tasks, events, emails, and errors</div>
             </div>
         </div>
+
+        ${typeof OL.globalSearchHtml === 'function' ? OL.globalSearchHtml() : ''}
 
         <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 25px;">
             <div class="card" style="padding: 15px;">
@@ -411,6 +417,10 @@ OL.renderDailyDashboard = function() {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    if (searchWasFocused) {
+        const box = document.getElementById('global-search-input');
+        if (box) { box.focus(); try { box.setSelectionRange(searchCursor, searchCursor); } catch (e) { /* not selectable */ } OL.globalSearchRestore(); }
+    }
 
     // Stash for the popovers below (built once per render, read at click time)
     OL._dashboardAssigneeOptions = orderedAssigneeOptions;

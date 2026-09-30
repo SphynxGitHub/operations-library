@@ -46,20 +46,47 @@ const SYNC_SYSTEMS = [
     { id: 'ycbm', name: 'YouCanBook.me', hints: ['youcanbook', 'ycbm'], pulls: 'your booking pages', extra: { label: 'YouCanBook.me account email', placeholder: 'you@firm.com' } },
     { id: 'processstreet', name: 'Process Street', hints: ['processstreet', 'process street'], pulls: 'your workflows and their tasks' },
 ];
-// The sync-capable systems the client named anywhere in the software answers (picked apps, typed names, other software).
-function detectSyncSystems(answers) {
-    const texts = [];
+// Every piece of software the client named, lowercased: apps picked from the Master Library, typed names, and the
+// "other software" list. `keys` limits it to particular questions (e.g. only the scheduling answer).
+function softwareNames(answers, keys) {
+    const out = [];
     INTAKE_STEPS.flatMap((st) => st.questions).forEach((q) => {
+        if (keys && !keys.includes(q.key)) return;
         const a = answers[q.key];
         if (q.type === 'apps' && a && typeof a === 'object') {
-            (a.apps || []).forEach((id) => texts.push((state.master?.apps || []).find((m) => String(m.id) === String(id))?.name || ''));
-            texts.push(a.other || '');
-        } else if (q.addAsApps && typeof a === 'string') texts.push(a);
+            (a.apps || []).forEach((id) => out.push((state.master?.apps || []).find((m) => String(m.id) === String(id))?.name || ''));
+            String(a.other || '').split(/[,\n;]+/).forEach((n) => out.push(n));
+        } else if (q.addAsApps && typeof a === 'string') out.push(...a.split(/[\n;]+/));
     });
-    const hay = texts.join(' | ').toLowerCase();
+    return out.map((n) => n.trim().toLowerCase()).filter(Boolean);
+}
+const namedAny = (answers, hint, keys) => softwareNames(answers, keys).some((n) => n.includes(hint));
+
+// The sync-capable systems the client named anywhere in the software answers.
+function detectSyncSystems(answers) {
+    const hay = softwareNames(answers).join(' | ');
     return SYNC_SYSTEMS.filter((sys) => sys.hints.some((h) => hay.includes(h)));
 }
 const canStoreKeys = () => state.adminMode === true || state.teamMemberMode === true;
+
+// Follow-ups that only make sense for certain software combinations. Each answer is saved as a note on that application's
+// card (Applications tab), as a line "Intake · <what>: <answer>", so it is there when someone opens the app later.
+//   when(answers) -> should this be asked?     note.hints -> which application card(s) get the note
+//   note.fromQuestion -> instead, every app the client picked for that question (minus note.exclude)
+const FOLLOWUPS = [
+    { key: 'fuDocusignSchwab', type: 'yesno', label: 'Is your DocuSign hosted through Schwab?',
+      when: (a) => namedAny(a, 'schwab') && namedAny(a, 'docusign'), note: { hints: ['docusign'], what: 'Hosted through Schwab' } },
+    { key: 'fuOncehubZapier', type: 'yesno', label: 'Is your OnceHub connected to Zapier?',
+      when: (a) => namedAny(a, 'oncehub'), note: { hints: ['oncehub'], what: 'Connected to Zapier' } },
+    { key: 'fuSchedulerConnects', type: 'multi', options: ['Zoom', 'Google Calendar', 'Outlook', 'None of these'],
+      label: 'Which of these is your scheduling software connected to?',
+      when: (a) => softwareNames(a, ['scheduling']).some((n) => !n.includes('oncehub')),
+      note: { fromQuestion: 'scheduling', exclude: ['oncehub'], what: 'Connected to' } },
+    { key: 'fuRetriever', type: 'yesno', label: 'Is RetrieverCloud set up?',
+      when: (a) => namedAny(a, 'redtail'), note: { hints: ['redtail'], what: 'RetrieverCloud set up' } },
+    { key: 'fuWealthboxCalendar', type: 'yesno', label: 'Is Wealthbox > Calendar sync set up?',
+      when: (a) => namedAny(a, 'wealthbox'), note: { hints: ['wealthbox'], what: 'Wealthbox > Calendar sync set up' } },
+];
 
 // The documents an advisory firm usually keeps. `name` is what is stored on the Compliance Documents resource (the same
 // short names it starts with, so nothing doubles up); `label` is what the person reads.
@@ -157,8 +184,6 @@ const INTAKE_STEPS = [
         { key: 'virtualMeeting', label: 'What virtual meeting software do you use?', type: 'apps', fn: /meeting|video|conferenc|webinar/i },
         { key: 'calendar', label: 'What calendar software do you use?', type: 'apps', fn: /calendar/i },
         { key: 'scheduling', label: 'What scheduling software do you use?', type: 'apps', fn: /schedul|booking/i },
-        { key: 'schedulingCalendarSync', label: 'Is your scheduling software integrated with your calendar software?', type: 'yesno' },
-        { key: 'schedulingMeetingSync', label: 'Is your virtual meeting software integrated with your scheduling software?', type: 'yesno' },
     ] },
     { key: 'techClients', title: 'Technology: clients, notes and workflow', questions: [
         { key: 'crm', label: 'What CRM software do you use?', type: 'apps', fn: /crm/i },
@@ -187,6 +212,9 @@ const INTAKE_STEPS = [
         { key: 'workflowFiles', label: 'Upload workflow documents (PDF)', type: 'files', hint: 'Checklists, process outlines, onboarding steps, meeting prep — anything written down. PDF only, up to 10 MB each.' },
         { key: 'workflowNote', label: 'No documents? Describe your main workflows in a few lines.', type: 'textarea', hint: 'For example: what happens from a booked intro meeting to a signed client.' },
     ] },
+    { key: 'followups', title: 'A few follow-up questions', intro: 'Based on the software you told us about.',
+      showIf: (a) => FOLLOWUPS.some((f) => f.when(a)),
+      questions: FOLLOWUPS.map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options, showIf: f.when })) },
     { key: 'naming', title: 'Naming conventions', intro: 'How you name things today, so what we build follows your existing habits. Use the pattern, not a real client — for example "Last, First".', questions: [
         { key: 'nameHhIndividual', label: 'Household name in your CRM — an individual client', type: 'text', prefill: (c) => namingValue(c, 'household', 'individual') },
         { key: 'nameHhJointSame', label: 'Household name — a couple who share a last name', type: 'text', prefill: (c) => namingValue(c, 'household', 'jointSame') },
@@ -302,6 +330,10 @@ function questionHtml(q, answers, client) {
                 <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer; text-transform:none; letter-spacing:0; font-weight:400;"><input type="checkbox" id="${id}-none" ${a.none ? 'checked' : ''}> Don't currently use</label>
             </div>`;
     }
+    else if (q.type === 'multi') {
+        const picked = new Set(Array.isArray(v) ? v : []);
+        input = `<div class="ob-pill-group" id="${id}">${q.options.map((o) => `<div class="ob-pill ${picked.has(o) ? 'selected' : ''}" data-val="${esc(o)}" onclick="this.classList.toggle('selected')">${esc(o)}</div>`).join('')}</div>`;
+    }
     else if (q.type === 'keys') {
         const st = answers.systemKeys && typeof answers.systemKeys === 'object' ? answers.systemKeys : { extra: [], stored: {} };
         const shown = [...new Set([...detectSyncSystems(answers).map((x) => x.id), ...(st.extra || [])])].map((id) => SYNC_SYSTEMS.find((x) => x.id === id)).filter(Boolean);
@@ -391,6 +423,10 @@ function readStep(client) {
         if (q.type === 'text' || q.type === 'textarea' || q.type === 'select') ob.answers[q.key] = el.value.trim();
         else if (q.type === 'number') ob.answers[q.key] = el.value === '' ? '' : Number(el.value);
         else if (q.type === 'yesno') { const sel = el.querySelector('.ob-pill.selected'); ob.answers[q.key] = sel ? sel.getAttribute('data-val') : ''; }
+        else if (q.type === 'multi') {
+            const picks = Array.from(el.querySelectorAll('.ob-pill.selected')).map((p) => p.getAttribute('data-val'));
+            ob.answers[q.key] = picks.includes('None of these') && picks.length > 1 ? picks.filter((x) => x !== 'None of these') : picks;
+        }
         else if (q.type === 'docs') {
             const have = {}, urls = {};
             el.querySelectorAll('input[data-doc]').forEach((c) => { have[c.getAttribute('data-doc')] = c.checked; });
@@ -423,7 +459,7 @@ export function applyIntakeApps(client) {
         if (have(name, master?.id)) return;
         if (master) { provisionMasterAppInto(client, master); added++; return; }
         pd.localApps.push({
-            id: 'local-app-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), name, notes: 'Added from the intake questionnaire',
+            id: 'local-app-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), name, notes: '',
             functionIds: fnId ? [{ id: fnId, status: 'available' }] : [], capabilities: [],
         });
         if (fnId) { if (!client.sharedMasterIds) client.sharedMasterIds = []; if (!client.sharedMasterIds.map(String).includes(fnId)) client.sharedMasterIds.push(fnId); }
@@ -512,14 +548,46 @@ export function applyIntakeFiles(client) {
     return out;
 }
 
+// ---- follow-up answers → notes on the application cards --------------------------------------------------------------
+// One line per follow-up, "Intake · <what>: <answer>". Running again replaces that line rather than adding another, and
+// notes someone wrote on the card by hand are left alone.
+function setIntakeNote(app, what, value) {
+    const prefix = `Intake · ${what}:`;
+    const lines = String(app.notes || '').split('\n').filter((l) => !l.startsWith(prefix));
+    lines.push(`${prefix} ${value}`);
+    const next = lines.filter((l) => l.trim()).join('\n');
+    if (next === String(app.notes || '')) return false;
+    app.notes = next;
+    return true;
+}
+export function applyIntakeNotes(client) {
+    const a = intakeOf(client).answers;
+    const localApps = client.projectData?.localApps || [];
+    const byName = (test) => localApps.filter((x) => !x.isHidden && test(String(x.name || '').toLowerCase()));
+    let changed = 0;
+    FOLLOWUPS.filter((f) => f.when(a)).forEach((f) => {
+        const v = a[f.key];
+        const value = Array.isArray(v) ? v.join(', ') : String(v || '');
+        if (!value) return;
+        let targets = [];
+        if (f.note.fromQuestion) {
+            const picked = softwareNames(a, [f.note.fromQuestion]).filter((n) => !(f.note.exclude || []).some((e) => n.includes(e)));
+            targets = byName((n) => picked.some((p) => n.includes(p) || p.includes(n)));
+        } else targets = byName((n) => f.note.hints.some((h) => n.includes(h)));
+        targets.forEach((app) => { if (setIntakeNote(app, f.note.what, value)) changed++; });
+    });
+    return changed;
+}
+
 // Everything the answers can put into the project. Idempotent and additive: safe to run again after editing answers.
 export function applyIntakeToProject(client) {
     applyIntakeContact(client);
     const apps = applyIntakeApps(client);
-    return { apps, ...applyIntakeFiles(client) };
+    const notes = applyIntakeNotes(client);
+    return { apps, notes, ...applyIntakeFiles(client) };
 }
 const summaryLine = (r) => [
-    r.apps && `${r.apps} application${r.apps === 1 ? '' : 's'}`, r.naming && `${r.naming} naming pattern${r.naming === 1 ? '' : 's'}`,
+    r.apps && `${r.apps} application${r.apps === 1 ? '' : 's'}`, r.notes && `${r.notes} application note${r.notes === 1 ? '' : 's'}`, r.naming && `${r.naming} naming pattern${r.naming === 1 ? '' : 's'}`,
     r.folders && `${r.folders} folder change${r.folders === 1 ? '' : 's'}`, r.docs && `${r.docs} compliance document${r.docs === 1 ? '' : 's'}`,
 ].filter(Boolean).join(', ');
 
@@ -662,6 +730,7 @@ export function intakeRefresh() {
 
 // ---- the page: status, start/resume, and the answers as a document -------------------------------------------------
 function answerText(q, v, answers = {}) {
+    if (q.type === 'multi') return Array.isArray(v) ? v.join(', ') : '';
     if (q.type === 'keys') {
         const stored = answers.systemKeys?.stored || {};
         return Object.keys(stored).map((id) => `${SYNC_SYSTEMS.find((x) => x.id === id)?.name || id}: key stored securely`).join('\n');
@@ -772,6 +841,7 @@ ul.list li { margin: 1px 0; }
 
 function printAnswerHtml(q, answers) {
     const v = answers[q.key];
+    if (q.type === 'multi') return Array.isArray(v) && v.length ? v.map((x) => `<span class="chip">${escHtml(x)}</span>`).join('') : '';
     if (q.type === 'yesno') return v ? `<span class="chip">${escHtml(v)}</span>` : '';
     if (q.type === 'select') return v ? `<span class="chip">${escHtml(v)}</span>` : '';
     if (q.type === 'apps') {
@@ -802,6 +872,7 @@ function printBlankHtml(q) {
     if (q.type === 'keys') return '';                          // never on paper
     if (q.type === 'files') return '<div class="hint">Attach any workflow documents (PDF) when you return this form.</div>';
     if (q.type === 'yesno') return '<div class="opts"><span>☐ Yes</span><span>☐ No</span></div>';
+    if (q.type === 'multi') return `<div class="opts">${q.options.map((o) => `<span>☐ ${escHtml(o)}</span>`).join('')}</div>`;
     if (q.type === 'select') return `<div class="opts">${q.options.map((o) => `<span>☐ ${escHtml(o)}</span>`).join('')}</div>`;
     if (q.type === 'docs') return `<div class="opts">${q.docs.map((d) => `<div>☐ ${escHtml(d.label)} <span class="hint">link: ____________________</span></div>`).join('')}<div class="line"></div></div>`;
     if (q.type === 'textarea') return `<div class="box" style="height:${q.tall ? 120 : 56}px;"></div>`;

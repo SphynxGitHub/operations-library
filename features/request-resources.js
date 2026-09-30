@@ -6,6 +6,7 @@
 
 import { state, esc, getActiveClient } from '../core/data.js';
 import { requestResourceIds, renderRequestResourcesHtml, REQUEST_RESOURCES_CSS } from '../core/request-pricing.js';
+import { groupResources, groupsHtml, resourceSearchText, filterGroupsDom } from '../core/resource-groups.js';
 
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US')}`;
 const isRequestLineId = (id) => String(id || '').startsWith('reqline-');
@@ -22,12 +23,15 @@ export function requestResourcesSectionHtml(client, item) {
     const ids = requestResourceIds(item);
     const shown = breakdown.lines.filter((l) => !isRequestLineId(l.resourceId));
     const onRequest = new Set(ids);
-    const spare = (client.projectData?.localResources || []).filter((r) => r && !onRequest.has(String(r.id)) && !String(r.id).startsWith('step-'));
+    // What can still be added: not already on this request, not a step, not archived, not one of the pinned reference
+    // resources (Naming Conventions, Folder Hierarchy, ...) that are never part of a request.
+    const spare = (client.projectData?.localResources || []).filter((r) => r && !onRequest.has(String(r.id)) && !String(r.id).startsWith('step-')
+        && !r.isArchived && !r.archived && !r.systemPinned && !r.adminPinned);
     const types = (state.master?.resourceTypes || []).map((t) => t.type).filter(Boolean);
     const typeOptions = (types.length ? types : DEFAULT_TYPES).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
     const removable = (id) => !(String(id) === String(item.resourceId) && (ids.length < 2 || isRequestLineId(item.resourceId)));
 
-    const rows = shown.map((l) => {
+    const rowFor = (l) => {
         const res = resourceIn(client, l.resourceId);
         const units = l.units.length ? l.units.map((u) => `${u.count} ${esc(u.label)} × ${money(u.value)}`).join(' · ') : 'no units set yet';
         return `
@@ -48,7 +52,12 @@ export function requestResourcesSectionHtml(client, item) {
                 </select>` : ''}
                 ${removable(l.resourceId) ? `<button type="button" class="btn tiny soft" title="Take it off this request" onclick="OL.rqRemoveResource('${esc(itemIdOf(item))}', '${esc(l.resourceId)}')">✕</button>` : ''}
             </div>`;
-    }).join('');
+    };
+    // A request that touches many resources is easier to read grouped by type; a short one stays a plain list.
+    const distinctTypes = new Set(shown.map((l) => String(l.type || 'General')));
+    const rows = shown.length >= 4 && distinctTypes.size > 1
+        ? groupsHtml(groupResources(shown.map((l) => ({ ...l, type: l.type || 'General' }))), (l) => rowFor(l), { open: true })
+        : shown.map(rowFor).join('');
 
     const hoursRow = breakdown.hoursFee > 0 ? `
             <div style="display:flex; justify-content:space-between; padding:4px 9px;" class="tiny"><span>Estimated time (${esc(breakdown.hours)} h)</span><strong>${money(breakdown.hoursFee)}</strong></div>` : '';
@@ -59,12 +68,18 @@ export function requestResourcesSectionHtml(client, item) {
             ${rows || '<div class="tiny muted">No resources yet. This request is priced by its estimated hours.</div>'}
             ${hoursRow}
             <div style="display:flex; justify-content:flex-end; padding:2px 9px;" class="tiny"><span class="muted" style="margin-right:8px;">Total before discount</span><strong>${money(breakdown.gross)}</strong></div>
-            <div style="display:flex; gap:6px; align-items:center;">
-                <select id="rq-add-existing" class="modal-input tiny" style="flex:1; min-width:0;">
-                    <option value="">Add an existing resource...</option>
-                    ${spare.map((r) => `<option value="${esc(r.id)}">${esc(r.name || 'Untitled')}${r.type ? ' (' + esc(r.type) + ')' : ''}${r.isShell ? ' - planned' : ''}</option>`).join('')}
-                </select>
-                <button type="button" class="btn tiny soft" onclick="OL.rqAddExistingResource('${esc(itemIdOf(item))}')">Add</button>
+            <div id="rq-add-existing-box" style="border:1px solid var(--line); border-radius:6px; padding:8px;">
+                <div class="tiny bold" style="margin-bottom:4px;">Add an existing resource <span class="muted" style="font-weight:400;">(${spare.length} available)</span></div>
+                <input id="rq-add-existing-search" type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box; margin-bottom:6px;" placeholder="Search by name, type or description…"
+                       oninput="OL.rqFilterResources(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+                <div id="rq-add-existing-list" style="max-height:230px; overflow:auto;">
+                    ${groupsHtml(groupResources(spare), (r) => `
+                        <div style="display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
+                            <span class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(r.name || 'Untitled')}">${esc(r.name || 'Untitled')}</span>
+                            ${r.isShell ? '<span class="pill tiny" style="font-size:9px; border:1px solid #f59e0b; color:#f59e0b;">Planned</span>' : ''}
+                            <button type="button" class="btn tiny soft" onclick="OL.rqAddExistingResourceId('${esc(itemIdOf(item))}', '${esc(r.id)}')">Add</button>
+                        </div>`, { query: '', empty: 'Every resource on this project is already on this request (or none exist yet).', searchTextFor: (r) => resourceSearchText(r) })}
+                </div>
             </div>
             <div style="display:flex; gap:6px; align-items:center;">
                 <input id="rq-shell-name" type="text" class="modal-input tiny" style="flex:1; min-width:0;" placeholder="Or plan a new resource, e.g. Intake form">
@@ -122,6 +137,21 @@ async function changeResources(itemId, change) {
     return true;
 }
 
+// Search box in the picker: filters the drawn list in place, so nothing typed elsewhere in the window is lost.
+export function rqFilterResources(query) {
+    filterGroupsDom(document.getElementById('rq-add-existing-list'), query);
+}
+
+export async function rqAddExistingResourceId(itemId, id) {
+    if (!id) return;
+    return changeResources(itemId, (client, item) => {
+        const ids = requestResourceIds(item);
+        if (ids.includes(String(id)) || !resourceIn(client, id)) return false;
+        item.resourceIds = [...ids, String(id)];
+    });
+}
+
+// Kept for anything still calling the old dropdown version.
 export async function rqAddExistingResource(itemId) {
     const id = document.getElementById('rq-add-existing')?.value;
     if (!id) return;
@@ -258,7 +288,7 @@ export async function rqSetUnits(itemId, resourceId) {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { renderRequestResourcesHtml, requestResourcesPrintCss: REQUEST_RESOURCES_CSS, requestResourcesSectionHtml, rqAddExistingResource, rqAddShell, rqRemoveResource, rqMarkBuilt, rqSetBuildState, setResourceBuildState, installBuildStateControls, rqSetUnits });
+Object.assign(window.OL, { renderRequestResourcesHtml, requestResourcesPrintCss: REQUEST_RESOURCES_CSS, requestResourcesSectionHtml, rqAddExistingResource, rqAddExistingResourceId, rqFilterResources, rqAddShell, rqRemoveResource, rqMarkBuilt, rqSetBuildState, setResourceBuildState, installBuildStateControls, rqSetUnits });
 
 // The resource files register the status menu and pill; wrap them once everything has loaded.
 if (typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) setTimeout(() => installBuildStateControls(), 0);

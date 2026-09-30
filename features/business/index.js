@@ -1,4 +1,5 @@
 import './compose-shared.js';
+import './global-search.js';
 import './dashboard.js';
 import './tasks.js';
 import './time-reports.js';
