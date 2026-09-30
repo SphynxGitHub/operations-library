@@ -7662,10 +7662,23 @@ export function centerPrevCanvasMatch() {
 export function centerCanvasNode(nodeId) {
     let nodeEl = document.getElementById(nodeId) || document.getElementById(`v2-node-${nodeId}`);
     
+    // The current flowchart names its cards fv-card-<id>-<workflow> and tags them with data-res-id, so look for
+    // that too. (The old v2-node-<id> names above no longer exist in the flowchart.)
     if (!nodeEl) {
-        console.warn("❌ Centering failed: Could not find element with ID", nodeId);
-        return;
+        const safeId = (window.CSS && CSS.escape) ? CSS.escape(String(nodeId)) : String(nodeId).replace(/["\\]/g, '\\$&');
+        nodeEl = document.querySelector(`.fv-card[data-res-id="${safeId}"]`) || document.getElementById(`wb-node-${nodeId}`);
+        if (nodeEl && nodeEl.classList.contains('fv-card')) {
+            nodeEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            document.querySelectorAll('.fv-card.search-active').forEach(el => el.classList.remove('search-active'));
+            nodeEl.classList.add('search-active');
+            return;
+        }
     }
+
+    if (!nodeEl) {
+      console.warn("❌ Centering failed: Could not find element with ID", nodeId);
+      return;
+    
     // 1. 🔍 THE AUTO-OPEN CHECK
     // Check if the node is inside a tray/sidebar
     const workbench = document.getElementById('v2-workbench-sidebar');
