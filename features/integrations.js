@@ -15,7 +15,8 @@
 // export), so the dead first definition was dropped — this changes
 // nothing about actual behavior, since it never ran anyway.
 
-import { state, esc, uid, getActiveClient, persist, loadFullClient, markClientDirty } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, loadFullClient, markClientDirty, db } from '../core/data.js';
+import { createZapImport } from './zap-import-ui.js';
 import {
     parseClickUpMinutes, parseClickUpDate, parseClickUpAssignees, parseClickUpBillable, applyImportedTime, guessClientFromFileName,
 } from '../core/clickup-import.js';
@@ -1683,8 +1684,22 @@ export function _printStepsHtml(stages, resources, workflows) {
     return html;
 };
 
+// ---- Zap import window (the logic lives in zap-import-ui.js and zap-import-core.js) ----
+const zapImport = createZapImport({
+    state, esc, uid, persist, markClientDirty, db,
+    getUserName: () => (typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : ''),
+    openModal: (html) => window.openModal(html),
+    closeModal: () => OL.closeModal(),
+    afterApply: () => {
+        if (typeof OL.syncLogicPorts === 'function') OL.syncLogicPorts();
+        if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer(false);
+        if (typeof OL.renderWorkbenchItemsOnly === 'function') OL.renderWorkbenchItemsOnly();
+    },
+});
+
 // ---- bridge: keep OL.* calls working until callers import directly ----
 window.OL = window.OL || {};
+Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, syncExternalIntegrations, importCalendly,
