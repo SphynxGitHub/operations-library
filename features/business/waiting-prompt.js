@@ -17,6 +17,7 @@
 
 import { state, esc, uid, updateAndSync } from '../../core/data.js';
 import { linksForTask, addLink } from '../../core/task-links.js';
+import { isClientFacing } from '../../core/request-tasks.js';
 
 const KIND_BY_STATUS = {
     'pending client feedback': 'feedback',
@@ -77,9 +78,15 @@ function redrawList() {
 OL.promptClientWaiting = function(clientId, taskId, status) {
     const kind = waitingKindForStatus(status);
     const task = findTask(clientId, taskId);
-    if (!kind || !task) return;
-    // Client asks and the follow-up itself aren't "Sphynx work waiting on the client".
-    if (task.isClientTask || task.askKind || task.consolidatedFollowUp) return;
+    if (!kind || !task) { console.info('[waiting prompt] not shown: no matching status/task', { status, found: !!task }); return; }
+    // Client asks and the follow-up itself aren't "Sphynx work waiting on the client". Judged the same way the
+    // follow-up rules judge it (assignee + ask kind), NOT by task.isClientTask: that flag is set from the assignee
+    // when the task is created and can be stale or wrong for a task assigned to a named team member.
+    const sphynxCtx = { sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).concat(OL.thirdPartyAssignees || []) };
+    if (task.consolidatedFollowUp || task.askKind === 'follow_up' || isClientFacing(task, sphynxCtx)) {
+        console.info('[waiting prompt] not shown: this is a client ask / follow-up task, not Sphynx work', { assignee: task.assignee, askKind: task.askKind });
+        return;
+    }
 
     document.getElementById(OVERLAY_ID)?.remove();
     OL._waitPromptState = { clientId, taskId, kind };
