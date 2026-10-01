@@ -13,7 +13,7 @@
 // children, so edits and deletions on a task show up everywhere at once,
 // and the parent's own comments/files stay separate from the rolled-up ones.
 
-import { state, esc, db } from '../core/data.js';
+import { state, esc, db, decodeEntities } from '../core/data.js';
 import { requestResourceIds } from '../core/request-pricing.js';
 import { requestIdsForTask, linksForTask } from '../core/task-links.js';
 import { rollDownPieceLinks, removePieceLink } from '../core/roll-down.js';
@@ -180,7 +180,7 @@ export async function renderEmailLinksInto(container, clientId, kind, id) {
     const wholeIds = new Set(emails.map((m) => String(m.id)));
     const removeBtn = (onclick, title) => `<button type="button" class="btn tiny soft" style="color:#ef4444; flex-shrink:0; padding:0 6px;" title="${esc(title)}" onclick="event.stopPropagation(); ${onclick}">✕</button>`;
     const whole = emails.map((m) => `
-        <div style="padding:6px 8px; background:rgba(168,85,247,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer;" onclick="OL.openGmailMessageModal('${esc(m.id)}')">
+        <div style="padding:6px 8px; background:rgba(168,85,247,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer; min-width:0; max-width:100%; box-sizing:border-box;" onclick="OL.openGmailMessageModal('${esc(m.id)}')">
             <div style="display:flex; align-items:center; gap:6px;">
                 <i data-lucide="mail" style="width:11px;height:11px;color:#a855f7;flex-shrink:0;"></i>
                 <strong class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject || 'No Subject')}</strong>
@@ -188,13 +188,13 @@ export async function renderEmailLinksInto(container, clientId, kind, id) {
                 <span class="pill tiny soft" style="font-size:9px;">whole email</span>
                 ${kind === 'request' && String(m.linked_request_id || '') === String(id) ? removeBtn(`OL.removeEmailRequestLink('${esc(m.id)}','${esc(clientId)}','${esc(id)}')`, 'Unlink this email from the request') : ''}
             </div>
-            ${(m.note || m.snippet) ? `<div class="tiny muted" style="margin-top:4px; max-height:60px; overflow:hidden; white-space:pre-wrap;">${esc(m.note || m.snippet)}</div>` : ''}
+            ${(m.note || m.snippet) ? `<div class="tiny muted" style="margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;">${esc(decodeEntities(m.note || m.snippet))}</div>` : ''}
         </div>`);
     const bits = pieces.filter((p) => !(p.link.kind === 'email' && wholeIds.has(String(p.messageId)))).map((p) => {
         const l = p.link, isAtt = l.kind === 'attachment', isWhole = l.kind === 'email';
         const body = isAtt ? (l.attachmentName || l.text || 'Attachment') : (l.text || '');
         return `
-        <div style="padding:6px 8px; background:rgba(56,189,248,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer;" onclick="OL.openGmailMessageModal('${esc(p.messageId)}')">
+        <div style="padding:6px 8px; background:rgba(56,189,248,0.04); border:1px solid var(--line); border-radius:4px; cursor:pointer; min-width:0; max-width:100%; box-sizing:border-box;" onclick="OL.openGmailMessageModal('${esc(p.messageId)}')">
             <div style="display:flex; align-items:center; gap:6px;">
                 <i data-lucide="${isAtt ? 'paperclip' : 'quote'}" style="width:11px;height:11px;color:#38bdf8;flex-shrink:0;"></i>
                 <strong class="tiny" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.subject || 'No Subject')}</strong>
@@ -202,12 +202,12 @@ export async function renderEmailLinksInto(container, clientId, kind, id) {
                 <span class="pill tiny soft" style="font-size:9px;">${isAtt ? 'attachment' : isWhole ? 'whole email' : 'excerpt'}${l.targetType && String(l.targetId) !== String(id) ? ` on ${esc(l.targetType)}` : ''}${l.rolledDownFrom ? ' · from request' : ''}</span>
                 ${removeBtn(`OL.removeEmailPiece('${esc(p.messageId)}','${esc(l.id)}','${esc(clientId)}','${esc(kind)}','${esc(id)}')`, l.rolledDownFrom ? 'Remove this from the task' : 'Remove this link (also removes the copies on its build tasks)')}
             </div>
-            <div class="tiny" style="margin-top:4px; max-height:72px; overflow:hidden; white-space:pre-wrap;">${esc(body)}</div>
+            <div class="tiny" style="margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden;">${esc(decodeEntities(body))}</div>
             ${l.note ? `<div class="tiny muted" style="margin-top:2px;">${esc(l.note)}</div>` : ''}
         </div>`;
     });
     container.innerHTML = (whole.length || bits.length)
-        ? `<div style="display:grid; gap:4px;">${whole.join('')}${bits.join('')}</div>`
+        ? `<div style="display:grid; grid-template-columns:minmax(0,1fr); gap:4px; min-width:0;">${whole.join('')}${bits.join('')}</div>`
         : '<span class="tiny muted">None.</span>';
     if (window.lucide) lucide.createIcons();
 }
@@ -300,7 +300,7 @@ export function renderRollupSection(clientId, kind, id) {
     if (!taskIds.length && kind !== 'request' && kind !== 'resource') return '';
     const label = kind === 'task' ? 'subtasks' : 'linked tasks';
     return `
-    <div id="rollup-${kind}-${esc(String(id))}" style="margin-bottom:20px; padding:14px; border:1px dashed rgba(100,198,162,0.4); border-radius:6px; background:rgba(100,198,162,0.03);">
+    <div id="rollup-${kind}-${esc(String(id))}" style="margin-bottom:20px; padding:14px; min-width:0; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere; border:1px dashed rgba(100,198,162,0.4); border-radius:6px; background:rgba(100,198,162,0.03);">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
             <i data-lucide="layers" style="width:12px;height:12px;color:#64c6a2;"></i>
             <label class="bold tiny uppercase muted" style="margin:0;">Rolled up from ${label}</label>
@@ -308,17 +308,17 @@ export function renderRollupSection(clientId, kind, id) {
         </div>
 
         <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Uploads (${files.length})</div>
-        <div style="display:grid; gap:4px; margin-bottom:10px;">
+        <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:4px; margin-bottom:10px;">
             ${files.length ? files.map((f) => `
-                <div style="display:flex; align-items:center; gap:6px; padding:5px 8px; background:rgba(0,0,0,0.12); border-radius:4px;">
-                    <i data-lucide="file-text" style="width:12px;height:12px;color:var(--accent);flex-shrink:0;"></i>
-                    <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" class="tiny bold" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:inherit;">${esc(f.name || 'File')}</a>
+                <div style="display:flex; align-items:flex-start; gap:6px; padding:5px 8px; background:rgba(0,0,0,0.12); border-radius:4px; min-width:0;">
+                    <i data-lucide="file-text" style="width:12px;height:12px;color:var(--accent);flex-shrink:0; margin-top:2px;"></i>
+                    <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" class="tiny bold" style="flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; word-break:break-word; color:inherit;">${esc(f.name || 'File')}</a>
                     ${fromPill(clientId, f)}
                 </div>`).join('') : '<span class="tiny muted">None.</span>'}
         </div>
 
         <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Linked emails, excerpts and attachments</div>
-        <div class="rollup-emails" style="display:grid; gap:4px; margin-bottom:10px;"><span class="tiny muted">Loading…</span></div>
+        <div class="rollup-emails" style="display:grid; grid-template-columns:minmax(0,1fr); gap:4px; margin-bottom:10px; min-width:0;"><span class="tiny muted">Loading…</span></div>
 
         <div class="tiny muted uppercase bold" style="margin-bottom:4px;">Comments (${comments.length})</div>
         <div style="display:grid; gap:4px; max-height:320px; overflow:auto;">

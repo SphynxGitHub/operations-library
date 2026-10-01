@@ -59,6 +59,27 @@ function blockingList(clientId, kind, id) {
     return out;
 }
 
+// What a blocked item is still waiting on, as a compact list for task rows: every unfinished thing in its blockedBy,
+// whatever kind (a Sphynx task, a client ask, a request, a resource). `skipIds` leaves out tasks already listed
+// by the open-client-tasks block under the same row, so nothing shows twice. Empty when nothing is outstanding.
+export function renderBlockedByList(clientId, item, { indent = 20, skipIds = [] } = {}) {
+    const skip = new Set((skipIds || []).map(String));
+    const open = (item?.blockedBy || [])
+        .map((d) => ({ ...d, item: findItem(clientId, d.kind, d.id) }))
+        .filter((d) => !isDone(d.kind, d.item) && !(d.kind === 'task' && skip.has(String(d.id))));
+    if (!open.length) return '';
+    return `
+        <div style="margin: 2px 0 6px ${indent}px; padding:6px 10px; border-left:2px dashed rgba(245,158,11,0.5); background:rgba(245,158,11,0.04); border-radius:0 6px 6px 0; min-width:0;">
+            <div class="tiny muted" style="margin-bottom:3px;">Waiting on:</div>
+            ${open.map((d) => `
+                <div class="tiny" style="display:flex; align-items:flex-start; gap:6px; padding:2px 0; cursor:pointer; min-width:0;" onclick="event.stopPropagation(); OL.openDependencyTarget('${esc(clientId)}', '${d.kind}', '${esc(String(d.id))}')">
+                    <i data-lucide="${KIND_ICON[d.kind] || 'lock'}" style="width:10px;height:10px; color:#f59e0b; flex-shrink:0; margin-top:2px;"></i>
+                    <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(titleOf(clientId, d.kind, d.item))}</span>
+                    <span class="pill tiny soft" style="font-size:9px; flex-shrink:0; white-space:nowrap;">${esc(KIND_LABEL[d.kind] || '')} · ${esc(statusText(d.kind, d.item))}</span>
+                </div>`).join('')}
+        </div>`;
+}
+
 export function isBlocked(clientId, item) {
     return (item?.blockedBy || []).some((d) => !isDone(d.kind, findItem(clientId, d.kind, d.id)));
 }
@@ -285,4 +306,4 @@ OL.openDependencyTarget = function (clientId, kind, id) {
     if (kind === 'resource') { OL.closeModal?.(); return OL.openResourceModal?.(id); }
 };
 
-Object.assign(window.OL, { renderDependencySection, isBlocked, askClientAsDependency: OL.askClientAsDependency });
+Object.assign(window.OL, { renderDependencySection, renderBlockedByList, isBlocked, askClientAsDependency: OL.askClientAsDependency });

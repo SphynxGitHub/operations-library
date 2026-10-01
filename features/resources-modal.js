@@ -8,7 +8,7 @@
 // Companion to features/resources-grid.js (see that file's header note
 // about the circular renderResourceManager <-> renderResourceCard calls).
 
-import { state, esc, num, uid, getActiveClient, persist, db } from '../core/data.js';
+import { state, esc, num, uid, getActiveClient, persist, db, decodeEntities } from '../core/data.js';
 import { evaluateCondition, renderFieldInput } from '../core/field-schema.js';
 import { renderDependencyRow } from './scoping.js';
 import { RESOURCE_STATUSES, RESOURCE_STATUS_COLORS, normalizeResourceStatus } from '../core/resource-status.js';
@@ -2243,7 +2243,7 @@ OL.loadLinkedEmailsIntoResourceNotes = async function(resId) {
                     </span>
                 </div>
                 <div class="tiny bold" style="margin-bottom:2px;">${esc(m.subject || 'No Subject')}</div>
-                ${m.snippet ? `<div class="tiny muted" style="line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(m.snippet)}</div>` : ''}
+                ${m.snippet ? `<div class="tiny muted" style="line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(decodeEntities(m.snippet))}</div>` : ''}
             </div>
         </div>
     `;
