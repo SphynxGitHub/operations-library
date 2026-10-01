@@ -22,6 +22,23 @@ import { TESTABLE_TYPES, isReadyForTesting, assigneeForRole, pickTemplates, DEFA
 import { requestResourceIds } from './request-pricing.js';
 
 export const REVIEW_DEFAULTS = { days: 30, followUpEveryDays: 10 };
+
+// How a round is wrapped up once every request in it has passed testing. Set per project
+// (projectData.reviewSettings.mode), overridable on one round (state.mode), default 'timeline':
+//   timeline   the client gets the testing checklist AND a dated review period with check-in tasks (the original flow)
+//   checklist  the client gets the testing checklist, with no dates and no check-ins: the review stays open until it
+//              is closed by hand or the client approves
+//   none       no client review at all: the round just shows "Passed testing" and is closed by hand (the notify email
+//              is still available if wanted)
+export const REVIEW_MODES = {
+    timeline:  { label: 'Review period with dates and check-ins', short: 'Review period' },
+    checklist: { label: 'Testing checklist only, no review period', short: 'Checklist only' },
+    none:      { label: 'No client review, close the round when testing passes', short: 'No client review' },
+};
+export function reviewModeFor(client, master, st) {
+    const pick = [st?.mode, client?.projectData?.reviewSettings?.mode, master?.reviewDefaults?.mode].find((m) => m && REVIEW_MODES[m]);
+    return pick || 'timeline';
+}
 export const roundKey = (sheetId, round) => `${sheetId ?? ''}:${round}`;
 
 // ---- dates (YYYY-MM-DD strings; noon UTC so the weekday never shifts) ----
@@ -75,7 +92,8 @@ export function reviewDefaults(master) {
     const r = master?.reviewDefaults || {};
     const days = Number(r.days), every = Number(r.followUpEveryDays);
     return { days: Number.isFinite(days) && days >= 1 ? days : REVIEW_DEFAULTS.days,
-             followUpEveryDays: Number.isFinite(every) && every >= 1 ? every : REVIEW_DEFAULTS.followUpEveryDays };
+             followUpEveryDays: Number.isFinite(every) && every >= 1 ? every : REVIEW_DEFAULTS.followUpEveryDays,
+             mode: REVIEW_MODES[r.mode] ? r.mode : 'timeline' };
 }
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
@@ -165,21 +183,28 @@ export function updateRoundStates(client, ctx) {
         const complete = prog.total > 0 && prog.complete === prog.total;
 
         if (!st && complete) {
+            const mode = reviewModeFor(client, ctx.master, null);
             const tier = reviewTierFor(client, sheet, current, ctx);
             const days = tier ? tier.days : defaults.days;
             const every = tier ? tier.followUpEveryDays : defaults.followUpEveryDays;
             const start = nextReviewStart(ctx.today);
+            // No dates are proposed unless the round gets a dated review period.
+            const dated = mode === 'timeline';
+            const text = mode === 'none'
+                ? { title: `Round ${current} passed testing: close it out`, description: 'Every request in this round has passed testing and this project has no client review. Check nothing else is open, then close the round from the Scoping Sheet (or send the client the testing checklist from the same place if you want to).' }
+                : mode === 'checklist'
+                ? { title: `Notify client: Round ${current} testing checklist`, description: 'Every request in this round has passed testing. Open the notification and send the client the link to the testing checklist. There is no dated review period.' }
+                : { title: `Notify client: Round ${current} review`, description: 'Every request in this round has passed testing. Open the notification, check the review dates, and send the client the review instructions with the link to the testing checklist.' };
             const task = {
-                id: ctx.uid(), title: `Notify client: Round ${current} review`, name: `Notify client: Round ${current} review`,
-                description: 'Every request in this round has passed testing. Open the notification, check the review dates, and send the client the review instructions with the link to the testing checklist.',
+                id: ctx.uid(), title: text.title, name: text.title, description: text.description,
                 status: 'Pending Sphynx Action', assignee: assigneeForRole(client, ctx.roles, /communicat/i), dueDate: ctx.today,
                 isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'conclusion', createdAt: ctx.now, reviewNotifyKey: key,
             };
             pd.clientTasks.unshift(task);
             pd.roundStates[key] = {
-                key, sheetId: String(sheet.id ?? ''), round: current, status: 'ready_to_notify', concludedAt: ctx.today,
-                reviewStart: start, reviewDays: days, followUpEveryDays: every, tier: tier ? tier.tier : '',
-                reviewEnd: reviewEndFor(start, days), notifyTaskId: task.id, checklistToken: '', sentAt: '', sentTo: '',
+                key, sheetId: String(sheet.id ?? ''), round: current, status: 'ready_to_notify', mode, concludedAt: ctx.today,
+                reviewStart: dated ? start : '', reviewDays: dated ? days : 0, followUpEveryDays: dated ? every : 0, tier: tier ? tier.tier : '',
+                reviewEnd: dated ? reviewEndFor(start, days) : '', notifyTaskId: task.id, checklistToken: '', sentAt: '', sentTo: '',
                 followUpTaskIds: [], closedAt: '',
             };
             result.ready.push(key);
@@ -194,8 +219,14 @@ export function updateRoundStates(client, ctx) {
     return result;
 }
 
-export function setReviewDates(state, { start, days, followUpEveryDays }) {
+export function setReviewDates(state, { start, days, followUpEveryDays, mode }) {
     if (!state || state.status !== 'ready_to_notify') return false;
+    if (mode && REVIEW_MODES[mode]) state.mode = mode;
+    // Checklist only / no review: no dates and no check-ins.
+    if (state.mode === 'checklist' || state.mode === 'none') {
+        state.reviewStart = ''; state.reviewEnd = ''; state.reviewDays = 0; state.followUpEveryDays = 0;
+        return true;
+    }
     if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) state.reviewStart = start;
     if (Number(days) >= 1) state.reviewDays = Number(days);
     if (Number(followUpEveryDays) >= 1) state.followUpEveryDays = Number(followUpEveryDays);
@@ -260,6 +291,56 @@ export function extendReview(client, key, ctx, days = 10, note = '') {
 }
 const daysBetweenIso = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 
+// Set a running review's dates by hand: any start and end, a check-in spacing (0 = no check-ins), or no review
+// period at all (end blank). Open check-in tasks are replaced by ones that follow the new schedule from today on;
+// check-ins already done stay as they are. Each change is logged on the round (st.edits).
+export function setReviewPeriod(client, key, ctx, { start = '', end = '', everyDays = 0, note = '' } = {}) {
+    const pd = client?.projectData;
+    const st = pd?.roundStates?.[key];
+    if (!st || st.status !== 'in_review') return { error: 'That review is not running.' };
+    const iso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+    const undated = !end;
+    if (!undated) {
+        if (!iso(start) || !iso(end)) return { error: 'Enter a start and an end date, or leave the end date blank for no review period.' };
+        if (end <= start) return { error: 'The end date must be after the start date.' };
+    }
+    const every = undated ? 0 : Math.max(0, Math.floor(Number(everyDays) || 0));
+    const closed = ctx.closedNames && ctx.closedNames.length ? ctx.closedNames : ['Done'];
+    const before = { start: st.reviewStart, end: st.reviewEnd, every: st.followUpEveryDays };
+
+    st.reviewStart = undated ? '' : start;
+    st.reviewEnd = undated ? '' : end;
+    st.reviewDays = undated ? 0 : daysBetweenIso(start, end);
+    st.followUpEveryDays = every;
+    if (undated) st.mode = 'checklist'; else if (st.mode !== 'timeline') st.mode = 'timeline';
+
+    // Replace the check-ins that haven't happened yet.
+    let cancelled = 0;
+    (st.followUpTaskIds || []).slice().forEach((id) => {
+        const t = pd.clientTasks.find((x) => x.id === id);
+        if (t && !isTaskClosed(t, closed)) { t.status = closed[0]; t.completedAt = ctx.now; t.cancelledAt = ctx.now; cancelled++; }
+    });
+    st.followUpTaskIds = (st.followUpTaskIds || []).filter((id) => { const t = pd.clientTasks.find((x) => x.id === id); return t && !t.cancelledAt; });
+    const added = [];
+    if (!undated && every >= 1) {
+        const assignee = assigneeForRole(client, ctx.roles, /communicat/i);
+        followUpDates(start, end, every).filter((date) => date >= ctx.today).forEach((date) => {
+            const day = daysBetweenIso(start, date);
+            const task = {
+                id: ctx.uid(), title: `Review check-in: Round ${st.round} (day ${day})`, name: `Review check-in: Round ${st.round} (day ${day})`,
+                description: `Follow up with the client on their Round ${st.round} review (ends ${end}). Ask what they have found, and log any problem as a revision task on the original request.`,
+                status: 'Pending Sphynx Action', assignee, dueDate: date, isClientTask: false, loggedHours: 0, parentTaskId: null,
+                createdBy: 'conclusion', createdAt: ctx.now, reviewFollowUpKey: key,
+            };
+            pd.clientTasks.unshift(task);
+            st.followUpTaskIds.push(task.id);
+            added.push(task.id);
+        });
+    }
+    (st.edits = st.edits || []).push({ at: ctx.now, from: before, to: { start: st.reviewStart, end: st.reviewEnd, every }, note: String(note || '') });
+    return { state: st, added, cancelled };
+}
+
 // Work still open on the round's requests (for a warning before closing).
 export function openWorkInRound(client, sheet, round, ctx) {
     const closed = ctx.closedNames && ctx.closedNames.length ? ctx.closedNames : ['Done'];
@@ -271,7 +352,8 @@ export function openWorkInRound(client, sheet, round, ctx) {
 export function closeReview(client, key, ctx) {
     const pd = client?.projectData;
     const st = pd?.roundStates?.[key];
-    if (!st || st.status !== 'in_review') return null;
+    // A round that passed testing can also be closed straight away, without sending the client anything.
+    if (!st || (st.status !== 'in_review' && st.status !== 'ready_to_notify')) return null;
     const sheet = (pd.scopingSheets || []).find((s) => String(s.id ?? '') === st.sheetId);
     const closed = ctx.closedNames && ctx.closedNames.length ? ctx.closedNames : ['Done'];
     let marked = 0;
@@ -282,6 +364,11 @@ export function closeReview(client, key, ctx) {
     });
     const approvedTask = st.approvedTaskId ? pd.clientTasks.find((x) => x.id === st.approvedTaskId) : null;
     if (approvedTask && !isTaskClosed(approvedTask, closed)) { approvedTask.status = closed[0]; approvedTask.completedAt = ctx.now; }
+    if (st.status === 'ready_to_notify') {
+        const notify = pd.clientTasks.find((x) => x.id === st.notifyTaskId);
+        if (notify && !isTaskClosed(notify, closed)) { notify.status = closed[0]; notify.completedAt = ctx.now; }
+        st.closedWithoutReview = true;
+    }
     st.status = 'closed'; st.closedAt = ctx.now;
     return { state: st, marked };
 }
@@ -292,9 +379,11 @@ export function roundStatus(client, sheet, round, ctx) {
     if (st) {
         if (st.status === 'closed') return { kind: 'closed', text: 'Review closed', state: st };
         if (st.status === 'in_review') {
+            if (!st.reviewEnd) return { kind: 'in_review', text: 'Client checklist sent (no review period)', state: st };
             const ended = ctx.today > st.reviewEnd;
             return { kind: ended ? 'review_ended' : 'in_review', text: ended ? `Review ended ${st.reviewEnd}` : `In review ${st.reviewStart} to ${st.reviewEnd}`, state: st };
         }
+        if (st.mode === 'none') return { kind: 'ready_to_notify', text: 'Passed testing: no client review', state: st };
         return { kind: 'ready_to_notify', text: 'Passed testing: notify the client', state: st };
     }
     const p = roundProgress(client, sheet, round, ctx);

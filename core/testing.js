@@ -192,11 +192,16 @@ export function updateTestRuns(client, ctx) {
     // 1. a request whose steps are done gets its own checklist and a Testing task
     (pd.scopingSheets || []).forEach((sheet) => {
         if (!sheet) return;
-        if (sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;   // client requests are plain: no testing checklist, no round review
+        // Client requests (maintenance) are plain: no testing checklist and no round review — unless the project
+        // opts in (projectData.reviewSettings.testClientRequests, a checkbox on Maintenance & Hours). Then each
+        // request gets its own internal checklist and Testing task when its steps are done; there are still no
+        // rounds, so nothing is sent to the client and no review period starts (core/conclusion.js skips them).
+        const isMaintSheet = sheet.kind === 'maintenance' || sheet.id === 'maintenance';
+        if (isMaintSheet && !pd.reviewSettings?.testClientRequests) return;
         const real = (sheet.lineItems || []).filter((item) => item && typeof item === 'object' && !isBlank(item.id) && titleOf(item, ctx.resourceFor(item)));
         // Carries roundApprovals/status through for per-round approval
         // gating (core/requests.js isRoundApproved) — see that file for why.
-        const current = getCurrentRound({ lineItems: real, roundApprovals: sheet.roundApprovals, status: sheet.status });
+        const current = isMaintSheet ? 1 : getCurrentRound({ lineItems: real, roundApprovals: sheet.roundApprovals, status: sheet.status });
         if (current === null) return;
 
         real.forEach((item) => {
