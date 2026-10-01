@@ -811,6 +811,17 @@ export function followUpEmailData(client, ctx) {
         (isThirdPartyWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);
     });
 
+    // Work parked on Pending Developer Update / Pending Third Party Support with a note written when it was flipped
+    // (features/business/waiting-prompt.js). The note is the status line of the item, like a status-note comment; a
+    // task that already has one from the stale-work prompt above keeps that one.
+    const listed = new Set([...sphynxStalled, ...thirdPartyStalled].map((r) => String(r.id)));
+    all.filter((w) => w && !w.isClientTask && !w.askKind && !w.consolidatedFollowUp && isOpen(w, ctx) && !isBlank(w.waitingNote) && !listed.has(String(w.id)))
+        .forEach((w) => {
+            const row = { id: w.id, label: labelFor(client, w), note: String(w.waitingNote).trim() };
+            if (isThirdPartyWaitingStatus(w.status)) thirdPartyStalled.push(row);
+            else if (/^pending developer\b/i.test(String(w.status || '').trim())) sphynxStalled.push(row);
+        });
+
     return { clientAsks, pendingReview, sphynxStalled, thirdPartyStalled };
 }
 
