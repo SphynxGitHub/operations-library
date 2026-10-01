@@ -1,4 +1,4 @@
-import { esc, state, db, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { esc, decodeEntities, state, db, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getCurrentRound } from '../../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
 import { assigneeForRole } from '../../core/testing.js';
@@ -753,7 +753,7 @@ OL.renderDashboardEmailRowHTML = function(m) {
             <div style="display:flex; align-items:center;" title="Email"><i data-lucide="mail" style="width:14px;height:14px; color:#a855f7;"></i></div>
             <div style="flex:1; min-width:0; overflow:hidden;">
                 <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject || 'No Subject')}</strong>
-                <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.sender)}${m.snippet ? ' — ' + esc(m.snippet) : ''}</div>
+                <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.sender)}${m.snippet ? ' — ' + esc(decodeEntities(m.snippet)) : ''}</div>
             </div>
             ${m.clientName && m.clientId ? `
                 <div style="flex-shrink:0;" onclick="event.stopPropagation();">

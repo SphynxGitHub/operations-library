@@ -1170,6 +1170,17 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
         }
     }
 
+    // The Blocked pill says THAT something is outstanding; this says WHAT, on the row itself. Anything already listed
+    // by the client-tasks block above (same ids) is not repeated.
+    let blockedByHTML = '';
+    if (typeof OL.renderBlockedByList === 'function' && (t.blockedBy || []).length) {
+        let alreadyListed = [];
+        if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask && !t.askKind) {
+            try { alreadyListed = OL.openClientTasksForId(t.clientId, t.id).map((x) => x.id); } catch (e) { /* the list is only a de-dupe */ }
+        }
+        blockedByHTML = OL.renderBlockedByList(t.clientId, t, { indent: t.parentTaskId ? 48 : 20, skipIds: alreadyListed });
+    }
+
     const html = `
     <div class="task-row-card" 
          style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; margin-left:${t.parentTaskId ? '28px' : '0'}; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; ${t.parentTaskId ? 'border-left:2px solid var(--accent);' : ''}"
@@ -1302,7 +1313,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
         </div>
     </div>
     `;
-    return html + openItemsHTML;
+    return html + blockedByHTML + openItemsHTML;
 };
 
 // ================= 🗂️ BULK TASK EDITOR =================

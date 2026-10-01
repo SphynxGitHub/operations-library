@@ -1,5 +1,5 @@
 import { groupResources, groupsHtml, flattenGroups } from '../../core/resource-groups.js';
-import { esc, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { esc, decodeEntities, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getRequestTypes } from '../../core/requests.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 
@@ -33,6 +33,9 @@ OL.commTabState = {
 // page from its own hash.
 // -------------------------------------------------------------
 OL._refreshAfterGmailAction = function() {
+    // The dashboard keeps its own cached copy of the unarchived emails. Without this, archiving, restoring or
+    // deleting an email left it showing on the dashboard (or missing from it) until a full reload.
+    OL._dashboardEmailsCache = null;
     const hash = window.location.hash || '';
     if (hash.includes('/business/communications')) {
         OL.renderBusinessCommunications();
@@ -346,7 +349,7 @@ OL.renderCommThreadRow.single = function(m, muted = false) {
             </div>
             <div style="min-width:0; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
                 <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject)}</div>
-                ${m.snippet ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.snippet)}</div>` : ''}
+                ${m.snippet ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(decodeEntities(m.snippet))}</div>` : ''}
                 ${m.linked_task_id ? `
                     <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px; white-space:normal; max-width:100%;"><i data-lucide="link" style="width:9px;height:9px; flex-shrink:0;"></i> ${esc(OL.getLinkedTaskLabel(m))}</span>
                 ` : (m.linked_resource_id ? `
@@ -866,6 +869,7 @@ OL.archiveGmailMessage = async function(id, alsoInGmail = true, opts = {}) {
           .catch(err => console.warn('Could not archive in Gmail (still archived in-app):', err));
     }
 
+    OL._dashboardEmailsCache = null;
     if (opts.skipClose) return;
     OL.closeModal();
     await OL.loadGmailFeed();
@@ -1761,12 +1765,12 @@ OL.renderGmailAttachments = function(m) {
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 ${attachments.map((a) => `
                     <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px;">
-                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" data-path="${esc(a.storagePath)}" onclick="OL.openGmailAttachment(this.dataset.path)" title="View / download">
+                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" onclick="OL.openGmailAttachment('${esc(a.storagePath)}')" title="View / download">
                             <i data-lucide="paperclip" style="width:11px;height:11px;vertical-align:sub;"></i> ${esc(a.filename)} <span class="tiny muted">(${sizeLabel(a.size || 0)})</span>
                         </span>
                         ${alreadyLinked(a.storagePath)
                             ? `<span class="tiny" style="color:var(--accent);">Linked</span>`
-                            : `<button class="btn tiny soft" data-path="${esc(a.storagePath)}" data-name="${esc(a.filename)}" onclick="OL.openExcerptLinkPicker('${m.id}', '📎 ' + this.dataset.name, 'attachment', this.dataset.path)">Link this attachment</button>`}
+                            : `<button class="btn tiny soft" onclick="OL.openExcerptLinkPicker('${m.id}', ${JSON.stringify('📎 ' + a.filename)}, 'attachment', '${esc(a.storagePath)}')">Link this attachment</button>`}
                     </div>
                 `).join('')}
             </div>
@@ -3589,7 +3593,7 @@ OL._maybePromptAddSenderToTeam = async function(clientId, senderHeader) {
     // contact-card step.
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">👤 Add Contact: ${esc(email)}</div>
+            <div class="modal-title-text"><i data-lucide="user-plus" style="width:16px;height:16px;vertical-align:sub;margin-right:6px;"></i>Add Contact: ${esc(email)}</div>
             <button class="btn small soft" onclick="OL._resolveTeamPrompt('skip')">✕</button>
         </div>
         <div class="modal-body" style="max-width:420px; width:100%;">
