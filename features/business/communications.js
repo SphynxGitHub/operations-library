@@ -1065,6 +1065,115 @@ OL.toggleGmailThreadList = function() {
     if (btn) btn.querySelector('span').textContent = show ? 'Hide earlier emails' : btn.getAttribute('data-label');
 };
 
+// The stylesheet every email preview frame gets: images scale, a readable body font, and the click-to-enlarge
+// lightbox (pure CSS, because the frame is sandboxed without scripts).
+OL._emailFrameStyle = function() {
+    return `
+                <style>
+                    img { max-width: 100% !important; height: auto !important; display: inline-block; }
+                    body { font-family: system-ui, -apple-system, sans-serif; padding: 12px; color: #334155; }
+
+                    .ol-img-zoom { display: inline-block; cursor: zoom-in; }
+                    .ol-lightbox-toggle {
+                        position: absolute;
+                        opacity: 0;
+                        width: 0;
+                        height: 0;
+                        pointer-events: none;
+                    }
+                    .ol-lightbox {
+                        display: none;
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0,0,0,0.85);
+                        z-index: 99999;
+                        padding: 24px;
+                        box-sizing: border-box;
+                    }
+                    /* The checkbox lives inside the trigger <label>, not as
+                       a sibling of .ol-lightbox, so a plain ~/+ sibling
+                       selector on the checkbox itself can't reach it.
+                       :has() on the preceding label (which does sit
+                       immediately before .ol-lightbox) reaches into it to
+                       check the box's state instead. */
+                    .ol-img-zoom:has(.ol-lightbox-toggle:checked) + .ol-lightbox {
+                        display: flex;
+                    }
+                    .ol-lightbox-backdrop {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 100%;
+                        height: 100%;
+                        cursor: zoom-out;
+                    }
+                    /* Class selector (not bare "img") + !important on every
+                       sizing property so nothing the source email's own
+                       stylesheet declares — including its own !important
+                       rules loaded after ours — can still shrink this back
+                       down. See _wrapEmailImagesForLightbox above for why
+                       this <img> is built fresh with no other attributes. */
+                    img.ol-lightbox-img {
+                        display: block !important;
+                        width: auto !important;
+                        height: auto !important;
+                        max-width: 100% !important;
+                        max-height: 100% !important;
+                        box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+                    }
+                </style>
+            `;
+};
+
+// Sizes a preview frame to its content, up to a maximum height (then it scrolls inside). Re-measures as images load,
+// because an email's height changes when its pictures arrive.
+OL._fitEmailFrame = function(frame, maxVh = 70) {
+    if (!frame) return;
+    const fit = () => {
+        try {
+            const doc = frame.contentDocument; if (!doc || !doc.documentElement) return;
+            const h = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+            frame.style.height = Math.max(80, Math.min(h + 2, Math.round(window.innerHeight * maxVh / 100))) + 'px';
+        } catch (e) { /* cross-origin or removed: leave as is */ }
+    };
+    fit();
+    try { frame.contentDocument.querySelectorAll('img').forEach((img) => { if (!img.complete) { img.addEventListener('load', fit, { once: true }); img.addEventListener('error', fit, { once: true }); } }); } catch (e) { /* ignore */ }
+    [150, 600, 1500].forEach((ms) => setTimeout(fit, ms));
+};
+
+// Same preparation for every email shown in a frame (the open one and earlier ones in the thread).
+OL._prepareEmailHtml = function(html) {
+    let out = String(html || '').replace(/src=["']\/\//gi, 'src="https://');
+    return OL._emailFrameStyle() + OL._wrapEmailImagesForLightbox(out);
+};
+
+// Earlier emails in the thread load their formatted HTML only when opened (it can be large), and show just their own
+// text, not the whole quoted chain again; "Show quoted text" brings the rest back.
+OL.loadOlderGmailMessage = async function(detailsEl) {
+    if (!detailsEl || !detailsEl.open || detailsEl.dataset.loaded) return;
+    detailsEl.dataset.loaded = '1';
+    const box = detailsEl.querySelector('.gmail-older-body');
+    if (!box) return;
+    box.innerHTML = '<span class="tiny muted">Loading…</span>';
+    const { data: o, error } = await db.from('gmail_messages').select('id, body, body_html').eq('id', detailsEl.dataset.id).single();
+    if (error || !o) { box.innerHTML = '<span class="tiny muted">Could not load this email.</span>'; return; }
+    if (!o.body_html) {
+        const txt = OL._latestPlain(o, false).text || 'No preview available.';
+        box.innerHTML = `<div style="white-space:pre-wrap; line-height:1.5; font-size:12px; max-height:60vh; overflow:auto; overflow-wrap:anywhere;">${esc(txt)}</div>`;
+        return;
+    }
+    const split = OL._splitQuotedHtml(o.body_html);
+    const own = split.latest || o.body_html;
+    box.innerHTML = `
+        ${split.hasQuoted ? '<div style="margin-bottom:6px;"><button type="button" class="btn tiny soft" style="font-size:10px;" data-shown="0">Show quoted text</button></div>' : ''}
+        <iframe sandbox="allow-same-origin allow-popups" style="width:100%; height:120px; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>`;
+    const frame = box.querySelector('iframe');
+    const show = (html) => { frame.addEventListener('load', () => OL._fitEmailFrame(frame, 60), { once: true }); frame.srcdoc = OL._prepareEmailHtml(html); };
+    show(own);
+    const btn = box.querySelector('button[data-shown]');
+    if (btn) btn.onclick = () => { const on = btn.dataset.shown === '1'; btn.dataset.shown = on ? '0' : '1'; btn.textContent = on ? 'Show quoted text' : 'Hide quoted text'; show(on ? own : o.body_html); };
+};
+
 OL.openGmailMessageModal = async function(id, opts = {}) {
     if (!opts.keepQuoted) OL._gmailShowQuoted = false;
     let { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
@@ -1124,7 +1233,9 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             <div class="modal-title-text">✉️ ${esc(m.subject || 'No Subject')}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body" style="max-width:900px; width:100%;">
+        <div class="modal-body" style="max-width:1000px; width:100%;">
+          <div class="gmail-modal-head" style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; margin-bottom:12px;">
+           <div style="min-width:0;">
             <div class="tiny muted" style="margin-bottom:14px; display:flex; flex-direction:column; gap:6px;">
                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     <strong>From:</strong> ${OL.formatEmailHeaderAddresses(m.sender, m.linked_client_id)}
@@ -1160,10 +1271,18 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                 <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.deleteGmailMessage('${m.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i> Delete</button>
             </div>
 
+           </div>
+           <!-- The linking section lives up here, beside the sender / date / actions, so the email below can use the full width. -->
+           <div style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(255,255,255,0.015);">
+                <div id="gmail-open-client-asks"></div>
+                <div id="gmail-thread-link-suggestion"></div>
+                <div id="gmail-link-summary"></div>
+           </div>
+          </div>
             ${hasQuoted ? `<div style="margin-bottom:8px;"><button class="btn tiny soft" style="font-size:10px;" onclick="OL.toggleGmailQuoted()">${showQuoted ? 'Hide quoted earlier messages' : 'Show quoted earlier messages'}</button></div>` : ''}
             <div id="gmail-attachments"></div>
 
-            <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:24px; align-items:start;">
+            <div style="display:block; min-width:0;">
                 ${m.body_html ? `
                     <!-- Rendered in a fully sandboxed iframe (sandbox="" — no
                          scripts, no forms, no same-origin access) so the
@@ -1174,19 +1293,13 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                          below) rather than inlined here, since embedding
                          arbitrary email HTML into this template string would
                          be extremely fragile to escape correctly. -->
-                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:65vh; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
+                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:120px; max-height:70vh; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
                 ` : `
-                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; height:65vh; overflow:auto; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
+                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:70vh; overflow:auto; overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
                         ${esc(latestPlain.text || 'No preview available for this message.')}
                     </div>
                     <div id="gmail-piece-links"></div>
                 `}
-
-                <div style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
-                    <div id="gmail-open-client-asks"></div>
-                    <div id="gmail-thread-link-suggestion"></div>
-                    <div id="gmail-link-summary"></div>
-                </div>
             </div>
             ${olderMsgs.length ? `
                 <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:12px;">
@@ -1197,10 +1310,9 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                         ${olderMsgs.map((o) => {
                             const parsed = OL._parseSenderHeader(o.sender);
                             const who = parsed?.name || o.sender || 'Unknown';
-                            const txt = OL._latestPlain(o, false).text || 'No preview available.';
-                            return `<details style="border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                            return `<details data-id="${esc(o.id)}" ontoggle="OL.loadOlderGmailMessage(this)" style="border:1px solid var(--line); border-radius:6px; padding:8px 10px; min-width:0;">
                                 <summary class="tiny" style="cursor:pointer;"><strong>${esc(who)}</strong> · ${o.date ? esc(new Date(o.date).toLocaleString()) : 'Unknown date'}</summary>
-                                <div style="white-space:pre-wrap; line-height:1.5; font-size:12px; max-height:260px; overflow:auto; margin-top:8px; min-width:0;">${esc(txt)}</div>
+                                <div class="gmail-older-body" style="margin-top:8px; min-width:0;"></div>
                             </details>`;
                         }).join('')}
                     </div>
@@ -1233,61 +1345,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             processedHtml = OL._wrapEmailImagesForLightbox(processedHtml);
 
             // Add a base style tag so images scale properly and don't overflow
-            const styleHeader = `
-                <style>
-                    img { max-width: 100% !important; height: auto !important; display: inline-block; }
-                    body { font-family: system-ui, -apple-system, sans-serif; padding: 12px; color: #334155; }
-
-                    .ol-img-zoom { display: inline-block; cursor: zoom-in; }
-                    .ol-lightbox-toggle {
-                        position: absolute;
-                        opacity: 0;
-                        width: 0;
-                        height: 0;
-                        pointer-events: none;
-                    }
-                    .ol-lightbox {
-                        display: none;
-                        position: fixed;
-                        inset: 0;
-                        background: rgba(0,0,0,0.85);
-                        z-index: 99999;
-                        padding: 24px;
-                        box-sizing: border-box;
-                    }
-                    /* The checkbox lives inside the trigger <label>, not as
-                       a sibling of .ol-lightbox, so a plain ~/+ sibling
-                       selector on the checkbox itself can't reach it.
-                       :has() on the preceding label (which does sit
-                       immediately before .ol-lightbox) reaches into it to
-                       check the box's state instead. */
-                    .ol-img-zoom:has(.ol-lightbox-toggle:checked) + .ol-lightbox {
-                        display: flex;
-                    }
-                    .ol-lightbox-backdrop {
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        width: 100%;
-                        height: 100%;
-                        cursor: zoom-out;
-                    }
-                    /* Class selector (not bare "img") + !important on every
-                       sizing property so nothing the source email's own
-                       stylesheet declares — including its own !important
-                       rules loaded after ours — can still shrink this back
-                       down. See _wrapEmailImagesForLightbox above for why
-                       this <img> is built fresh with no other attributes. */
-                    img.ol-lightbox-img {
-                        display: block !important;
-                        width: auto !important;
-                        height: auto !important;
-                        max-width: 100% !important;
-                        max-height: 100% !important;
-                        box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-                    }
-                </style>
-            `;
+            const styleHeader = OL._emailFrameStyle();
     
             frame.srcdoc = styleHeader + processedHtml;
             // allow-same-origin (already on this sandbox) lets our own
@@ -1295,7 +1353,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             // this is the parent's trusted code, not anything from the
             // email's own HTML (which still can't execute, no allow-scripts).
             // That's what makes excerpt selection possible here at all.
-            frame.addEventListener('load', () => OL.attachExcerptSelectionHandler(id, frame), { once: true });
+            frame.addEventListener('load', () => { OL._fitEmailFrame(frame, 70); OL.attachExcerptSelectionHandler(id, frame); }, { once: true });
         }
     }
 
@@ -1765,12 +1823,12 @@ OL.renderGmailAttachments = function(m) {
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 ${attachments.map((a) => `
                     <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px;">
-                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" onclick="OL.openGmailAttachment('${esc(a.storagePath)}')" title="View / download">
+                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" data-path="${esc(a.storagePath)}" onclick="OL.openGmailAttachment(this.dataset.path)" title="View / download">
                             <i data-lucide="paperclip" style="width:11px;height:11px;vertical-align:sub;"></i> ${esc(a.filename)} <span class="tiny muted">(${sizeLabel(a.size || 0)})</span>
                         </span>
                         ${alreadyLinked(a.storagePath)
                             ? `<span class="tiny" style="color:var(--accent);">Linked</span>`
-                            : `<button class="btn tiny soft" onclick="OL.openExcerptLinkPicker('${m.id}', ${JSON.stringify('📎 ' + a.filename)}, 'attachment', '${esc(a.storagePath)}')">Link this attachment</button>`}
+                            : `<button class="btn tiny soft" data-path="${esc(a.storagePath)}" data-name="${esc(a.filename)}" onclick="OL.openExcerptLinkPicker('${esc(m.id)}', '📎 ' + this.dataset.name, 'attachment', this.dataset.path)">Link this attachment</button>`}
                     </div>
                 `).join('')}
             </div>
