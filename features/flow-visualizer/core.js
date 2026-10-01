@@ -22,6 +22,7 @@
 
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
+import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js';
 
 //===========================INFINITE GRID (V2 CONSOLIDATED)===========================
 state.v2 = {
@@ -489,7 +490,7 @@ export function _fvGetEffectiveOut(step, res) {
 // Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
 export function _fvLayoutResource(res) {
     // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
-    if (isLaneResource(res)) return layoutLanes(res);
+    if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols });
     const steps = res.steps || [];
 
     // Find which steps are branch targets and who their parent is
@@ -569,6 +570,24 @@ if (!OL._fv) OL._fv = {
     _searchQuery: '',
     railCollapsed: sessionStorage.getItem('fv_rail_collapsed') === 'true',
 };
+
+// Arrangement of the Steps view: 'auto' (fit the window), 'wide' (side by side) or 'tall' (one column)
+if (!OL._fv.flowShape) OL._fv.flowShape = sessionStorage.getItem('fv_flow_shape') || 'auto';
+// When the window is resized in Auto, re-flow the Steps view if the number of columns that fit has changed
+if (!OL._fv._resizeBound) {
+    OL._fv._resizeBound = true;
+    let _fvResizeTimer = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(_fvResizeTimer);
+       _fvResizeTimer = setTimeout(() => {
+            if (OL._fv.layout !== 'steps' || OL._fv.flowShape !== 'auto' || OL._fv._colsOverride) return;
+            if (!document.getElementById('fv-content')) return;
+            const wrap = document.getElementById('fv-canvas-wrap');
+            const w = ((wrap && wrap.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
+            if (chooseCols('auto', w) !== OL._fv._renderedCols) OL.renderVisualizer();
+        }, 250);
+   });
+}
 
 // ── MAIN ENTRY ────────────────────────────────────────────
 export function renderVisualizer() {
@@ -730,6 +749,13 @@ export function renderVisualizer() {
               <i data-lucide="chevron-down"></i>
             </button>
           </div>
+          <!-- Arrangement: fit the window, or force side by side / one column -->
+          <select class="fv-select" style="max-width:120px;" title="How the diagram is arranged"
+                  onchange="OL.fvSetFlowShape(this.value)">
+            <option value="auto" ${OL._fv.flowShape === 'auto' ? 'selected' : ''}>Fit window</option>
+            <option value="wide" ${OL._fv.flowShape === 'wide' ? 'selected' : ''}>Side by side</option>
+            <option value="tall" ${OL._fv.flowShape === 'tall' ? 'selected' : ''}>One column</option>
+          </select>
         ` : ''}
 
         <div class="fv-divider"></div>
@@ -774,11 +800,13 @@ export function renderVisualizer() {
                     { view:'flowchart', icon:'columns-3',   label:'Swimlanes' },
                     { view:'list',      icon:'list',         label:'List View' },
                     { view:'steps',     icon:'hexagon',      label:'Steps View' },
-                ].map(v => `
-                    <div onmousedown="event.preventDefault();OL.printFlowMap('${v.view}');document.getElementById('fv-print-menu').style.display='none';"
-                         style="display:flex;align-items:center;gap:10px;padding:9px 12px;
-                                border-radius:7px;cursor:pointer;transition:background 0.12s;"
-                         onmouseover="this.style.background='var(--panel-soft)'"
+                    { view:'diagram-portrait',  icon:'workflow', label:'Flow diagram (portrait)',  call:"OL.printFlowDiagram('portrait')" },
+                    { view:'diagram-landscape', icon:'workflow', label:'Flow diagram (landscape)', call:"OL.printFlowDiagram('landscape')" },
+                 ].map(v => `
+                    <div onmousedown="event.preventDefault();${v.call || `OL.printFlowMap('${v.view}')`};document.getElementById('fv-print-menu').style.display='none';"
+                          style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                 border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                          onmouseover="this.style.background='var(--panel-soft)'"
                          onmouseout="this.style.background='transparent'">
                         <i data-lucide="${v.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
                         <span style="font-size:12px;font-weight:600;color:var(--text-main);">${v.label}</span>
@@ -1975,6 +2003,19 @@ export function _fvToggleCardSteps(resId) {
 // Heights of step cards, measured once per render. Card positions are set by the code itself (style
 // left/top), so lines can be placed from these numbers without asking the browser to lay the page out.
 const _fvStepHeights = new WeakMap();
+ 
+// Arrangement choice for the Steps view
+export function fvSetFlowShape(shape) {
+  OL._fv.flowShape = ['auto', 'wide', 'tall'].includes(shape) ? shape : 'auto';
+  sessionStorage.setItem('fv_flow_shape', OL._fv.flowShape);
+  OL.renderVisualizer();
+}
+
+// Print the real diagram (see features/flow-print.js)
+export function printFlowDiagram(orientation) {
+  const client = getActiveClient();
+  return _printFlowDiagram({ OL, document, window }, { orientation, title: (client && client.meta && client.meta.name) || 'Flow map' });
+}
 
 export function _fvRenderSteps(resources) {
   const canvas    = document.getElementById('fv-content');
@@ -2024,6 +2065,31 @@ export function _fvRenderSteps(resources) {
   const PAD_Y     = 36;
   const EST_STEP  = 100;
   const CONSOL_H  = 44;   // estimated collapsed consolidated card height
+
+  // -- Responsive arrangement: how many card columns fit the window (or the paper, when printing) -----
+  {
+    const wrapEl = document.getElementById('fv-canvas-wrap');
+    const availW = ((wrapEl && wrapEl.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
+    const maxCols = chooseCols(OL._fv._colsOverride || OL._fv.flowShape || 'auto', availW, { cardW: CARD_W, colGap: COL_GAP, padX: PAD_X });
+    OL._fv._laneCols = Number.isFinite(maxCols) ? maxCols : undefined;   // read by _fvLayoutResource (paths wrap into rows)
+    OL._fv._renderedCols = maxCols;
+    if (Number.isFinite(maxCols)) {
+      // Zaps that sit side by side in a workflow wrap onto further rows when they would not fit the width
+      stageGroups.forEach(sg => {
+      sg.wfGroups = sg.wfGroups.flatMap(g => {
+          const rows = []; let cur = []; let used = 0;
+          g.resources.forEach(r => {
+            const lay = OL._fvLayoutResource(r);
+            const w = 1 + Math.max(0, ...Object.values(lay).map(l => l.colOffset));
+            if (cur.length && used + w > maxCols) { rows.push(cur); cur = []; used = 0; }
+            cur.push(r); used += w;
+          });
+          if (cur.length) rows.push(cur);
+          return rows.map((rs, i) => ({ workflow: i === 0 ? g.workflow : { ...g.workflow, name: `${g.workflow.name} (cont.)` }, resources: rs }));
+        });
+      });
+    }
+  }
 
   const allActiveResources = [];
   const stageMeta = [];
@@ -8876,6 +8942,7 @@ Object.assign(window.OL, {
     _fvLaneDragOver, _fvLaneDragLeave, _fvLaneDrop, _fvComputeLayout,
     getLucideSVG, _fvBuildCard, _fvCardDragStart, _fvCardDragEnd,
     _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup,
+    _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, fvSetFlowShape, printFlowDiagram,
     _fvDrawStepConnections, _fvSetupCardDrag, _fvEditStageName, _fvJumpToLane,
     _fvSyncRailHeights, _fvDrawConnections, _fvHighlightGlobalConnections, _fvTidy,
     _fvShowTidyMenu, _fvTogglePin, _fvToggleWb, _fvPopulateWb,
