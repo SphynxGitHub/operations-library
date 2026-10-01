@@ -2876,11 +2876,17 @@ export function _fvDrawConnections(resources) {
   // adding a line forced a full re-layout of the map per line, which scaled badly with big projects.
   const rectCache = new Map();
   const rectOf = (el) => { let r = rectCache.get(el); if (!r) { r = el.getBoundingClientRect(); rectCache.set(el, r); } return r; };
-  const cardEls = new Map();
-  document.querySelectorAll('[id^="fv-card-"]').forEach(el => cardEls.set(el.id, el));
-  const frag = document.createDocumentFragment();
-  const globalIds = new Set(
-    (resources || []).filter(r => r.isGlobal).map(r => String(r.id))
+   const cardEls = new Map();
+   document.querySelectorAll('[id^="fv-card-"]').forEach(el => cardEls.set(el.id, el));
+  // A card's element id carries its workflow (fv-card-<id>-<workflow>), so the lookups below by fv-card-<id> never
+  // matched and no arrow between two cards was drawn. Also index every card by its plain resource id.
+  document.querySelectorAll('.fv-card[data-res-id]').forEach(el => {
+    const k = `fv-card-${el.dataset.resId}`;
+    if (!cardEls.has(k)) cardEls.set(k, el);
+  });
+   const frag = document.createDocumentFragment();
+   const globalIds = new Set(
+     (resources || []).filter(r => r.isGlobal).map(r => String(r.id))
   );
 
   (resources || []).forEach(sourceRes => {
