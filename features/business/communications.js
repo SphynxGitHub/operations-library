@@ -1055,16 +1055,6 @@ OL.toggleGmailQuoted = function() {
     if (id) OL.openGmailMessageModal(id, { keepQuoted: true });
 };
 
-OL.toggleGmailThreadList = function() {
-    const box = document.getElementById('gmail-thread-older');
-    const btn = document.getElementById('gmail-thread-toggle');
-    if (!box) return;
-    const show = box.style.display === 'none';
-    box.style.display = show ? 'grid' : 'none';
-    if (btn) btn.setAttribute('data-open', show ? '1' : '0');
-    if (btn) btn.querySelector('span').textContent = show ? 'Hide earlier emails' : btn.getAttribute('data-label');
-};
-
 // The stylesheet every email preview frame gets: images scale, a readable body font, and the click-to-enlarge
 // lightbox (pure CSS, because the frame is sandboxed without scripts).
 OL._emailFrameStyle = function() {
@@ -1147,55 +1137,110 @@ OL._prepareEmailHtml = function(html) {
     return OL._emailFrameStyle() + OL._wrapEmailImagesForLightbox(out);
 };
 
-// Earlier emails in the thread load their formatted HTML only when opened (it can be large), and show just their own
-// text, not the whole quoted chain again; "Show quoted text" brings the rest back.
-OL.loadOlderGmailMessage = async function(detailsEl) {
-    if (!detailsEl || !detailsEl.open || detailsEl.dataset.loaded) return;
-    detailsEl.dataset.loaded = '1';
-    const box = detailsEl.querySelector('.gmail-older-body');
-    if (!box) return;
-    box.innerHTML = '<span class="tiny muted">Loading…</span>';
-    const { data: o, error } = await db.from('gmail_messages').select('id, body, body_html').eq('id', detailsEl.dataset.id).single();
-    if (error || !o) { box.innerHTML = '<span class="tiny muted">Could not load this email.</span>'; return; }
-    if (!o.body_html) {
-        const txt = OL._latestPlain(o, false).text || 'No preview available.';
-        box.innerHTML = `<div style="white-space:pre-wrap; line-height:1.5; font-size:12px; max-height:60vh; overflow:auto; overflow-wrap:anywhere;">${esc(txt)}</div>`;
-        return;
+// ---- the thread list: every email in the conversation, each with ITS OWN links ----
+// Linking one email never changes another; a row's chips show what that email alone is linked to. Clicking a row
+// opens that email in the same window.
+const LINK_ICON = { project: 'folder', task: 'check-square', request: 'clipboard-list', resource: 'database', event: 'calendar' };
+const shortLabel = (t, n = 38) => (String(t).length > n ? String(t).slice(0, n - 1) + '…' : String(t));
+
+OL._gmailLinkLabels = function(msg) {
+    const out = [];
+    const client = msg.linked_client_id ? state.clients?.[msg.linked_client_id] : null;
+    const pd = client?.projectData;
+    if (msg.linked_client_id) out.push({ type: 'project', label: `Project: ${client?.meta?.name || 'Project'}` });
+    if (msg.linked_request_id) {
+        const r = (pd?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => String(i?.id) === String(msg.linked_request_id));
+        out.push({ type: 'request', label: r ? `Request: ${r.name || r.title}` : 'Request' });
     }
-    const split = OL._splitQuotedHtml(o.body_html);
-    const own = split.latest || o.body_html;
-    box.innerHTML = `
-        ${split.hasQuoted ? '<div style="margin-bottom:6px;"><button type="button" class="btn tiny soft" style="font-size:10px;" data-shown="0">Show quoted text</button></div>' : ''}
-        <iframe sandbox="allow-same-origin allow-popups" style="width:100%; height:120px; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>`;
-    const frame = box.querySelector('iframe');
-    const show = (html) => { frame.addEventListener('load', () => OL._fitEmailFrame(frame, 60), { once: true }); frame.srcdoc = OL._prepareEmailHtml(html); };
-    show(own);
-    const btn = box.querySelector('button[data-shown]');
-    if (btn) btn.onclick = () => { const on = btn.dataset.shown === '1'; btn.dataset.shown = on ? '0' : '1'; btn.textContent = on ? 'Show quoted text' : 'Hide quoted text'; show(on ? own : o.body_html); };
+    if (msg.linked_task_id) {
+        const t = (pd?.clientTasks || []).find((x) => String(x.id) === String(msg.linked_task_id));
+        out.push({ type: 'task', label: t ? `Task: ${t.title || t.name}` : 'Task' });
+    }
+    if (msg.linked_resource_id) {
+        const r = (pd?.localResources || []).find((x) => String(x.id) === String(msg.linked_resource_id));
+        out.push({ type: 'resource', label: r ? `Resource: ${r.name}` : 'Resource' });
+    }
+    if (msg.linked_event_id) out.push({ type: 'event', label: 'Event' });
+    return out;
+};
+
+OL.toggleGmailThread = function() {
+    if (!OL._gmailThread) return;
+    OL._gmailThread.expanded = !OL._gmailThread.expanded;
+    OL.renderGmailThread();
+};
+
+OL.renderGmailThread = function() {
+    const box = document.getElementById('gmail-thread-box');
+    const th = OL._gmailThread;
+    if (!box) return;
+    if (!th || th.msgs.length < 2) { box.innerHTML = ''; return; }
+    const msgs = th.msgs.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));   // newest first
+    const header = `
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:${th.expanded ? '10px' : '0'};">
+            <button type="button" style="background:transparent; border:0; color:inherit; font:inherit; font-weight:600; display:inline-flex; align-items:center; gap:8px; padding:0; cursor:pointer;" onclick="OL.toggleGmailThread()" aria-expanded="${th.expanded ? 'true' : 'false'}">
+                <i data-lucide="${th.expanded ? 'chevron-down' : 'chevron-right'}" style="width:14px;height:14px;"></i> Thread <span class="pill tiny soft">${msgs.length} emails</span>
+            </button>
+            <span style="flex:1;"></span>
+            ${th.expanded ? '<span class="tiny muted">Each email keeps its own links. Linking one never changes the others.</span>' : ''}
+        </div>`;
+    const rows = !th.expanded ? '' : `<div style="display:grid; gap:8px;">${msgs.map((o) => {
+        const current = String(o.id) === String(th.currentId);
+        const who = OL._parseSenderHeader(o.sender)?.name || o.sender || 'Unknown';
+        const labels = OL._gmailLinkLabels(o);
+        const parts = Array.isArray(o.piece_links) ? o.piece_links.filter((l) => l.kind !== 'attachment').length : 0;
+        const chips = labels.map((l) => `<span class="pill tiny soft" title="${esc(l.label)}"><i data-lucide="${LINK_ICON[l.type]}" style="width:10px;height:10px;vertical-align:sub;"></i> ${esc(shortLabel(l.label))}</span>`).join('')
+            + (parts ? `<span class="pill tiny soft" style="color:#2dd4bf; border-color:rgba(45,212,191,0.45);"><i data-lucide="link" style="width:10px;height:10px;vertical-align:sub;"></i> ${parts} part${parts === 1 ? '' : 's'} linked</span>` : '');
+        const snippet = decodeEntities(o.snippet || '');
+        return `
+            <div ${current ? '' : `role="button" tabindex="0" onclick="OL.openGmailMessageModal('${esc(String(o.id))}', { keepQuoted: true })" onkeydown="if(event.key==='Enter') OL.openGmailMessageModal('${esc(String(o.id))}', { keepQuoted: true })"`}
+                 style="padding:9px 14px; border:1px solid ${current ? 'var(--accent)' : 'var(--line)'}; border-radius:8px; ${current ? 'background:rgba(var(--accent-rgb),0.10);' : 'cursor:pointer;'} min-width:0;">
+                <div style="display:flex; align-items:center; gap:14px; min-width:0;">
+                    <span class="tiny bold" style="width:150px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(who)}</span>
+                    <span class="tiny muted" style="width:150px; flex-shrink:0;">${o.date ? esc(new Date(o.date).toLocaleString()) : 'Unknown date'}</span>
+                    <span class="tiny muted" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(snippet)}</span>
+                    ${current ? '<span class="pill tiny soft" style="color:var(--accent); border-color:var(--accent);">Viewing</span>' : ''}
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-left:164px; margin-top:6px;">
+                    ${chips || '<span class="tiny muted" style="font-style:italic;">Not linked yet</span>'}
+                    ${!chips && !current ? `<button class="btn tiny soft" onclick="event.stopPropagation(); OL.openGmailThreadMessageLink('${esc(String(o.id))}')">+ Link</button>` : ''}
+                </div>
+            </div>`;
+    }).join('')}</div>`;
+    box.innerHTML = `<div style="margin-top:18px; border-top:1px solid var(--line); padding-top:12px;">${header}${rows}</div>`;
+    if (window.lucide) lucide.createIcons();
+};
+
+// "+ Link" on a thread row: open that email and go straight to its link editor.
+OL.openGmailThreadMessageLink = async function(id) {
+    await OL.openGmailMessageModal(id, { keepQuoted: true });
+    OL.openGmailLinkModal();
 };
 
 OL.openGmailMessageModal = async function(id, opts = {}) {
     if (!opts.keepQuoted) OL._gmailShowQuoted = false;
-    let { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
+    const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
 
-    // The modal always shows the most recent email in the thread, even if an older one was clicked.
+    // Opens exactly the email that was clicked. An earlier email in a thread is shown as itself, with a banner
+    // pointing to the newest reply; the thread list below switches between them. Every email keeps its own links.
     let threadMsgs = [];
     if (m.thread_id) {
         const { data: tm } = await db.from('gmail_messages')
-            .select('id, sender, date, snippet, body, linked_client_id').eq('thread_id', m.thread_id)
-            .order('date', { ascending: false }).limit(50);
+            .select('id, sender, date, snippet, linked_client_id, linked_resource_id, linked_task_id, linked_request_id, linked_event_id, piece_links')
+            .eq('thread_id', m.thread_id).order('date', { ascending: true }).limit(50);
         threadMsgs = tm || [];
-        const newest = threadMsgs[0];
-        if (newest && newest.id !== m.id && new Date(newest.date || 0) > new Date(m.date || 0)) {
-            const { data: full } = await db.from('gmail_messages').select('*').eq('id', newest.id).single();
-            if (full) { m = full; id = full.id; }
-        }
     }
-    const olderMsgs = threadMsgs.filter((x) => String(x.id) !== String(id));
-    // The newest reply is often not linked to a client yet while an earlier message in the thread is, so the
-    // open-asks panel falls back to the client the thread is linked to.
-    const askClientId = m.linked_client_id || (threadMsgs.find((x) => x.linked_client_id) || {}).linked_client_id || '';
+    const idx = threadMsgs.findIndex((x) => String(x.id) === String(id));
+    const total = Math.max(threadMsgs.length, 1);
+    const position = idx >= 0 ? idx + 1 : total;
+    const newest = threadMsgs[threadMsgs.length - 1];
+    const isLatest = !newest || String(newest.id) === String(id);
+    const newerCount = idx >= 0 ? threadMsgs.length - idx - 1 : 0;
+    OL._gmailThread = { msgs: threadMsgs, currentId: id, newestId: newest ? newest.id : id, expanded: !isLatest };
+    // The newest reply is often not linked to a client yet while another message in the thread is, so the
+    // open-tasks menu falls back to the client the thread is linked to.
+    const askClientId = m.linked_client_id || ([...threadMsgs].reverse().find((x) => x.linked_client_id) || {}).linked_client_id || '';
     const showQuoted = !!OL._gmailShowQuoted;
     const latestHtml = m.body_html ? (showQuoted ? { latest: m.body_html, hasQuoted: OL._splitQuotedHtml(m.body_html).hasQuoted } : OL._splitQuotedHtml(m.body_html)) : null;
     const latestPlain = OL._latestPlain(m, showQuoted);
@@ -1230,23 +1275,28 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">✉️ ${esc(m.subject || 'No Subject')}</div>
+            <div class="modal-title-text"><i data-lucide="mail" style="width:18px;height:18px;vertical-align:sub;margin-right:8px;"></i>${esc(m.subject || 'No Subject')}</div>
+            ${total > 1 ? `<span class="pill tiny soft">Email ${position} of ${total}</span>` : ''}
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
+        <!-- Link bar: what THIS email is linked to (click a pill to change it) and the client's open tasks. -->
+        <div class="gmail-link-bar" style="position:relative; display:flex; align-items:center; gap:10px; padding:10px 24px; border-bottom:1px solid var(--line); background:rgba(255,255,255,0.02);">
+            <div id="gmail-link-summary" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;"></div>
+            <span style="flex:1;"></span>
+            <div id="gmail-open-client-asks"></div>
+        </div>
         <div class="modal-body" style="max-width:1000px; width:100%;">
-          <div class="gmail-modal-head" style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; margin-bottom:12px;">
-           <div style="min-width:0;">
-            <div class="tiny muted" style="margin-bottom:14px; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:14px;">
+            <div class="tiny muted" style="display:flex; flex-direction:column; gap:6px; min-width:0;">
                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     <strong>From:</strong> ${OL.formatEmailHeaderAddresses(m.sender, m.linked_client_id)}
                 </div>
                 ${m.recipient_to ? `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><strong>To:</strong> ${OL.formatEmailHeaderAddresses(m.recipient_to, m.linked_client_id)}</div>` : ''}
                 ${m.recipient_cc ? `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><strong>Cc:</strong> ${OL.formatEmailHeaderAddresses(m.recipient_cc, m.linked_client_id)}</div>` : ''}
                 ${m.recipient_bcc ? `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><strong>Bcc:</strong> ${OL.formatEmailHeaderAddresses(m.recipient_bcc, m.linked_client_id)}</div>` : ''}
-                <div><strong>Date:</strong> ${m.date ? new Date(m.date).toLocaleString() : 'Unknown'}</div>
+                <div style="display:flex; align-items:center; gap:10px;"><span><strong>Date:</strong> ${m.date ? new Date(m.date).toLocaleString() : 'Unknown'}</span>${total > 1 ? (isLatest ? '<span class="pill tiny soft" style="color:#2dd4bf; border-color:rgba(45,212,191,0.45);">Latest in thread</span>' : '<span class="pill tiny soft" style="color:#f59e0b; border-color:rgba(245,158,11,0.45);">Earlier email</span>') : ''}</div>
             </div>
-
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
                 ${m.archived ? `
                     <button class="btn tiny soft" onclick="OL.unarchiveGmailMessage('${m.id}')">Move Back to Inbox</button>
                 ` : `
@@ -1270,17 +1320,18 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                 })()}
                 <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.deleteGmailMessage('${m.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i> Delete</button>
             </div>
-
-           </div>
-           <!-- The linking section lives up here, beside the sender / date / actions, so the email below can use the full width. -->
-           <div style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(255,255,255,0.015);">
-                <div id="gmail-open-client-asks"></div>
-                <div id="gmail-thread-link-suggestion"></div>
-                <div id="gmail-link-summary"></div>
-           </div>
-          </div>
-            ${hasQuoted ? `<div style="margin-bottom:8px;"><button class="btn tiny soft" style="font-size:10px;" onclick="OL.toggleGmailQuoted()">${showQuoted ? 'Hide quoted earlier messages' : 'Show quoted earlier messages'}</button></div>` : ''}
-            <div id="gmail-attachments"></div>
+            </div>
+            <div id="gmail-thread-link-suggestion"></div>
+            ${newerCount ? `
+                <div style="display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:12px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.4); border-radius:8px;">
+                    <i data-lucide="messages-square" style="width:14px;height:14px;color:#f59e0b;flex-shrink:0;"></i>
+                    <span class="tiny" style="flex:1;">You are viewing an <strong>earlier email</strong> from ${m.date ? esc(new Date(m.date).toLocaleString()) : 'an earlier date'}. There ${newerCount === 1 ? 'is <strong>1 newer reply</strong>' : `are <strong>${newerCount} newer replies</strong>`} in this thread.</span>
+                    <button class="btn tiny soft" onclick="OL.openGmailMessageModal('${esc(String(OL._gmailThread.newestId))}')">Open latest reply <i data-lucide="arrow-right" style="width:11px;height:11px;"></i></button>
+                </div>` : ''}
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+                <div id="gmail-attachments" style="min-width:0;"></div>
+                ${hasQuoted ? `<button class="btn tiny soft" style="flex-shrink:0;" onclick="OL.toggleGmailQuoted()"><i data-lucide="messages-square" style="width:11px;height:11px;"></i> ${showQuoted ? 'Hide quoted earlier messages' : 'Show quoted earlier messages'}</button>` : ''}
+            </div>
 
             <div style="display:block; min-width:0;">
                 ${m.body_html ? `
@@ -1298,31 +1349,17 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                     <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:70vh; overflow:auto; overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
                         ${esc(latestPlain.text || 'No preview available for this message.')}
                     </div>
-                    <div id="gmail-piece-links"></div>
                 `}
             </div>
-            ${olderMsgs.length ? `
-                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:12px;">
-                    <button id="gmail-thread-toggle" class="btn tiny soft" data-label="Show ${olderMsgs.length} earlier email${olderMsgs.length === 1 ? '' : 's'} in this thread" onclick="OL.toggleGmailThreadList()">
-                        <i data-lucide="messages-square" style="width:11px;height:11px;"></i> <span>Show ${olderMsgs.length} earlier email${olderMsgs.length === 1 ? '' : 's'} in this thread</span>
-                    </button>
-                    <div id="gmail-thread-older" style="display:none; gap:8px; margin-top:10px;">
-                        ${olderMsgs.map((o) => {
-                            const parsed = OL._parseSenderHeader(o.sender);
-                            const who = parsed?.name || o.sender || 'Unknown';
-                            return `<details data-id="${esc(o.id)}" ontoggle="OL.loadOlderGmailMessage(this)" style="border:1px solid var(--line); border-radius:6px; padding:8px 10px; min-width:0;">
-                                <summary class="tiny" style="cursor:pointer;"><strong>${esc(who)}</strong> · ${o.date ? esc(new Date(o.date).toLocaleString()) : 'Unknown date'}</summary>
-                                <div class="gmail-older-body" style="margin-top:8px; min-width:0;"></div>
-                            </details>`;
-                        }).join('')}
-                    </div>
-                </div>` : ''}
+            <div id="gmail-piece-links"></div>
+            <div id="gmail-thread-box"></div>
         </div>
     `;
     OL._gmailLinkSelectedEvent = null; // resolved just below if this email already has a linked event
 
     openModal(html);
     OL.renderGmailLinkSummary();
+    OL.renderGmailThread();
     OL.renderGmailOpenClientAsks({ ...m, linked_client_id: askClientId });
     OL.renderGmailPieceLinks(m);
     OL.renderGmailAttachments(m);
@@ -1433,18 +1470,54 @@ OL.renderGmailOpenClientAsks = async function(m) {
             </div>`;
     };
 
+    const waitingOnClient = buckets.client.length;
+    // A button in the link bar that opens a menu, instead of a panel that takes up space on the page. The menu hangs
+    // from the link bar (the container is deliberately not positioned, so the bar is what it anchors to).
     container.innerHTML = `
-        <div style="margin-bottom:16px; padding:10px 12px; background:rgba(var(--accent-rgb), 0.05); border:1px solid var(--line); border-radius:8px;">
-            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Open tasks for this client</label>
-            <div style="display:grid; gap:10px; max-height:340px; overflow:auto;">
-                ${GROUPS.filter((g) => buckets[g.key].length).map((g) => `
-                    <div>
-                        <div class="tiny muted" style="margin-bottom:4px;">${g.label} (${buckets[g.key].length})</div>
-                        <div style="display:grid; gap:4px;">${buckets[g.key].map(row).join('')}</div>
-                    </div>`).join('')}
+        <button type="button" id="gmail-open-tasks-btn" class="btn tiny soft" style="display:inline-flex; align-items:center; gap:8px;" aria-expanded="false" onclick="OL.toggleGmailOpenTasks()">
+            <i data-lucide="list-checks" style="width:13px;height:13px;color:var(--accent);"></i> Open tasks <span class="pill tiny soft">${open.length}</span>
+            ${waitingOnClient ? `<span style="display:inline-flex; align-items:center; gap:5px; color:#f59e0b;"><span style="width:7px; height:7px; border-radius:50%; background:#f59e0b; display:inline-block;"></span>${waitingOnClient} waiting on client</span>` : ''}
+            <i data-lucide="chevron-down" style="width:13px;height:13px;opacity:0.7;"></i>
+        </button>
+        <div id="gmail-open-tasks-panel" style="display:none; position:absolute; right:24px; top:calc(100% + 6px); width:min(580px, 92vw); max-height:60vh; overflow:auto; z-index:20; padding:14px; background:var(--bg-card, #1c2839); border:1px solid var(--line); border-radius:12px; box-shadow:0 18px 40px rgba(0,0,0,0.55);">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                <span class="small bold">Open tasks for this client</span>
+                <span style="flex:1;"></span>
+                <button type="button" class="btn tiny ghost" onclick="document.querySelectorAll('#gmail-open-tasks-panel details').forEach((d) => { d.open = false; })"><i data-lucide="chevrons-up" style="width:11px;height:11px;"></i> Collapse all</button>
             </div>
+            <div style="display:grid; gap:12px;">
+                ${GROUPS.filter((g) => buckets[g.key].length).map((g) => `
+                    <details open>
+                        <summary class="tiny bold muted" style="cursor:pointer; margin-bottom:6px;">${g.label} (${buckets[g.key].length})</summary>
+                        <div style="display:grid; gap:6px; margin-top:6px;">${buckets[g.key].map(row).join('')}</div>
+                    </details>`).join('')}
+            </div>
+            <div class="tiny muted" style="border-top:1px solid var(--line); margin-top:12px; padding-top:10px;">Addressing a task links this email to it. Nothing is closed or changed on the task.</div>
         </div>
     `;
+    if (window.lucide) lucide.createIcons();
+    // The thread list's chips can now name tasks and requests, since the project's data is loaded.
+    if (typeof OL.renderGmailThread === 'function') OL.renderGmailThread();
+};
+
+OL.toggleGmailOpenTasks = function() {
+    const panel = document.getElementById('gmail-open-tasks-panel');
+    const btn = document.getElementById('gmail-open-tasks-btn');
+    if (!panel) return;
+    const open = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) return;
+    // Click anywhere else closes it.
+    const away = (e) => {
+        const p = document.getElementById('gmail-open-tasks-panel');
+        if (!p) { document.removeEventListener('mousedown', away); return; }
+        if (p.contains(e.target) || (btn && btn.contains(e.target))) return;
+        p.style.display = 'none';
+        document.getElementById('gmail-open-tasks-btn')?.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('mousedown', away);
+    };
+    document.addEventListener('mousedown', away);
 };
 
 // ---- excerpt selection: highlight text -> a small floating "Link this" button ----
@@ -1845,7 +1918,7 @@ OL.renderGmailPieceLinks = function(m) {
 
     container.innerHTML = `
         <div style="margin-top:12px; display:grid; gap:6px;">
-            <span class="tiny bold uppercase muted">Linked pieces (${links.length})</span>
+            <span class="tiny bold uppercase muted">Linked parts of this email (${links.length})</span>
             ${links.map((l) => `
                 <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:rgba(var(--accent-rgb),0.04);">
                     <div class="tiny muted" style="margin-bottom:4px;">"${esc(l.text.length > 100 ? l.text.slice(0, 100) + '…' : l.text)}"</div>
@@ -2983,21 +3056,20 @@ OL.renderGmailLinkSummary = function() {
     const event = st.eventId ? OL._gmailLinkSelectedEvent : null;
 
     const chips = [
-        client ? `<span class="pill tiny soft">Project: ${esc(client.meta?.name || 'Unnamed')}</span>` : '',
-        resource ? `<span class="pill tiny soft">Resource: ${esc(resource.name)}</span>` : '',
-        task ? `<span class="pill tiny soft">Task: ${esc(task.title || task.name)}</span>` : '',
-        request ? `<span class="pill tiny soft">Request: ${esc(request.name || request.title)}</span>` : '',
-        event ? `<span class="pill tiny soft">Event: ${esc(event.title)}</span>` : ''
-    ].filter(Boolean);
+        client ? `Project: ${client.meta?.name || 'Unnamed'}` : '',
+        resource ? `Resource: ${resource.name}` : '',
+        task ? `Task: ${task.title || task.name}` : '',
+        request ? `Request: ${request.name || request.title}` : '',
+        event ? `Event: ${event.title}` : ''
+    ].filter(Boolean);   // plain text; escaped once when drawn below
 
+    // A link icon, then this email's links as pills. Clicking any pill (or "+ Link" when there are none) opens the editor.
+    const pillHtml = (text) => `<span class="pill tiny soft" role="button" tabindex="0" style="cursor:pointer;" title="Click to edit this email's link" onclick="OL.openGmailLinkModal()" onkeydown="if(event.key==='Enter') OL.openGmailLinkModal()">${esc(text)}</span>`;
     container.innerHTML = `
-        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
-            <i data-lucide="link" style="width:12px;height:12px;vertical-align:sub;"></i> Project / Resource / Task / Event
-        </label>
-        ${chips.length ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">${chips.join('')}</div>` : `<div class="tiny muted" style="margin-bottom:10px;">Not linked yet.</div>`}
-        <button class="btn small ${chips.length ? 'soft' : 'primary'}" style="width:100%;" onclick="OL.openGmailLinkModal()">
-            <i data-lucide="link" style="width:12px;height:12px;"></i> ${chips.length ? 'Edit Link' : 'Link to Project / Resource / Task / Event'}
-        </button>
+        <i data-lucide="link" style="width:14px;height:14px;flex-shrink:0;opacity:0.8;" aria-label="Linked to"></i>
+        ${chips.length
+            ? chips.map(pillHtml).join('')
+            : `<span class="pill tiny soft" role="button" tabindex="0" style="cursor:pointer;" onclick="OL.openGmailLinkModal()" onkeydown="if(event.key==='Enter') OL.openGmailLinkModal()">Not linked yet · + Link</span>`}
     `;
     if (window.lucide) lucide.createIcons();
 };
@@ -3775,10 +3847,10 @@ OL.loadThreadLinkSuggestion = async function(m) {
         <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:14px; background:rgba(var(--accent-rgb),0.08); border:1px solid var(--accent); border-radius:8px;">
             <i data-lucide="messages-square" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
             <div class="tiny" style="flex:1; min-width:0;">
-                An earlier message in this thread is linked to:<br>
-                <strong>${esc(parts.join(' · ') || 'a project')}</strong>
+                Another email in this thread is linked to <strong>${esc(parts.join(' · ') || 'a project')}</strong>. This one is not linked yet.
             </div>
-            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyThreadLinkSuggestion()">Use Same Links</button>
+            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyThreadLinkSuggestion()">Use same links</button>
+            <button class="btn tiny ghost" style="flex-shrink:0;" onclick="document.getElementById('gmail-thread-link-suggestion').innerHTML = ''">Not this one</button>
         </div>`;
     if (window.lucide) lucide.createIcons();
 };
