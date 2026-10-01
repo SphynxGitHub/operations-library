@@ -9,6 +9,7 @@
 
 import { state, esc, updateAndSync } from '../core/data.js';
 import { isClientFacing } from '../core/request-tasks.js';
+import { linksForTask } from '../core/task-links.js';
 
 const KIND_ICON = { task: 'check-square', request: 'git-pull-request', resource: 'database' };
 const KIND_LABEL = { task: 'Task', request: 'Request', resource: 'Resource' };
@@ -177,7 +178,7 @@ OL._refreshDependencySection = (clientId, kind, id) => refresh(clientId, kind, i
 function requestIdFor(clientId, kind, id, item) {
     if (kind === 'request') return id;
     if (kind === 'task') {
-        const links = OL.linksForTask ? OL.linksForTask(item) : (item?.links || []);
+        const links = linksForTask(item);   // also reads the older requestLineItemId field (OL.linksForTask was never defined, so tasks without links[] looked unlinked)
         return links[0]?.requestId || null;
     }
     return null;
@@ -267,7 +268,7 @@ OL.askClientAsDependency = function (clientId, kind, id) {
     const requestId = requestIdFor(clientId, kind, id, item);
     if (!requestId) { alert("This isn't linked to a request yet, so there's nothing to attribute a client ask to. Link it to a request first."); return; }
     OL.closeDependencyPickers();
-    if (typeof OL.openAskModal === 'function') OL.openAskModal(requestId, { kind, id });
+    if (typeof OL.openAskModal === 'function') OL.openAskModal(requestId, { kind, id, clientId });
 };
 
 OL.removeBlockedBy = function (clientId, kind, id, depKind, depId) {

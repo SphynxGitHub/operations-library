@@ -5,7 +5,7 @@
 // the client profile modal (modules, partner assignment, share link,
 // delete), and the cross-client feature-sync ("Migration") action.
 
-import { state, esc, uid, getActiveClient, persist, updateAndSync, switchClient, loadFullClient } from '../core/data.js';
+import { state, esc, uid, db, getActiveClient, persist, updateAndSync, switchClient, loadFullClient } from '../core/data.js';
 import { recordStatusChange, computeStatusKpis } from '../core/status-kpis.js';
 
 //======================= CLIENT DASHBOARD SECTION =======================//
@@ -1259,7 +1259,7 @@ export function updateClientNameInline(clientId, newName) {
     // when the Firestore write completes.
 };
 
-export function deleteClient(clientId) {
+export async function deleteClient(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
 
@@ -1270,19 +1270,38 @@ export function deleteClient(clientId) {
         return;
     }
 
-    // 2. Remove from state
-    delete state.clients[clientId];
+    // 2. Delete it from the database FIRST. Removing it only from the in-memory state (what this used to do)
+    // looked like it worked, but the next load read the row straight back from workspace_clients.
+    // .select() returns the rows actually removed, so a delete the database refused (no permission) is caught
+    // instead of silently doing nothing.
+    const { data: removed, error } = await db.from('workspace_clients').delete().eq('id', clientId).select('id');
+    if (error) {
+        console.error('❌ Delete project failed:', error.message);
+        alert(`Couldn't delete this project: ${error.message}`);
+        return;
+    }
+    if (!removed || removed.length === 0) {
+        alert("The database didn't delete this project (no row was removed — most likely a permissions rule on workspace_clients doesn't allow deletes for this login). Nothing was changed.");
+        return;
+    }
 
-    // 3. Clear active client if we just deleted the one we were viewing
+    // Its mirrored request rows go with it (best effort — the project row is already gone).
+    try { await db.from('requests').delete().eq('client_id', clientId); } catch (e) { console.warn('Could not remove mirrored requests:', e); }
+
+    // 3. Remove from state, and make sure nothing queued will save it back.
+    delete state.clients[clientId];
+    if (state.dirtyClientIds) state.dirtyClientIds.delete(clientId);
+
+    // 4. Clear active client if we just deleted the one we were viewing
     if (state.activeClientId === clientId) {
         state.activeClientId = null;
     }
 
-    // 4. Save and redirect
+    // 5. Save (master data) and redirect
     OL.persist();
     OL.closeModal();
     window.location.hash = "#/"; // Return to registry
-    handleRoute(); 
+    handleRoute();
 };
 
 // 4. PUSH FEATURES TO CLIENT

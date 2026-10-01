@@ -2391,8 +2391,17 @@ function existingTasksPickerHtml(client, item) {
         </div>`;
 }
 
+// The project an Ask client window belongs to. Opened from a task's Dependencies section it can be a project that
+// is NOT the one currently open (the master Task Manager, the dashboard), so the caller's clientId wins over
+// getActiveClient() — otherwise the window silently did nothing.
+function askClient() {
+    const id = OL._askModalClientId;
+    return (id && state.clients?.[id]) || getActiveClient();
+}
+
 export function openAskModal(itemId, blockFor = null) {
-    const client = getActiveClient();
+    OL._askModalClientId = blockFor?.clientId || null;
+    const client = askClient();
     // Any sheet (or the standalone list), not just the first one: the Requests tab lists all of them.
     const item = client && OL.findRequestItem ? OL.findRequestItem(client, itemId) : null;
     if (!client || !item) return;
@@ -2453,7 +2462,7 @@ export function addAskLine() {
 }
 
 export function refreshAskAssignees() {
-    const client = getActiveClient();
+    const client = askClient();
     const kind = document.getElementById('ask-kind')?.value || 'review';
     const select = document.getElementById('ask-assignee');
     if (!client || !select) return;
@@ -2463,7 +2472,7 @@ export function refreshAskAssignees() {
 }
 
 export async function saveAsks(itemId) {
-    const client = getActiveClient();
+    const client = askClient();
     const item = client && OL.findRequestItem ? OL.findRequestItem(client, itemId) : null;
     if (!client || !item) return;
     const blockFor = OL._askModalBlockFor;
@@ -2545,7 +2554,15 @@ export async function saveAsks(itemId) {
     });
 
     OL._askModalBlockFor = null;
+    OL._askModalClientId = null;
     OL.closeModal();
+    const sameProjectOpen = !blockFor?.clientId || state.activeClientId === blockFor.clientId;
+    // Started from a task opened outside its own project (Task Manager, dashboard): put the task window back
+    // rather than redrawing a page that belongs to a different project.
+    if (!sameProjectOpen && blockFor.kind === 'task' && typeof OL.openTaskInContext === 'function') {
+        OL.openTaskInContext(blockFor.clientId, blockFor.id);
+        return;
+    }
     // Redraw whichever page the ask was started from (the Requests tab or the scoping sheet).
     if (String(window.location.hash || '').includes('client-requests') && typeof OL.renderClientRequests === 'function') OL.renderClientRequests();
     else renderScopingSheet();

@@ -375,7 +375,7 @@ export function renderMaintenancePage() {
         </div>
         ${mode === ONGOING && history.length ? `
         <div class="card" style="padding:16px; margin-top:16px;"><h3 style="margin:0 0 10px;">Earlier plan periods</h3>
-            ${history.map((p) => `<div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line);" class="tiny"><span>${esc(niceDate(p.start_date))} to ${esc(niceDate(p.due_date))}${p.tier ? ` · ${esc(p.tier)}` : ''}</span><span class="muted">${esc(p.status)}${p.renewing ? ' · renewing' : ''}</span></div>`).join('')}
+            ${history.map((p) => `<div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line);" class="tiny"><span>${esc(niceDate(p.start_date))} to ${esc(niceDate(p.due_date))}${p.tier ? ` · ${esc(p.tier)}` : ''}</span><span class="muted" style="display:flex; align-items:center; gap:8px;">${esc(p.status)}${p.renewing ? ' · renewing' : ''}${canManage() ? `<button class="btn tiny soft" onclick="OL.openEditPeriodModal('${esc(p.id)}')">Edit</button>` : ''}</span></div>`).join('')}
         </div>` : ''}`;
     main.innerHTML = `
         <div class="section-header"><div><h2><i data-lucide="wrench" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Maintenance &amp; Hours</h2>
