@@ -216,8 +216,11 @@ export function planEditPeriod({ period, grants = [], patch }) {
         if (patch.allotment !== undefined) { const h = cleanHours(patch.allotment); if (h > 0) p.hours_granted = h; }
         grantUpdates.push({ id: allot.id, patch: p });
     }
+    // A carryover follows the period's end date (3 months, or 6 if renewing) UNLESS someone set its expiry by hand;
+    // a custom date is left alone, so editing the period can't silently overwrite it.
+    const oldDefault = carryoverExpiry(period.due_date, !!period.renewing);
     grants.filter((g) => g.period_id === period.id && g.source === 'courtesy_carryover' && g.status === 'active').forEach((g) => {
-        grantUpdates.push({ id: g.id, patch: { expires_on: carryoverExpiry(due, renewing) } });
+        if (String(g.expires_on || '').slice(0, 10) === oldDefault) grantUpdates.push({ id: g.id, patch: { expires_on: carryoverExpiry(due, renewing) } });
     });
     const newAllotment = !allot && patch.allotment !== undefined && cleanHours(patch.allotment) > 0
         ? { period_id: period.id, client_id: period.client_id, source: 'plan_allotment', hours_granted: cleanHours(patch.allotment), granted_on: start, expires_on: due, status: 'active' } : null;
@@ -225,16 +228,54 @@ export function planEditPeriod({ period, grants = [], patch }) {
 }
 
 // Close a period: optionally extend unused hours as a courtesy carryover, and optionally start the next year.
-export function planClosePeriod({ period, carryoverHours = 0, renewNext = false, nextAllotment = 0, nextRenewing = false, nextTier = null, today }) {
+export function planClosePeriod({ period, carryoverHours = 0, carryoverExpires = '', renewNext = false, nextAllotment = 0, nextRenewing = false, nextTier = null, today }) {
     const out = { periodUpdate: { status: 'closed' }, carryover: null, next: null };
     const hours = cleanHours(carryoverHours);
     if (hours > 0) {
+        // An expiry typed in ("carried forward until...") wins over the 3 / 6 month default.
+        const customExpiry = validDate(carryoverExpires) && carryoverExpires > String(period.due_date).slice(0, 10) ? carryoverExpires : '';
         out.carryover = { client_id: period.client_id, period_id: period.id, source: 'courtesy_carryover', hours_granted: hours,
-                          granted_on: period.due_date, expires_on: carryoverExpiry(period.due_date, !!period.renewing), status: 'active',
+                          granted_on: period.due_date, expires_on: customExpiry || carryoverExpiry(period.due_date, !!period.renewing), status: 'active',
                           note: `Courtesy carryover from the plan period ending ${period.due_date}` };
     }
     if (renewNext) out.next = planStartPeriod({ clientId: period.client_id, start: nextPeriodStart(period.due_date), allotment: nextAllotment, renewing: nextRenewing, tier: nextTier });
     return out;
+}
+
+// ---- a plan period from BEFORE the hours were tracked here ----
+// For a client whose earlier plan period was never backfilled with time logs: record what the period was
+// (hours allotted), how much of it was used, and how many hours were carried forward and until when. The period
+// is stored as closed. Its allotment is stored with the usage as a marker in the note — "[manual used: 18h]" —
+// which the ledger adds to that grant's used hours (no time entries exist for it). The carryforward is a normal
+// courtesy-carryover grant, so it counts toward the hours available now and is charged like any other.
+export const MANUAL_USED_RE = /\[manual used: ([0-9.]+)h\]/;
+export const manualUsedHours = (g) => { const m = MANUAL_USED_RE.exec(String(g?.note || '')); return m ? Number(m[1]) : 0; };
+export const noteWithoutMarker = (note) => String(note || '').replace(MANUAL_USED_RE, '').replace(/\s+/g, ' ').trim();
+
+export function planPriorPeriod({ clientId, start, due, allotment, used, carryHours, carryExpires, renewing = true, tier = null, today }) {
+    if (!validDate(start)) return { error: 'Enter a valid start date for that plan period.' };
+    const end = due || periodDue(start);
+    if (!validDate(end) || end <= start) return { error: 'The end date must be after the start date.' };
+    const allotted = cleanHours(allotment);
+    if (allotted <= 0) return { error: 'Enter the hours that plan period allotted.' };
+    const usedHours = Math.round((parseFloat(used) || 0) * 100) / 100;
+    if (usedHours < 0) return { error: 'Hours used can\'t be negative.' };
+    const carry = cleanHours(carryHours);
+    if (carry > 0 && (!validDate(carryExpires) || carryExpires <= end)) return { error: 'Enter the date the carried-forward hours run until (after the period ended).' };
+    const t = cleanTier(tier);
+    const plural = (n) => `${n} hour${n === 1 ? '' : 's'}`;
+    return {
+        period: { client_id: clientId, start_date: start, due_date: end, renewing: !!renewing, status: 'closed', ...(t ? { tier: t } : {}) },
+        allotment: {
+            client_id: clientId, source: 'plan_allotment', hours_granted: allotted, granted_on: start, expires_on: end, status: 'expired',
+            note: `Earlier plan period, recorded by hand: ${usedHours} of ${allotted} hours used. [manual used: ${usedHours}h]`,
+        },
+        carryover: carry > 0 ? {
+            client_id: clientId, source: 'courtesy_carryover', hours_granted: carry, granted_on: end, expires_on: carryExpires,
+            status: today && carryExpires < today ? 'expired' : 'active',
+            note: `Carried forward from the plan period ending ${end} (${plural(carry)})`,
+        } : null,
+    };
 }
 
 // An ad hoc purchase: hours that expire a year after they are bought.
