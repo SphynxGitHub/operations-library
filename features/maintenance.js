@@ -15,6 +15,7 @@ import {
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
     allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
+    planPriorPeriod, manualUsedHours, noteWithoutMarker, carryoverExpiry,
 } from '../core/maintenance.js';
 import { isClientTask, isTaskBillableForHours, stampBillableFor } from '../core/billable.js';
 import { markClientDirty } from '../core/data.js';
@@ -71,6 +72,21 @@ export async function savePeriodStart(clientId, { start, allotment, renewing }) 
     if (plan.grant) {
         const g = await db.from('hours_grant').insert({ ...plan.grant, period_id: data.id });
         if (g.error) return { error: friendly(g.error) };
+    }
+    return { ok: true };
+}
+
+// An earlier plan period recorded by hand (see planPriorPeriod in core/maintenance.js).
+export async function savePriorPeriod(clientId, opts) {
+    const plan = planPriorPeriod({ clientId, ...opts, today: todayIso() });
+    if (plan.error) return { error: plan.error };
+    const { data, error } = await db.from('maintenance_plan_period').insert(plan.period).select('id').single();
+    if (error) return { error: friendly(error) };
+    const a = await db.from('hours_grant').insert({ ...plan.allotment, period_id: data.id });
+    if (a.error) return { error: friendly(a.error) };
+    if (plan.carryover) {
+        const c = await db.from('hours_grant').insert({ ...plan.carryover, period_id: data.id });
+        if (c.error) return { error: friendly(c.error) };
     }
     return { ok: true };
 }
@@ -138,7 +154,8 @@ function ledgerFor(client, slot) {
         .sort((a, b) => (a.source === 'plan_allotment' ? 0 : 1) - (b.source === 'plan_allotment' ? 0 : 1) || String(a.expires_on).localeCompare(String(b.expires_on)));
     return { entries, alloc, allocations, current, opts, tasks };
 }
-const usedHoursOf = (ledger, g) => Math.round(((ledger.alloc.usedMinutes[g.id] || 0) / 60) * 100) / 100;
+// Hours used out of a grant: time charged to it from the logs, plus any usage recorded by hand for an earlier plan period.
+const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] || 0) / 60) + manualUsedHours(g)) * 100) / 100;
 const allocatedCount = (ledger, g) => Object.values(ledger.allocations).filter((id) => String(id) === String(g.id)).length;
 
 // The tracking bar: one segment per grant available now (allotment, carryover, ad hoc), each filled by what's used.
@@ -204,7 +221,7 @@ function grantCardHtml(client, g, ledger, gt) {
         <div style="border:1px solid var(--line); border-left:3px solid ${GRANT_COLOR[g.source] || '#22c55e'}; border-radius:8px; padding:12px; margin-top:10px; ${expired ? 'opacity:0.7;' : ''}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
-                    <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${g.note ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(g.note)}</span>` : ''}</div>
+                    <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${noteWithoutMarker(g.note) ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(noteWithoutMarker(g.note))}</span>` : ''}</div>
                     <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -369,7 +386,7 @@ export function renderMaintenancePage() {
         <div class="card" style="padding:16px; margin-top:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <h3 style="margin:0;">Hours by grant</h3>
-                ${canManage() ? `<button class="btn tiny soft" onclick="OL.openAdHocPurchaseModal()">+ Ad hoc purchase</button>` : ''}
+                ${canManage() ? `<div style="display:flex; gap:6px;">${mode === ONGOING ? `<button class="btn tiny soft" onclick="OL.openPriorPeriodModal()" title="Record an earlier plan period that was never logged here: hours allotted, hours used, and what was carried forward">Record earlier period…</button>` : ''}<button class="btn tiny soft" onclick="OL.openAdHocPurchaseModal()">+ Ad hoc purchase</button></div>` : ''}
             </div>
             ${grantCardsHtml(client, slot, ledger)}
         </div>
@@ -486,6 +503,47 @@ export async function submitStartPeriod() {
 
 function findPeriod(periodId) { const client = getActiveClient(); return { client, period: slotFor(client?.id).periods.find((p) => p.id === periodId), grants: slotFor(client?.id).grants }; }
 
+// ---------------- recording an earlier plan period ----------------
+export function openPriorPeriodModal() {
+    const client = getActiveClient(); if (!client || !canManage()) return;
+    openModal(`${modalHead('Record an earlier plan period')}<div class="modal-body" style="padding-top:14px;">
+        <p class="tiny muted" style="margin-bottom:14px;">For a plan period from before hours were logged here. Enter what it allotted and how much was used; any hours carried forward become a courtesy carryover that counts toward the hours available now, until the date you set.</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${field('Period started', `<input id="pr-start" type="date" class="modal-input" oninput="OL.priorRecalc()">`)}
+            ${field('Period ended', `<input id="pr-due" type="date" class="modal-input" oninput="this.dataset.touched='1'; OL.priorRecalc()">`)}
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${field('Hours allotted', `<input id="pr-allot" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 24" oninput="OL.priorRecalc()">`)}
+            ${field('Hours used', `<input id="pr-used" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 18" oninput="OL.priorRecalc()">`)}
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${field('Hours carried forward', `<input id="pr-carry" type="number" min="0" step="0.25" class="modal-input" oninput="this.dataset.touched='1'; OL.priorRecalc()">`)}
+            ${field('Carried forward until', `<input id="pr-expires" type="date" class="modal-input" oninput="this.dataset.touched='1'">`)}
+        </div>
+        <div id="pr-hint" class="tiny muted" style="margin:-6px 0 12px;">Hours carried forward start as the unused hours; change them if you agreed on a different amount.</div>
+        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitPriorPeriod()">Save earlier period</button></div>`);
+}
+// Fills what can be worked out: the end date a year after the start, the unused hours as the carryforward, and an
+// expiry six months after the period ended — each only until you type your own value in that box.
+export function priorRecalc() {
+    const start = val('pr-start'); const dueEl = document.getElementById('pr-due');
+    if (dueEl && !dueEl.dataset.touched && validDate(start)) dueEl.value = periodDue(start);
+    const due = val('pr-due');
+    const allot = parseFloat(val('pr-allot')) || 0; const used = parseFloat(val('pr-used')) || 0;
+    const carryEl = document.getElementById('pr-carry');
+    if (carryEl && !carryEl.dataset.touched && (allot || used)) carryEl.value = Math.max(0, Math.round((allot - used) * 100) / 100) || '';
+    const expEl = document.getElementById('pr-expires');
+    if (expEl && !expEl.dataset.touched && validDate(due)) expEl.value = carryoverExpiry(due, true);
+    const hint = document.getElementById('pr-hint');
+    if (hint && allot) hint.textContent = used > allot ? `${Math.round((used - allot) * 100) / 100} h over the allotment.` : `${Math.round((allot - used) * 100) / 100} h unused.`;
+}
+export async function submitPriorPeriod() {
+    const client = getActiveClient(); if (!client) return;
+    const res = await savePriorPeriod(client.id, { start: val('pr-start'), due: val('pr-due'), allotment: val('pr-allot'), used: val('pr-used'), carryHours: val('pr-carry'), carryExpires: val('pr-expires'), renewing: true });
+    if (res.error) { alert(res.error); return; }
+    OL.closeModal(); await reloadAndRedraw(client.id);
+}
+
 export function openEditPeriodModal(periodId) {
     const { period, grants } = findPeriod(periodId); if (!period) return;
     const allot = grants.filter((g) => g.period_id === period.id && g.source === 'plan_allotment').reduce((s, g) => s + Number(g.hours_granted), 0);
@@ -518,6 +576,8 @@ export function openClosePeriodModal(periodId) {
     openModal(`${modalHead('Close plan period')}<div class="modal-body" style="padding-top:14px;">
         <p class="tiny muted" style="margin-bottom:14px;">Closing ends the period ${esc(niceDate(period.start_date))} to ${esc(niceDate(period.due_date))}. Unused hours can be extended as a courtesy carryover, which expires ${period.renewing ? '6' : '3'} months after the period ends${period.renewing ? ' (the client is renewing)' : ' (not renewing)'}.</p>
         ${field('Hours to carry over (optional)', `<input id="pc-carry" type="number" min="0" step="0.25" class="modal-input" placeholder="0">`)}
+        ${field('Carried over until (optional)', `<input id="pc-carry-exp" type="date" class="modal-input">`)}
+        <div class="tiny muted" style="margin:-6px 0 12px;">Leave the date blank to use the standard ${period.renewing ? '6' : '3'} months.</div>
         <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:10px;"><input id="pc-next" type="checkbox" onchange="document.getElementById('pc-next-box').style.display = this.checked ? 'block' : 'none'"> Start the next period on ${esc(niceDate(next))}</label>
         <div id="pc-next-box" style="display:none; margin-bottom:12px;">
             ${field('Next period tier', tierSelectHtml('pc-tier', 'pc-allot', ''))}
@@ -528,7 +588,7 @@ export function openClosePeriodModal(periodId) {
 }
 export async function submitClosePeriod(periodId) {
     const { client, period } = findPeriod(periodId); if (!period) return;
-    const res = await savePeriodClose(period, { carryoverHours: val('pc-carry'), renewNext: checked('pc-next'), nextAllotment: val('pc-allot'), nextRenewing: checked('pc-renew'), nextTier: val('pc-tier') });
+    const res = await savePeriodClose(period, { carryoverHours: val('pc-carry'), carryoverExpires: val('pc-carry-exp'), renewNext: checked('pc-next'), nextAllotment: val('pc-allot'), nextRenewing: checked('pc-renew'), nextTier: val('pc-tier') });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -859,7 +919,7 @@ Object.assign(window.OL, {
     renderMaintenancePage, renderClientRequests, loadMaintenanceData,
     openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
     openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
-    openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase,
+    openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
     maintenanceTabAllowed, migrateClientRequestsToBacklog,
 });
