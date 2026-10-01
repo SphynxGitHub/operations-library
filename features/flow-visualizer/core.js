@@ -2470,13 +2470,13 @@ export function _fvRenderSteps(resources) {
             // Pass 1: compute natural (independent) Y for each card via simple stacking
             const naturalTopY = new Map(); // el → top Y from simple stacking
             byRes.forEach((cards, res) => {
-                const lay = layoutOf.get(res);
-                if (isLaneLayout(lay)) {   // imported Zap: every column (lane) stacks on its own
-                     return;
-                }
+              const lay = layoutOf.get(res);
+              if (isLaneLayout(lay)) {   // imported Zap: every column (lane) stacks on its own
+                stackColumns(cards, lay, y, STEP_GAP, hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
+                return;
+              }
               let ry = y;
               cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += hOf(el) + STEP_GAP; });
-                    stackColumns(cards, lay, y, STEP_GAP, hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
             });
 
             // Pass 2: for each cross-resource outbound link within this section,
