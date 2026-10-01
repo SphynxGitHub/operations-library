@@ -8,6 +8,13 @@ import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } f
 // ---- small value helpers used throughout the data layer ----
 export const val = (v) => (v === undefined || v === null) ? "" : v;
 export const num = (v) => (v === undefined || v === null || v === 0) ? "" : v;
+// Gmail hands back message snippets already HTML-escaped ("shouldn&#39;t"). Run those through this before esc(), or the
+// raw entities show up on screen. Only the common entities are handled, and only text, never markup.
+export const decodeEntities = (s) => String(s ?? "")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+
 export const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 export const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 
