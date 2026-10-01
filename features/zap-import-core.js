@@ -685,7 +685,7 @@ export function placeZapCards(pd, plan, opts = {}) {
     const cards = g.zapIds.map(cardOf).filter(Boolean);
     if (!cards.length) return;
     if (!wf) {
-      wf = { id: `wf-${makeId()}`, name: g.name, stageId: stage.id, color: WF_COLORS[i % WF_COLORS.length], resourceIds: [], description: workflowNote(g) };
+      wf = { id: `wf-${makeId()}`, name: g.name, stageId: stage.id, color: WF_COLORS[i % WF_COLORS.length], resourceIds: [], description: workflowNote(g), zapAuto: true };
       pd.workflows.push(wf);
     }
     out.workflowsUsed++;

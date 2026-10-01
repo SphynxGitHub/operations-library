@@ -17,6 +17,7 @@
 //                   history is skipped, and the window says so.
 // ================================================================================================
 
+import { planReorganize, applyReorganize, restoreBackup } from './zap-reorganize.js';
 import { planImport, zapToResource, mergeIntoExisting, discoverResources, fingerprint, findHookLinks, applyHookLinks, isInactiveZap, planGroups, placeZapCards } from './zap-import-core.js';
 
 const STATUS_LABEL = { new: 'New', changed: 'Changed', unchanged: 'Unchanged', baseline: 'Already here' };
@@ -51,7 +52,7 @@ export function changeText(c) {
 
 export function createZapImport(deps) {
   const { state, esc, uid, persist, markClientDirty, db, getUserName, openModal, closeModal, afterApply, now = () => new Date() } = deps;
-  const session = { step: 'pick', model: null, error: '', note: '', author: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, groupBy: 'flow', skipInactive: true, connectZaps: true, leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
+  const session = { reorg: null, step: 'pick', model: null, error: '', note: '', author: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, groupBy: 'flow', skipInactive: true, connectZaps: true, leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
 
   const active = () => { const id = state.activeClientId; return { id, client: state.clients && state.clients[id] }; };
   const libraryOf = (client) => { client.projectData = client.projectData || {}; client.projectData.localResources = client.projectData.localResources || []; return client.projectData.localResources; };
@@ -251,7 +252,12 @@ export function createZapImport(deps) {
         <textarea id="zap-import-paste" class="modal-input" style="width:100%; min-height:110px; margin-top:8px;" placeholder="[ { &quot;zapName&quot;: ..."></textarea>
         <button class="btn small primary" style="margin-top:6px;" onclick="OL.zapImportPaste()">Read pasted JSON</button></details>
       ${session.busy ? '<p class="tiny muted">Reading…</p>' : ''}
-      ${session.error ? `<p class="tiny" style="color:#dc2626;">${esc(session.error)}</p>` : ''}</div>`;
+      ${session.error ? `<p class="tiny" style="color:#dc2626;">${esc(session.error)}</p>` : ''}
+      <div style="margin-top:18px; padding-top:12px; border-top:1px solid var(--line,#e5e7eb);">
+        <div class="tiny" style="font-weight:600;">Zaps already on the flow map?</div>
+        <div class="tiny muted" style="margin:4px 0 8px;">Re-sort the Zap cards that are already in this project with the current grouping rules (call chains, versions of the same flow, name families). No file needed; you see everything first, a backup is saved, and you can undo.</div>
+        <button class="btn small soft" onclick="OL.zapReorgOpen()">Reorganize Zaps already on the map…</button>
+      </div></div>`;
   }
 
   function accountBanner(m) {
@@ -357,7 +363,62 @@ export function createZapImport(deps) {
       <div style="text-align:right;"><button class="btn small primary" onclick="OL.zapImportClose()">Done</button></div></div>`;
   }
 
-  const render = () => (session.step === 'pick' ? renderPick() : session.step === 'review' ? renderReview() : renderDone());
+  // ---------- reorganize Zaps that are already on the map ----------
+
+  const saveFile = deps.saveFile || ((name, text) => {
+    try { const blob = new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return true; } catch { return false; }
+  });
+  const reorgOpts = () => { const o = (session.reorg && session.reorg.opts) || {}; return { groupBy: o.groupBy === 'trigger' ? 'trigger' : undefined, includeInactive: !!o.includeInactive, includeHandPlaced: !!o.includeHandPlaced, placeUnplaced: o.placeUnplaced !== false, groupZaps: o.groupZaps !== false }; };
+  const replan = () => { const { client } = active(); session.reorg.plan = planReorganize(client.projectData || {}, reorgOpts()); };
+  const KIND_LABEL = { chain: 'Call chain', versions: 'Versions of one flow', trigger: 'Same trigger', family: 'Name family', other: 'Other' };
+  const KEPT_LABEL = { inactive: 'off / old / copy / test / draft-only', 'placed by hand': 'placed by hand', global: 'global', 'not on the map': 'not on the map' };
+
+  function renderReorg() {
+    const r = session.reorg; const p = r.plan; const c = p.counts;
+    const todo = c.moved + c.placed + c.workflowsRemoved + c.reordered + c.workflowsCreated;
+    const opt = (key, label, hint) => `<label class="tiny" style="display:block; margin:5px 0;"><input type="checkbox" ${(key === 'placeUnplaced' || key === 'groupZaps' ? r.opts[key] !== false : r.opts[key]) ? 'checked' : ''} onchange="OL.zapReorgSet('${key}', this.checked)"> ${label}${hint ? ` <span class="tiny muted">${hint}</span>` : ''}</label>`;
+    const groups = p.groups.map((g) => `<tr><td><span style="font-size:10px; padding:1px 6px; border-radius:99px; background:rgba(61,217,197,0.15);">${esc(KIND_LABEL[g.kind] || g.kind)}</span></td><td>${esc(g.name)}</td><td>${g.zapIds.length}</td><td class="tiny muted">${g.isNew ? 'new workflow' : 'uses the existing workflow'}${g.reorder ? ', reordered' : ''}</td></tr>`).join('');
+    const moves = p.moves.filter((m) => m.kind !== 'same');
+    const moveRows = moves.slice(0, 60).map((m) => `<tr><td class="tiny">${esc(String(m.name).replace(/^⚡\s*/, ''))}</td><td class="tiny muted">${m.fromWorkflow ? esc(m.fromWorkflow) : '(not on the map)'}</td><td class="tiny">→ ${esc(m.toWorkflow)}</td></tr>`).join('');
+    const keptBy = {}; p.kept.forEach((k) => { keptBy[k.reason] = (keptBy[k.reason] || 0) + 1; });
+    const keptText = Object.entries(keptBy).map(([k, n]) => `${n} ${KEPT_LABEL[k] || k}`).join(', ');
+    return `${head('Reorganize Zaps already on the map')}<div class="modal-body" style="max-width:860px;">
+      <p class="tiny muted" style="margin-top:0;">Re-sorts the Zap cards in <strong>${esc(((active().client || {}).meta || {}).name || 'this project')}</strong> with the current rules. Nothing changes until you press Apply.</p>
+      <div style="display:flex; gap:22px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:250px;">${opt('groupZaps', 'Group Zaps into workflows')}
+          <label class="tiny" style="display:block; margin:5px 0;">Group by <select class="modal-input tiny" onchange="OL.zapReorgSet('groupBy', this.value)"><option value="flow" ${r.opts.groupBy !== 'trigger' ? 'selected' : ''}>how they work</option><option value="trigger" ${r.opts.groupBy === 'trigger' ? 'selected' : ''}>what starts them</option></select></label>
+          ${opt('placeUnplaced', 'Put Zaps that are not on the map yet onto it')}
+          ${opt('includeInactive', 'Include off / old / copy / test / draft-only Zaps')}
+          ${opt('includeHandPlaced', 'Also move Zaps I placed by hand', '(normally left exactly where you put them)')}</div>
+        <div class="tiny" style="flex:1; min-width:250px; line-height:1.6;">
+          <div><strong>${c.considered}</strong> Zap card${c.considered === 1 ? '' : 's'} in this project</div>
+          <div>${c.moved} will move to a different workflow, ${c.placed} will be placed, ${c.unchanged} are already right</div>
+          <div>${c.workflowsCreated} workflow${c.workflowsCreated === 1 ? '' : 's'} created, ${c.workflowsReused} reused, ${c.workflowsRemoved} empty old one${c.workflowsRemoved === 1 ? '' : 's'} removed${c.reordered ? `, ${c.reordered} reordered` : ''}</div>
+          ${keptText ? `<div class="muted">Left alone: ${esc(keptText)}</div>` : ''}</div></div>
+      ${todo ? '' : '<p class="tiny" style="color:#166534; margin-top:10px;">✔ Everything is already organized by the current rules.</p>'}
+      ${groups ? `<div class="tiny" style="font-weight:600; margin-top:12px;">Workflows after this</div><div style="max-height:200px; overflow:auto;"><table class="tiny" style="width:100%;"><tbody>${groups}</tbody></table></div>` : ''}
+      ${moveRows ? `<div class="tiny" style="font-weight:600; margin-top:12px;">What moves${moves.length > 60 ? ` (first 60 of ${moves.length})` : ''}</div><div style="max-height:220px; overflow:auto;"><table class="tiny" style="width:100%;"><tbody>${moveRows}</tbody></table></div>` : ''}
+      <p class="tiny muted" style="margin-top:12px;">Only the stage / workflow a card sits in, the workflow list and each card's group label change. Statuses, notes, owners, links, positions and steps are not touched. A backup file is saved first.</p>
+      <details style="margin-top:6px;"><summary class="tiny muted" style="cursor:pointer;">Restore from a backup file instead</summary><input type="file" accept=".json,application/json" style="margin-top:6px;" onchange="OL.zapReorgRestoreFile(this)"></details>
+      ${session.busy ? '<p class="tiny muted">Working…</p>' : ''}${session.error ? `<p class="tiny" style="color:#dc2626;">${esc(session.error)}</p>` : ''}
+      <div style="text-align:right; margin-top:12px;"><button class="btn small soft" onclick="OL.zapImportBack()">Back</button> <button class="btn small primary" ${todo && !session.busy ? '' : 'disabled'} onclick="OL.zapReorgApply()">Apply</button></div></div>`;
+  }
+
+  function renderReorgDone() {
+    const r = session.reorg.result;
+    const li = (n, one, many) => (n ? `<li>${n} ${n === 1 ? one : many}</li>` : '');
+    return `${head(r.undone ? 'Reorganize undone' : 'Reorganize finished')}<div class="modal-body" style="max-width:640px;">
+      ${r.undone ? `<p class="tiny">Everything was put back as it was (${r.restored} card${r.restored === 1 ? '' : 's'}).</p>` : `<ul class="tiny">
+        ${li(r.moved, 'card moved to a different workflow.', 'cards moved to a different workflow.')}${li(r.placed, 'card placed on the flow map.', 'cards placed on the flow map.')}
+        ${li(r.workflowsCreated, 'workflow created.', 'workflows created.')}${li(r.workflowsRemoved, 'empty old workflow removed.', 'empty old workflows removed.')}${li(r.reordered, 'workflow reordered.', 'workflows reordered.')}
+        <li>${r.unchanged} card${r.unchanged === 1 ? ' was' : 's were'} already in the right place.</li>
+        <li>${r.backupSaved ? `A backup file was saved (${esc(r.backupName)}).` : 'The backup file could not be saved by the browser, but Undo below still works until you close this window.'}</li></ul>`}
+      ${session.error ? `<p class="tiny" style="color:#dc2626;">${esc(session.error)}</p>` : ''}
+      <div style="text-align:right;">${r.undone ? '' : '<button class="btn small soft" onclick="OL.zapReorgUndo()">Undo</button> '}<button class="btn small primary" onclick="OL.zapImportClose()">Done</button></div></div>`;
+  }
+
+  const render = () => (session.step === 'pick' ? renderPick() : session.step === 'review' ? renderReview() : session.step === 'reorg' ? renderReorg() : session.step === 'reorgDone' ? renderReorgDone() : renderDone());
   const show = () => openModal(render());
 
   // ---------- what the buttons call ----------
@@ -383,6 +444,51 @@ export function createZapImport(deps) {
       Object.assign(session, { step: 'pick', model: null, error: '', note: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, groupBy: 'flow', skipInactive: true, connectZaps: true, leaveUnexplained: false, result: null, busy: false });
       show();
     },
+    zapReorgOpen() {
+      const { client } = active();
+      if (!client) return alert('No active project. Open a client project first.');
+      session.reorg = { opts: { groupBy: 'flow', includeInactive: false, includeHandPlaced: false, placeUnplaced: true, groupZaps: true }, plan: null, result: null, backup: null };
+      session.error = ''; session.busy = false; replan(); session.step = 'reorg'; show();
+    },
+    zapReorgSet(key, value) { session.reorg.opts[key] = value; replan(); show(); },
+    async zapReorgApply() {
+      if (session.busy) return;
+      const { id, client } = active();
+      session.busy = true; session.error = ''; show();
+      try {
+        const plan = planReorganize(client.projectData || {}, reorgOpts());
+        const done = applyReorganize(client.projectData, plan, { makeId: uid, now });
+        session.reorg.backup = done.backup;
+        const name = `zap-reorganize-backup_${String(((client.meta || {}).name) || 'project').replace(/[^A-Za-z0-9]+/g, '-')}_${now().toISOString().slice(0, 10)}.json`;
+        const saved = !!saveFile(name, JSON.stringify(done.backup));
+        markClientDirty(id); await persist();
+        if (typeof afterApply === 'function') afterApply();
+        session.reorg.result = { ...done, backup: undefined, backupSaved: saved, backupName: name };
+        session.step = 'reorgDone';
+      } catch (e) { session.error = `Reorganize stopped: ${String((e && e.message) || e)}`; }
+      session.busy = false; show();
+    },
+    async zapReorgUndo() {
+      const { id, client } = active();
+      try {
+        const out = restoreBackup(client.projectData, session.reorg.backup);
+        markClientDirty(id); await persist();
+        if (typeof afterApply === 'function') afterApply();
+        session.reorg.result = { undone: true, restored: out.restored }; session.error = '';
+      } catch (e) { session.error = `Undo failed: ${String((e && e.message) || e)}`; }
+      show();
+    },
+    async zapReorgRestoreFile(input) {
+      const f = input && input.files && input.files[0]; if (!f) return;
+      const { id, client } = active();
+      try {
+        const out = restoreBackup(client.projectData, JSON.parse(await f.text()));
+        markClientDirty(id); await persist();
+        if (typeof afterApply === 'function') afterApply();
+        session.reorg.result = { undone: true, restored: out.restored }; session.error = ''; session.step = 'reorgDone';
+      } catch (e) { session.error = e instanceof SyntaxError ? 'That file is not valid JSON.' : `Restore failed: ${String((e && e.message) || e)}`; }
+      show();
+    },
     async zapImportFile(input) { const f = input && input.files && input.files[0]; if (f) await loadText(await f.text()); },
     async zapImportDrop(ev) { const f = ev && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) await loadText(await f.text()); },
     async zapImportPaste() { const el = document.getElementById('zap-import-paste'); if (el && el.value.trim()) await loadText(el.value); },
@@ -402,5 +508,5 @@ export function createZapImport(deps) {
     },
   };
 
-  return { api, session, validate, buildModel, applyImport, renderReview, renderPick, renderDone, canApply, loadPrevious, fingerprint };
+  return { api, session, validate, buildModel, applyImport, renderReview, renderPick, renderDone, renderReorg, renderReorgDone, canApply, loadPrevious, fingerprint };
 }
