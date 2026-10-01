@@ -22,6 +22,7 @@ import { planImport, zapToResource, mergeIntoExisting, discoverResources, finger
 const STATUS_LABEL = { new: 'New', changed: 'Changed', unchanged: 'Unchanged', baseline: 'Already here' };
 const STATUS_COLOR = { new: '#16a34a', changed: '#d97706', unchanged: '#6b7280', baseline: '#2563eb' };
 
+const isPendingStatus = (v) => { const t = String(v == null ? '' : v).trim(); return t === '' || /^pending/i.test(t); };
 const clip = (s, n = 110) => { const t = String(s == null ? '' : s).replace(/\s+/g, ' '); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
 // One readable line per detected change
@@ -50,7 +51,7 @@ export function changeText(c) {
 
 export function createZapImport(deps) {
   const { state, esc, uid, persist, markClientDirty, db, getUserName, openModal, closeModal, afterApply, now = () => new Date() } = deps;
-  const session = { step: 'pick', model: null, error: '', note: '', author: '', leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
+  const session = { step: 'pick', model: null, error: '', note: '', author: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
 
   const active = () => { const id = state.activeClientId; return { id, client: state.clients && state.clients[id] }; };
   const libraryOf = (client) => { client.projectData = client.projectData || {}; client.projectData.localResources = client.projectData.localResources || []; return client.projectData.localResources; };
@@ -152,13 +153,26 @@ export function createZapImport(deps) {
     const library = libraryOf(client);
     const chosen = model.items.filter((i) => i.selected && !i.empty);
     const removed = model.missing.filter((m) => m.selected);
-    const summary = { created: 0, updated: 0, discovered: 0, removedFlagged: 0, history: null };
+    const summary = { created: 0, updated: 0, discovered: 0, removedFlagged: 0, markedBuilt: 0, history: null };
+    const startStatus = opts.newStatus === 'Pending' ? 'Pending' : 'Built';
+    const draftsPending = opts.draftsPending !== false;       // a Zap with no published version is not Built yet
+    summary.draftsPending = 0;
 
     chosen.forEach((it) => {
       const existing = findCard(library, it.zap);
       const fresh = zapToResource(it.zap, { resourceId: existing ? existing.id : `local-prj-zap-${it.zapId}` });
       const res = existing ? mergeIntoExisting(existing, fresh) : fresh;
-      if (existing) { library[library.indexOf(existing)] = res; summary.updated++; } else { library.unshift(res); summary.created++; }
+      const holdBack = it.isDraft && draftsPending;
+      if (existing) {
+        library[library.indexOf(existing)] = res; summary.updated++;
+        // a status someone set stays; a card still at Pending can be moved to Built if asked (never a draft-only Zap)
+        if (opts.markExistingBuilt && !holdBack && isPendingStatus(existing.status)) { res.status = 'Built'; summary.markedBuilt++; }
+      } else {
+        res.status = holdBack ? 'Pending' : startStatus;  // a card made by the import starts as Built (the Zap already exists in Zapier)
+        library.unshift(res); summary.created++;
+        if (res.status === 'Built') summary.markedBuilt++;
+        if (holdBack) summary.draftsPending++;
+      }
       res.zapMeta = Object.assign({}, res.zapMeta, { lastImportedAt: now().toISOString(), missingFromZapier: false });
 
       // folders and spreadsheets the Zap uses: make a card once, and link it from every step that uses it
@@ -239,7 +253,7 @@ export function createZapImport(deps) {
     const rows = m.items.filter((i) => session.showUnchanged || i.status !== 'unchanged').map((it) => {
       const detail = it.changes.length ? `<details style="margin:4px 0 0 24px;"><summary class="tiny muted" style="cursor:pointer;">${it.changes.length} change${it.changes.length === 1 ? '' : 's'}</summary>
         <ul class="tiny" style="margin:4px 0 0 16px; padding:0;">${it.changes.slice(0, 40).map((x) => `<li>${esc(changeText(x))}</li>`).join('')}${it.changes.length > 40 ? `<li class="muted">…and ${it.changes.length - 40} more</li>` : ''}</ul></details>` : '';
-      const flags = [it.isDraft ? '<span class="tiny" style="color:#d97706;">Draft: may not match what is live</span>' : '', it.empty ? '<span class="tiny" style="color:#dc2626;">No steps found: skipped</span>' : ''].filter(Boolean).join(' · ');
+      const flags = [it.isDraft ? '<span class="tiny" style="color:#d97706;">Draft only: no published version found, so it may not be live</span>' : '', it.empty ? '<span class="tiny" style="color:#dc2626;">No steps found: skipped</span>' : ''].filter(Boolean).join(' · ');
       return `<div style="padding:7px 0; border-bottom:1px solid var(--line,#e5e7eb);">
         <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" ${it.selected ? 'checked' : ''} ${it.empty ? 'disabled' : ''} onchange="OL.zapImportToggle('${esc(it.zapId)}', this.checked)">
           <span style="font-size:11px; padding:1px 7px; border-radius:99px; background:${STATUS_COLOR[it.status]}22; color:${STATUS_COLOR[it.status]};">${STATUS_LABEL[it.status]}</span>
@@ -249,6 +263,8 @@ export function createZapImport(deps) {
       <div class="tiny muted">Not deleted. Tick to mark the card as “missing from Zapier”.</div>${m.missing.map((x) => `<label class="tiny" style="display:flex; gap:8px; padding:3px 0;">
       <input type="checkbox" ${x.selected ? 'checked' : ''} onchange="OL.zapImportToggleMissing('${esc(x.zapId)}', this.checked)"> ${esc(x.name)}</label>`).join('')}</div>` : '';
     const n = m.items.filter((i) => i.selected).length;
+    const newDrafts = m.items.filter((i) => i.selected && !i.card && i.isDraft).length;
+    const pendingExisting = m.items.filter((i) => i.selected && i.card && isPendingStatus(i.card.status) && !(i.isDraft && session.draftsPending)).length;
     return `${head('Review Zap import')}<div class="modal-body" style="max-width:880px;">
       ${accountBanner(m)}
       <div style="margin:8px 0;">${chip('new', c.new, STATUS_COLOR.new)}${chip('changed', c.changed, STATUS_COLOR.changed)}${c.baseline ? chip('already here', c.baseline, STATUS_COLOR.baseline) : ''}${chip('unchanged', c.unchanged, STATUS_COLOR.unchanged)}${c.missing ? chip('missing', c.missing, '#dc2626') : ''}</div>
@@ -257,6 +273,15 @@ export function createZapImport(deps) {
       <div style="max-height:320px; overflow:auto; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:0 10px;">${rows || '<div class="tiny muted" style="padding:12px;">Nothing new or changed.</div>'}</div>
       ${missing}
       <div class="card" style="padding:12px; margin-top:14px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="tiny" style="font-weight:600;">New Zap cards start as</span>
+          <select class="modal-input tiny" style="width:auto;" onchange="OL.zapImportSet('newStatus', this.value)">
+            <option value="Built" ${session.newStatus === 'Built' ? 'selected' : ''}>Built</option>
+            <option value="Pending" ${session.newStatus === 'Pending' ? 'selected' : ''}>Pending</option></select>
+          <span class="tiny muted">(${m.items.filter((i) => i.selected && !i.card).length} new)</span></div>
+        ${newDrafts ? `<label class="tiny" style="display:flex; gap:6px; margin-top:6px;"><input type="checkbox" ${session.draftsPending ? 'checked' : ''} onchange="OL.zapImportSet('draftsPending', this.checked)"> ${newDrafts} Zap${newDrafts === 1 ? ' is' : 's are'} a draft with no published version: start ${newDrafts === 1 ? 'it' : 'them'} as Pending, not Built</label>` : ''}
+        ${pendingExisting ? `<label class="tiny" style="display:flex; gap:6px; margin-top:6px;"><input type="checkbox" ${session.markExistingBuilt ? 'checked' : ''} onchange="OL.zapImportSet('markExistingBuilt', this.checked)"> Also mark the ${pendingExisting} existing Zap card${pendingExisting === 1 ? '' : 's'} that ${pendingExisting === 1 ? 'is' : 'are'} still Pending as Built</label>` : ''}
+      </div>
+      <div class="card" style="padding:12px; margin-top:10px;">
         <div class="tiny" style="font-weight:600;">Why were these changes made?</div>
         <div class="tiny muted" style="margin-bottom:6px;">Zapier cannot tell you who made an edit (your team shares the logins). This note is saved with every change in this import.</div>
         <textarea class="modal-input" style="width:100%; min-height:64px;" placeholder="e.g. Switched Wealthbox steps to Slant per client request" oninput="OL.zapImportSet('note', this.value, true)">${esc(session.note)}</textarea>
@@ -276,6 +301,8 @@ export function createZapImport(deps) {
       : `<li style="color:#d97706;">History was not saved: ${esc(h.error)}</li>`;
     return `${head('Import finished')}<div class="modal-body" style="max-width:640px;"><ul class="tiny">
       <li>${r.created} Zap card${r.created === 1 ? '' : 's'} added, ${r.updated} updated.</li>
+      ${r.markedBuilt ? `<li>${r.markedBuilt} card${r.markedBuilt === 1 ? '' : 's'} set to Built.</li>` : ''}
+      ${r.draftsPending ? `<li>${r.draftsPending} draft-only Zap${r.draftsPending === 1 ? '' : 's'} left as Pending (never published).</li>` : ''}
       ${r.discovered ? `<li>${r.discovered} folder/spreadsheet resource${r.discovered === 1 ? '' : 's'} found and linked.</li>` : ''}
       ${r.removedFlagged ? `<li>${r.removedFlagged} card${r.removedFlagged === 1 ? '' : 's'} marked “missing from Zapier”.</li>` : ''}${hist}</ul>
       <div style="text-align:right;"><button class="btn small primary" onclick="OL.zapImportClose()">Done</button></div></div>`;
@@ -304,7 +331,7 @@ export function createZapImport(deps) {
     openZapImport() {
       const { client } = active();
       if (!client) return alert('No active project. Open a client project first.');
-      Object.assign(session, { step: 'pick', model: null, error: '', note: '', leaveUnexplained: false, result: null, busy: false });
+      Object.assign(session, { step: 'pick', model: null, error: '', note: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, leaveUnexplained: false, result: null, busy: false });
       show();
     },
     async zapImportFile(input) { const f = input && input.files && input.files[0]; if (f) await loadText(await f.text()); },
@@ -319,7 +346,7 @@ export function createZapImport(deps) {
       if (!canApply(session.model) || session.busy) return;
       session.busy = true; session.error = ''; show();
       try {
-        session.result = await applyImport(session.model, { note: session.note.trim(), author: session.author.trim(), leaveUnexplained: session.leaveUnexplained });
+        session.result = await applyImport(session.model, { note: session.note.trim(), author: session.author.trim(), leaveUnexplained: session.leaveUnexplained, newStatus: session.newStatus, markExistingBuilt: session.markExistingBuilt, draftsPending: session.draftsPending });
         session.step = 'done';
       } catch (e) { session.error = `Import stopped: ${String((e && e.message) || e)}`; }
       session.busy = false; show();
