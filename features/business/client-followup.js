@@ -86,6 +86,7 @@ function checklistSectionHtml(key, items, checked, clientName) {
                         <span style="flex:1; min-width:0;">
                             <span style="cursor:pointer;" onclick="event.preventDefault(); OL.openTaskInContext('${esc(OL._cfState.clientId)}', '${esc(String(it.id))}')">${esc(it.title || it.label || '')}</span>
                             ${(it.description || it.note) ? `<span class="muted"> — ${esc((it.description || it.note).slice(0, 90))}${(it.description || it.note).length > 90 ? '…' : ''}</span>` : ''}
+                            ${(it.waitNotes || []).map((n) => `<div class="tiny" style="margin-top:3px; padding-left:8px; border-left:2px solid var(--line); color:var(--muted); white-space:pre-wrap;">${n.label ? `<strong>${esc(n.label)}:</strong> ` : '<strong>Note:</strong> '}${esc(n.text)}</div>`).join('')}
                         </span>
                     </label>
                 `).join('')}
@@ -143,7 +144,7 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
 
         <div style="border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:10px;">
             <div class="tiny muted" style="margin-bottom:4px;">Ask the client for something new</div>
-            <input id="cf-new-title" type="text" class="modal-input tiny" placeholder="What do you need?">
+            <input id="cf-new-title" type="text" class="modal-input tiny" placeholder="What do you need?" onkeydown="if(event.key==='Enter'){ event.preventDefault(); OL.cfAddClientAsk(); }">
             <div style="margin-top:6px;">
                 <select id="cf-new-kind" class="modal-input tiny">
                     <option value="document">Document</option>
@@ -203,14 +204,25 @@ OL.cfAddClientAsk = async function() {
         assignee: 'Client Task', dueDate: '', isClientTask: true, loggedHours: 0, parentTaskId: null,
         createdBy: 'client-followup', createdAt: now, askKind: kind,
     };
-    await updateAndSync(() => { st.client.projectData.clientTasks.unshift(task); }, st.clientId);
+    try {
+        await updateAndSync(() => {
+            if (!Array.isArray(st.client.projectData.clientTasks)) st.client.projectData.clientTasks = [];
+            st.client.projectData.clientTasks.unshift(task);
+        }, st.clientId);
+    } catch (e) {
+        console.error('Could not add the client ask:', e);
+        alert(`Couldn't add that: ${e?.message || e}`);
+        return;
+    }
 
     // A review/confirmation ask goes in its own section, same as followUpEmailData files it (core/client-work-rules.js).
+    // (The lists and checked-sets are created here if the window opened without them, so adding never throws.)
+    ['clientAsks', 'pendingReview'].forEach((k) => { if (!Array.isArray(st.data[k])) st.data[k] = []; if (!st.checked[k]) st.checked[k] = new Set(); });
     if (kind === 'review') {
-        st.data.pendingReview.unshift({ id: task.id, label: task.title, note: '' });
+        st.data.pendingReview.unshift({ id: task.id, label: task.title, note: '', waitNotes: [] });
         st.checked.pendingReview.add(task.id);
     } else {
-        st.data.clientAsks.unshift({ id: task.id, title: task.title, description: '' });
+        st.data.clientAsks.unshift({ id: task.id, title: task.title, description: '', waitNotes: [] });
         st.checked.clientAsks.add(task.id);
     }
 

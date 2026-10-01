@@ -1761,12 +1761,12 @@ OL.renderGmailAttachments = function(m) {
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 ${attachments.map((a) => `
                     <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px;">
-                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" onclick="OL.openGmailAttachment('${esc(a.storagePath)}')" title="View / download">
+                        <span class="tiny" style="cursor:pointer; text-decoration:underline;" data-path="${esc(a.storagePath)}" onclick="OL.openGmailAttachment(this.dataset.path)" title="View / download">
                             <i data-lucide="paperclip" style="width:11px;height:11px;vertical-align:sub;"></i> ${esc(a.filename)} <span class="tiny muted">(${sizeLabel(a.size || 0)})</span>
                         </span>
                         ${alreadyLinked(a.storagePath)
                             ? `<span class="tiny" style="color:var(--accent);">Linked</span>`
-                            : `<button class="btn tiny soft" onclick="OL.openExcerptLinkPicker('${m.id}', ${JSON.stringify('📎 ' + a.filename)}, 'attachment', '${esc(a.storagePath)}')">Link this attachment</button>`}
+                            : `<button class="btn tiny soft" data-path="${esc(a.storagePath)}" data-name="${esc(a.filename)}" onclick="OL.openExcerptLinkPicker('${m.id}', '📎 ' + this.dataset.name, 'attachment', this.dataset.path)">Link this attachment</button>`}
                     </div>
                 `).join('')}
             </div>

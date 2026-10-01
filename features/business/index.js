@@ -11,6 +11,7 @@ import './team.js';
 import './automations.js';
 import './activation-review.js';
 import './client-followup.js';
+import './waiting-prompt.js';
 import './meeting-agenda.js';
 import './bulk-email.js';
 

@@ -1726,6 +1726,10 @@ OL.updateGlobalTaskDueDate = function(clientId, taskId, newDueDate) {
 OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
     console.log(`📡 Updating Status for Task [${taskId}] in Client [${clientId}] -> ${newStatus}`);
 
+    // What it was before this change, so the "waiting on the client" window only opens on an actual flip.
+    const statusBefore = (state.clients?.[clientId]?.projectData?.clientTasks || [])
+        .find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId))?.status;
+
     updateAndSync(() => {
         const client = state.clients?.[clientId];
         if (!client) {
@@ -1764,6 +1768,12 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
 
     // Re-render immediately to reflect state
     OL.refreshTaskView();
+
+    // Flipped to Pending Client Feedback / Document / Review: ask what it's waiting on and for a note
+    // (features/business/waiting-prompt.js).
+    if (statusBefore !== newStatus && typeof OL.waitingKindForStatus === 'function' && OL.waitingKindForStatus(newStatus) && typeof OL.promptClientWaiting === 'function') {
+        OL.promptClientWaiting(clientId, taskId, newStatus);
+    }
 };
 
 // 👥 Persist Assignee Change to Supabase State
