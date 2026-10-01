@@ -341,6 +341,20 @@ function periodCardHtml(client, slot, ledger) {
         </div>`;
 }
 
+// Ongoing Maintenance: an internal testing checklist for each client request is opt-in. It never starts a review
+// period or sends the client anything (client requests have no rounds); see core/testing.js.
+function testingToggleHtml(client) {
+    if (!canManage()) return '';
+    const on = !!client.projectData?.reviewSettings?.testClientRequests;
+    return `
+        <div class="card" style="padding:12px 16px; margin-top:12px;">
+            <label class="tiny" style="display:flex !important; align-items:flex-start; gap:8px; cursor:pointer; margin:0 !important;">
+                <input type="checkbox" ${on ? 'checked' : ''} style="width:auto !important; margin-top:2px;" onchange="OL.setTestClientRequests('${esc(client.id)}', this.checked)">
+                <span><strong>Create a testing checklist for each client request</strong><br><span class="muted">When a request's steps are done it gets a checklist and a Testing task. No review period starts and the client isn't sent anything.</span></span>
+            </label>
+        </div>`;
+}
+
 function adHocCardHtml(ledger) {
     return `
         <div class="card" style="padding:16px;"><div class="bold">Ad Hoc Maintenance</div>
@@ -381,7 +395,7 @@ export function renderMaintenancePage() {
     const ledger = slot.loaded && !slot.error ? ledgerFor(client, slot) : null;
     const body = !slot.loaded ? '<div class="tiny muted">Loading...</div>' : slot.error ? `<div class="card" style="padding:16px; border-left:3px solid #ef4444;">Could not load the maintenance data: ${esc(slot.error)}</div>` : `
         ${mode === ONGOING
-            ? periodCardHtml(client, slot, ledger) + (activePeriod ? hoursLogHtml(client, ledger, activePeriod, 'Hours log · this period') : '')
+            ? periodCardHtml(client, slot, ledger) + testingToggleHtml(client) + (activePeriod ? hoursLogHtml(client, ledger, activePeriod, 'Hours log · this period') : '')
             : adHocCardHtml(ledger) + (ledger.current.length ? hoursLogHtml(client, ledger, adHocWindow(ledger), 'Hours log · active purchases') : '')}
         <div class="card" style="padding:16px; margin-top:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
