@@ -45,6 +45,10 @@ const corsHeaders = {
 // comfortably covers even a few days of backlog in one run; anything left
 // over just gets picked up on the next "Sync Gmail" click.
 const MAX_LIST_PAGES = 3;
+// At most this many NEW messages are fully downloaded per run. The rest are
+// picked up by the next run (cron every 10 min / next Sync click), so one big
+// backlog can never push a single run past the worker's memory/CPU limit.
+const MAX_NEW_PER_RUN = 25;
 const LIST_PAGE_SIZE = 100;
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
@@ -102,6 +106,9 @@ function extractPlainTextBody(payload: any): string {
   return "";
 }
 
+const MAX_INLINE_IMAGE_BYTES = 300 * 1024;   // per inline image
+const MAX_INLINE_TOTAL_CHARS = 600 * 1024;   // per message (base64 chars)
+
 async function fetchAndConvertCidImages(
   payload: any,
   html: string,
@@ -128,7 +135,7 @@ async function fetchAndConvertCidImages(
         if (node.body?.data) {
           partsToProcess.push({ cid, mimeType, data: node.body.data });
         } else if (node.body?.attachmentId) {
-          partsToProcess.push({ cid, mimeType, attachmentId: node.body.attachmentId });
+          partsToProcess.push({ cid, mimeType, attachmentId: node.body.attachmentId, declaredSize: node.body.size || 0 } as any);
         }
       }
     }
@@ -140,8 +147,12 @@ async function fetchAndConvertCidImages(
 
   collectParts(payload);
 
+  let inlinedChars = 0;
   for (const item of partsToProcess) {
     try {
+      // Skip images that are already too big to inline (body_html is cut at
+      // 100k chars on save, so a huge data: URI would only get truncated).
+      if ((item as any).declaredSize && (item as any).declaredSize > MAX_INLINE_IMAGE_BYTES) continue;
       let base64Data = item.data;
 
       if (!base64Data && item.attachmentId) {
@@ -158,14 +169,16 @@ async function fetchAndConvertCidImages(
 
       // Guard: only attempt string manipulation if valid base64 data exists
       if (base64Data && typeof base64Data === "string") {
+        if (base64Data.length > MAX_INLINE_IMAGE_BYTES * 1.4 || inlinedChars + base64Data.length > MAX_INLINE_TOTAL_CHARS) {
+          continue; // too big / budget used up — leave the cid: reference as-is
+        }
+        inlinedChars += base64Data.length;
         const normalizedBase64 = base64Data.replace(/-/g, "+").replace(/_/g, "/");
         const dataUri = `data:${item.mimeType};base64,${normalizedBase64}`;
 
-        // Safe replace without RegExp or replaceAll syntax errors
-        const targetCidStr = `cid:${item.cid}`;
-        while (updatedHtml.includes(targetCidStr)) {
-          updatedHtml = updatedHtml.replace(targetCidStr, dataUri);
-        }
+        // split/join replaces every occurrence in one pass (the old
+        // while/replace loop re-copied the whole HTML string per occurrence)
+        updatedHtml = updatedHtml.split(`cid:${item.cid}`).join(dataUri);
       }
     } catch (err) {
       console.error(`Error processing inline image for CID ${item.cid}:`, err);
@@ -213,8 +226,9 @@ function base64UrlToBytes(data: string): Uint8Array {
 // attachment can be much bigger than an inline image, so this is more
 // conservative. A skipped attachment just doesn't get stored; the email
 // itself still imports normally.
-const MAX_ATTACHMENTS_PER_MESSAGE = 10;
-const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // 15MB
+const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB each
+const MAX_ATTACHMENT_BYTES_PER_MESSAGE = 10 * 1024 * 1024; // 10MB total per message
 
 async function fetchAndStoreAttachments(
   supabase: any,
@@ -224,7 +238,12 @@ async function fetchAndStoreAttachments(
 ): Promise<{ id: string; filename: string; mimeType: string; size: number; storagePath: string }[]> {
   const out: { id: string; filename: string; mimeType: string; size: number; storagePath: string }[] = [];
 
+  let totalBytes = 0;
   for (const part of parts.slice(0, MAX_ATTACHMENTS_PER_MESSAGE)) {
+    if (totalBytes + (part.size || 0) > MAX_ATTACHMENT_BYTES_PER_MESSAGE) {
+      console.warn(`Skipping attachment "${part.filename}" on ${messageId}: per-message size budget reached`);
+      continue;
+    }
     if (part.size && part.size > MAX_ATTACHMENT_BYTES) {
       console.warn(`Skipping oversized attachment "${part.filename}" (${part.size} bytes) on message ${messageId}`);
       continue;
@@ -249,6 +268,7 @@ async function fetchAndStoreAttachments(
         .upload(storagePath, bytes, { contentType: part.mimeType, upsert: true });
       if (uploadErr) { console.error(`Failed to store attachment "${part.filename}" on ${messageId}:`, uploadErr.message); continue; }
 
+      totalBytes += bytes.byteLength;
       out.push({ id: part.attachmentId, filename: part.filename, mimeType: part.mimeType, size: bytes.byteLength, storagePath });
     } catch (e) {
       console.error(`Error processing attachment "${part.filename}" on ${messageId}:`, e);
@@ -589,7 +609,9 @@ serve(async (req) => {
     // cost is what was tripping the edge function's resource limit (HTTP
     // 546). Now we only do the expensive work for ids not already in
     // gmail_messages.
-    const newIds = inboxIds.filter((id) => !alreadyImported.has(id));
+    const allNewIds = inboxIds.filter((id) => !alreadyImported.has(id));
+    const newIds = allNewIds.slice(0, MAX_NEW_PER_RUN); // list is newest-first
+    const remainingCount = allNewIds.length - newIds.length;
 
     if (newIds.length === 0) {
       return new Response(JSON.stringify({ scannedCount: inboxIds.length, importedCount: 0, labeledCount: 0, reconciled }), { status: 200, headers: corsHeaders });
@@ -621,7 +643,31 @@ serve(async (req) => {
     // can still be 100+ messages, and any of them holding embedded images
     // as base64 in memory simultaneously is what was pushing the function
     // over its resource limit.
-    const FETCH_CONCURRENCY = 8;
+    // 5. Save each batch as soon as it is built (upsert guards against a race
+    // if two syncs overlap). Flushing per batch means (a) memory never holds
+    // more than one batch of bodies/images, and (b) if a later batch hits the
+    // resource limit, everything saved so far stays saved instead of the whole
+    // run being lost and retried from scratch forever.
+    let errorsLogged = 0;
+    const flush = async () => {
+      if (rows.length > 0) {
+        const { error: insertError } = await supabase
+          .from("gmail_messages")
+          .upsert(rows, { onConflict: "id", ignoreDuplicates: false });
+        if (insertError) throw new Error(`Insert failed: ${insertError.message}`);
+      }
+      if (errorRows.length > 0) {
+        const { error: errorInsertError, count } = await supabase
+          .from("error_log")
+          .upsert(errorRows, { onConflict: "gmail_message_id", ignoreDuplicates: true, count: "exact" });
+        if (errorInsertError) console.error("Failed to log parsed errors:", errorInsertError.message);
+        else errorsLogged += count ?? errorRows.length;
+      }
+      rows.length = 0;
+      errorRows.length = 0;
+    };
+
+    const FETCH_CONCURRENCY = 3;
     for (let i = 0; i < newIds.length; i += FETCH_CONCURRENCY) {
       const batch = newIds.slice(i, i + FETCH_CONCURRENCY);
       await Promise.all(
@@ -746,27 +792,7 @@ serve(async (req) => {
         }
         })
       );
-    }
-
-    // 5. Save them (upsert guards against a race if two syncs overlap).
-    // Ensure upsert updates the content columns for existing rows
-    const { error: insertError } = await supabase
-      .from("gmail_messages")
-      .upsert(rows, { 
-        onConflict: "id", 
-        ignoreDuplicates: false 
-      });
-    
-    if (insertError) throw new Error(`Insert failed: ${insertError.message}`);
-
-    // 5b. Save any detected Zapier error emails into the centralized error log.
-    let errorsLogged = 0;
-    if (errorRows.length > 0) {
-      const { error: errorInsertError, count } = await supabase
-        .from("error_log")
-        .upsert(errorRows, { onConflict: "gmail_message_id", ignoreDuplicates: true, count: "exact" });
-      if (errorInsertError) console.error("Failed to log parsed errors:", errorInsertError.message);
-      else errorsLogged = count ?? errorRows.length;
+      await flush();
     }
 
     // 6. Apply Gmail labels for any project matches
@@ -798,7 +824,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, labeledCount, errorsLogged, reconciled }),
+      JSON.stringify({ scannedCount: inboxIds.length, importedCount: newIds.length, remainingCount, labeledCount, errorsLogged, reconciled }),
       { status: 200, headers: corsHeaders }
     );
 
