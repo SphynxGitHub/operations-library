@@ -51,7 +51,7 @@ export function changeText(c) {
 
 export function createZapImport(deps) {
   const { state, esc, uid, persist, markClientDirty, db, getUserName, openModal, closeModal, afterApply, now = () => new Date() } = deps;
-  const session = { step: 'pick', model: null, error: '', note: '', author: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, skipInactive: true, connectZaps: true, leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
+  const session = { step: 'pick', model: null, error: '', note: '', author: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, groupBy: 'flow', skipInactive: true, connectZaps: true, leaveUnexplained: false, confirmAccount: false, overrideMismatch: false, showUnchanged: false, result: null, busy: false };
 
   const active = () => { const id = state.activeClientId; return { id, client: state.clients && state.clients[id] }; };
   const libraryOf = (client) => { client.projectData = client.projectData || {}; client.projectData.localResources = client.projectData.localResources || []; return client.projectData.localResources; };
@@ -121,8 +121,8 @@ export function createZapImport(deps) {
     const unplaced = selected.filter((i) => !(i.card && i.card.stageId));
     const off = session.skipInactive ? unplaced.filter((i) => isInactiveZap(i.zap)) : [];
     const cand = unplaced.filter((i) => !off.includes(i)).map((i) => i.zap);
-    const plan = session.groupZaps ? planGroups(cand, links) : { workflows: [], other: cand.map((z) => String(z.zapId)) };
-    return { placeable: cand.length, chains: plan.workflows.filter((w) => w.kind === 'chain').length, families: plan.workflows.filter((w) => w.kind === 'family').length,
+    const plan = session.groupZaps ? planGroups(cand, links, { groupBy: session.groupBy === 'trigger' ? 'trigger' : undefined }) : { workflows: [], other: cand.map((z) => String(z.zapId)) };
+    return { placeable: cand.length, chains: plan.workflows.filter((w) => w.kind === 'chain').length, versions: plan.workflows.filter((w) => w.kind === 'versions' || w.kind === 'trigger').length, families: plan.workflows.filter((w) => w.kind === 'family').length,
       other: plan.other.length, off: off.length, links: links.length };
   }
 
@@ -218,8 +218,8 @@ export function createZapImport(deps) {
         const card = library.find((r) => r.type === 'Zap' && String(r.originalZapId) === String(z.zapId));
         return card && !card.stageId && !(opts.skipInactive !== false && isInactiveZap(z));
       });
-      const plan = opts.groupZaps === false ? { workflows: [], other: cand.map((z) => String(z.zapId)) } : planGroups(cand, hookLinks);
-      const placed = placeZapCards(client.projectData, plan, { stageId: opts.stageChoice && opts.stageChoice !== 'new' ? opts.stageChoice : undefined, stageName: 'Zapier Automations', makeId: uid });
+      const plan = opts.groupZaps === false ? { workflows: [], other: cand.map((z) => String(z.zapId)) } : planGroups(cand, hookLinks, { groupBy: opts.groupBy === 'trigger' ? 'trigger' : undefined });
+      const placed = placeZapCards(client.projectData, plan, { stageId: opts.stageChoice && opts.stageChoice !== 'new' ? opts.stageChoice : undefined, stageName: 'Zapier Automations', makeId: uid, zapsById: new Map((model.zaps || []).map((z) => [String(z.zapId), z])) });
       summary.placed = placed.placed; summary.workflows = placed.workflowsUsed; summary.stageName = placed.stageName;
     }
 
@@ -268,7 +268,7 @@ export function createZapImport(deps) {
 
   const stagesNow = () => { const { client } = active(); return (client && client.projectData && client.projectData.stages) || []; };
   const flowText = (f) => session.stageChoice === 'none' ? 'The cards will be added to the workbench only.'
-    : `${f.placeable} Zap${f.placeable === 1 ? '' : 's'} would go on the map: ${f.chains} chain workflow${f.chains === 1 ? '' : 's'}, ${f.families} same-name workflow${f.families === 1 ? '' : 's'}, ${f.other} in “Other Zaps”${f.off ? `; ${f.off} left off (OFF / old / draft)` : ''}. ${session.connectZaps ? `${f.links} connection${f.links === 1 ? '' : 's'} between Zaps.` : ''}`;
+    : `${f.placeable} Zap${f.placeable === 1 ? '' : 's'} would go on the map: ${f.chains} chain workflow${f.chains === 1 ? '' : 's'}, ${f.versions} ${session.groupBy === 'trigger' ? 'same-trigger' : 'same-flow'} workflow${f.versions === 1 ? '' : 's'}, ${f.families} same-name workflow${f.families === 1 ? '' : 's'}, ${f.other} in “Other Zaps”${f.off ? `; ${f.off} left off (OFF / old / draft)` : ''}. ${session.connectZaps ? `${f.links} connection${f.links === 1 ? '' : 's'} between Zaps.` : ''}`;
 
   function canApply(m) {
     const a = m.account;
@@ -311,7 +311,10 @@ export function createZapImport(deps) {
             ${stagesNow().filter((x) => x.name !== 'Zapier Automations').map((x) => `<option value="${esc(x.id)}" ${session.stageChoice === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
             <option value="none" ${session.stageChoice === 'none' ? 'selected' : ''}>Don't place them yet</option></select></div>
         ${session.stageChoice === 'none' ? '' : `
-        <label class="tiny" style="display:flex; gap:6px; margin-top:6px;"><input type="checkbox" ${session.groupZaps ? 'checked' : ''} onchange="OL.zapImportSet('groupZaps', this.checked)"> Group related Zaps into workflows (Zaps that start each other, and Zaps with the same name apart from initials or “Part N”)</label>
+        <label class="tiny" style="display:flex; gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap;"><input type="checkbox" ${session.groupZaps ? 'checked' : ''} onchange="OL.zapImportSet('groupZaps', this.checked)"> Group related Zaps into workflows by
+          <select class="modal-input tiny" style="width:auto;" ${session.groupZaps ? '' : 'disabled'} onchange="OL.zapImportSet('groupBy', this.value)">
+            <option value="flow" ${session.groupBy !== 'trigger' ? 'selected' : ''}>how they work (chains, copies of the same flow, same name)</option>
+            <option value="trigger" ${session.groupBy === 'trigger' ? 'selected' : ''}>what starts them (same trigger)</option></select></label>
         <label class="tiny" style="display:flex; gap:6px; margin-top:4px;"><input type="checkbox" ${session.skipInactive ? 'checked' : ''} onchange="OL.zapImportSet('skipInactive', this.checked)"> Keep OFF, old, retired, copy, test and draft-only Zaps off the map (they stay in the workbench)</label>`}
         <label class="tiny" style="display:flex; gap:6px; margin-top:4px;"><input type="checkbox" ${session.connectZaps ? 'checked' : ''} onchange="OL.zapImportSet('connectZaps', this.checked)"> Draw connections between Zaps that start each other (catch hooks)</label>
         <div class="tiny muted" style="margin-top:6px;">${flowText(flow)}</div>
@@ -377,7 +380,7 @@ export function createZapImport(deps) {
     openZapImport() {
       const { client } = active();
       if (!client) return alert('No active project. Open a client project first.');
-      Object.assign(session, { step: 'pick', model: null, error: '', note: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, skipInactive: true, connectZaps: true, leaveUnexplained: false, result: null, busy: false });
+      Object.assign(session, { step: 'pick', model: null, error: '', note: '', newStatus: 'Built', markExistingBuilt: false, draftsPending: true, stageChoice: 'new', groupZaps: true, groupBy: 'flow', skipInactive: true, connectZaps: true, leaveUnexplained: false, result: null, busy: false });
       show();
     },
     async zapImportFile(input) { const f = input && input.files && input.files[0]; if (f) await loadText(await f.text()); },
@@ -392,7 +395,7 @@ export function createZapImport(deps) {
       if (!canApply(session.model) || session.busy) return;
       session.busy = true; session.error = ''; show();
       try {
-        session.result = await applyImport(session.model, { note: session.note.trim(), author: session.author.trim(), leaveUnexplained: session.leaveUnexplained, newStatus: session.newStatus, markExistingBuilt: session.markExistingBuilt, draftsPending: session.draftsPending, stageChoice: session.stageChoice, groupZaps: session.groupZaps, skipInactive: session.skipInactive, connectZaps: session.connectZaps });
+        session.result = await applyImport(session.model, { note: session.note.trim(), author: session.author.trim(), leaveUnexplained: session.leaveUnexplained, newStatus: session.newStatus, markExistingBuilt: session.markExistingBuilt, draftsPending: session.draftsPending, stageChoice: session.stageChoice, groupZaps: session.groupZaps, groupBy: session.groupBy, skipInactive: session.skipInactive, connectZaps: session.connectZaps });
         session.step = 'done';
       } catch (e) { session.error = `Import stopped: ${String((e && e.message) || e)}`; }
       session.busy = false; show();

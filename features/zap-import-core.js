@@ -263,6 +263,7 @@ export function zapToResource(zap, opts = {}) {
       editorState: zap.editorState || undefined,
       accountId: zap.zapierAccountId, accountName: zap.zapierAccountName,
       timezone: zap.timezone, contentHash: fingerprint(zap.steps || []),
+      trigger: triggerInfo(zap).label || undefined,
     },
   };
 }
@@ -486,14 +487,82 @@ function candidateKeys(name) {
   return keys.filter((k) => k && k.length >= 4);
 }
 
-// Groups Zaps into workflows: call chains first (Zaps that start each other), then families that share a name.
-// Returns { workflows: [{ name, kind: 'chain'|'family', zapIds }], other: [zapId] }, every given Zap exactly once.
-export function planGroups(zaps, links) {
+// ---------- what Zaps have in common: same flow (versions), same trigger -----------------------
+
+// The SHAPE of a Zap's flow, ignoring names, settings and accounts: which kinds of step, from which apps and actions,
+// at what depth. Two Zaps with the same shape are "versions" of one flow (for example one per advisor or per account).
+export function shapeSignature(zap) {
+  const steps = zap.steps || [];
+  const by = new Map(steps.map((s) => [String(s.stepId), s]));
+  const depth = (s) => { let d = 0; let p = s.parentStepId; const seen = new Set(); while (p && by.has(String(p)) && !seen.has(p)) { seen.add(p); d++; p = by.get(String(p)).parentStepId; } return d; };
+  return steps.map((s) => `${depth(s)}:${s.role || ''}:${baseApp(s.app)}:${s.action || ''}`).join('>');
+}
+
+// What starts the Zap: the first step's app and action
+export function triggerInfo(zap) {
+  const t = (zap.steps || [])[0];
+  if (!t) return { key: '', label: '' };
+  const app = t.appName || cleanAppName(t.app);
+  const what = t.actionLabel || t.action || t.title || '';
+  return { key: `${baseApp(t.app)}|${t.action || ''}`, label: `${app} · ${what}`.trim() };
+}
+
+const modeOf = (arr) => { const c = new Map(); arr.forEach((x) => c.set(x, (c.get(x) || 0) + 1)); return [...c].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))[0]?.[0]; };
+const shortAccount = (label) => String(label || '').replace(/\s+-\s+\S+@\S+$/, '').trim();
+
+// How the Zaps in one group differ: which accounts they use, and which settings differ from one to the next
+export function describeVersions(zaps) {
+  const labels = new Set();
+  for (const z of zaps) for (const s of z.steps || []) if (s.connectionId) labels.add(s.connectionLabel || `connection ${s.connectionId}`);
+  const fields = new Map();
+  const n = Math.max(...zaps.map((z) => (z.steps || []).length), 0);
+  for (let i = 0; i < n; i++) {
+    const here = zaps.map((z) => (z.steps || [])[i]).filter(Boolean);
+    if (here.length < 2) continue;
+    const names = new Set(here.flatMap((s) => (s.mappings || []).map((m) => m.field)));
+    for (const f of names) {
+      if (f.startsWith('_')) continue;
+      const vals = here.map((s) => { const m = (s.mappings || []).find((x) => x.field === f); return m ? (m.hash || m.value) : ''; });
+      const distinct = new Set(vals).size;
+      if (distinct > 1) { const key = `${here[0].title}: ${f}`; fields.set(key, Math.max(fields.get(key) || 0, distinct)); }
+    }
+  }
+  return { accounts: [...labels].map(shortAccount).filter(Boolean), differs: [...fields].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k) };
+}
+
+// A short label that says which version a Zap is: its account, else the initials / word after " - " in its name
+export function versionLabel(zap, siblings) {
+  const mine = new Set((zap.steps || []).filter((s) => s.connectionId).map((s) => s.connectionLabel || s.connectionId));
+  const all = new Set((siblings || []).flatMap((z) => (z.steps || []).filter((s) => s.connectionId).map((s) => s.connectionLabel || s.connectionId)));
+  if (all.size > 1 && mine.size) return [...mine].map(shortAccount).filter(Boolean).slice(0, 2).join(', ');
+  const tail = String(zap.zapName || '').match(/\s[-–]\s+([^-–]{1,40})$/);
+  if (tail) return tail[1].trim();
+  return '';
+}
+
+// The name most of the group shares ("Generate Paperwork Step Complete" for DocuSign / Transfer / MISC / New Account ...)
+function sharedName(group) {
+  const count = new Map(); const display = new Map();
+  for (const z of group) {
+    for (const k of new Set(candidateKeys(z.zapName))) { const key = norm(k); count.set(key, (count.get(key) || 0) + 1); if (!display.has(key)) display.set(key, k); }
+  }
+  const best = [...count].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+  return (best && best[1] >= 2 ? display.get(best[0]) : '') || modeOf(group.map((z) => nameStem(z.zapName))) || nameStem(group[0].zapName) || group[0].zapName;
+}
+
+// Groups Zaps into workflows, strongest evidence first:
+//   1. chains     Zaps that start each other through a catch hook, in the order they run
+//   2. versions   Zaps with the SAME FLOW (same steps, apps and actions) and the same trigger: one per account / person / type
+//                 (opts.groupBy === 'trigger' groups by what starts them instead)
+//   3. families   Zaps that share a name stem, apart from trailing initials, "Part N", or the part before/after " - "
+// Returns { workflows: [{ name, kind, zapIds, ... }], other: [zapId] }, every given Zap exactly once.
+export function planGroups(zaps, links, opts = {}) {
   const byId = new Map(zaps.map((z) => [String(z.zapId), z]));
   const used = new Set();
   const workflows = [];
+  const zapName = (id) => byId.get(id).zapName;
 
-  // 1) chains: connected Zaps, in the order they start each other
+  // 1) chains
   const adj = new Map(); const indeg = new Map();
   for (const l of links || []) {
     if (!byId.has(l.fromZapId) || !byId.has(l.toZapId)) continue;
@@ -508,25 +577,54 @@ export function planGroups(zaps, links) {
     if (seen.has(start)) continue;
     const comp = []; const stack = [start];
     while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); comp.push(x); (und.get(x) || []).forEach((y) => stack.push(y)); }
-    // order: walk from the Zaps nothing calls, following the calls
-    const roots = comp.filter((x) => !indeg.get(x)).sort((a, b) => String(byId.get(a).zapName).localeCompare(String(byId.get(b).zapName)));
+    const roots = comp.filter((x) => !indeg.get(x)).sort((a, b) => String(zapName(a)).localeCompare(String(zapName(b))));
     const ordered = []; const q = roots.length ? [...roots] : [comp[0]];
     while (q.length) { const x = q.shift(); if (ordered.includes(x)) continue; ordered.push(x); [...(adj.get(x) || [])].sort().forEach((y) => q.push(y)); }
     comp.forEach((x) => { if (!ordered.includes(x)) ordered.push(x); });
     ordered.forEach((x) => used.add(x));
-    workflows.push({ name: nameStem(byId.get(ordered[0]).zapName) || byId.get(ordered[0]).zapName, kind: 'chain', zapIds: ordered });
+    workflows.push({ name: nameStem(zapName(ordered[0])) || zapName(ordered[0]), kind: 'chain', zapIds: ordered });
   }
 
-  // 2) families: Zaps that share a name stem (or the part before / after " - "), the biggest shared name wins
-  const rest = zaps.filter((z) => !used.has(String(z.zapId)));
+  const rest = () => zaps.filter((z) => !used.has(String(z.zapId)));
+
+  // 2) versions (same flow) or, if asked, same trigger
+  if (opts.groupBy === 'trigger') {
+    const byTrig = new Map();
+    for (const z of rest()) { const t = triggerInfo(z); if (!t.key) continue; (byTrig.get(t.key) || byTrig.set(t.key, { label: t.label, ids: [] }).get(t.key)).ids.push(String(z.zapId)); }
+    for (const g of byTrig.values()) {
+      if (g.ids.length < 2) continue;
+      g.ids.sort((a, b) => String(zapName(a)).localeCompare(String(zapName(b))));
+      g.ids.forEach((x) => used.add(x));
+      workflows.push({ name: `Starts when: ${g.label}`, kind: 'trigger', zapIds: g.ids });
+    }
+  } else {
+    const bySig = new Map();
+    for (const z of rest()) { if (!(z.steps || []).length) continue; const k = `${triggerInfo(z).key}#${shapeSignature(z)}`; (bySig.get(k) || bySig.set(k, []).get(k)).push(z); }
+    for (const members of bySig.values()) {
+      if (members.length < 2) continue;
+      let group = members;
+      if ((members[0].steps || []).length <= 2) {          // a very short flow is only a "version" if the names also match
+        const keyCount = new Map();
+        members.forEach((z) => new Set(candidateKeys(z.zapName).map(norm)).forEach((k) => keyCount.set(k, (keyCount.get(k) || 0) + 1)));
+        group = members.filter((z) => candidateKeys(z.zapName).map(norm).some((k) => keyCount.get(k) >= 2));
+        if (group.length < 2) continue;
+      }
+      const ids = group.map((z) => String(z.zapId)).sort((a, b) => String(zapName(a)).localeCompare(String(zapName(b))));
+      ids.forEach((x) => used.add(x));
+      workflows.push({ name: sharedName(group), kind: 'versions', zapIds: ids });
+    }
+  }
+
+  // 3) families by name
+  const left = rest();
   const members = new Map(); const display = new Map();
-  for (const z of rest) for (const k of candidateKeys(z.zapName)) {
+  for (const z of left) for (const k of candidateKeys(z.zapName)) {
     const key = norm(k);
     (members.get(key) || members.set(key, new Set()).get(key)).add(String(z.zapId));
     if (!display.has(key)) display.set(key, k);
   }
   const choice = new Map();
-  for (const z of rest) {
+  for (const z of left) {
     const options = candidateKeys(z.zapName).map(norm).filter((k) => (members.get(k) || []).size >= 2);
     options.sort((a, b) => members.get(b).size - members.get(a).size || b.length - a.length);
     if (options.length) choice.set(String(z.zapId), options[0]);
@@ -535,14 +633,34 @@ export function planGroups(zaps, links) {
   for (const [id, key] of choice) (fam.get(key) || fam.set(key, []).get(key)).push(id);
   for (const [key, ids] of fam) {
     if (ids.length < 2) continue;
-    ids.sort((a, b) => String(byId.get(a).zapName).localeCompare(String(byId.get(b).zapName)));
+    ids.sort((a, b) => String(zapName(a)).localeCompare(String(zapName(b))));
     ids.forEach((x) => used.add(x));
     workflows.push({ name: display.get(key), kind: 'family', zapIds: ids });
   }
 
-  const other = rest.map((z) => String(z.zapId)).filter((id) => !used.has(id));
-  workflows.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'chain' ? -1 : 1));
+  // describe what differs inside each group of look-alikes
+  workflows.forEach((w) => {
+    if (w.kind === 'versions' || w.kind === 'family' || w.kind === 'trigger') {
+      const zs = w.zapIds.map((id) => byId.get(id));
+      w.differences = describeVersions(zs);
+    }
+  });
+
+  const other = left.map((z) => String(z.zapId)).filter((id) => !used.has(id));
+  const rank = { chain: 0, versions: 1, trigger: 1, family: 2 };
+  workflows.sort((a, b) => ((rank[a.kind] ?? 3) - (rank[b.kind] ?? 3)) || a.name.localeCompare(b.name));
   return { workflows, other };
+}
+
+// A sentence saying why these Zaps were put together and how they differ
+export function workflowNote(g) {
+  const d = g.differences;
+  const diff = d ? [d.accounts && d.accounts.length > 1 ? `different accounts (${d.accounts.slice(0, 4).join(', ')})` : '', d.differs && d.differs.length ? `settings that differ: ${d.differs.join('; ')}` : ''].filter(Boolean).join(' | ') : '';
+  if (g.kind === 'chain') return 'Zaps that start each other (a step calls the next Zap\'s catch hook), in the order they run. Grouped automatically by the Zap import.';
+  if (g.kind === 'versions') return `${g.zapIds.length} copies of the same flow (same steps, apps and actions).${diff ? ' They differ by ' + diff + '.' : ''} Grouped automatically by the Zap import.`;
+  if (g.kind === 'trigger') return `${g.zapIds.length} Zaps that all start from the same trigger and run side by side.${diff ? ' ' + diff + '.' : ''} Grouped automatically by the Zap import.`;
+  if (g.kind === 'family') return `Zaps with the same name apart from initials or part numbers.${diff ? ' ' + diff + '.' : ''} Grouped automatically by the Zap import.`;
+  return 'Grouped automatically by the Zap import';
 }
 
 const WF_COLORS = ['#3dd9c5', '#7c3aed', '#f97316', '#38bdf8', '#a78bfa', '#fb923c', '#10b981', '#f43f5e'];
@@ -567,10 +685,17 @@ export function placeZapCards(pd, plan, opts = {}) {
     const cards = g.zapIds.map(cardOf).filter(Boolean);
     if (!cards.length) return;
     if (!wf) {
-      wf = { id: `wf-${makeId()}`, name: g.name, stageId: stage.id, color: WF_COLORS[i % WF_COLORS.length], resourceIds: [], description: 'Grouped automatically by the Zap import' };
+      wf = { id: `wf-${makeId()}`, name: g.name, stageId: stage.id, color: WF_COLORS[i % WF_COLORS.length], resourceIds: [], description: workflowNote(g) };
       pd.workflows.push(wf);
     }
     out.workflowsUsed++;
+    if (opts.zapsById && (g.kind === 'versions' || g.kind === 'family' || g.kind === 'trigger')) {
+      const sibs = g.zapIds.map((id) => opts.zapsById.get(String(id))).filter(Boolean);
+      g.zapIds.forEach((id) => {
+        const card = cardOf(id); const zap = opts.zapsById.get(String(id));
+        if (card && zap) card.zapMeta = Object.assign({}, card.zapMeta, { group: { name: g.name, kind: g.kind, size: g.zapIds.length, label: versionLabel(zap, sibs) || undefined } });
+      });
+    }
     cards.forEach((c) => {
       if (c.stageId) { out.kept++; return; }                  // already placed: never moved
       c.stageId = stage.id; c.workflowId = wf.id; c.isGlobal = false;
