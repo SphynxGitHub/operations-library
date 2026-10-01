@@ -1,15 +1,18 @@
 //======================= FEATURES / BUSINESS / WAITING-ON-CLIENT PROMPT =======================//
-// Shown right after someone flips a Sphynx task to "Pending Client Feedback", "Pending Client Document" or
-// "Pending Client Review" (OL.updateGlobalTaskStatus in features/business/tasks.js).
+// Shown right after someone flips a Sphynx task to a "waiting" status (OL.updateGlobalTaskStatus in
+// features/business/tasks.js):
 //
-//   Feedback / Document -> the client tasks this task is waiting on (the ones tied to the same request/resource
-//                          and anything set as a Dependency), a way to add a NEW client task right there, and a
-//                          notes box.
-//   Review              -> just the notes box.
+//   Pending Client Action / Feedback / Document -> the client tasks this task is waiting on (the ones tied to the
+//                          same request/resource and anything set as a Dependency), a way to add a NEW client task or
+//                          link an existing one right there, and a notes box.
+//   Pending Client Review                       -> just the notes box.
+//   Pending Developer Update / Third Party Support -> just the notes box (the status, in a line).
 //
-// The note is saved on the task itself as task.waitingNote (+ waitingNoteAt / waitingNoteBy). It is sidebar
-// context only: the client follow-up's open-items list (features/business/client-followup.js) shows it under
-// the item(s) this task is waiting on — it is never put into the email body, which lists task names only.
+// The note is saved on the task itself as task.waitingNote (+ waitingNoteAt / waitingNoteBy). For the client
+// statuses it is sidebar context only: the client follow-up's open-items list (features/business/client-followup.js)
+// shows it under the item(s) this task is waiting on — never in the email body, which lists task names only. For
+// developer / third-party it is the status line of the follow-up's "Waiting on Sphynx" / "Waiting on Other" item
+// (see followUpEmailData in core/client-work-rules.js).
 // New client tasks made here are linked to the same request(s)/resource(s) as the waiting task and added to its
 // Dependencies ("Waiting on"), so they feed the one consolidated client follow-up like any other client ask.
 //
@@ -20,12 +23,25 @@ import { linksForTask, addLink } from '../../core/task-links.js';
 import { isClientFacing } from '../../core/request-tasks.js';
 
 const KIND_BY_STATUS = {
+    'pending client action': 'action',
     'pending client feedback': 'feedback',
     'pending client document': 'document',
     'pending client review': 'review',
+    'pending developer update': 'developer',
+    'pending third party support': 'third_party',
 };
-const ASK_STATUS = { document: 'Pending Client Document', review: 'Pending Client Review', feedback: 'Pending Client Feedback' };
-const KIND_LABEL = { document: 'Document', feedback: 'Feedback', review: 'Review / confirmation' };
+const ASK_STATUS = { action: 'Pending Client Action', document: 'Pending Client Document', review: 'Pending Client Review', feedback: 'Pending Client Feedback' };
+const KIND_LABEL = { action: 'Action', document: 'Document', feedback: 'Feedback', review: 'Review / confirmation' };
+// Which kinds get the client-task list and "add a client task" box, and what each window says.
+const TASK_KINDS = ['action', 'feedback', 'document'];
+const WINDOW = {
+    action:      { head: 'Waiting on the client', placeholder: 'What the client needs to do, and anything they should know.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
+    feedback:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
+    document:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
+    review:      { head: 'Waiting on the client', placeholder: 'What is the client reviewing, and anything they should know?', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
+    developer:   { head: 'Waiting on a developer', placeholder: 'What the developer is working on or has been asked, and what is expected back.', hint: 'Shown as this item\'s status under "Waiting on Sphynx" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+    third_party: { head: 'Waiting on a third party', placeholder: 'Who it is with, what they were asked for, and any reference or ticket number.', hint: 'Shown as this item\'s status under "Waiting on Other" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+};
 
 const OVERLAY_ID = 'waiting-prompt';
 
@@ -90,7 +106,8 @@ OL.promptClientWaiting = function(clientId, taskId, status) {
 
     document.getElementById(OVERLAY_ID)?.remove();
     OL._waitPromptState = { clientId, taskId, kind };
-    const showTasks = kind !== 'review';
+    const showTasks = TASK_KINDS.includes(kind);
+    const win = WINDOW[kind];
     const title = task.title || task.name || 'This task';
 
     const wrap = document.createElement('div');
@@ -100,7 +117,7 @@ OL.promptClientWaiting = function(clientId, taskId, status) {
     wrap.innerHTML = `
         <div class="card" style="max-width:520px; width:92vw; max-height:88vh; overflow-y:auto; padding:20px; cursor:default;" onclick="event.stopPropagation();">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-weight:bold;">
-                <i data-lucide="clock" style="width:16px;height:16px;color:var(--accent);"></i> Waiting on the client
+                <i data-lucide="clock" style="width:16px;height:16px;color:var(--accent);"></i> ${esc(win.head)}
             </div>
             <div class="small" style="margin-bottom:14px; line-height:1.5;"><strong>${esc(title)}</strong> is now <strong>${esc(status)}</strong>.</div>
 
@@ -113,7 +130,7 @@ OL.promptClientWaiting = function(clientId, taskId, status) {
                        onkeydown="if(event.key==='Enter'){ event.preventDefault(); OL.waitPromptAddNew(); }">
                 <div style="display:flex; gap:6px; margin-top:6px;">
                     <select id="wp-new-kind" class="modal-input tiny" style="flex:1;">
-                        ${['document', 'feedback', 'review'].map((k) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(KIND_LABEL[k])}</option>`).join('')}
+                        ${['action', 'document', 'feedback', 'review'].map((k) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(KIND_LABEL[k])}</option>`).join('')}
                     </select>
                     <button type="button" class="btn tiny soft" onclick="OL.waitPromptAddNew()">+ Add</button>
                 </div>
@@ -121,8 +138,8 @@ OL.promptClientWaiting = function(clientId, taskId, status) {
 
             <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Notes</div>
             <textarea id="wp-note" class="modal-input" rows="4" style="width:100%; resize:vertical;"
-                      placeholder="${kind === 'review' ? 'What is the client reviewing, and anything they should know?' : 'Context for the follow-up: what exactly is needed, and why.'}">${esc(task.waitingNote || '')}</textarea>
-            <div class="tiny muted" style="margin-top:4px;">Shown under this item in the client follow-up's open-items list. It isn't put in the email itself.</div>
+                      placeholder="${esc(win.placeholder)}">${esc(task.waitingNote || '')}</textarea>
+            <div class="tiny muted" style="margin-top:4px;">${esc(win.hint)}</div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
                 <button class="btn small soft" onclick="OL.waitPromptClose()">Skip</button>
@@ -147,7 +164,7 @@ OL.waitPromptAddNew = async function() {
     const input = document.getElementById('wp-new-title');
     const title = (input?.value || '').trim();
     if (!title) { alert('Say what you need from the client.'); return; }
-    const kind = document.getElementById('wp-new-kind')?.value || st.kind;
+    const kind = document.getElementById('wp-new-kind')?.value || (TASK_KINDS.includes(st.kind) ? st.kind : 'action');
     const now = new Date().toISOString();
 
     await updateAndSync(() => {
@@ -158,7 +175,9 @@ OL.waitPromptAddNew = async function() {
         const ask = {
             id: uid(), title, name: title, description: `For: ${waiting.title || waiting.name || 'task'}`,
             status: ASK_STATUS[kind] || ASK_STATUS.document, assignee: 'Client Task', dueDate: '',   // client tasks have no due dates
-            isClientTask: true, loggedHours: 0, parentTaskId: null, createdBy: 'waiting-prompt', createdAt: now, askKind: kind,
+            isClientTask: true, loggedHours: 0, parentTaskId: null, createdBy: 'waiting-prompt', createdAt: now,
+            // Documents, feedback and reviews carry an ask kind; a plain action is just a client task.
+            ...(kind === 'action' ? {} : { askKind: kind }),
         };
         const links = linksForTask(waiting);
         links.forEach((l) => addLink(ask, l.requestId, l.resourceIds || []));
