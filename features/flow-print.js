@@ -159,7 +159,7 @@ export async function printFlowDiagram(deps, opts = {}) {
   const { OL, document: doc, window: win } = deps;
   const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
   const box = pageBox(orientation);
-  const prev = { layout: OL._fv.layout, override: OL._fv._colsOverride };
+  const prev = { layout: OL._fv.layout, override: OL._fv._colsOverride, laneCols: OL._fv._laneCols, renderedCols: OL._fv._renderedCols };
   const popup = win.open('', '_blank', 'width=1000,height=800');
   if (!popup) { win.alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return false; }
   popup.document.write('<p style="font-family:sans-serif;padding:24px;color:#475569;">Preparing the diagram&hellip;</p>');
@@ -192,5 +192,7 @@ export async function printFlowDiagram(deps, opts = {}) {
   } finally {
     OL._fv.layout = prev.layout; OL._fv._colsOverride = prev.override;            // put the screen back
     OL.renderVisualizer();
+    // the print render set how many columns fit the PAPER; if the screen is not in Steps view that value would linger
+    if (prev.layout !== 'steps') { OL._fv._laneCols = prev.laneCols; OL._fv._renderedCols = prev.renderedCols; }
   }
 }
