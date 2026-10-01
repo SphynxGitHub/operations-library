@@ -267,10 +267,13 @@ export function zapToResource(zap, opts = {}) {
   };
 }
 
-// Keeps everything a person did by hand on an existing card.
+// Keeps everything a person did by hand on an existing card (status, description, notes, owner, position, tags...).
+// Only the fields the import itself owns are replaced.
+const IMPORT_OWNED = ['type', 'archetype', 'name', 'originalZapId', 'externalUrl', 'steps', 'zapMeta'];
 export function mergeIntoExisting(oldRes, newRes) {
-  const merged = { ...newRes };
-  for (const k of ['id', 'coords', 'stageId', 'isGlobal', 'isTopShelf', '_col']) if (oldRes[k] !== undefined) merged[k] = oldRes[k];
+  const merged = { ...oldRes };
+  for (const k of IMPORT_OWNED) if (newRes[k] !== undefined) merged[k] = newRes[k];
+  if (merged.isExpanded === undefined) merged.isExpanded = newRes.isExpanded;
   const oldByZapId = new Map();
   const oldByName = new Map();
   (oldRes.steps || []).forEach((s) => { if (s.zap && s.zap.stepId) oldByZapId.set(String(s.zap.stepId), s); else oldByName.set(s.name, s); });
@@ -396,4 +399,184 @@ export function discoverResources(zap) {
     }
   }
   return [...byKey.values()];
+}
+
+// ---------- connections between Zaps (catch hooks) ---------------------------------------------
+
+const HOOK_URL = /hooks\.zapier\.com\/hooks\/catch\/\d+\/(\w+)/g;
+
+// A step that POSTs to a Zapier catch-hook address starts the Zap whose trigger owns that hook. The hook is
+// identified by the last part of the address (the number before it can differ), which the export records as hookKey.
+export function findHookLinks(zaps) {
+  const receivers = new Map();
+  for (const z of zaps || []) {
+    for (const s of z.steps || []) {
+      if (s.hookKey && s.role === 'trigger') receivers.set(String(s.hookKey), { zapId: String(z.zapId), stepId: String(s.stepId), name: z.zapName });
+    }
+  }
+  const links = [];
+  const unmatched = [];
+  const seen = new Set();
+  for (const z of zaps || []) {
+    for (const s of z.steps || []) {
+      if (s.role === 'trigger') continue;
+      for (const m of s.mappings || []) {
+        for (const mm of String(m.value == null ? '' : m.value).matchAll(HOOK_URL)) {
+          const key = mm[1];
+          const to = receivers.get(key);
+          const id = `${z.zapId}|${s.stepId}|${key}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          if (!to) { unmatched.push({ fromZapId: String(z.zapId), fromStepId: String(s.stepId), hookKey: key, fromName: z.zapName }); continue; }
+          if (to.zapId === String(z.zapId)) continue;
+          links.push({ fromZapId: String(z.zapId), fromStepId: String(s.stepId), toZapId: to.zapId, toStepId: to.stepId, hookKey: key, toName: to.name, fromName: z.zapName });
+        }
+      }
+    }
+  }
+  return { links, unmatched };
+}
+
+// Draws the connections on the cards themselves. Old automatic hook links are removed first so a re-import never
+// doubles them up. Only links whose two cards both exist (and both have the steps) are added.
+export function applyHookLinks(library, links) {
+  const cards = (library || []).filter((r) => r && r.type === 'Zap');
+  cards.forEach((c) => (c.steps || []).forEach((s) => { if (s.logic && Array.isArray(s.logic.out)) s.logic.out = s.logic.out.filter((l) => !l._hook); }));
+  const cardOf = (zapId) => cards.find((r) => String(r.originalZapId) === String(zapId));
+  const stepOf = (card, stepId) => card && (card.steps || []).find((s) => s.zap && String(s.zap.stepId) === String(stepId));
+  let added = 0;
+  for (const l of links || []) {
+    const src = cardOf(l.fromZapId); const dst = cardOf(l.toZapId);
+    const from = stepOf(src, l.fromStepId); const to = stepOf(dst, l.toStepId);
+    if (!from || !to) continue;
+    from.logic = from.logic || { in: [], out: [] };
+    from.logic.out.push({ type: 'next', types: ['next'], targetId: `${dst.id}-${to.id}`, rule: `Starts “${l.toName}” (catch hook)`,
+      loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hook: l.hookKey });
+    added++;
+  }
+  return added;
+}
+
+// ---------- putting cards on the flow map ------------------------------------------------------
+
+// Zaps that are switched off, retired, a copy, a draft, or a test: kept off the map unless asked.
+export function isInactiveZap(zap) {
+  const n = String((zap && zap.zapName) || '');
+  return (zap && zap.editorState === 'draft') || /^\s*(?:off\b|\(old\)|\(copy\)|draft\b|testing\b)/i.test(n) || /\bretired\b/i.test(n);
+}
+
+// "Email Move Money Request Task - JS" -> "Email Move Money Request Task"; "Meetings Part 2: Draft Email" -> "Meetings"
+export function nameStem(name) {
+  let n = String(name == null ? '' : name).trim();
+  n = n.replace(/^\s*(?:⚡\s*)?(?:off\b|\(old\)|\(new\)|\(copy\)|draft\b|testing\b)[\s:\-–]*/i, '');
+  n = n.replace(/^\d+\.\s*/, '');
+  n = n.replace(/\s+[-–]\s+[A-Z]{1,3}$/, '');
+  const part = n.match(/^(.*?)\s*\bPart\s*\d+/i);
+  if (part && part[1].trim().length >= 4) n = part[1].trim();
+  return n.replace(/[\s:\-–]+$/, '').trim();
+}
+
+const norm = (s) => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
+
+function candidateKeys(name) {
+  const stem = nameStem(name);
+  const keys = [stem];
+  const bits = stem.split(/\s+[-–]\s+/);
+  if (bits.length === 2) keys.push(bits[0], bits[1]);
+  return keys.filter((k) => k && k.length >= 4);
+}
+
+// Groups Zaps into workflows: call chains first (Zaps that start each other), then families that share a name.
+// Returns { workflows: [{ name, kind: 'chain'|'family', zapIds }], other: [zapId] }, every given Zap exactly once.
+export function planGroups(zaps, links) {
+  const byId = new Map(zaps.map((z) => [String(z.zapId), z]));
+  const used = new Set();
+  const workflows = [];
+
+  // 1) chains: connected Zaps, in the order they start each other
+  const adj = new Map(); const indeg = new Map();
+  for (const l of links || []) {
+    if (!byId.has(l.fromZapId) || !byId.has(l.toZapId)) continue;
+    (adj.get(l.fromZapId) || adj.set(l.fromZapId, new Set()).get(l.fromZapId)).add(l.toZapId);
+    indeg.set(l.toZapId, (indeg.get(l.toZapId) || 0) + 1);
+  }
+  const und = new Map();
+  const touch = (a, b) => { (und.get(a) || und.set(a, new Set()).get(a)).add(b); (und.get(b) || und.set(b, new Set()).get(b)).add(a); };
+  for (const [a, set] of adj) for (const b of set) touch(a, b);
+  const seen = new Set();
+  for (const start of und.keys()) {
+    if (seen.has(start)) continue;
+    const comp = []; const stack = [start];
+    while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); comp.push(x); (und.get(x) || []).forEach((y) => stack.push(y)); }
+    // order: walk from the Zaps nothing calls, following the calls
+    const roots = comp.filter((x) => !indeg.get(x)).sort((a, b) => String(byId.get(a).zapName).localeCompare(String(byId.get(b).zapName)));
+    const ordered = []; const q = roots.length ? [...roots] : [comp[0]];
+    while (q.length) { const x = q.shift(); if (ordered.includes(x)) continue; ordered.push(x); [...(adj.get(x) || [])].sort().forEach((y) => q.push(y)); }
+    comp.forEach((x) => { if (!ordered.includes(x)) ordered.push(x); });
+    ordered.forEach((x) => used.add(x));
+    workflows.push({ name: nameStem(byId.get(ordered[0]).zapName) || byId.get(ordered[0]).zapName, kind: 'chain', zapIds: ordered });
+  }
+
+  // 2) families: Zaps that share a name stem (or the part before / after " - "), the biggest shared name wins
+  const rest = zaps.filter((z) => !used.has(String(z.zapId)));
+  const members = new Map(); const display = new Map();
+  for (const z of rest) for (const k of candidateKeys(z.zapName)) {
+    const key = norm(k);
+    (members.get(key) || members.set(key, new Set()).get(key)).add(String(z.zapId));
+    if (!display.has(key)) display.set(key, k);
+  }
+  const choice = new Map();
+  for (const z of rest) {
+    const options = candidateKeys(z.zapName).map(norm).filter((k) => (members.get(k) || []).size >= 2);
+    options.sort((a, b) => members.get(b).size - members.get(a).size || b.length - a.length);
+    if (options.length) choice.set(String(z.zapId), options[0]);
+  }
+  const fam = new Map();
+  for (const [id, key] of choice) (fam.get(key) || fam.set(key, []).get(key)).push(id);
+  for (const [key, ids] of fam) {
+    if (ids.length < 2) continue;
+    ids.sort((a, b) => String(byId.get(a).zapName).localeCompare(String(byId.get(b).zapName)));
+    ids.forEach((x) => used.add(x));
+    workflows.push({ name: display.get(key), kind: 'family', zapIds: ids });
+  }
+
+  const other = rest.map((z) => String(z.zapId)).filter((id) => !used.has(id));
+  workflows.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'chain' ? -1 : 1));
+  return { workflows, other };
+}
+
+const WF_COLORS = ['#3dd9c5', '#7c3aed', '#f97316', '#38bdf8', '#a78bfa', '#fb923c', '#10b981', '#f43f5e'];
+
+// Creates (or reuses) the stage and workflows and puts the cards in them. Cards that are already on the map are
+// left exactly where they are. pd = the project data (stages, workflows, localResources).
+export function placeZapCards(pd, plan, opts = {}) {
+  const makeId = opts.makeId || (() => Math.random().toString(36).slice(2, 9));
+  pd.stages = pd.stages || []; pd.workflows = pd.workflows || [];
+  const library = pd.localResources || [];
+  let stage = opts.stageId ? pd.stages.find((s) => s.id === opts.stageId) : null;
+  if (!stage) {
+    const name = opts.stageName || 'Zapier Automations';
+    stage = pd.stages.find((s) => s.name === name);
+    if (!stage) { stage = { id: `stage-${makeId()}`, name, width: 400 }; pd.stages.push(stage); }
+  }
+  const out = { stageId: stage.id, stageName: stage.name, placed: 0, kept: 0, workflowsUsed: 0 };
+  const cardOf = (zapId) => library.find((r) => r.type === 'Zap' && String(r.originalZapId) === String(zapId));
+  const groups = [...plan.workflows.map((w) => ({ ...w })), ...(plan.other.length ? [{ name: 'Other Zaps', kind: 'other', zapIds: plan.other }] : [])];
+  groups.forEach((g, i) => {
+    let wf = pd.workflows.find((w) => w.stageId === stage.id && w.name === g.name);
+    const cards = g.zapIds.map(cardOf).filter(Boolean);
+    if (!cards.length) return;
+    if (!wf) {
+      wf = { id: `wf-${makeId()}`, name: g.name, stageId: stage.id, color: WF_COLORS[i % WF_COLORS.length], resourceIds: [], description: 'Grouped automatically by the Zap import' };
+      pd.workflows.push(wf);
+    }
+    out.workflowsUsed++;
+    cards.forEach((c) => {
+      if (c.stageId) { out.kept++; return; }                  // already placed: never moved
+      c.stageId = stage.id; c.workflowId = wf.id; c.isGlobal = false;
+      if (!wf.resourceIds.includes(String(c.id))) wf.resourceIds.push(String(c.id));
+      out.placed++;
+    });
+  });
+  return out;
 }
