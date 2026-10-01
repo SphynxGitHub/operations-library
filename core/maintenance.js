@@ -207,7 +207,10 @@ export function planEditPeriod({ period, grants = [], patch }) {
     const periodUpdate = { start_date: start, due_date: due, renewing };
     if (patch.tier !== undefined && cleanTier(patch.tier) !== cleanTier(period.tier)) periodUpdate.tier = cleanTier(patch.tier);   // only sent when it changes
     const grantUpdates = [];
-    const allot = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active');
+    // A past period's allotment may be used up or expired by now; it is still THE allotment for editing (looking only at
+    // active ones would have added a second allotment grant when the hours of an earlier period were changed).
+    const allot = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active')
+        || grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment');
     if (allot) {
         const p = { granted_on: start, expires_on: due };
         if (patch.allotment !== undefined) { const h = cleanHours(patch.allotment); if (h > 0) p.hours_granted = h; }

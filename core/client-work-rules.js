@@ -24,8 +24,9 @@
 //      Maintenance).
 //   5. Ongoing Maintenance: a setup task and a monthly touch base when a client becomes Ongoing Maintenance,
 //      and a prompt to propose a brainstorming meeting after 60 days with no new requests.
-//   6. A working round left in Drafting too long (setting: Automations > Templates & settings): a task to follow up
-//      with the client or change the round's status to record the outcome. Repeats until the round leaves Drafting.
+//   6. Working rounds left in Drafting too long (setting: Automations > Templates & settings): ONE task per project to
+//      follow up with the client or change the rounds' status to record the outcome. It closes itself once no round
+//      is in Drafting (approved / declined / on hold).
 //
 // Pure functions on the client project JSON. ctx: { roles, closedNames, sphynxNames, today (YYYY-MM-DD),
 // now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
@@ -518,11 +519,27 @@ export function planPeriodReminders(client, periods, ctx) {
 // ------------------------------------------------------------------------------------------
 // 6. Working rounds left in Drafting
 // ------------------------------------------------------------------------------------------
-// A round is "in Drafting" from its statusChangedAt (stamped when the round is created or its status changes; a round
-// that has none yet starts its clock the first time this runs). After afterDays a task is made for the project's
-// Communications person (or the assignee set in settings). It is not made again while that task is open, and only
-// again after repeatEveryDays once it has been closed. Approving, declining or holding the round stops it.
+// ONE follow-up task per project, covering every working round that has been in Drafting too long — not one task per
+// round. A round is "in Drafting" from its statusChangedAt (stamped when the round is created or its status changes; a
+// round that has none yet starts its clock the first time this runs). Once any round has been there afterDays, a task
+// is made for the project's Communications person (or the assignee set in settings) listing the rounds. While it is
+// open its title and description follow the list as rounds come and go. It closes ITSELF as soon as no round is left
+// in Drafting (every one was approved, declined or put on hold). After a person closes it, a new one only appears
+// after repeatEveryDays. Open per-round tasks from the earlier version are folded into the single one and closed.
 const roundLabel = (round) => (/^\d+$/.test(String(round)) ? `Working Round ${round}` : String(round));
+const DRAFTING_TASK_KEY = 'project';
+
+function roundsLabel(rounds) {
+    const labels = [...new Set(rounds.map((r) => String(r.round)))];
+    const allNumeric = labels.every((l) => /^\d+$/.test(l));
+    if (allNumeric) return labels.length === 1 ? `Working Round ${labels[0]}` : `Working Rounds ${labels.join(', ')}`;
+    return labels.map(roundLabel).join(', ');
+}
+
+function closeDraftingTask(t, ctx, why) {
+    t.status = closedList(ctx)[0]; t.completedAt = ctx.now; t.cancelledAt = ctx.now; t.autoClosed = true;
+    addComment(t, why, ctx);
+}
 
 function reconcileDraftingRounds(client, ctx) {
     const cfg = ctx.drafting;
@@ -531,6 +548,9 @@ function reconcileDraftingRounds(client, ctx) {
     const afterDays = Math.max(1, Number(cfg.afterDays) || 7);
     const repeatDays = Math.max(1, Number(cfg.repeatEveryDays) || afterDays);
     const pd = client.projectData;
+
+    // Every round currently in Drafting, with how long it has been there.
+    const drafting = [];
     (pd.scopingSheets || []).forEach((sheet) => {
         if (!sheet || sheet.kind === 'maintenance' || sheet.id === 'maintenance') return;
         const rounds = new Set((sheet.lineItems || []).filter((i) => i && !isBlank(i.round)).map((i) => String(i.round)));
@@ -544,27 +564,55 @@ function reconcileDraftingRounds(client, ctx) {
                 entry.statusChangedAt = ctx.now;   // start the clock
                 since = day(ctx.now);
             }
-            const age = daysBetween(since, ctx.today);
-            if (age < afterDays) return;
-
-            const key = `${sheet.id || 'sheet'}:${round}`;
-            const mine = pd.clientTasks.filter((t) => t && t.draftingFollowUpKey === key);
-            if (mine.some((t) => isOpen(t, ctx))) return;
-            const last = mine.map((t) => day(t.createdAt)).sort().pop();
-            if (last && daysBetween(last, ctx.today) < repeatDays) return;
-
-            const vars = { round: roundLabel(round), client: client.meta?.name || 'client', days: age };
-            const title = fillTemplate(cfg.taskTitle, vars) || `Follow up on ${vars.round}`;
-            const t = {
-                id: ctx.uid(), title, name: title,
-                description: fillTemplate(cfg.taskDescription, vars),
-                status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: ctx.today,
-                isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'drafting-followup', createdAt: ctx.now,
-                draftingFollowUpKey: key,
-            };
-            pd.clientTasks.unshift(t); created.push(t.id);
+            drafting.push({ key: `${sheet.id || 'sheet'}:${round}`, round, age: daysBetween(since, ctx.today) });
         });
     });
+
+    const mine = pd.clientTasks.filter((t) => t && t.draftingFollowUpKey);
+    const openMine = mine.filter((t) => isOpen(t, ctx));
+
+    // Nothing left in Drafting: whatever follow-up is still open has done its job.
+    if (!drafting.length) {
+        openMine.forEach((t) => closeDraftingTask(t, ctx, 'Closed automatically: no working round is in Drafting any more (each was approved, declined or put on hold).'));
+        return created;
+    }
+
+    // Per-round tasks from the earlier version are folded into the single project-level one.
+    openMine.filter((t) => t.draftingFollowUpKey !== DRAFTING_TASK_KEY)
+        .forEach((t) => closeDraftingTask(t, ctx, 'Closed: replaced by one follow-up task covering all working rounds in Drafting.'));
+
+    const due = drafting.filter((d) => d.age >= afterDays).sort((x, y) => y.age - x.age);
+    const vars = () => ({ round: roundsLabel(due), client: client.meta?.name || 'client', days: due[0]?.age || afterDays });
+    const describe = () => {
+        const base = fillTemplate(cfg.taskDescription, vars());
+        if (due.length < 2) return base;
+        return `${base}\n\nRounds in Drafting:\n${due.map((d) => `  - ${roundLabel(d.round)}: ${d.age} days`).join('\n')}`;
+    };
+    const keysNow = due.map((d) => d.key).sort().join('|');
+
+    const main = openMine.find((t) => t.draftingFollowUpKey === DRAFTING_TASK_KEY);
+    if (main) {
+        // Keep the open task's list current as rounds are added to or leave the overdue set.
+        if (due.length && main.draftingRoundKeys !== keysNow) {
+            const title = fillTemplate(cfg.taskTitle, vars()) || `Follow up on ${vars().round}`;
+            main.title = title; main.name = title; main.description = describe(); main.draftingRoundKeys = keysNow;
+        }
+        return created;
+    }
+    if (!due.length) return created;
+
+    // A person closed the last one: wait out the repeat period before making another.
+    const lastDone = mine.filter((t) => !isOpen(t, ctx) && !t.autoClosed).map((t) => day(t.completedAt || t.createdAt)).sort().pop();
+    if (lastDone && daysBetween(lastDone, ctx.today) < repeatDays) return created;
+
+    const title = fillTemplate(cfg.taskTitle, vars()) || `Follow up on ${vars().round}`;
+    const t = {
+        id: ctx.uid(), title, name: title, description: describe(),
+        status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: ctx.today,
+        isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'drafting-followup', createdAt: ctx.now,
+        draftingFollowUpKey: DRAFTING_TASK_KEY, draftingRoundKeys: keysNow,
+    };
+    pd.clientTasks.unshift(t); created.push(t.id);
     return created;
 }
 
@@ -728,13 +776,28 @@ export function followUpEmailData(client, ctx) {
         && t.askKind !== 'follow_up' && isOpen(t, ctx) && clientAskEligible(t));
     const taskName = (t) => t.title || t.name || 'Task';
 
+    // Notes written in the "waiting on the client" window (features/business/waiting-prompt.js, task.waitingNote) on
+    // work that is parked on a Pending Client status. Each shows in the sidebar under the client ask(s) the task is
+    // waiting on. Sidebar context only: bulletFor() never puts a note in the email.
+    const notesByAsk = new Map();
+    all.filter((w) => w && !w.isClientTask && !w.askKind && !w.consolidatedFollowUp && isClientWaitingStatus(w.status) && !isBlank(w.waitingNote))
+        .forEach((w) => {
+            openClientTasksFor(client, w, ctx).forEach((a) => {
+                if (!notesByAsk.has(a.id)) notesByAsk.set(a.id, []);
+                notesByAsk.get(a.id).push({ label: labelFor(client, w), text: String(w.waitingNote).trim() });
+            });
+        });
+
     const clientAsks = openClientAsks.filter((t) => !isReviewAsk(t))
-        .map((t) => ({ id: t.id, title: taskName(t), description: (t.description || '').replace(/^For:\s*/, '').trim() }));
+        .map((t) => ({ id: t.id, title: taskName(t), description: (t.description || '').replace(/^For:\s*/, '').trim(), waitNotes: notesByAsk.get(t.id) || [] }));
 
     const reviewAsks = openClientAsks.filter(isReviewAsk)
-        .map((t) => ({ id: t.id, label: taskName(t), note: (t.description || '').replace(/^For:\s*/, '').trim() }));
+        .map((t) => ({ id: t.id, label: taskName(t), note: (t.description || '').replace(/^For:\s*/, '').trim(), waitNotes: notesByAsk.get(t.id) || [] }));
+    // Work parked on Pending Client Review: its own written note (when there is one) is what the sidebar shows.
     const reviewWork = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')
-        .map((t) => ({ id: t.id, label: labelFor(client, t), note: (t.description || t.title || t.name || '').trim() }));
+        .map((t) => (isBlank(t.waitingNote)
+            ? { id: t.id, label: labelFor(client, t), note: (t.description || t.title || t.name || '').trim(), waitNotes: [] }
+            : { id: t.id, label: labelFor(client, t), note: '', waitNotes: [{ label: '', text: String(t.waitingNote).trim() }] }));
     const pendingReview = [...reviewAsks, ...reviewWork];
 
     const sphynxStalled = [];

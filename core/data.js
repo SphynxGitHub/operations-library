@@ -1186,17 +1186,25 @@ OL.promptCreateClientFromUnrecognizedEmail = function(email) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">👤 Add Contact: ${esc(cleanEmail)}</div>
+            <div class="modal-title-text"><i data-lucide="user-plus" style="width:16px;height:16px;vertical-align:sub;margin-right:6px;"></i>Add Contact: ${esc(cleanEmail)}</div>
             <button class="btn small soft" onclick="OL.closeModal()">✕</button>
         </div>
         <div class="modal-body" style="max-width:500px; width:100%;">
             <!-- STEP 1: SELECT OR CREATE PROJECT -->
             <div style="margin-bottom:16px;">
                 <label class="tiny bold uppercase muted" style="display:block; margin-bottom:6px;">1. Select Project / Client</label>
-                <select id="contact-assign-project-select" class="modal-input tiny" style="width:100%; margin-bottom:8px;" onchange="OL._onContactProjectSelectChange(this.value, '${esc(cleanEmail)}')">
-                    <option value="__new__">+ Create New Project...</option>
-                    ${clients.map(c => `<option value="${c.id}">${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
-                </select>
+                <!-- Searchable project picker. The hidden input keeps the id the save code reads (.value is the project id,
+                     or __new__), so nothing downstream changed. -->
+                <div style="position:relative; margin-bottom:8px;">
+                    <input type="hidden" id="contact-assign-project-select" value="__new__">
+                    <i data-lucide="search" style="position:absolute; left:9px; top:50%; transform:translateY(-50%); width:12px; height:12px; color:var(--text-dim); pointer-events:none;"></i>
+                    <input type="text" id="contact-project-search" class="modal-input tiny" style="width:100%; padding-left:28px;" autocomplete="off"
+                           placeholder="Search projects..." value="+ Create New Project..."
+                           onfocus="this.select(); OL._contactProjectList(true, '')"
+                           oninput="OL._contactProjectList(true, this.value)"
+                           onkeydown="OL._contactProjectKey(event)">
+                    <div id="contact-project-list" style="display:none; position:absolute; z-index:10; left:0; right:0; top:100%; margin-top:2px; max-height:220px; overflow-y:auto; background:var(--bg-panel, #0f172a); border:1px solid var(--line); border-radius:6px; padding:4px;"></div>
+                </div>
 
                 <div id="contact-new-project-input-container">
                     <input type="text" id="contact-new-project-name" class="modal-input tiny" placeholder="New Project / Client Name..." value="${esc(defaultName)}" style="width:100%;">
@@ -1223,8 +1231,75 @@ OL.promptCreateClientFromUnrecognizedEmail = function(email) {
         </div>
     `;
 
+    OL._contactProjectState = { email: cleanEmail, options: [...clients].sort((a, b) => String(a.meta?.name || '').localeCompare(String(b.meta?.name || ''))).map(c => ({ id: c.id, name: c.meta?.name || 'Unnamed' })), active: 0 };
     openModal(html);
     if (window.lucide) lucide.createIcons();
+    // Click anywhere outside the picker closes its list (put the chosen name back in the box).
+    const closeOnOutside = (e) => {
+        const box = document.getElementById('contact-project-list');
+        if (!box) { document.removeEventListener('mousedown', closeOnOutside); return; }
+        if (e.target.closest('#contact-project-list') || e.target.id === 'contact-project-search') return;
+        OL._contactProjectList(false);
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+};
+
+// ---- searchable project picker for the Add Contact window ----
+// The text box filters as you type; the list shows "+ Create New Project..." first, then matching projects.
+OL._contactProjectItems = function(query) {
+    const q = String(query || '').trim().toLowerCase();
+    const items = [{ id: '__new__', name: '+ Create New Project...' }];
+    (OL._contactProjectState?.options || []).forEach(o => { if (!q || o.name.toLowerCase().includes(q)) items.push(o); });
+    return items;
+};
+
+OL._contactProjectList = function(open, query, keepActive = false) {
+    const box = document.getElementById('contact-project-list');
+    const st = OL._contactProjectState;
+    if (!box || !st) return;
+    if (!open) {
+        box.style.display = 'none';
+        // Show the current choice again, discarding half-typed search text.
+        const cur = document.getElementById('contact-assign-project-select')?.value || '__new__';
+        const input = document.getElementById('contact-project-search');
+        if (input) input.value = cur === '__new__' ? '+ Create New Project...' : (st.options.find(o => String(o.id) === String(cur))?.name || '');
+        return;
+    }
+    // Typing the text that is already shown ("+ Create New Project...") shouldn't filter on it.
+    const q = query === '+ Create New Project...' ? '' : query;
+    const items = OL._contactProjectItems(q);
+    st.shown = items;
+    st.active = Math.max(0, Math.min(st.active || 0, items.length - 1));
+    if (!keepActive) st.active = q && items.length > 1 ? 1 : 0;   // with a search typed, highlight the first real match
+    box.innerHTML = items.map((o, i) => `
+        <div data-pid="${esc(String(o.id))}" onmousedown="event.preventDefault(); OL._contactProjectPick('${esc(String(o.id))}')"
+             style="padding:6px 8px; border-radius:4px; cursor:pointer; font-size:12px; ${i === st.active ? 'background:rgba(56,189,248,0.15);' : ''} ${o.id === '__new__' ? 'color:var(--accent);' : ''}">${esc(o.name)}</div>`).join('')
+        + (items.length === 1 && q ? '<div class="tiny muted" style="padding:6px 8px;">No projects match.</div>' : '');
+    box.style.display = 'block';
+};
+
+OL._contactProjectPick = function(id) {
+    const st = OL._contactProjectState;
+    if (!st) return;
+    const hidden = document.getElementById('contact-assign-project-select');
+    if (hidden) hidden.value = id;
+    OL._contactProjectList(false);
+    OL._onContactProjectSelectChange(id, st.email);
+};
+
+OL._contactProjectKey = function(e) {
+    const st = OL._contactProjectState;
+    const box = document.getElementById('contact-project-list');
+    if (!st || !box) return;
+    const input = document.getElementById('contact-project-search');
+    const query = input?.value || '';
+    const redraw = () => OL._contactProjectList(true, query, true);
+    if (box.style.display === 'none' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { OL._contactProjectList(true, query); }
+    const n = (st.shown || []).length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); st.active = Math.min(n - 1, (st.active || 0) + 1); redraw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); st.active = Math.max(0, (st.active || 0) - 1); redraw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const it = (st.shown || [])[st.active || 0]; if (it) OL._contactProjectPick(String(it.id)); }
+    else if (e.key === 'Escape') { e.stopPropagation(); OL._contactProjectList(false); }
 };
 
 // Updates Step 2 options when changing the selected project in Step 1
