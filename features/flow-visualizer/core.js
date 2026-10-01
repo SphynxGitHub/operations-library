@@ -21,6 +21,7 @@
 // before — they just remain plain assignments onto the global OL object.
 
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
+import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
 
 //===========================INFINITE GRID (V2 CONSOLIDATED)===========================
 state.v2 = {
@@ -487,6 +488,8 @@ export function _fvGetEffectiveOut(step, res) {
 // Main-path steps (not branch targets): colOffset=0, sequential rows.
 // Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
 export function _fvLayoutResource(res) {
+    // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
+    if (isLaneResource(res)) return layoutLanes(res);
     const steps = res.steps || [];
 
     // Find which steps are branch targets and who their parent is
@@ -2372,6 +2375,7 @@ export function _fvRenderSteps(resources) {
       let stageBottom = wfY;
 
       wfMetaList.forEach(({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth }) => {
+        const layoutOf = new Map((resMeta || []).map(rm => [rm.res, rm.layout]));
         const wfTop     = wfY;
         const actualColY = wfTop + WF_PAD + WF_HDR + RES_HDR;
 
@@ -2399,9 +2403,14 @@ export function _fvRenderSteps(resources) {
 
             // Pass 1: compute natural (independent) Y for each card via simple stacking
             const naturalTopY = new Map(); // el → top Y from simple stacking
-            byRes.forEach(cards => {
+            byRes.forEach((cards, res) => {
+                const lay = layoutOf.get(res);
+                if (isLaneLayout(lay)) {   // imported Zap: every column (lane) stacks on its own
+                     return;
+                }
               let ry = y;
               cards.forEach(({ el }) => { naturalTopY.set(el, ry); ry += hOf(el) + STEP_GAP; });
+                    stackColumns(cards, lay, y, STEP_GAP, hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
             });
 
             // Pass 2: for each cross-resource outbound link within this section,
@@ -2420,7 +2429,17 @@ export function _fvRenderSteps(resources) {
 
             // Pass 3: position each column, honouring minY constraints as steps are stacked
             let maxBottom = y;
-            byRes.forEach(cards => {
+            byRes.forEach((cards, res) => {
+                 const lay = layoutOf.get(res);
+                 if (isLaneLayout(lay)) {   // imported Zap: paths sit side by side, each lane stacks down from its path step
+                     const out = stackColumns(cards, lay, y, STEP_GAP, hOf, (el) => minY.get(el));
+                     cards.forEach(({ step, el }) => {
+                         const top = out.tops.get(el);
+                          if (!step.pinned) { el.style.top = top + 'px'; step.coords.y = top; }
+                    });
+                maxBottom = Math.max(maxBottom, out.bottom);
+                return;
+              }
               let ry = y;
               cards.forEach(({ step, el }) => {
                 const constraint = minY.get(el);
@@ -3959,9 +3978,9 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
         const li = layout[step.id] || { colOffset: 0, row: idx };
         posMap[String(step.id)] = {
             x: PAD + li.colOffset * (CARD_W + GAP_X),
-            y: rowY[li.row] !== undefined ? rowY[li.row] : PAD + idx * (CARD_H + GAP_Y),
-        };
-    });
+            y: li.laneMode ? PAD + li.row * (CARD_H + GAP_Y) : (rowY[li.row] !== undefined ? rowY[li.row] : PAD + idx * (CARD_H + GAP_Y)),
+         };
+     });
 
     // Calculate canvas size
     const maxX = Math.max(...Object.values(posMap).map(p => p.x), 0) + CARD_W + PAD;
