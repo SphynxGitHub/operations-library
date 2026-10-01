@@ -2435,9 +2435,19 @@ export function goToResourceInMap(resId) {
     OL.renderVisualizer();
     
     setTimeout(() => {
-        if (typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
-    }, 150);
-};
+        // A card that is not in any stage is not drawn on the flowchart (imported Zaps start that way), so there is
+        // nothing to centre on. Open the card's own step editor instead: that is what this button is for.
+        const safeId = (window.CSS && CSS.escape) ? CSS.escape(String(resId)) : String(resId).replace(/["\\]/g, '\\$&');
+        const onCanvas = document.querySelector(`.fv-card[data-res-id="${safeId}"]`)
+            || document.getElementById(`v2-node-${resId}`) || document.getElementById(String(resId));
+        if (!onCanvas && typeof OL._fvOpenStepCanvas === 'function') {
+            OL.focusedResourceId = null;
+            OL._fvOpenStepCanvas(String(resId));
+            return;
+        }
+         if (typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
+     }, 150);
+ };
 
 export function navigateBack() {
     const history = JSON.parse(sessionStorage.getItem('ol_nav_history') || '[]');
