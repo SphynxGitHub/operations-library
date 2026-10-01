@@ -7678,6 +7678,7 @@ export function centerCanvasNode(nodeId) {
     if (!nodeEl) {
       console.warn("❌ Centering failed: Could not find element with ID", nodeId);
       return;
+    }
     
     // 1. 🔍 THE AUTO-OPEN CHECK
     // Check if the node is inside a tray/sidebar
