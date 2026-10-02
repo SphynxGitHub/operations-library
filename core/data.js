@@ -227,6 +227,7 @@ export function persist() {
                 showSyncErrorToast(`Some changes couldn't be saved (${masterErr.message}). Your latest edits may not have synced.`);
             }
 
+            let rulesChangedSomething = false;
             const idsToSave = new Set(state.dirtyClientIds || []);
             if (state.activeClientId) idsToSave.add(state.activeClientId);
             state.dirtyClientIds = new Set(); // claimed for this cycle; re-added below on failure
@@ -277,7 +278,11 @@ export function persist() {
                 // Ongoing Maintenance touch-points (core/client-work-rules.js).
                 try {
                     if (!window.IS_GUEST && window.OL && typeof window.OL.runClientWorkRulesFor === 'function') {
-                        window.OL.runClientWorkRulesFor(client);
+                        const ruleResult = window.OL.runClientWorkRulesFor(client);
+                        // These rules run after the screen was redrawn for the edit; if they changed something (a removed
+                        // due date, a new follow-up task), redraw again so the screen matches what is being saved.
+                        const anyChange = (v) => Array.isArray(v) ? v.length > 0 : (v && typeof v === 'object' ? Object.values(v).some(anyChange) : false);
+                        if (anyChange(ruleResult)) rulesChangedSomething = true;
                     }
                 } catch (rulesErr) {
                     console.warn('Client work rules failed:', rulesErr);
@@ -347,6 +352,7 @@ export function persist() {
 
             window.lastLocalSave = Date.now();
             console.log("✅ Background Sync Complete.");
+            if (rulesChangedSomething) { try { window.OL?.scheduleViewRefresh?.(100); } catch (e) { /* never block a save */ } }
         } catch (error) {
             console.error("💀 Persistence Error:", error);
             showSyncErrorToast(`Save failed unexpectedly (${error?.message || error}). Check your connection and try again.`);

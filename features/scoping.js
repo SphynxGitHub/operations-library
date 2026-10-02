@@ -2325,6 +2325,42 @@ export async function setRoundApprovalStatus(round, newStatus) {
     });
 
     renderScopingSheet();
+
+    // Approving a round makes its Do Now requests ready for activation, but tasks are only created once someone
+    // reviews the plan (Review & Activate, at the top of the sheet). Say what happened, so "nothing happened" is never the answer.
+    if (next === 'Approved') {
+        // An admin goes straight into the activation review for the round's ready requests (one after another);
+        // anyone else, or a round with nothing ready, is told what happened and why.
+        const ready = state.adminMode === true && typeof OL.startActivationQueue === 'function' ? OL.startActivationQueue(client.id, Number(round), sheet.id) : 0;
+        if (!ready) {
+            const note = explainRoundActivation(client, sheet, Number(round));
+            if (note) { if (typeof OL.showToast === 'function') OL.showToast(note); else alert(note); }
+        }
+    }
+}
+
+// What approving a round did, in plain words: how many of its requests are waiting for activation review, or why none are.
+function explainRoundActivation(client, sheet, round) {
+    const inRound = (sheet.lineItems || []).filter((i) => i && String(i.status || '') !== 'Backlog' && (parseInt(i.round, 10) || 1) === round);
+    const backlog = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog').length;
+    if (!inRound.length) return `Round ${round} is approved, but it has no requests yet.${backlog ? ` ${backlog} request${backlog === 1 ? ' is' : 's are'} in Backlog; pull ${backlog === 1 ? 'it' : 'them'} into the round to activate.` : ''}`;
+    const doNow = inRound.filter((i) => String(i.status || '') === 'Do Now');
+    // A request only counts once it has a name, or a resource that can still be found.
+    const lookup = (id) => (client.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id);
+    const unnamed = doNow.filter((i) => !String(i.name || '').trim() && !(i.resourceId && lookup(i.resourceId)));
+    if (doNow.length && unnamed.length === doNow.length) return `Round ${round} is approved, but its Do Now request${doNow.length === 1 ? ' has' : 's have'} no name and no resource that can be found, so ${doNow.length === 1 ? 'it' : 'they'} can't be activated. Open ${doNow.length === 1 ? 'it' : 'each'} and give ${doNow.length === 1 ? 'it' : 'them'} a name or pick a resource.`;
+    if (!doNow.length) {
+        const counts = {}; inRound.forEach((i) => { const k = String(i.status || 'no status'); counts[k] = (counts[k] || 0) + 1; });
+        return `Round ${round} is approved, but none of its requests are marked Do Now (${Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(', ')}). Only Do Now requests are activated.`;
+    }
+    const ready = typeof OL.pendingRequestActivations === 'function' ? OL.pendingRequestActivations(client, state.master?.resources || []).filter((p) => p.round === round && p.sheet === sheet).length : 0;
+    if (ready) return state.adminMode === true
+        ? `Round ${round} approved. ${ready} request${ready === 1 ? ' is' : 's are'} ready: use Review & Activate at the top of the sheet to create the tasks.`
+        : `Round ${round} approved. ${ready} request${ready === 1 ? ' is' : 's are'} ready, and an admin needs to Review & Activate ${ready === 1 ? 'it' : 'them'} to create the tasks.`;
+    if (doNow.every((i) => i.activatedAt)) return `Round ${round} is approved. Its Do Now requests were already activated, so no new tasks were made.`;
+    const current = getCurrentRound(sheet);
+    if (current !== null && current !== round) return `Round ${round} is approved, but Round ${current} still has Do Now requests open, and rounds go in order. Round ${round} starts once those are done.`;
+    return `Round ${round} is approved, but none of its requests could be activated. Run OL.explainActivations() in the browser console for the reason for each request.`;
 }
 
 function communicationAssignee(client) {

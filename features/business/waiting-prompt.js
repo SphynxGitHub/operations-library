@@ -30,7 +30,8 @@ const KIND_BY_STATUS = {
     'pending developer update': 'developer',
     'pending third party support': 'third_party',
 };
-const ASK_STATUS = { action: 'Pending Client Action', document: 'Pending Client Document', review: 'Pending Client Review', feedback: 'Pending Client Feedback' };
+// Tasks made for the client are always "Client Task"; the kind (document, feedback, review) is kept in askKind.
+const CLIENT_TASK_STATUS = 'Client Task';
 const KIND_LABEL = { action: 'Action', document: 'Document', feedback: 'Feedback', review: 'Review / confirmation' };
 // Which kinds get the client-task list and "add a client task" box, and what each window says.
 const TASK_KINDS = ['action', 'feedback', 'document'];
@@ -174,7 +175,7 @@ OL.waitPromptAddNew = async function() {
         if (!Array.isArray(client.projectData.clientTasks)) client.projectData.clientTasks = [];
         const ask = {
             id: uid(), title, name: title, description: `For: ${waiting.title || waiting.name || 'task'}`,
-            status: ASK_STATUS[kind] || ASK_STATUS.document, assignee: 'Client Task', dueDate: '',   // client tasks have no due dates
+            status: CLIENT_TASK_STATUS, assignee: 'Client Task', dueDate: '',   // client tasks have no due dates
             isClientTask: true, loggedHours: 0, parentTaskId: null, createdBy: 'waiting-prompt', createdAt: now,
             // Documents, feedback and reviews carry an ask kind; a plain action is just a client task.
             ...(kind === 'action' ? {} : { askKind: kind }),

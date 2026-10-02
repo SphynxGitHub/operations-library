@@ -39,11 +39,14 @@ export const WORK_STATUS_LABELS = {
     done: 'Done',
 };
 
-// What the "Ask client" form offers, and the task status each kind gets.
+// What the "Ask client" form offers, and the task status each kind gets. A task for the CLIENT is always "Client Task"
+// whatever it asks for - the kind is kept in task.askKind, not in the status. The "Pending Client ..." statuses are for
+// Sphynx's own tasks that are parked waiting on the client.
+export const CLIENT_TASK_STATUS = 'Client Task';
 export const ASK_KINDS = {
-    review:      { label: 'Client review',   taskStatus: 'Pending Client Review',       owner: 'client' },
-    document:    { label: 'Client document', taskStatus: 'Pending Client Document',     owner: 'client' },
-    feedback:    { label: 'Client feedback', taskStatus: 'Pending Client Feedback',     owner: 'client' },
+    review:      { label: 'Client review',   taskStatus: CLIENT_TASK_STATUS,            owner: 'client' },
+    document:    { label: 'Client document', taskStatus: CLIENT_TASK_STATUS,            owner: 'client' },
+    feedback:    { label: 'Client feedback', taskStatus: CLIENT_TASK_STATUS,            owner: 'client' },
     third_party: { label: 'Third party',     taskStatus: 'Pending Third Party Support', owner: 'third_party' },
 };
 

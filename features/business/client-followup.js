@@ -197,10 +197,9 @@ OL.cfAddClientAsk = async function() {
     const title = (document.getElementById('cf-new-title')?.value || '').trim();
     if (!title) { alert('Say what you need.'); return; }
     const kind = document.getElementById('cf-new-kind')?.value || 'document';
-    const statusFor = { document: 'Pending Client Document', review: 'Pending Client Review', feedback: 'Pending Client Feedback' };
     const now = new Date().toISOString();
     const task = {
-        id: uid(), title, name: title, description: '', status: statusFor[kind] || 'Pending Client Document',
+        id: uid(), title, name: title, description: '', status: 'Client Task',
         assignee: 'Client Task', dueDate: '', isClientTask: true, loggedHours: 0, parentTaskId: null,
         createdBy: 'client-followup', createdAt: now, askKind: kind,
     };

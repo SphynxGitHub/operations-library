@@ -150,11 +150,16 @@ const addComment = (task, text, ctx) => {
     (task.comments = task.comments || []).push({ id: ctx.uid(), author: 'System', text, html: '', mentions: [], date: ctx.now });
 };
 
+// Sphynx's own work for the purpose of waiting on the client: like an implementation task, but it does not have to be
+// linked to a request (a task made by hand still loses its due date while it waits).
+const isSphynxWork = (t, ctx) => !!t && !t.isClientTask && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
+    && !t.recurrenceTag && !t.testRunId && !t.reviewNotifyKey && !t.reviewFollowUpKey && !isClientFacing(t, ctx);
+
 export function reconcileBlockedTasks(client, ctx) {
     const out = { blocked: [], released: [] };
     const all = client?.projectData?.clientTasks || [];
     all.forEach((t) => {
-        if (!t || !isImplementationTask(t, ctx)) return;
+        if (!t || !isSphynxWork(t, ctx)) return;
         const depTasks = dependencyClientTasks(client, t, ctx);
         const waiting = isClientWaitingStatus(t.status);
 

@@ -17,6 +17,8 @@ import { requestResourceIds } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
 import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
+import { getCurrentRound, isRoundApproved } from '../../core/requests.js';
+import { isMaintenanceSheet } from '../../core/maintenance.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
@@ -52,6 +54,76 @@ OL.openActivationReview = async function(clientId, itemId) {
 
     OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan, calendarEvents, existingTasks };
     OL.renderActivationReviewStep();
+};
+
+// ---- Why is (or isn't) a request waiting for activation? ------------------------------------------------------------
+// OL.explainActivations() answers it for every request on every sheet of the open project, one line each, and prints
+// the table to the browser console. Pure reading; nothing is changed.
+export function explainActivationRows(client, masterResources = []) {
+    const rows = [];
+    const lookup = (id) => (client?.projectData?.localResources || []).find((r) => r.id === id) || (masterResources || []).find((r) => r.id === id) || null;
+    (client?.projectData?.scopingSheets || []).forEach((sheet, idx) => {
+        if (!sheet) return;
+        const maint = isMaintenanceSheet(sheet);
+        const real = (sheet.lineItems || []).filter((i) => i && typeof i === 'object' && i.id != null && String(i.id).trim() !== '');
+        const named = (i) => !!String(i.name || '').trim() || !!(i.resourceId && lookup(i.resourceId));
+        const current = getCurrentRound({ lineItems: real.filter(named), roundApprovals: sheet.roundApprovals, status: sheet.status });
+        real.forEach((item) => {
+            const status = String(item.status || '');
+            const r = parseInt(item.round, 10);
+            const round = Number.isFinite(r) && r >= 1 ? r : (status === 'Backlog' ? null : 1);
+            let verdict;
+            if (item.activatedAt) verdict = 'Already activated';
+            else if (status === 'Backlog') verdict = 'In Backlog: pull it into a round first';
+            else if (status !== 'Do Now') verdict = `Status is "${status || 'blank'}": only Do Now is activated`;
+            else if (!named(item)) verdict = 'No name and no resource that can be found';
+            else if (!isRoundApproved(sheet, round)) verdict = `Round ${round} is not Approved`;
+            else if (current !== round) verdict = `Round ${current} comes first: it still has open Do Now requests`;
+            else verdict = 'READY: should show under "awaiting activation review"';
+            rows.push({ sheet: maint ? 'Maintenance queue' : (idx === 0 ? 'Scoping sheet' : `Sheet ${idx + 1}`), request: String(item.name || lookup(item.resourceId)?.name || item.id), status: status || '(blank)', round: round ?? '-', verdict });
+        });
+    });
+    return rows;
+}
+OL.explainActivations = function() {
+    const client = state.clients?.[state.activeClientId];
+    if (!client) { console.warn('Open a project first.'); return []; }
+    const rows = explainActivationRows(client, state.master?.resources || []);
+    console.log(`Activation check for ${client.meta?.name || client.id}: ${rows.filter((r) => r.verdict.startsWith('READY')).length} ready of ${rows.length} requests`);
+    console.table(rows);
+    return rows;
+};
+
+// ---- Review a whole round, one request after another ---------------------------------------------------------------
+// Approving a round (features/scoping.js setRoundApprovalStatus) opens the review for the first ready request;
+// activating it opens the next, until none are left. Closing the window without activating stops the chain, and the
+// rest stay on the scoping sheet's "awaiting activation review" list.
+// Only the sheet whose round was approved: a Maintenance queue request is also "Do Now, round 1", but approving a
+// working round on the scoping sheet has nothing to do with it.
+const pendingForRound = (clientId, round, sheetId) => {
+    const client = state.clients?.[clientId];
+    if (!client || typeof OL.pendingRequestActivations !== 'function') return [];
+    return OL.pendingRequestActivations(client, state.master?.resources || [])
+        .filter((p) => (!round || p.round === round) && (sheetId === undefined || p.sheet?.id === sheetId));
+};
+
+OL.startActivationQueue = function(clientId, round, sheetId) {
+    const pending = pendingForRound(clientId, round, sheetId);
+    if (!pending.length) { OL._activationQueue = null; return 0; }
+    OL._activationQueue = { clientId, round, sheetId, itemIds: pending.map((p) => String(p.item.id)) };
+    if (typeof OL.showToast === 'function') OL.showToast(`Round ${round} approved. Reviewing ${pending.length} request${pending.length === 1 ? '' : 's'} for activation.`);
+    OL.openActivationReview(clientId, pending[0].item.id);
+    return pending.length;
+};
+
+// Called after a request is activated: open the next one in the same round's queue, if any is still waiting.
+OL.openNextQueuedActivation = function(clientId, justDoneItemId) {
+    const q = OL._activationQueue;
+    if (!q || q.clientId !== clientId || !q.itemIds.includes(String(justDoneItemId))) return false;
+    const stillWaiting = pendingForRound(clientId, q.round, q.sheetId).filter((p) => q.itemIds.includes(String(p.item.id)));
+    if (!stillWaiting.length) { OL._activationQueue = null; if (typeof OL.showToast === 'function') OL.showToast(`Round ${q.round}: every ready request is activated.`); return false; }
+    OL.openActivationReview(clientId, stillWaiting[0].item.id);
+    return true;
 };
 
 // How busy the assignee is on a row's due date, before this row: meetings + tasks already due that day, plus the
@@ -273,7 +345,8 @@ OL._commitActivationReview = function(decisions) {
     }, clientId).then(() => {
         // Anything already linked to the request from email rolls down onto the new build tasks.
         if (buildTasks.length && typeof OL.rollDownRequestLinks === 'function') return OL.rollDownRequestLinks(clientId, st.itemId, buildTasks);
-    }).catch((e) => console.warn('Rolling links down failed:', e));
+    }).catch((e) => console.warn('Rolling links down failed:', e))
+      .then(() => { try { OL.openNextQueuedActivation(clientId, st.itemId); } catch (e) { console.warn('Next activation did not open:', e); } });
 
     OL._activationReviewState = null;
     OL.closeModal();

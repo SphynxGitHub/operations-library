@@ -1761,6 +1761,10 @@ OL.updateGlobalTaskStatus = function(clientId, taskId, newStatus) {
             task.status = newStatus;
             console.log(`✅ Status updated successfully for [${taskId}] -> ${newStatus}`);
 
+            // The due-date removal for a waiting status (and the rest of the work rules) normally runs inside the delayed
+            // save, after the screen has already redrawn - so the old date stayed on screen. Run them now, then the redraw is right.
+            try { if (typeof OL.runClientWorkRulesFor === 'function') OL.runClientWorkRulesFor(client); } catch (e) { console.warn('Work rules after status change failed:', e); }
+
             OL.handleTaskCompletionCascade(client, task, previousStatus);
 
             if (typeof OL.runAutomationRules === 'function') {
