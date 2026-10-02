@@ -23,6 +23,7 @@ import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
 import * as OLFlowCallouts from './features/flow-visualizer/callouts.js';
 import * as OLJotformLogic from './features/jotform-logic.js';
+import * as OLFrameOut from './features/frameout.js';
 import * as OLBusinessManager from './features/business/index.js';
 import * as OLTaskBlueprints from './features/task-blueprints.js';
 import * as OLTesting from './features/testing.js';
@@ -132,6 +133,7 @@ OL.getRegistryIcon = function(type) {
         sop: "book-open",
         guide: "book-open",
         workflow: "workflow",
+        process: "workflow",
         checklist: "clipboard-list",
         signature: "pen-tool",
         spreadsheet: "table",

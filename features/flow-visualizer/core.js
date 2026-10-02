@@ -458,6 +458,7 @@ OL._fvTypes = {
   'Task':           { color: '#6b7280', abbr: 'TK' },
   'Calendar':       { color: '#7c3aed', abbr: 'CA' },
   'Decision':       { color: '#f5b800', abbr: '?' },
+  'Process':        { color: '#e8a83a', abbr: 'PR' },
   'General':        { color: '#6b7280', abbr: '•' },
 };
 OL._fvSourceLabels = { zapier: 'Zapier', wealthbox: 'Wealthbox', redtail: 'Redtail', jotform: 'Jotform', calendly: 'Calendly', ycbm: 'YouCanBook.me', activecampaign: 'ActiveCampaign', mailerlite: 'MailerLite', processstreet: 'Process Street' };
@@ -785,6 +786,10 @@ export function renderVisualizer() {
       </div>
 
         <div class="fv-divider"></div>
+        <button class="fv-btn" style="gap:6px;" title="Frame out a process quickly: type steps, see the chain" onclick="OL.openFrameOut()">
+            <i data-lucide="pen-line" style="width:13px;height:13px;"></i>
+            Frame out
+        </button>
         <div style="position:relative;display:inline-flex;">
             <button class="fv-btn" style="gap:6px;"
                     id="fv-print-btn"
@@ -1798,15 +1803,19 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
           ? `<span style="color:var(--accent);font-size:9px;font-weight:700;">${stepLogicIcon}</span>` 
           : '';
         return `
-          <div class="fv-card-step-row"
+          <div class="fv-card-step-row${s.draft ? ' is-draft-step' : ''}"
                onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
             <span class="fv-card-step-num-sm">${i+1}</span>
             <span class="fv-card-step-name">${esc(s.name || 'Unnamed')}</span>
+            ${s.draft && typeof OL.foDraftStepBadges === 'function' ? OL.foDraftStepBadges(s) : ''}
             ${appLabel}
             ${logicIcon}
           </div>
         `;
       }).join('')}
+      ${res.isDraft && typeof OL.foInlineAddRow === 'function' ? `
+        ${OL.foInlineAddRow(res.id)}
+        <div style="padding:2px 12px 6px;"><button type="button" class="fo-open-btn" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')">Open in Frame-out</button></div>` : ''}
     </div>
   ` : '';
 
@@ -1822,7 +1831,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
   const renderAsGlobalCard = isGlobal === true || res.isGlobal === true;
     
   return `
-    <div class="fv-card ${renderAsGlobalCard ? 'is-global' : ''}"
+    <div class="fv-card ${renderAsGlobalCard ? 'is-global' : ''}${res.isDraft ? ' is-draft' : ''}"
          id="fv-card-${res.id}-${res.workflowId || 'unassigned'}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
@@ -1843,6 +1852,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
                 ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'var(--panel)')}
             </div>
           <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>${res.source && OL._fvSourceLabels[res.source] ? `<span class="fv-card-source">${esc(OL._fvSourceLabels[res.source])}</span>` : ''}
+          ${res.isDraft ? '<span class="fo-draft-chip">DRAFT</span>' : ''}
           ${res.missingUpstream ? `<span class="fv-card-warn" title="No longer returned by ${esc(OL._fvSourceLabels[res.source] || 'the service')} (since ${esc(String(res.missingUpstream.since || '').slice(0, 10))}). It may have been deleted or renamed there.">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} Removed upstream</span>` : ''}
           ${res.zapMeta && res.zapMeta.externalIssues && res.zapMeta.externalIssues.length ? `<span class="fv-card-warn" title="${esc(res.zapMeta.externalIssues.map(i => `${i.step}: ${i.label} (${i.state === 'removed_upstream' ? 'removed from the service' : i.state === 'not_pulled' ? 'service not pulled yet' : 'not found in the last pull'})`).join('\n'))}">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} ${res.zapMeta.externalIssues.length} to check</span>` : ''}
           <span class="fv-card-step-num">${num}</span>
@@ -3546,7 +3556,7 @@ export function _fvBuildListShell(stages, resources) {
                         new Set(), 
                         contextWfId // Added parameter passing
                     );
-                }).join('');
+                }).join('') + (res.isDraft && typeof OL.foInlineAddRow === 'function' ? OL.foInlineAddRow(res.id) : '');
             }).join('');
 
             stageWorkflowsHtml += `
@@ -4421,6 +4431,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
     }
 
     const tags = [
+        step.draft && typeof OL.foDraftStepBadges === 'function' ? OL.foDraftStepBadges(step) : '',
         isGlobal ? `<span class="fv-list-tag global">Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
         (isDecision) ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
