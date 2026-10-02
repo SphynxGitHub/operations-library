@@ -1746,9 +1746,12 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
     references: '#a78bfa',
   };
 
+  // Reference items (templates, sheets, docs, folders) are drawn as callouts below; only flow-related links stay as icons here.
+  const calloutIds = typeof OL.fvCalloutLinkIds === 'function' ? OL.fvCalloutLinkIds(res) : new Set();
   const linkedAssets = (res.steps || [])
     .flatMap(s => s.links || [])
-    .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i);
+    .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i)
+    .filter(l => !calloutIds.has(String(l.id)));
 
   const assetIconsHtml = linkedAssets.length > 0 ? `
     <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
@@ -1845,6 +1848,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
         <div class="fv-card-name">${esc(res.name)}</div>
         ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
         ${assetIconsHtml}
+        ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}
       </div>
 
       <div class="fv-card-footer">

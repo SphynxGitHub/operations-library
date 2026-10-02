@@ -1888,3 +1888,26 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 
 /* Which service a flow-map card was pulled from (replaces the old emoji + "Cal:" name prefixes) */
 .fv-card-source { font-size: 9px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--panel-border); color: var(--text-muted); margin-left: 6px; text-transform: none; }
+
+
+/* ---- Flow-map callouts: reference chips (templates, sheets, docs, folders) that expand into a mini card ------- */
+.fv-callouts { margin-top: 6px; }
+.fv-callout-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.fv-callout-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 7px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 10px; font-weight: 600;
+    color: var(--text-dim); background: var(--panel-dark); border: 1px solid var(--panel-border); transition: border-color .15s, color .15s; }
+.fv-callout-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-callout-chip:hover, .fv-callout-chip.is-open { border-color: var(--accent); color: var(--accent); }
+.fv-callout-add { display: none; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; cursor: pointer; padding: 0; color: var(--text-muted);
+    background: transparent; border: 1px dashed var(--panel-border); }
+.fv-callout-add:hover { color: var(--accent); border-color: var(--accent); }
+.fv-card:hover .fv-callout-add, .fv-card.selected .fv-callout-add, .fv-callouts:not(.has-items) .fv-callout-add:focus { display: inline-flex; }
+.fv-callouts.has-items .fv-callout-add { display: inline-flex; opacity: 0; transition: opacity .15s; }
+.fv-card:hover .fv-callouts.has-items .fv-callout-add, .fv-card.selected .fv-callouts.has-items .fv-callout-add { opacity: 1; }
+.fv-callout-panel { margin-top: 6px; padding: 9px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--accent); cursor: default; }
+.fv-callout-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.fv-callout-kind { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); }
+.fv-callout-x { border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 0; display: inline-flex; }
+.fv-callout-title { font-size: 12px; font-weight: 600; line-height: 1.3; word-break: break-word; }
+.fv-callout-note { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.fv-callout-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+.fv-callout-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

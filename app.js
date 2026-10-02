@@ -21,6 +21,7 @@ import * as OLIntegrations from './features/integrations.js';
 import * as OLHowTo from './features/how-to.js';
 import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
+import * as OLFlowCallouts from './features/flow-visualizer/callouts.js';
 import * as OLBusinessManager from './features/business/index.js';
 import * as OLTaskBlueprints from './features/task-blueprints.js';
 import * as OLTesting from './features/testing.js';
