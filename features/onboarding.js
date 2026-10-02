@@ -78,7 +78,7 @@ function renderOnboardingStep() {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🚀 Get Started — Step ${ob.stepIndex + 1} of ${total}</div>
+            <div class="modal-title-text">Get Started — Step ${ob.stepIndex + 1} of ${total}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -190,7 +190,7 @@ function addOnboardingRow(containerId, rowHtml, wrapperClass) {
 // ============================= STEP 1: Your Info =============================
 function renderYourInfoStep(client) {
     const you = (client.projectData.teamMembers || []).find(m => m.isPrimaryContact) || {};
-    const initials = (you.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || '👋';
+    const initials = (you.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || '?';
     return `
         <div class="ob-avatar-row">
             <div class="ob-avatar-circle">${initials}</div>

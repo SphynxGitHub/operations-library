@@ -19,7 +19,7 @@ OL.renderDailyDashboard = function() {
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>☀️ Daily Command Dashboard</h2>
+                <h2>Daily Command Dashboard</h2>
                 <div class="small muted">Overview of operations, active tasks, and client communications</div>
             </div>
         </div>
@@ -41,7 +41,7 @@ OL.renderDailyDashboard = function() {
 
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
             <div class="card" style="padding: 20px;">
-                <h3>📋 High-Priority Task Stream</h3>
+                <h3>High-Priority Task Stream</h3>
                 <div style="margin-top: 15px;">
                     ${allTasks.filter(t => t.status !== 'Done').slice(0, 8).map(t => `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--line);">
@@ -56,7 +56,7 @@ OL.renderDailyDashboard = function() {
             </div>
 
             <div class="card" style="padding: 20px;">
-                <h3>✉️ Communications & Sync</h3>
+                <h3>Communications & Sync</h3>
                 <div class="tiny muted" style="margin-top: 10px;">Connect Gmail and Quo webhook integrations to stream messages directly here.</div>
                 <button class="btn primary tiny" style="margin-top: 15px;" onclick="window.location.hash='#/business/communications'">Connect API</button>
             </div>
@@ -75,7 +75,7 @@ OL.globalTaskFilterState = {
     groupBy: 'client' // 'client' | 'status' | 'assignee'
 };
 
-// ⏱️ LIVE STOPWATCH STATE TRACKER
+// ⏱ LIVE STOPWATCH STATE TRACKER
 OL.activeTaskTimer = {
     clientId: null,
     taskId: null,
@@ -174,7 +174,7 @@ OL.renderBusinessTaskManager = function() {
             </div>
         </div>
 
-        <!-- ⚡ QUICK TASK CREATION BAR -->
+        <!-- QUICK TASK CREATION BAR -->
         <div class="card" style="padding: 16px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.04); border: 1px solid var(--accent);">
             <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
                 <i data-lucide="zap" style="width:14px;height:14px;"></i> Quick Task Creator
@@ -186,8 +186,8 @@ OL.renderBusinessTaskManager = function() {
                 </select>
                 <input type="text" id="quick-task-title" class="modal-input tiny" placeholder="Task title or deliverable description..." required>
                 <select id="quick-task-assignee" class="modal-input tiny">
-                    <option value="Sphynx Task" selected>⚡ Sphynx Task</option>
-                    <option value="Client Task">👤 Client Task</option>
+                    <option value="Sphynx Task" selected>Sphynx Task</option>
+                    <option value="Client Task">Client Task</option>
                 </select>
                 <input type="date" id="quick-task-duedate" class="modal-input tiny" title="Due Date">
                 <select id="quick-task-status" class="modal-input tiny">
@@ -359,15 +359,15 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             <select class="modal-input tiny" 
                                     style="width: 100%; border-color: ${isClientAssigned ? '#fbbf24' : 'var(--line)'};"
                                     onchange="OL.updateGlobalTaskAssignee('${t.clientId}', '${t.id}', this.value)">
-                                <option value="Sphynx Task" ${t.assignee === 'Sphynx Task' ? 'selected' : ''}>⚡ Sphynx Task</option>
+                                <option value="Sphynx Task" ${t.assignee === 'Sphynx Task' ? 'selected' : ''}>Sphynx Task</option>
                                 ${teamOptions.length > 0 ? `
                                     <optgroup label="Client Team">
                                         ${teamOptions.map(m => `
-                                            <option value="${esc(m.name)}" ${t.assignee === m.name ? 'selected' : ''}>👤 ${esc(m.name)}</option>
+                                            <option value="${esc(m.name)}" ${t.assignee === m.name ? 'selected' : ''}>${esc(m.name)}</option>
                                         `).join('')}
                                     </optgroup>
                                 ` : `
-                                    <option value="Client Task" ${t.assignee === 'Client Task' || t.assignee === 'Client' ? 'selected' : ''}>👤 Client Task</option>
+                                    <option value="Client Task" ${t.assignee === 'Client Task' || t.assignee === 'Client' ? 'selected' : ''}>Client Task</option>
                                 `}
                             </select>
                         </div>
@@ -394,7 +394,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </select>
                         </div>
 
-                        <!-- ⏱️ COMPACT TIMER & LOG BUTTONS -->
+                        <!-- COMPACT TIMER & LOG BUTTONS -->
                         <div onclick="event.stopPropagation();" style="display: flex; align-items: center; gap: 4px; justify-content: flex-end;">
                             <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
                                     id="timer-btn-${t.id}"
@@ -456,10 +456,10 @@ OL.navigateToClientProject = function(clientId) {
 OL.renderProjectPill = function(clientId, name, opts = {}) {
     const label = esc(name || (clientId && state.clients?.[clientId]?.meta?.name) || 'Unknown Project');
     if (!clientId) {
-        return `<span class="pill tiny project-pill is-static">📁 ${label}</span>`;
+        return `<span class="pill tiny project-pill is-static">${label}</span>`;
     }
     const stop = opts.stopPropagation !== false ? "event.stopPropagation();" : "";
-    return `<span class="pill tiny project-pill" onclick="${stop} OL.navigateToClientProject('${clientId}')" title="Jump to ${label}">📁 ${label}</span>`;
+    return `<span class="pill tiny project-pill" onclick="${stop} OL.navigateToClientProject('${clientId}')" title="Jump to ${label}">${label}</span>`;
 };
 
 // name + the clientId whose roster it should resolve against -> a
@@ -469,16 +469,16 @@ OL.renderProjectPill = function(clientId, name, opts = {}) {
 // tag rather than silently going nowhere.
 OL.renderTeamPill = function(name, clientId, opts = {}) {
     const label = esc(name || 'Unassigned');
-    if (!name) return `<span class="pill tiny team-pill is-static">👤 ${label}</span>`;
+    if (!name) return `<span class="pill tiny team-pill is-static">${label}</span>`;
 
     const client = clientId ? state.clients?.[clientId] : null;
     const member = client?.projectData?.teamMembers?.find(m => m.name === name);
     if (member) {
         const stop = opts.stopPropagation !== false ? "event.stopPropagation();" : "";
-        return `<span class="pill tiny team-pill" onclick="${stop} OL.openTeamMemberModal('${member.id}')" title="Open ${label}'s card">👤 ${label}</span>`;
+        return `<span class="pill tiny team-pill" onclick="${stop} OL.openTeamMemberModal('${member.id}')" title="Open ${label}'s card">${label}</span>`;
     }
     // Sphynx-side assignee (or unresolved name) — no card to open yet.
-    return `<span class="pill tiny team-pill is-static">👤 ${label}</span>`;
+    return `<span class="pill tiny team-pill is-static">${label}</span>`;
 };
 
 // Row click handler (Opens details unless an input/select/button/client-link was clicked)
@@ -580,7 +580,7 @@ OL.renderClientReportView = function(clientId) {
         </div>
 
         <!-- BREAKDOWN TABLE -->
-        <h4>📋 Task Itemization & Time Audit</h4>
+        <h4>Task Itemization & Time Audit</h4>
         <table class="matrix-table" style="width:100%; margin-top: 10px;">
             <thead>
                 <tr>
@@ -604,7 +604,7 @@ OL.renderClientReportView = function(clientId) {
                             <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
                             <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                             <td style="text-align:center;">
-                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">✏️ Edit Log</button>
+                                <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">Edit Log</button>
                             </td>
                         </tr>
                     `;
@@ -665,7 +665,7 @@ OL.renderBusinessTimeReports = function() {
                 return `
                     <div class="card" style="padding: 14px; cursor:pointer;" onclick="OL.openTimeReportModal('${c.id}')">
                         <div style="font-weight:bold; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between;">
-                            <span>📁 ${esc(c.meta?.name || c.id)}</span>
+                            <span>${esc(c.meta?.name || c.id)}</span>
                             <span class="tiny muted">${m.burnRate}% Used</span>
                         </div>
                         <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
@@ -789,7 +789,7 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                             <tr>
                                 <td>
                                     <strong>${esc(t.title || t.name)}</strong>
-                                    ${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                    ${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">${esc(t.timeAuditNote)}</div>` : ''}
                                 </td>
                                 <td style="text-align:center;">${OL.renderProjectPill(t.clientId, t.clientName)}</td>
                                 <td style="text-align:center;">${OL.renderTeamPill(t.assignee, t.clientId)}</td>
@@ -797,7 +797,7 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                                 <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
                                 <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                                 <td style="text-align:center;">
-                                    <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">✏️ Edit Log</button>
+                                    <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">Edit Log</button>
                                 </td>
                             </tr>
                         `;
@@ -981,7 +981,7 @@ OL.exportClientTimeReportCSV = function(clientId) {
     URL.revokeObjectURL(link.href);
 };
 
-// ⏱️ LIVE STOPWATCH CONTROLS
+// ⏱ LIVE STOPWATCH CONTROLS
 OL.toggleLiveTaskTimer = function(clientId, taskId) {
     const timer = OL.activeTaskTimer;
 
@@ -1117,7 +1117,7 @@ OL.logTaskHours = function(clientId, taskId, additionalHours) {
             const current = Number(task.loggedHours || task.hoursLogged || 0);
             task.loggedHours = current + Number(additionalHours);
             task.hoursLogged = task.loggedHours;
-            console.log(`⏱️ Logged ${additionalHours}h on Task [${taskId}]. Total: ${task.loggedHours}h`);
+            console.log(`⏱ Logged ${additionalHours}h on Task [${taskId}]. Total: ${task.loggedHours}h`);
         }
     });
     OL.renderBusinessTaskManager();
@@ -1154,7 +1154,7 @@ OL.renderBusinessFinancials = function() {
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>💰 Agency Financials & Scoped Work</h2>
+                <h2>Agency Financials & Scoped Work</h2>
                 <div class="small muted">Track total gross, scoped deliverables, and approved revenue across all projects</div>
             </div>
         </div>
@@ -1201,7 +1201,7 @@ OL.renderBusinessCommunications = function() {
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>✉️ Communications Center</h2>
+                <h2>Communications Center</h2>
                 <div class="small muted">Connect Gmail API & Quo Webhook endpoints</div>
             </div>
         </div>
@@ -1225,7 +1225,7 @@ OL.renderBusinessCalendar = function() {
     main.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>📅 Unified Calendar</h2>
+                <h2>Unified Calendar</h2>
                 <div class="small muted">Google Calendar API Synchronization</div>
             </div>
         </div>

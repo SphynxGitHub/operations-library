@@ -159,7 +159,7 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
 
     const html = OL.composeShellHtml({
         prefix: 'cf',
-        title: `✉️ Client follow-up — ${st.clientName}`,
+        title: `Client follow-up — ${st.clientName}`,
         headBadgeHtml: followedUp ? `<span class="pill tiny soft" style="color:#22c55e; display:inline-flex; align-items:center; gap:4px; margin-left:10px;">✓ Followed up · next ${esc(OL.formatDayKey ? OL.formatDayKey(task.nextFollowUpDue || '', { month: 'short', day: 'numeric' }) : (task.nextFollowUpDue || ''))}</span>` : '',
         subject: fillTemplate(followUpTemplate().subject, { client: st.clientName, sender: senderNameNow() }),
         messageHtml: esc(intro).replace(/\n/g, '<br>'),

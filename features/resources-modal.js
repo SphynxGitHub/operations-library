@@ -129,7 +129,7 @@ export function renderResourceCard(res, opts = {}) {
                 <span class="vault-tag" style="${tagStyle} padding: 1px 5px; font-size: 7.5px; border-radius: 3px; font-weight: bold;">
                     ${isMaster ? 'MASTER' : 'LOCAL'}
                 </span>
-                ${res.isArchived ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
+                ${res.isArchived ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Archived</span>` : ''}
             </div>
 
             <!-- Footer: Base Meta & Scoping Info -->
@@ -570,7 +570,7 @@ export function openResourceModal(targetId, draftObj = null) {
     // Back button to go back to flow map if jumped from scope button
     const backBtn = state.v2.returnTo ? `
         <button class="btn-back-to-flow" onclick="OL.returnToFlow()">
-            ⬅ Back to Flow
+            Back to Flow
         </button>
     ` : '';
 
@@ -688,7 +688,7 @@ export function openResourceModal(targetId, draftObj = null) {
         
             displayVal = actualStepCount;
             inputProps = "readonly style='background:rgba(255,159,67,0.1);color:#ff9f43;border-color:#ff9f43;cursor:not-allowed;'";
-            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">⚡ AUTO</span>`;
+            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">AUTO</span>`;
         
             if (num(activeData.data?.[varKey]) !== actualStepCount) {
                 if (!activeData.data) activeData.data = {};
@@ -708,7 +708,7 @@ export function openResourceModal(targetId, draftObj = null) {
             }, 0);
             displayVal = actualLogicCount;
             inputProps = "readonly style='background:rgba(255,159,67,0.1);color:#ff9f43;border-color:#ff9f43;cursor:not-allowed;'";
-            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">⚡ AUTO</span>`;
+            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">AUTO</span>`;
         
             if (num(activeData.data?.[varKey]) !== actualLogicCount) {
                 if (!activeData.data) activeData.data = {};
@@ -2316,7 +2316,7 @@ export async function addResourceComment(resId, isClientFacing = false) {
         author: authorName,
         text: text,
         timestamp: new Date().toISOString(),
-        isClientFacing: isClientFacing // 🔒 Visibility Flag
+        isClientFacing: isClientFacing // Visibility Flag
     });
 
     await OL.persist();
@@ -2363,7 +2363,7 @@ export function renderResourceMiniMaps(targetResId) {
     // 3. Build the Grid HTML...
     return `
         <div class="card-section" style="margin-top:20px; border-top:1px solid var(--line); padding-top:20px;">
-            <label class="modal-section-label">🕸️ RELATIONSHIP MAP</label>
+            <label class="modal-section-label">RELATIONSHIP MAP</label>
             <div class="mini-map-grid" style="display: grid; grid-template-columns: 1fr 30px 1.2fr 30px 1fr; align-items: center; gap: 5px; margin-top: 15px;">
                 
                 <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -2492,7 +2492,7 @@ export function filterSignatureSearch(resId, query) {
 
     listEl.innerHTML = sigs.map(s => `
         <div class="search-result-item" onmousedown="OL.linkSignature('${resId}', '${s.id}', '${esc(s.name)}')">
-            ✍️ ${esc(s.name)}
+            ${esc(s.name)}
         </div>
     `).join('') || '<div class="search-result-item muted">No signatures found. Create one typed "Signature" first!</div>';
 };
@@ -2526,7 +2526,7 @@ export function previewEmailTemplate(resId) {
 
     const previewHtml = `
         <div class="modal-head">
-            <div class="modal-title-text">📧 Email Preview</div>
+            <div class="modal-title-text">Email Preview</div>
         </div>
         <div class="modal-body" style="background: #fff; color: #333; padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border-radius: 0 0 8px 8px;">
             <div style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; font-size: 13px;">
@@ -2546,7 +2546,7 @@ export function previewEmailTemplate(resId) {
 export function copyToClipboard(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
         const originalText = btn.innerText;
-        btn.innerText = "✅ Copied!";
+        btn.innerText = "Copied!";
         btn.style.color = "var(--accent)";
         
         setTimeout(() => {
@@ -2723,11 +2723,11 @@ export function renderVaultRatesPage() {
   container.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>💰 Scoping Variable Library</h2>
+                <h2>Scoping Variable Library</h2>
                 <div class="small muted">Manage technical pricing per Resource Type</div>
             </div>
             <div class="header-actions">
-                <button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>
+                <button class="btn small soft" onclick="OL.openResourceTypeManager()">Types</button>
                 <button class="btn primary" onclick="OL.addRegistryType()">+ Add New Type</button>
             </div>
         </div>
@@ -2741,7 +2741,7 @@ export function renderVaultRatesPage() {
                 return `
                     <div class="card is-clickable" onclick="OL.openTypeDetailModal('${type.type}')">
                         <div class="card-header">
-                            <div class="card-title" style="text-transform: uppercase; color: var(--accent);">📁 ${esc(type.type)}</div>
+                            <div class="card-title" style="text-transform: uppercase; color: var(--accent);">${esc(type.type)}</div>
                             <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeRegistryTypeByKey('${type.typeKey}')">×</button>
                         </div>
                         <div class="card-body">
@@ -2844,7 +2844,7 @@ export function renameResourceType(oldNameEncoded, newName, archetype, isEncoded
 
   OL.persist();
   console.log(
-    `✅ Renamed type: "${oldName}" -> "${cleanNewName}" in ${archetype}`,
+    `Renamed type: "${oldName}" -> "${cleanNewName}" in ${archetype}`,
   );
 };
 
@@ -2923,7 +2923,7 @@ export function filterMasterResourceImport(query) {
     listEl.innerHTML = available.map(res => `
         <div class="search-result-item" onmousedown="OL.executeResourceImport('${res.id}')">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>🛠️ ${esc(res.name)}</span>
+                <span>${esc(res.name)}</span>
                 <span class="pill tiny soft">${esc(res.type)}</span>
             </div>
         </div>
@@ -2933,7 +2933,7 @@ export function filterMasterResourceImport(query) {
 export function importFromMaster() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📥 Import Master Resource</div>
+            <div class="modal-title-text">Import Master Resource</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -2977,7 +2977,7 @@ export function executeResourceImport(masterId) {
 export async function universalDelete(id, type, options = {}) {
     const res = OL.getResourceById(id);
       if (res && res.isLocked) {
-          alert("🔒 This is a required Sphynx system resource and cannot be removed.");
+          alert("This is a required Sphynx system resource and cannot be removed.");
           return;
       }
     const { event, isFunction, name } = options;
@@ -3009,10 +3009,10 @@ export async function universalDelete(id, type, options = {}) {
     // 🛡️ SCENARIO B: Permanent Deletion (Local items or Master items deleted from the Vault)
     const label = name || type.slice(0, -1); // "apps" becomes "app"
     let confirmMsg = isVaultRoute 
-        ? `⚠️ PERMANENT VAULT DELETE: "${label}"\n\nThis removes the source for ALL projects. This cannot be undone.`
+        ? `PERMANENT VAULT DELETE: "${label}"\n\nThis removes the source for ALL projects. This cannot be undone.`
         : `Delete "${label}" from this project?`;
 
-    if (isFunction && isVaultRoute) confirmMsg = `⚠️ WARNING: This will permanently remove the "${label}" Master Function from the Vault registry. Proceed?`;
+    if (isFunction && isVaultRoute) confirmMsg = `WARNING: This will permanently remove the "${label}" Master Function from the Vault registry. Proceed?`;
     if (!confirm(confirmMsg)) return;
 
     await OL.updateAndSync(() => {

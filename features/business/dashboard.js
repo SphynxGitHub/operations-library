@@ -318,7 +318,7 @@ OL.renderDailyDashboard = function() {
     main.innerHTML = `
         <div class="section-header" id="daily-dashboard-shell">
             <div>
-                <h2>☀️ Daily Command Dashboard</h2>
+                <h2>Daily Command Dashboard</h2>
                 <div class="small muted">Overview of operations, tasks, events, emails, and errors</div>
             </div>
         </div>
@@ -346,7 +346,7 @@ OL.renderDailyDashboard = function() {
 
         <div class="card" style="padding: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
-                <h3 style="margin:0;">📋 High-Priority Stream</h3>
+                <h3 style="margin:0;">High-Priority Stream</h3>
                 <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
                     <div style="display:flex; gap:6px; align-items:center;">
                         <i data-lucide="layers-3" style="width:14px;height:14px;color:var(--muted);"></i>

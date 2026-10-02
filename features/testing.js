@@ -104,13 +104,13 @@ export async function openTestRun(runId, clientId) {
     const done = p.passed + p.skipped;
     const pct = p.total ? Math.round((done / p.total) * 100) : 0;
     const statusPill = run.status === 'passed'
-        ? `<span class="pill tiny" style="border:1px solid #22c55e; color:#22c55e;">✅ Passed</span>`
+        ? `<span class="pill tiny" style="border:1px solid #22c55e; color:#22c55e;">Passed</span>`
         : run.status === 'needs_fix'
             ? `<span class="pill tiny" style="border:1px solid #ef4444; color:#ef4444;">Needs a fix</span>`
             : `<span class="pill tiny" style="border:1px solid #f59e0b; color:#f59e0b;">In testing</span>`;
     openModal(`
         <div class="modal-head">
-            <div class="modal-title-text">🧪 Test: ${esc(run.title)}</div>
+            <div class="modal-title-text">Test: ${esc(run.title)}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -180,7 +180,7 @@ export function testBadgeHtml(client, item, canAct) {
         return `<span style="display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap;">${runs.map((run) => {
             const p = runProgress(run);
             const color = run.status === 'passed' ? '#22c55e' : run.status === 'needs_fix' ? '#ef4444' : '#38bdf8';
-            const text = (run.status === 'passed' ? '✅' : '🧪') + (run.resourceName ? ` ${esc(run.resourceName)}` : '') +
+            const text = (run.resourceName ? esc(run.resourceName) : 'Testing') +
                 (run.status === 'passed' ? ' Tested' : ` ${p.passed + p.skipped}/${p.total}${p.failed ? `, ${p.failed} failed` : ''}`);
             return `<span class="pill tiny" style="border:1px solid ${color}; color:${color};">${text}</span>
                     <button class="btn tiny soft" onclick="OL.openTestRun('${run.id}', '${esc(client.id)}')">Open</button>`;
@@ -204,7 +204,7 @@ export function openTestTemplates() {
     const canSave = state.masterHasTestTemplates !== false;
     openModal(`
         <div class="modal-head">
-            <div class="modal-title-text">🧪 Test templates</div>
+            <div class="modal-title-text">Test templates</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>

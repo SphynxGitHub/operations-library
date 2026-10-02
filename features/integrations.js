@@ -126,7 +126,7 @@ export function openClickUpImportModal() {
     OL._clickupImportState = null;
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📥 Import ClickUp CSV</div>
+            <div class="modal-title-text">Import ClickUp CSV</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body" id="clickup-import-body">
@@ -389,7 +389,7 @@ export async function runClickUpImport() {
     OL.closeModal();
     if (typeof window.renderClientTaskManager === 'function' && state.activeClientId) window.renderClientTaskManager();
     const h = Math.floor(minutesIn / 60), mm = minutesIn % 60;
-    alert(`✅ ClickUp Import Complete\nCreated: ${created}\nUpdated: ${updated}\nTime imported: ${h}h ${String(mm).padStart(2, '0')}m`
+    alert(`ClickUp Import Complete\nCreated: ${created}\nUpdated: ${updated}\nTime imported: ${h}h ${String(mm).padStart(2, '0')}m`
         + (noTime ? `\nSkipped (no time logged): ${noTime}` : '') + (skipped ? `\nSkipped (unmapped/blank): ${skipped}` : ''));
 }
 
@@ -454,7 +454,8 @@ export function processZapLogic(zap, isMaster = false) {
         id: (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5),
         type: 'Zap',
         archetype: 'Multi-Step',
-        name: `⚡ ${zap.zapName}`,
+        name: String(zap.zapName || '').replace(/^⚡\s*/, '').trim(),
+        source: 'zapier',
         steps: transformedSteps,
         isExpanded: true
     };
@@ -463,7 +464,7 @@ export function processZapLogic(zap, isMaster = false) {
 export function bulkImportZaps(isMaster = false) {
     const activeId = state.activeClientId;
     const client = state.clients[activeId];
-    if (!client && !isMaster) return alert("❌ No active project.");
+    if (!client && !isMaster) return alert("No active project.");
 
     const zapierRobotMap = {
         "app115533": "Wealthbox",
@@ -490,7 +491,7 @@ export function bulkImportZaps(isMaster = false) {
     const library = isMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    const rawData = prompt(`🔄 LOGIC-PRESERVING SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
+    const rawData = prompt(`LOGIC-PRESERVING SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -531,11 +532,12 @@ export function bulkImportZaps(isMaster = false) {
             });
 
             processedZap.originalZapId = zapData.zapId;
-            processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
+            processedZap.name = String(zapData.zapName || '').replace(/^⚡\s*/, '').trim();
+            processedZap.source = 'zapier';
 
             // 🎯 4. LOGIC & POSITION GRAFTING
             const existingIndex = library.findIndex(r => 
-                r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
+                r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || String(r.name || '').replace(/^⚡\s*/, '').toLowerCase() === processedZap.name.toLowerCase())
             );
 
             if (existingIndex !== -1) {
@@ -580,7 +582,7 @@ export function bulkImportZaps(isMaster = false) {
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Complete! Positions, Connections (Logic), and Tags were preserved.`);
+        alert(`Sync Complete! Positions, Connections (Logic), and Tags were preserved.`);
     } catch (e) {
         console.error("🔥 Sync Error:", e);
     }
@@ -606,7 +608,8 @@ export async function syncWealthbox(client) {
         const resourceData = {
             id: `wb-${wf.id}`,
             externalId: wf.id,
-            name: `🕸️ WB: ${wf.name}`,
+            name: wf.name,
+            source: 'wealthbox',
             type: 'Workflow',  
             visible: true, 
             category: 'Flows',
@@ -625,16 +628,6 @@ export async function syncWealthbox(client) {
 
         // 🎯 ADD THIS: Register with the system so it "sticks"
         OL.upsertExternalResource(client, resourceData);
-    
-        // 🟢 Save to localResources
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        
-        const idx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
-        if (idx > -1) {
-            client.projectData.localResources[idx] = resourceData;
-        } else {
-            client.projectData.localResources.push(resourceData);
-        }
     });
     console.log(`✅ Wealthbox sync complete: ${templates.length} templates.`);
 
@@ -648,7 +641,7 @@ export async function syncWealthbox(client) {
         // 1. Ensure the metadata is forced (matching your console logic)
         if (clientObj && clientObj.projectData.localResources) {
             clientObj.projectData.localResources.forEach(res => {
-                if (res.name && res.name.includes('WB:')) {
+                if (res.source === 'wealthbox' || String(res.id || '').startsWith('wb-')) {
                     res.type = 'Workflow';
                     res.visible = true;
                     res.category = 'Flows';
@@ -686,22 +679,36 @@ export async function syncWealthbox(client) {
 };
 
 
+// Names saved before the emoji clean-up carry a prefix such as "Cal: " with a symbol in front. Matching ignores it, and
+// cleanLegacyResourceNames() removes it from saved cards (keeping which service the card came from in .source).
+const LEGACY_NAME_PREFIX = /^(?:(?:\u26A1)\uFE0F?|(?:[\u{1F300}-\u{1FAFF}][\uFE0F\u200D]*\s*)(?:cal|form|ac|ml|wb|ycbm|rt|ps):)\s*/iu;
+const LEGACY_SOURCE = { cal: 'calendly', form: 'jotform', ac: 'activecampaign', ml: 'mailerlite', wb: 'wealthbox', ycbm: 'ycbm', rt: 'redtail', ps: 'processstreet' };
+export function cleanLegacyResourceNames(client) {
+    const list = client?.projectData?.localResources;
+    if (!Array.isArray(list)) return 0;
+    let n = 0;
+    list.forEach((r) => {
+        if (!r || typeof r.name !== 'string') return;
+        const m = r.name.match(/^[\u{1F300}-\u{1FAFF}][\uFE0F\u200D]*\s*(cal|form|ac|ml|wb|ycbm|rt|ps):\s*/iu);
+        if (m) { if (!r.source) r.source = LEGACY_SOURCE[m[1].toLowerCase()]; r.name = r.name.slice(m[0].length).trim(); n++; return; }
+        if (/^\u26A1\uFE0F?\s*/u.test(r.name) && r.type === 'Zap') { if (!r.source) r.source = 'zapier'; r.name = r.name.replace(/^\u26A1\uFE0F?\s*/u, '').trim(); n++; }
+    });
+    return n;
+}
+
 export function upsertExternalResource(client, data) {
     if (!client.projectData.localResources) client.projectData.localResources = [];
     const library = client.projectData.localResources;
     
     // 🎯 REFINED MATCHING LOGIC
     // We check: 1. External ID (Best), 2. Name Match, 3. Clean Name Match (ignoring icons)
+    const stripLegacy = (n) => String(n || '').toLowerCase().replace(LEGACY_NAME_PREFIX, '').trim();
     const existingIdx = library.findIndex(r => {
         const matchId = (r.externalId && data.externalId && String(r.externalId) === String(data.externalId));
-        const matchExactName = r.name.toLowerCase() === data.name.toLowerCase();
-        
-        // Handle "Imported" prefixes (e.g., matching "My Form" with "📄 Form: My Form")
-        const cleanR = r.name.toLowerCase().replace(/^(📅 cal:|📄 form:|📧 ac:|🕸️ wb:)\s*/, '').trim();
-        const cleanD = data.name.toLowerCase().replace(/^(📅 cal:|📄 form:|📧 ac:|🕸️ wb:)\s*/, '').trim();
-        const matchCleanName = cleanR === cleanD;
-
-        return matchId || matchExactName || matchCleanName;
+        if (matchId) return true;
+        // Names are plain now, so two services can hold a workflow with the same name. Only match by name inside one source.
+        const sameSource = !r.source || !data.source || r.source === data.source;
+        return sameSource && r.type === data.type && stripLegacy(r.name) === stripLegacy(data.name);
     });
 
     if (existingIdx !== -1) {
@@ -747,128 +754,112 @@ export function upsertExternalResource(client, data) {
     }
 };
 
-// 📡 THE SYNC ORCHESTRATOR
+// ---- The Importer Hub -------------------------------------------------------------------------------------
+// Every service the OL can pull from, grouped. `creds` is the app name the access registry is searched for.
+const HUB_GROUPS = [
+    { title: 'CRM workflows', items: [
+        { key: 'wealthbox', name: 'Wealthbox', desc: 'Workflow templates', icon: 'network', creds: 'wealthbox' },
+        { key: 'redtail', name: 'Redtail', desc: 'CRM workflow templates', icon: 'contact', creds: 'redtail' },
+    ] },
+    { title: 'Forms and scheduling', items: [
+        { key: 'jotform', name: 'Jotform', desc: 'Active forms', icon: 'file-text', creds: 'jotform' },
+        { key: 'calendly', name: 'Calendly', desc: 'Event types', icon: 'calendar-clock', creds: 'calendly' },
+        { key: 'ycbm', name: 'YouCanBook.me', desc: 'Booking profiles', icon: 'calendar-check', creds: 'youcanbookme' },
+    ] },
+    { title: 'Email automation', items: [
+        { key: 'activecampaign', name: 'ActiveCampaign', desc: 'Automations', icon: 'mail', creds: 'activecampaign' },
+        { key: 'mailerlite', name: 'MailerLite', desc: 'Sequences', icon: 'send', creds: 'mailerlite' },
+    ] },
+    { title: 'Checklists and tasks', items: [
+        { key: 'processstreet', name: 'Process Street', desc: 'Checklists', icon: 'list-checks', creds: 'processstreet' },
+        { key: 'clickup', name: 'ClickUp', desc: 'Task import (CSV)', icon: 'square-check-big', csv: true },
+    ] },
+];
+const HUB_LABEL = Object.fromEntries(HUB_GROUPS.flatMap((g) => g.items).map((i) => [i.key, i.name]));
+
+function timeAgo(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (mins < 2) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 36) return `${hrs} hr ago`;
+    return `${Math.round(hrs / 24)} days ago`;
+}
+
+// 📡 THE SYNC ORCHESTRATOR: runs one service, records when it last ran, and reports in the hub instead of a pop-up.
 export async function syncExternalIntegrations(serviceKey) {
     const client = getActiveClient();
-    if (!client) return alert("❌ No active project selected.");
+    if (!client) { OL._importHub = { ...(OL._importHub || {}), note: { kind: 'error', text: 'No active project selected.' } }; return openImportHub(); }
+    if (OL._importHub?.busy) return;
 
-    const btn = event?.target;
-    const originalText = btn ? btn.innerText : "";
-    if (btn) { btn.innerText = "⏳ Syncing..."; btn.disabled = true; }
+    OL._importHub = { busy: serviceKey, note: null };
+    openImportHub();
 
     try {
-        console.group(`📡 Syncing: ${serviceKey}`);
         let count = 0;
-
-        switch(serviceKey) {
-            case 'wealthbox':
-                count = await OL.syncWealthbox(client);
-                break;
-            case 'jotform':
-                count = await OL.importJotform(client);
-                break;
-            case 'calendly':
-                count = await OL.importCalendly(client);
-                break;
-            case 'activecampaign':
-                count = await OL.importActiveCampaign(client);
-                break;
-            case 'mailerlite':
-                count = await OL.importMailerLite(client);
-                break;
-            case 'ycbm':
-                count = await OL.importYCBM(client);
-                break;
-            case 'redtail': // 🎯 ADDED
-                count = await OL.syncRedtail(client);
-                break;
-            case 'processstreet': // 🎯 ADDED
-            case 'process-street':
-                count = await OL.syncProcessStreet(client);
-                break;
+        switch (serviceKey) {
+            case 'wealthbox': count = await OL.syncWealthbox(client); break;
+            case 'jotform': count = await OL.importJotform(client); break;
+            case 'calendly': count = await OL.importCalendly(client); break;
+            case 'activecampaign': count = await OL.importActiveCampaign(client); break;
+            case 'mailerlite': count = await OL.importMailerLite(client); break;
+            case 'ycbm': count = await OL.importYCBM(client); break;
+            case 'redtail': count = await OL.syncRedtail(client); break;
+            case 'processstreet':
+            case 'process-street': count = await OL.syncProcessStreet(client); break;
         }
-
+        count = Number(count) || 0;
+        client.projectData.integrationSync = { ...(client.projectData.integrationSync || {}), [serviceKey]: { at: new Date().toISOString(), count } };
         await OL.persist();
         if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
-        alert(`✅ Sync Successful!\n- ${serviceKey.toUpperCase()}: ${count} items updated.`);
-
+        OL._importHub = { busy: null, note: { kind: 'ok', text: `${HUB_LABEL[serviceKey] || serviceKey}: ${count} item${count === 1 ? '' : 's'} updated.` } };
     } catch (e) {
-        console.error(`🔥 ${serviceKey} Sync Error:`, e);
-        alert(`Sync Failed: ${e.message}`);
-    } finally {
-        if (btn) { btn.innerText = originalText; btn.disabled = false; }
-        console.groupEnd();
+        console.error(`${serviceKey} sync error:`, e);
+        OL._importHub = { busy: null, note: { kind: 'error', text: `${HUB_LABEL[serviceKey] || serviceKey}: ${e.message || 'sync failed'}` } };
     }
+    openImportHub();
 };
 
 export function openImportHub() {
+    const client = getActiveClient();
+    const st = OL._importHub || {};
+    const synced = client?.projectData?.integrationSync || {};
+
+    const tile = (it) => {
+        const entry = it.creds && client ? getCredsForApp(client, it.creds) : null;
+        const connected = it.csv ? true : hasKey(entry);
+        const last = synced[it.key];
+        const busy = st.busy === it.key;
+        const status = busy ? 'Syncing...'
+            : it.csv ? 'Upload a ClickUp export'
+            : !connected ? 'Add the API key in Credentials'
+            : last ? `Last synced ${timeAgo(last.at)}${Number.isFinite(last.count) ? ` · ${last.count} items` : ''}`
+            : 'Connected · not synced yet';
+        const action = it.csv ? "OL.openClickUpImportModal()" : `OL.syncExternalIntegrations('${it.key}')`;
+        return `
+            <button type="button" class="ih-tile${connected ? '' : ' is-off'}${busy ? ' is-busy' : ''}" ${st.busy ? 'disabled' : ''} onclick="${action}">
+                <span class="ih-icon"><i data-lucide="${it.icon}"></i></span>
+                <span class="ih-name">${esc(it.name)}</span>
+                <span class="ih-desc">${esc(it.desc)}</span>
+                <span class="ih-status">${esc(status)}</span>
+            </button>`;
+    };
+
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔌 System Importer Hub</div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            <div class="modal-title-text">System Importer Hub</div>
+            <button class="btn small soft" onclick="OL._importHub = null; OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <p class="tiny muted" style="margin-bottom: 20px;">
-                Select a service to sync live data into your Workbench.
-            </p>
-            
-            <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px;">
-                
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('wealthbox')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">🕸️</div>
-                    <div class="bold">Wealthbox</div>
-                    <div class="tiny muted">Sync Workflows</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('jotform')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">📄</div>
-                    <div class="bold">Jotform</div>
-                    <div class="tiny muted">Sync Active Forms</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('calendly')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">📅</div>
-                    <div class="bold">Calendly</div>
-                    <div class="tiny muted">Sync Event Types</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('activecampaign')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">📧</div>
-                    <div class="bold">ActiveCampaign</div>
-                    <div class="tiny muted">Sync Automations</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('mailerlite')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">⚡</div>
-                    <div class="bold">MailerLite</div>
-                    <div class="tiny muted">Sync Sequences</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('ycbm')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">🗓️</div>
-                    <div class="bold">YouCanBook.me</div>
-                    <div class="tiny muted">Sync Booking Profiles</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.syncRedtail(OL.activeClient)">
-                    <div style="font-size: 24px; margin-bottom: 10px;">🔴</div>
-                    <div class="bold">Redtail</div>
-                    <div class="tiny muted">Sync CRM Workflows</div>
-                </div>
-                
-                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('processstreet')">
-                    <div style="font-size: 24px; margin-bottom: 10px;">🏁</div>
-                    <div class="bold">Process Street</div>
-                    <div class="tiny muted">Sync Checklists</div>
-                </div>
-
-                <div class="card is-clickable import-card" onclick="OL.openClickUpImportModal()">
-                    <div style="font-size: 24px; margin-bottom: 10px;">✅</div>
-                    <div class="bold">ClickUp</div>
-                    <div class="tiny muted">Import Tasks (CSV)</div>
-                </div>
-
-            </div>
+            <p class="tiny muted ih-lede">Pull live data from your connected services into ${client ? `<strong>${esc(client.meta?.name || 'this project')}</strong>` : 'the active project'}. Keys are read from the project's Credentials and never leave the server.</p>
+            ${st.note ? `<div class="ih-note ih-note-${st.note.kind}">${esc(st.note.text)}</div>` : ''}
+            ${HUB_GROUPS.map((g) => `
+                <div class="ih-group">
+                    <div class="ih-group-title">${g.title}</div>
+                    <div class="ih-grid">${g.items.map(tile).join('')}</div>
+                </div>`).join('')}
         </div>
     `;
     openModal(html);
@@ -889,7 +880,8 @@ export async function importCalendly(client) {
         OL.upsertExternalResource(client, {
             id: `cal-${externalId}`,
             externalId: externalId,
-            name: `📅 Cal: ${ev.name}`,
+            name: ev.name,
+            source: 'calendly',
             type: 'Event',
             externalUrl: ev.scheduling_url,
             description: ev.description || "Calendly Event Type",
@@ -925,7 +917,8 @@ export async function importYCBM(client) {
     profiles.forEach(p => {
         OL.upsertExternalResource(client, {
             externalId: p.id,
-            name: `🗓️ YCBM: ${p.title}`,
+            name: p.title,
+            source: 'ycbm',
             type: 'Event',
             externalUrl: `https://${p.subdomain}.youcanbook.me`,
             steps: [{ id: uid(), name: "Customer Schedules via YCBM", appName: "YouCanBookMe" }]
@@ -960,7 +953,8 @@ export async function importActiveCampaign(client) {
         OL.upsertExternalResource(client, {
             id: `ac-${auto.id}`,
             externalId: auto.id,
-            name: `📧 AC: ${auto.name}`,
+            name: auto.name,
+            source: 'activecampaign',
             type: 'Email Campaign',
             archetype: 'Multi-Level',
             steps: [
@@ -984,7 +978,8 @@ export async function importMailerLite(client) {
     automations.forEach(auto => {
         OL.upsertExternalResource(client, {
             externalId: auto.id,
-            name: `📧 ML: ${auto.name}`,
+            name: auto.name,
+            source: 'mailerlite',
             type: 'Email Campaign',
             archetype: 'Multi-Level',
             steps: [
@@ -1009,7 +1004,8 @@ export async function importJotform(client) {
             OL.upsertExternalResource(client, {
                 id: `jf-${form.id}`,
                 externalId: form.id,
-                name: `📄 Form: ${form.title}`,
+                name: form.title,
+                source: 'jotform',
                 type: 'Form',
                 externalUrl: `https://www.jotform.com/form/${form.id}`,
                 steps: [{ id: uid(), name: "User Submits Form", appName: "Jotform" }]
@@ -1030,10 +1026,7 @@ export async function syncProcessStreet(client) {
         const registry = targetClient.projectData.accessRegistry || [];
         const psCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.processstreet);
 
-        if (!hasKey(psCreds)) {
-            alert("Missing Process Street API Key in Registry.");
-            return;
-        }
+        if (!hasKey(psCreds)) throw new Error("Process Street API Key missing in Credentials.");
         await secureEntry(targetClient, psCreds);
 
         // The backend pages through the workflows and returns them all (with their tasks).
@@ -1044,8 +1037,7 @@ export async function syncProcessStreet(client) {
         console.log(`✅ Total Collected: ${allWorkflows.length} workflows.`);
 
         if (allWorkflows.length === 0) {
-            alert("Process Street returned 0 workflows. Verify your account has 'Active' workflows.");
-            return;
+            throw new Error("Process Street returned 0 workflows. Verify your account has 'Active' workflows.");
         }
 
         // 🧹 Wipe and Rebuild
@@ -1056,7 +1048,8 @@ export async function syncProcessStreet(client) {
             targetClient.projectData.localResources.push({
                 id: `ps-workflow-${wf.id}-${i}`,
                 externalId: wf.id,
-                name: `🏁 PS: ${wf.name}`,
+                name: wf.name,
+                source: 'processstreet',
                 type: 'Checklist',
                 visible: true,
                 category: 'Flows',
@@ -1076,7 +1069,7 @@ export async function syncProcessStreet(client) {
             if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
         }, 300);
 
-        alert(`🎉 Success! Synced ${allWorkflows.length} Process Street workflows.`);
+        alert(`Success! Synced ${allWorkflows.length} Process Street workflows.`);
 
     } catch (e) {
         console.error("🔥 PS v1.1 Sync Error:", e);
@@ -1132,7 +1125,8 @@ export async function syncRedtail(client) {
             const resourceData = {
                 id: uniqueId,
                 externalId: wf.id,
-                name: `🔴 RT: ${wf.name}`,
+                name: wf.name,
+                source: 'redtail',
                 type: 'Workflow',
                 visible: true,
                 category: 'Flows',
@@ -1163,13 +1157,12 @@ export async function syncRedtail(client) {
             const finalCount = targetClient.projectData.localResources.filter(r => r.id.startsWith('rt-')).length;
             console.log(`🏁 Final verification: ${finalCount} Redtail items in memory.`);
             
-            if(finalCount < 61) {
-                console.error("⚠️ ALERT: Something is still stripping the array during persist!");
-            }
         }, 300);
-        
+
+        return allTemplates.length;
     } catch (e) {
         console.error("🔥 Sync Failed:", e);
+        throw e;
     }
 };
 
@@ -1599,7 +1592,7 @@ export function _printStepsHtml(stages, resources, workflows) {
             const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
             if (!tRes || !tStep) return '';
             const types = l.types || [l.type || 'next'];
-            const arrow = types.includes('condition') ? '◆' : types.includes('loop') ? '↺' : types.includes('delay') ? '⏱' : '→';
+            const arrow = types.includes('condition') ? '◆' : types.includes('loop') ? '↺' : types.includes('delay') ? '◷' : '→';
             const rule  = l.rule ? `<em>${esc(l.rule)}</em>: ` : '';
             return `<div style="font-size:8px;color:#7c3aed;margin-top:2px;">${arrow} ${rule}${esc(tRes.name)}</div>`;
         }).filter(Boolean).join('');
@@ -1702,7 +1695,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
-    upsertExternalResource, syncExternalIntegrations, importCalendly,
+    upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
     importYCBM, importActiveCampaign, importMailerLite, importJotform,
     syncProcessStreet, syncRedtail, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,

@@ -96,7 +96,7 @@ function showSyncErrorToast(message) {
     }
     el.innerHTML = `
         <div style="flex:1;">
-            <strong style="display:block; margin-bottom:2px;">⚠️ Save failed</strong>
+            <strong style="display:block; margin-bottom:2px;">Save failed</strong>
             <span>${message}</span>
         </div>
         <button onclick="document.getElementById('ol-sync-error-toast')?.remove()"
@@ -574,6 +574,9 @@ export async function loadFullClient(clientId) {
         };
         delete state.clients[clientId]._metaOnly;
 
+        // Cards saved before the emoji clean-up carry names like "Cal: Intro Call"; strip them in memory (saved with the next write).
+        try { if (typeof window !== 'undefined' && typeof window.OL?.cleanLegacyResourceNames === 'function') window.OL.cleanLegacyResourceNames(state.clients[clientId]); } catch (e) { console.warn('Name clean-up skipped:', e); }
+
         // Repair: everywhere else in the app hardcodes scopingSheets[0] as
         // the main (non-maintenance) sheet. A client whose very first-ever
         // request came in through Client Requests/Maintenance before the
@@ -604,7 +607,7 @@ export async function switchClient(id) {
         main.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
                 <div style="text-align:center;">
-                    <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                    <div style="font-size:24px;margin-bottom:10px;"><i data-lucide="hourglass" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></div>
                     <div>Opening project...</div>
                 </div>
             </div>`;
@@ -802,7 +805,7 @@ export async function exportMasterBackup() {
         URL.revokeObjectURL(a.href);
         console.log(`✅ Backup exported: master + ${clients.length} clients`);
     } catch (e) {
-        alert('❌ Export failed: ' + e.message);
+        alert('Export failed: ' + e.message);
         console.error(e);
     }
 }
@@ -898,10 +901,10 @@ export async function importMasterBackup(event) {
         }
 
         console.log(`✅ Restored: master + ${clients.length} clients`);
-        alert(`✅ Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
+        alert(`Backup restored!\n\n• Master library\n${clients.length ? `• ${clients.length} client projects` : ''}`);
         if (typeof window.handleRoute === 'function') window.handleRoute();
     } catch (e) {
-        alert('❌ Restore failed: ' + e.message);
+        alert('Restore failed: ' + e.message);
         console.error(e);
     }
 }

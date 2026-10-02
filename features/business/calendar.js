@@ -734,7 +734,7 @@ OL.openCalendarEventModal = async function(id) {
 
                     ${evt.linked_client_id && new Date(evt.start) < new Date() ? `
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-6px 0 18px; padding:10px 12px; border:1px solid rgba(37,99,235,0.3); background:rgba(37,99,235,0.05); border-radius:8px;">
-                            <button class="btn small primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">✉️ ${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
+                            <button class="btn small primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
                             <button class="btn small soft" onclick="OL.openContextCompose()" title="Blank email about this meeting (stays open over this window)">New email</button>
                             ${evt.summary_sent_at ? `<span class="tiny muted">Sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
                             <span class="tiny muted" style="margin-left:auto;">${OL.zoomStatusLine ? OL.zoomStatusLine(evt) : ''}</span>
@@ -1827,7 +1827,7 @@ OL.zoomStatusLine = function(evt) {
         if (evt.zoom_recording_url) bits.push(`<a href="${esc(evt.zoom_recording_url)}" target="_blank" rel="noopener">Zoom link</a>`);
     }
     const line = bits.map(b => b.startsWith('<a ') ? b : esc(b)).join(' · ');
-    return evt.zoom_drive_error ? `${line}<br><span style="color:#ef4444;" title="Last Drive export error">⚠ ${esc(evt.zoom_drive_error)}</span>` : line;
+    return evt.zoom_drive_error ? `${line}<br><span style="color:#ef4444;" title="Last Drive export error">${esc(evt.zoom_drive_error)}</span>` : line;
 };
 
 // Clears this meeting's Zoom flags and runs the sync now, then reports
@@ -1986,7 +1986,7 @@ OL.stopCalendarAutoSync = function() {
 OL.openManageCalendarsModal = async function() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🗓️ Manage Calendars</div>
+            <div class="modal-title-text">Manage Calendars</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body" id="manage-calendars-body" style="max-width:450px; width:100%;">

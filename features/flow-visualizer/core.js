@@ -460,6 +460,7 @@ OL._fvTypes = {
   'Decision':       { color: '#f5b800', abbr: '?' },
   'General':        { color: '#6b7280', abbr: '•' },
 };
+OL._fvSourceLabels = { zapier: 'Zapier', wealthbox: 'Wealthbox', redtail: 'Redtail', jotform: 'Jotform', calendly: 'Calendly', ycbm: 'YouCanBook.me', activecampaign: 'ActiveCampaign', mailerlite: 'MailerLite', processstreet: 'Process Street' };
 OL._fvGetType = t => OL._fvTypes[t] || { color: '#6b7280', abbr: (t||'?').substring(0,2).toUpperCase() };
 
 export function _fvNormalizeStepCoords() {
@@ -661,7 +662,7 @@ export function renderVisualizer() {
           </button>
           <button class="fv-toggle-btn ${OL._fv.showArchived ? 'on' : ''}"
                     onclick="OL._fv.showArchived = !OL._fv.showArchived; OL.renderVisualizer();">
-              📦 ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
+              ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
             </button>
         </div>
 
@@ -1774,7 +1775,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
   ));
   const logicBadge = logicTypes.size === 0 ? '' :
     logicTypes.has('loop')      ? '↺' :
-    logicTypes.has('delay')     ? '⏱' :
+    logicTypes.has('delay')     ? '◷' :
     logicTypes.has('condition') ? '◆' :
     logicTypes.size > 0          ? '→' : '';
 
@@ -1787,7 +1788,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
         const stepOut = (s.logic?.out || []).filter(l => l.targetId);
         const stepLogicIcon = stepOut.length === 0 ? '' :
             stepOut.some(l => l.type === 'loop')      ? '↺' :
-            stepOut.some(l => l.type === 'delay')     ? '⏱' :
+            stepOut.some(l => l.type === 'delay')     ? '◷' :
             stepOut.some(l => l.type === 'condition') ? '◆' :
             stepOut.length > 1                         ? '◆' : '→';
         const logicIcon = stepLogicIcon 
@@ -1838,7 +1839,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
           <div class="fv-card-type-icon" style="background:${tc.color};">
                 ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'var(--panel)')}
             </div>
-          <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>
+          <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>${res.source && OL._fvSourceLabels[res.source] ? `<span class="fv-card-source">${esc(OL._fvSourceLabels[res.source])}</span>` : ''}
           <span class="fv-card-step-num">${num}</span>
         </div>
         <div class="fv-card-name">${esc(res.name)}</div>
@@ -1869,7 +1870,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
                         ${OL.getLucideSVG('circle-dollar-sign', 10, scopeColor)}
                     </div>
                 ` : ''}
-                ${renderAsGlobalCard ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+                ${renderAsGlobalCard ? `<span class="fv-global-card-badge">×${globalStageCount}</span>` : ''}
                     <button onclick="event.stopPropagation();
                                      OL.handleResourceSave('${res.id}','isGlobal',${!renderAsGlobalCard});
                                      OL.renderVisualizer();"
@@ -2730,7 +2731,7 @@ export function _fvDrawStepConnections(resources) {
         // Logic icon on line midpoint (implicit links get no icon)
         const hasRule  = !isImplicit && outRule.rule?.trim();
         const hasDelay = !isImplicit && (outRule.type === 'delay' || parseInt(outRule.delayValue) > 0);
-        const iconChar = isLoop ? '↺' : hasDelay ? '⏱' : hasRule ? 'λ' : null;
+        const iconChar = isLoop ? '↺' : hasDelay ? '◷' : hasRule ? 'λ' : null;
 
         if (iconChar) {
           // Find midpoint of bezier curve
@@ -2757,7 +2758,7 @@ export function _fvDrawStepConnections(resources) {
           // Tooltip on hover showing the rule/delay
           if (hasRule || hasDelay) {
             const label = hasDelay
-              ? `⏱ ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
+              ? `${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
               : outRule.rule;
             bg.setAttribute('title', label);
             bg.style.cursor = 'help';
@@ -3307,7 +3308,7 @@ export function _fvRenderWbItems(items, tab) {
                 <div class="fv-wb-item-icon"
                      style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
                             color:${isData ? '#7c3aed' : tc.color};">
-                    ${isData ? '🏷' : tc.abbr}
+                    ${isData ? 'DP' : tc.abbr}
                 </div>
                 <div class="fv-wb-item-info">
                     <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
@@ -3537,7 +3538,7 @@ export function _fvBuildListShell(stages, resources) {
                         resources, 
                         0, 
                         new Set(), 
-                        contextWfId // 🚀 Added parameter passing
+                        contextWfId // Added parameter passing
                     );
                 }).join('');
             }).join('');
@@ -3748,7 +3749,7 @@ export function _fvOpenStepsList(resId) {
         const stepOut = (s.logic?.out || []).filter(l => l.targetId);
         const icons = [];
         if (stepOut.some(l => l.type === 'loop'))      icons.push('↺');
-        if (stepOut.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (stepOut.some(l => l.type === 'delay'))     icons.push('◷');
         if (stepOut.some(l => l.type === 'condition') || stepOut.length > 1) icons.push('◆');
         else if (stepOut.length === 1 && !icons.length) icons.push('→');
         const logicIcon = icons.map(ic =>
@@ -4105,7 +4106,7 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
                 const mx = isVertical ? x1 : (x1 + x2) / 2;
                 const my = isVertical ? (y1 + y2) / 2 - 8 : (y1 + y2) / 2 - 8;
                 const label = rule.type === 'condition' ? `If: ${(rule.rule||'').substring(0,20)}` :
-                              rule.type === 'delay'     ? `⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}` :
+                              rule.type === 'delay'     ? `◷ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}` :
                               rule.type === 'loop'      ? `↺ ${rule.loopLimit||''}` : '';
                 if (label) svgArrows += `
                     <rect x="${mx - 30}" y="${my - 8}" width="60" height="14"
@@ -4152,7 +4153,7 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
                      onclick="OL._fvOpenStepCanvas('${tResId}', ${JSON.stringify([...trail, {resId, name: res.name}])})">
                     <div style="font-size:8px;font-weight:700;text-transform:uppercase;
                                 letter-spacing:0.06em;color:#a78bfa;margin-bottom:4px;">
-                        🌐 ${esc(tRes.name.substring(0, 16))}
+                        ${esc(tRes.name.substring(0, 16))}
                     </div>
                     <div style="font-size:11px;font-weight:500;color:var(--text-dim);
                                 line-height:1.3;">
@@ -4167,7 +4168,7 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
 
         const icons = [];
         if (outRules.some(l => l.type === 'loop'))      icons.push('↺');
-        if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (outRules.some(l => l.type === 'delay'))     icons.push('◷');
         if (outRules.some(l => l.type === 'condition')) icons.push('◆');
 
         // 🎯 UNIQUE ELEMENT REGISTRY: Match contextual id identifiers per copy on step layout canvas
@@ -4394,7 +4395,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
                 badgeText = `Delay: ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
             } else if (!isSubsequentLocalStep) {
                 badgeStyle = "background:rgba(56,189,248,0.08); color:#38bdf8; border:1px solid rgba(56,189,248,0.25); cursor:pointer;";
-                badgeText = `🔀 Skip To: ${targetLabel} ➔`;
+                badgeText = `Skip To: ${targetLabel} ➔`;
             }
 
             if (rule.rule && rule.rule.trim() && !isCond) {
@@ -4414,7 +4415,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
     }
 
     const tags = [
-        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
+        isGlobal ? `<span class="fv-list-tag global">Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
         (isDecision) ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
         (isConditional && !isDecision) ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : ''
@@ -4911,7 +4912,7 @@ document.addEventListener('mousedown', function(e) {
         // Trigger the duplicate function
         OL.duplicateResourceV2(resId);
     }
-}, true); // 🎯 The 'true' is critical: it uses 'Capture' phase to catch the click first
+}, true); // The 'true' is critical: it uses 'Capture' phase to catch the click first
 
 // Global to track the dragged index
 state.draggingStepIdx = null;
@@ -4937,7 +4938,7 @@ export function renderFocusControls() {
     }
 
     // 4. Update Button Content & Action
-    scopeBtn.innerHTML = `⬅️ Back to ${destinationName}`;
+    scopeBtn.innerHTML = `Back to ${destinationName}`;
     scopeBtn.style.display = 'block';
     
     scopeBtn.onclick = () => {
@@ -5063,7 +5064,7 @@ export async function addNewResourceToCanvas() {
             //OL.openInspector(newResId, null, 'cards');
             OL._fvOpenStepsList('${res.id}')
 
-            // ⌨️ BONUS: Auto-focus the name field in the inspector if it exists
+            // ⌨ BONUS: Auto-focus the name field in the inspector if it exists
             const nameInput = document.getElementById('modal-res-name');
             if (nameInput) {
                 nameInput.select(); // Select the "New Resource" text so they can just type over it
@@ -5443,7 +5444,7 @@ export function addNewStepToCard(resId) {
     const html = `
         <div id="quick-add-modal"> 
             <div class="modal-head">
-                <div class="modal-title-text">⚡ Power Add Step</div>
+                <div class="modal-title-text">Power Add Step</div>
                 ${autoAssigneeObj ? `<div style="font-size:10px; color:var(--accent); margin-top:4px;">Auto-assigning to: ${autoAssigneeObj.name}</div>` : ''}
             </div>
             <div class="modal-body" style="position:relative;">
@@ -5592,7 +5593,7 @@ export function updateQuickAddPreview() {
     
     // 🔍 Find the actual app object to get its icon
     const appObj = (data.apps || []).find(a => a.name === state.app || a.id === state.appId);
-    const iconHtml = appObj?.icon ? `<img src="${appObj.icon}" style="width:16px; height:16px; margin-right:8px;">` : '🛠️';
+    const iconHtml = appObj?.icon ? `<img src="${appObj.icon}" style="width:16px; height:16px; margin-right:8px;">` : '<i data-lucide="wrench" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i>';
 
     if (state.name || state.app || state.assignee.length > 0) {
         preview.style.display = 'block';
@@ -5618,14 +5619,14 @@ export function updateQuickAddPreview() {
 export function showSlashMenu(query, resId) {
     const menu = document.getElementById('slash-menu');
     const options = [
-        { label: 'Assignee', key: 'Assign:', icon: '👨‍💼', sub: 'team' },
-        { label: 'Application', key: 'App:', icon: '💻', sub: 'apps' },
-        { label: 'Delay', key: 'Delay:', icon: '⏱', sub: null },
-        { label: 'Note', key: 'Note:', icon: '📝', sub: null },
-        { label: 'Due Date', key: 'Due:', icon: '📅', sub: 'due' }, // ✨ New Option
+        { label: 'Assignee', key: 'Assign:', icon: 'user', sub: 'team' },
+        { label: 'Application', key: 'App:', icon: 'monitor', sub: 'apps' },
+        { label: 'Delay', key: 'Delay:', icon: 'timer', sub: null },
+        { label: 'Note', key: 'Note:', icon: 'pencil', sub: null },
+        { label: 'Due Date', key: 'Due:', icon: 'calendar', sub: 'due' }, // ✨ New Option
         { label: 'Rules', key: 'Rule:', icon: 'λ', sub: 'logic' },
-        { label: 'Link Assets', key: 'Link:', icon: '🔗', sub: 'links' },
-        { label: 'Target Resource', key: 'Target:', icon: '🎯', sub: 'target' }
+        { label: 'Link Assets', key: 'Link:', icon: 'link', sub: 'links' },
+        { label: 'Target Resource', key: 'Target:', icon: 'target', sub: 'target' }
     ];
 
     const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
@@ -5636,7 +5637,7 @@ export function showSlashMenu(query, resId) {
                  data-label="${o.key}" 
                  data-sub="${o.sub || ''}"
                  onmousedown="event.preventDefault(); OL.selectMenuOption('${o.key}', '${o.sub || ''}')">
-                <span>${o.icon} ${o.label}</span>
+                <span><i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${o.label}</span>
             </div>
         `).join('');
         menu.style.display = 'block';
@@ -5677,7 +5678,7 @@ export function handleQuickAddKeys(e, resId) {
 
         if (e.key === 'Enter' || e.key === 'Tab') {
             e.preventDefault();
-            e.stopImmediatePropagation(); // 🛑 Stop modal from saving
+            e.stopImmediatePropagation(); // Stop modal from saving
             
             // Default to first option if none highlighted
             const selectedIdx = activeIdx >= 0 ? activeIdx : 0;
@@ -5791,11 +5792,11 @@ export function updateStepPreview(val) {
             </div>
             
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                ${s.app ? `<span class="pill status-primary">💻 ${s.app}</span>` : ''}
+                ${s.app ? `<span class="pill status-primary">${s.app}</span>` : ''}
                 ${(s.assignee || []).map(a => `
-                    <span class="pill vault-gold" style="font-size: 10px;">👨‍💼 ${a.name}</span> `).join('')}
-                ${s.delay ? `<span class="pill">⏱ ${s.delay}</span>` : ''}
-                ${s.due ? `<span class="pill" style="border: 1px solid #ff4757; color: #ff4757;">📅 ${s.due}</span>` : ''}
+                    <span class="pill vault-gold" style="font-size: 10px;">${a.name}</span> `).join('')}
+                ${s.delay ? `<span class="pill">${s.delay}</span>` : ''}
+                ${s.due ? `<span class="pill" style="border: 1px solid #ff4757; color: #ff4757;">${s.due}</span>` : ''}
                 ${s.rule ? `<span class="pill" style="border: 1px solid var(--warning); color: var(--warning);">λ ${s.rule}</span>` : ''}
             </div>
 
@@ -5823,7 +5824,7 @@ export function showSubMenu(subType, filterQuery = "") {
             menuHtml += `
                 <div class="slash-option exit-option" style="border-bottom: 1px solid var(--line); color: var(--accent); font-weight:bold;" 
                      onmousedown="event.preventDefault(); OL.exitSubMenu()">
-                    <span>✅ Done Selecting</span>
+                    <span>Done Selecting</span>
                 </div>
             `;
             menuHtml += matches.map((item) => {
@@ -5831,8 +5832,8 @@ export function showSubMenu(subType, filterQuery = "") {
                 return `
                     <div class="slash-option ${isSelected ? 'active' : ''}" 
                          onmousedown="event.preventDefault(); OL.selectMultiAssignee('${item.id}', '${esc(item.name)}', '${item.type}')">
-                        <span>${item.icon} ${esc(item.name)}</span>
-                        ${isSelected ? '<span class="tiny" style="margin-left:auto;">✅</span>' : ''}
+                        <span><i data-lucide="${item.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(item.name)}</span>
+                        ${isSelected ? '<span class="tiny" style="margin-left:auto;"><i data-lucide="circle-check" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>' : ''}
                     </div>
                 `;
             }).join('');
@@ -5840,16 +5841,16 @@ export function showSubMenu(subType, filterQuery = "") {
 
         case 'due':
             const dueOptions = [
-                { label: 'Same Day', icon: '⚡' },
-                { label: '+1 Day', icon: '🌅' },
-                { label: '+2 Days', icon: '📅' },
-                { label: '+1 Week', icon: '🗓️' },
-                { label: 'Immediate', icon: '🚀' }
+                { label: 'Same Day', icon: 'zap' },
+                { label: '+1 Day', icon: 'sunrise' },
+                { label: '+2 Days', icon: 'calendar' },
+                { label: '+1 Week', icon: 'calendar-range' },
+                { label: 'Immediate', icon: 'rocket' }
             ];
             menuHtml = `<div class="search-category-label">Select Due Offset...</div>`;
             menuHtml += dueOptions.filter(o => o.label.toLowerCase().includes(q)).map(o => `
                 <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${o.label}')">
-                    <span>${o.icon} ${o.label}</span>
+                    <span><i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${o.label}</span>
                 </div>
             `).join('');
             break;
@@ -5860,7 +5861,7 @@ export function showSubMenu(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Select Application...</div>`;
             menuHtml += apps.map(a => `
                 <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${esc(a.name)}', null, '${a.id}')">
-                    <span>💻 ${esc(a.name)}</span>
+                    <span>${esc(a.name)}</span>
                 </div>
             `).join('');
             break;
@@ -5874,7 +5875,7 @@ export function showSubMenu(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Select Logic Rule...</div>`;
             menuHtml += logicOptions.filter(o => o.label.toLowerCase().includes(q)).map(o => `
                 <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${o.label}')">
-                    <span>${o.icon} ${o.label}</span>
+                    <span><i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${o.label}</span>
                 </div>
             `).join('');
             break;
@@ -5892,12 +5893,12 @@ export function showSubMenu(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Link Assets/SOPs (Multi)</div>`;
             menuHtml += linkMatches.map(item => {
                 const isSelected = (OL.quickAddState.links || []).some(l => l.id === item.id);
-                const icon = item.type === 'SOP' || item.content !== undefined ? '📖' : '💻';
+                const icon = item.type === 'SOP' || item.content !== undefined ? 'book-open' : 'monitor';
                 return `
                     <div class="slash-option ${isSelected ? 'active' : ''}" 
                         onmousedown="event.preventDefault(); OL.selectMultiLink('${item.id}', '${esc(item.name)}', '${item.type || 'sop'}')">
-                        <span>${icon} ${esc(item.name)}</span>
-                        ${isSelected ? '<span class="tiny">✅</span>' : ''}
+                        <span><i data-lucide="${icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(item.name)}</span>
+                        ${isSelected ? '<span class="tiny"><i data-lucide="circle-check" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>' : ''}
                     </div>
                 `;
             }).join('');
@@ -5910,7 +5911,7 @@ export function showSubMenu(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Set Target Resource (Milestone)</div>`;
             menuHtml += targetMatches.map(r => `
                 <div class="slash-option" onmousedown="event.preventDefault(); OL.selectTargetResource('${r.id}', '${esc(r.name)}')">
-                    <span>🎯 ${esc(r.name)}</span>
+                    <span>${esc(r.name)}</span>
                 </div>
             `).join('');
             break;
@@ -6307,7 +6308,7 @@ export function highlightFamily(originId) {
         if (isMatch) {
             // Check for Map Node OR Resource Card
             const el = document.getElementById(`v2-node-${res.id}`) || 
-                       document.getElementById(`res-card-${res.id}`); // 👈 Matches your renderResourceCard ID
+                       document.getElementById(`res-card-${res.id}`); // Matches your renderResourceCard ID
             
             if (el) el.classList.add('family-focus');
         }
@@ -6895,7 +6896,7 @@ if (mode === 'cards' && resId) {
                         <div class="pill ${isManualOverride ? 'accent' : 'primary'}" 
                              style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                             <span class="pill-text">
-                                ${isManualOverride ? '✏️' : '🤖'} ${esc(res.appName)}
+                                ${isManualOverride ? '<i data-lucide="pencil" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="bot" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>'} ${esc(res.appName)}
                             </span>
                             <b class="is-clickable pill-remove" 
                                title="Clear and Revert"
@@ -6918,7 +6919,7 @@ if (mode === 'cards' && resId) {
             ${isLockedType && !autoApp && !isZap ? `
                 <div class="inspector-section no-border">
                     <div class="pill warning">
-                        <span class="pill-text">⚠️ No Primary tool found for this function in the Registry.</span>
+                        <span class="pill-text">No Primary tool found for this function in the Registry.</span>
                     </div>
                 </div>
             ` : ''}
@@ -7081,7 +7082,7 @@ if (mode === 'cards' && resId) {
                                        border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
                                        background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
                                        color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
-                            🌐 ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
+                            ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
                         </button>
                     </div>
                 </div>
@@ -7330,7 +7331,7 @@ export function filterAppSearch(parentId, stepId, arg3, arg4) {
              style="cursor: pointer; padding: 8px; border-bottom: 1px solid var(--line);"
              onmousedown="event.preventDefault(); event.stopPropagation(); ${selectFn}('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
             <div style="display:flex; align-items:center; gap:8px;">
-                <span>💻</span>
+                <span><i data-lucide="monitor" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                 <div>${esc(app.name)}</div>
             </div>
         </div>
@@ -7397,24 +7398,24 @@ export function getFilteredAssigneeOptions(query) {
     
     // 1. Define Virtual & Global Options
     const virtualOptions = [
-        { id: 'any-team', name: 'Any Team Member', type: 'role', icon: '👥' },
-        { id: 'all-client', name: 'Any Client', type: 'role', icon: '🏠' },
-        { id: 'role-client-1', name: 'Client 1', type: 'role', icon: '👨‍💼' },
-        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: '👨‍💼' },
-        { id: 'role-coi', name: 'COI', type: 'role', icon: '👨‍💼' },
-        { id: 'role-sphynx', name: 'Sphynx', type: 'role', icon: '👩‍🎤' }
+        { id: 'any-team', name: 'Any Team Member', type: 'role', icon: 'users' },
+        { id: 'all-client', name: 'Any Client', type: 'role', icon: 'house' },
+        { id: 'role-client-1', name: 'Client 1', type: 'role', icon: 'user' },
+        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: 'user' },
+        { id: 'role-coi', name: 'COI', type: 'role', icon: 'user' },
+        { id: 'role-sphynx', name: 'Sphynx', type: 'role', icon: 'user' }
     ];
 
     // 2. Gather Dynamic Data
-    const masterRoles = (state.master.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: '🎭' }));
-    const clientRoles = (client?.projectData?.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: '🎭' }));
+    const masterRoles = (state.master.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: 'users' }));
+    const clientRoles = (client?.projectData?.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: 'users' }));
     
     // Extract roles defined within the team member objects themselves
     const teamList = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || [])];
-    const inlineRoles = [...new Set(teamList.flatMap(m => m.roles || []))].map(r => ({ id: `role-${r}`, name: r, type: 'role', icon: '🎭' }));
+    const inlineRoles = [...new Set(teamList.flatMap(m => m.roles || []))].map(r => ({ id: `role-${r}`, name: r, type: 'role', icon: 'users' }));
 
-    const people = teamList.map(m => ({ id: m.id, name: m.name, type: 'person', icon: '👨‍💼' }));
-    const apps = (client?.projectData?.localApps || []).map(a => ({ id: a.id, name: a.name, type: 'app', icon: '💻' }));
+    const people = teamList.map(m => ({ id: m.id, name: m.name, type: 'person', icon: 'user' }));
+    const apps = (client?.projectData?.localApps || []).map(a => ({ id: a.id, name: a.name, type: 'app', icon: 'monitor' }));
 
     // 3. Combine and Filter
     const all = [...virtualOptions, ...masterRoles, ...clientRoles, ...inlineRoles, ...people, ...apps];
@@ -7458,7 +7459,7 @@ export function filterAssignmentSearch(parentId, stepId, isResource, query) {
         html += `<div class="search-category-label">${g.label}</div>`;
         html += g.items.map(item => `
             <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${item.id}', '${esc(item.name)}', '${item.type}')">
-                ${item.icon} ${esc(item.name)}
+                <i data-lucide="${item.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(item.name)}
             </div>
         `).join('');
     });
@@ -7545,7 +7546,7 @@ export function filterTargetSearch(resId, stepId, query) {
 
     resultsOverlay.innerHTML = matches.map(r => `
         <div class="search-result-item" onmousedown="event.preventDefault(); OL.setStepTargetResource('${resId}', '${stepId}', '${r.id}', '${esc(r.name)}')">
-            🎯 ${esc(r.name)}
+            ${esc(r.name)}
         </div>
     `).join('');
     
@@ -8048,10 +8049,10 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
                 // Fallback: If it's old index-based data
                 const finalStep = targetStep || targetRes.steps[parseInt(tStepId)];
                 
-                const locationPrefix = targetRes.isTopShelf ? '🏛️ ' : (targetRes.isGlobal ? '🛠️ ' : '📍 ');
+                const locationPrefix = targetRes.isTopShelf ? 'Top shelf: ' : (targetRes.isGlobal ? 'Global: ' : 'Local: ');
                 displayLabel = `${locationPrefix}${targetRes.name} > ${finalStep?.name || 'Unnamed Step'}`;
             } else {
-                displayLabel = '⚠️ Missing Resource';
+                displayLabel = 'Missing Resource';
             }
         }
     }
@@ -8068,15 +8069,15 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap: 8px;">
                 <div style="flex-grow: 1;">
                     <div class="section-label tiny" style="margin-bottom: 4px; color: ${isReadOnly ? 'var(--text-muted)' : 'var(--text-main)'}; font-weight: bold; letter-spacing: 0.5px;">
-                        ${dir === 'out' ? '📤 OUTGOING OUTPUT' : '📥 INCOMING INPUT'} ${isReadOnly ? '🔒' : ''}
+                        ${dir === 'out' ? 'OUTGOING OUTPUT' : 'INCOMING INPUT'} ${isReadOnly ? '<i data-lucide="lock" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>' : ''}
                     </div>
 
                     ${dir === 'out' ? `
                         <select class="modal-input tiny" style="margin:0; height:24px;" onchange="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'type', this.value)">
                             <option value="next" ${isNextStep ? 'selected' : ''}>➔ Next Step</option>
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
-                            <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
-                            <option value="delay" ${isDelay ? 'selected' : ''}>⏱︎ Wait For</option>
+                            <option value="loop" ${isLoop ? 'selected' : ''}>Loop/Repeat</option>
+                            <option value="delay" ${isDelay ? 'selected' : ''}> Wait For</option>
                         </select>
                     ` : ''}
                 </div>
@@ -8088,7 +8089,7 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
 
             <div style="background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line);">
                 <span style="font-size: 10px; color: var(--text-main);">${esc(displayLabel)}</span>
-                ${targetId ? `<button class="logic-jump-btn" onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')" title="Jump to Card">🎯</button>` : ''}
+                ${targetId ? `<button class="logic-jump-btn" onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')" title="Jump to Card"><i data-lucide="target" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></button>` : ''}
             </div>
 
             <input class="modal-input tiny" value="${esc(logic.rule || '')}" 
@@ -8100,7 +8101,7 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
             ${!isReadOnly ? `
                 <div class="search-map-container" style="position:relative;">
                     <input type="text" class="modal-input tiny" 
-                           placeholder="🔍 Search target resource/step..." 
+                           placeholder="Search target resource/step..." 
                            onfocus="OL.filterLogicTargetSearch('${resId}', '${stepId}', '${dir}', ${i}, '')"
                            oninput="OL.filterLogicTargetSearch('${resId}', '${stepId}', '${dir}', ${i}, this.value)">
                     <div id="logic-search-results-${resId}-${stepId}-${i}" class="search-results-overlay" style="max-height: 200px; overflow-y: auto;"></div>
@@ -8136,7 +8137,7 @@ export function filterLogicTargetSearch(resId, stepId, dir, logicIdx, query) {
 
     activeResources.forEach(res => {
         // Identify physical location
-        const familyPrefix = res.isTopShelf ? '🏛️ [SHELF] ' : (res.isGlobal ? '🛠️ [WORKBENCH] ' : '📍 [CANVAS] ');
+        const familyPrefix = res.isTopShelf ? '[SHELF] ' : (res.isGlobal ? '[WORKBENCH] ' : '[CANVAS] ');
         
         // Filter steps within this resource
         const matchedSteps = res.steps.filter((s, idx) => {
@@ -8194,14 +8195,14 @@ export function getAllStepOptions() {
         if (stageResources.length === 0) return;
 
         // 📂 Add the STAGE header
-        options.push({ id: 'header', label: `📂 ${stage.name.toUpperCase()}`, isHeader: true });
+        options.push({ id: 'header', label: `${stage.name.toUpperCase()}`, isHeader: true });
 
         stageResources.forEach(res => {
             const family = activeResources.filter(r => r.originId === res.originId);
             const partNum = family.length > 1 ? ` (${family.findIndex(r => r.id === res.id) + 1}/${family.length})` : '';
             
             // 📦 Add the RESOURCE (Indented level 1)
-            options.push({ id: 'header', label: `\u00A0\u00A0📦 ${res.name}${partNum}`, isHeader: true });
+            options.push({ id: 'header', label: `\u00A0\u00A0${res.name}${partNum}`, isHeader: true });
 
             // ⚡ Add the STEPS (Indented level 2)
             res.steps.forEach((step, idx) => {
@@ -8731,7 +8732,7 @@ export function drawLogicIcon(group, x, y, rule, isLoop = false, limit = '') {
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', `logic-gate-container ${isLoop ? 'is-loop-gate' : ''}`);
-    g.setAttribute('pointer-events', 'all'); // 🎯 Force hover detection
+    g.setAttribute('pointer-events', 'all'); // Force hover detection
     g.style.cursor = 'pointer';
     
     // 1. The Rule Label (Hover Reveal)
@@ -8918,7 +8919,7 @@ export function toggleWorkbenchTray() {
 
     // 4. Update the Button Icon if you have one
     const btn = document.querySelector('.v2-tray-toggle-btn');
-    if (btn) btn.innerHTML = state.ui.sidebarOpen ? '🔳' : '⬜';
+    if (btn) btn.innerHTML = state.ui.sidebarOpen ? '▣' : '▢';
 };
 
 // hashchange listener already registered near the top of the file

@@ -110,7 +110,7 @@ OL.renderAgendaSection = async function(eventId) {
             ${agenda.sentAt ? `<span class="tiny muted">Sent ${esc(new Date(agenda.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))}</span>` : ''}
             <div style="margin-left:auto; display:flex; gap:6px;">
                 ${evt.linked_client_id ? `<button class="btn tiny soft" onclick="OL.suggestAgendaItems('${esc(eventId)}')"><i data-lucide="sparkles" style="width:11px;height:11px;"></i> Suggest items</button>` : ''}
-                ${isUpcoming && agenda.items.length ? `<button class="btn tiny primary" onclick="OL.emailAgenda('${esc(eventId)}')">✉️ Email agenda</button>` : ''}
+                ${isUpcoming && agenda.items.length ? `<button class="btn tiny primary" onclick="OL.emailAgenda('${esc(eventId)}')">Email agenda</button>` : ''}
             </div>
         </div>
         ${!evt.linked_client_id ? `<div class="tiny muted" style="margin-bottom:6px;">Link this meeting to a project to get suggested items.</div>` : ''}
@@ -202,7 +202,7 @@ OL.emailAgenda = function(eventId) {
     const bodyHtml = `<p>Hi,</p><p>Here's what I'd like to cover on ${esc(when)}:</p><ol>${agenda.items.filter(i => !i.done).map(i => `<li>${esc(i.text)}</li>`).join('')}</ol><p>Let me know if there's anything you'd like to add.</p>`;
     OL.closeModal?.();
     OL.openComposeEmailModal({
-        title: '✉️ Email agenda',
+        title: 'Email agenda',
         to,
         subject: `Agenda: ${evt.title || 'our meeting'}`,
         bodyHtml,

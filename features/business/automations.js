@@ -728,7 +728,7 @@ OL.openAssigneeDefaults = function() {
 
     window.openModal(`
         <div class="modal-head">
-            <div class="modal-title-text">🙋 Assignee defaults</div>
+            <div class="modal-title-text">Assignee defaults</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>

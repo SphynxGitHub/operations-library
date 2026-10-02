@@ -244,14 +244,14 @@ export function renderClientAccessList() {
                 <td><span class="pill tiny soft">${c.meta?.status || ''}</span></td>
                 <td>
                     ${isMigrated
-                        ? `<span style="color:#48bb78;">✅ Logged in</span>`
+                        ? `<span style="color:#48bb78;">Logged in</span>`
                         : hasPendingLink
-                            ? `<span style="color:#fbbf24;">⏳ Link sent, not claimed</span>`
+                            ? `<span style="color:#fbbf24;">Link sent, not claimed</span>`
                             : `<span style="color:#a0aec0;">— Not started</span>`
                     }
                 </td>
                 <td>
-                    <button class="btn tiny soft" onclick="OL.startPreview('${c.id}')" title="See what they see (read-only, opens a new tab)">👁 Preview</button>
+                    <button class="btn tiny soft" onclick="OL.startPreview('${c.id}')" title="See what they see (read-only, opens a new tab)">Preview</button>
                     ${isMigrated ? '' : `
                         <input type="email" id="setupEmail-${c.id}" class="modal-input tiny"
                                placeholder="their@email.com" value="${c.meta?.setupEmail || ''}"

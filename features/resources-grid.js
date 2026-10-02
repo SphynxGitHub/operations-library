@@ -394,7 +394,7 @@ export function _renderResourceListRow(res) {
              onmouseout="this.style.borderColor='var(--panel-border)'">
             <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
             <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
-            ${isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:var(--text-dim);border:1px solid #6b7280;font-size:8px;">📦 Archived</span>` : ''}
+            ${isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:var(--text-dim);border:1px solid #6b7280;font-size:8px;">Archived</span>` : ''}
             <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
             ${OL.renderResourceStatusPill(res)}
             ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
@@ -741,7 +741,7 @@ export function renderSopStepList(res) {
     let html = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <label class="tiny muted bold uppercase" style="letter-spacing:1px; font-size:10px;">Step Sequence</label>
-            <span class="tiny muted" style="font-size:9px; opacity:0.6;">💡 Drag items to re-order steps instantly</span>
+            <span class="tiny muted" style="font-size:9px; opacity:0.6;">Drag items to re-order steps instantly</span>
         </div>
     `;
 
@@ -755,7 +755,7 @@ export function renderSopStepList(res) {
 
         const icons = [];
         if (outRules.some(l => l.type === 'loop'))      icons.push('↺');
-        if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (outRules.some(l => l.type === 'delay'))     icons.push('◷');
         if (outRules.some(l => l.type === 'condition') || outRules.length > 1) icons.push('◆');
         else if (outRules.length === 1 && !icons.length) icons.push('→');
         
@@ -945,7 +945,7 @@ export function filterInlineAppSearch(resId, stepId, query) {
         ? matches.map(app => `
             <div class="search-result-item"
                  onmousedown="event.preventDefault(); OL.updateAppMetadataInline('${resId}', '${stepId}', '${app.id}', '${esc(app.name)}')">
-                💻 ${esc(app.name)}
+                ${esc(app.name)}
             </div>`).join('')
         : '<div class="p-10 tiny muted">No tools found.</div>';
     overlay.style.display = 'block';
@@ -1098,10 +1098,10 @@ export function goToStepFromLibrary(resId, stepId) {
 // 1. Add New Type
 export function addNewResourceTypeFlat() {
     const input = document.getElementById('new-type-input');
-    const iconInput = document.getElementById('new-type-icon'); // 🚀 Capture the emoji input
+    const iconInput = document.getElementById('new-type-icon'); // Capture the emoji input
     
     const val = (input.value || "").trim();
-    const iconVal = (iconInput.value || "⚙️").trim(); // Fallback to gear
+    const iconVal = (iconInput.value || "⚙️").trim(); // Fallback to gear (stored icon value, kept as it was)
 
     if (!val || val.toLowerCase() === "general") return;
 

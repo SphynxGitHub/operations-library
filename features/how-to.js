@@ -1574,7 +1574,7 @@ export function promoteLocalSOPToMaster(localId) {
     OL.closeModal();
     renderHowToLibrary(); // Refresh grid to show new status
     
-    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
+    alert(`"${localSOP.name}" is now a Master Template!`);
 };
 
 export function renderHTRequirements(ht) {
@@ -1590,7 +1590,7 @@ export function renderHTRequirements(ht) {
                 
                 <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'targetId', this.value)">
                     <option value="">-- Target Function --</option>
-                    ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>⚙️ ${esc(f.name)}</option>`).join('')}
+                    ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}
                 </select>
                 <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTRequirement('${ht.id}', ${idx})">×</button>
             </div>
@@ -1598,7 +1598,7 @@ export function renderHTRequirements(ht) {
             <div style="display:flex; gap:10px; align-items:center;">
                 <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'clientGuideId', this.value)">
                     <option value="">-- Client Helper Guide (SOP) --</option>
-                    ${allGuides.filter(g => g.id !== ht.id).map(g => `<option value="${g.id}" ${req.clientGuideId === g.id ? 'selected' : ''}>📖 ${esc(g.name)}</option>`).join('')}
+                    ${allGuides.filter(g => g.id !== ht.id).map(g => `<option value="${g.id}" ${req.clientGuideId === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
                 </select>
                 <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Instructions for client..." 
                        value="${esc(req.description || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'description', this.value)">
@@ -1654,7 +1654,7 @@ export function filterHTAppSearch(htId, query) {
     // 4. Render results
     listEl.innerHTML = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
-            ${String(app.id).includes('local') ? '📍' : '🏛️'} ${esc(app.name)}
+            ${esc(app.name)} <span class="tiny muted">(${String(app.id).includes('local') ? 'local' : 'master'})</span>
         </div>
     `).join('') || '<div class="search-result-item muted">No matching items found</div>';
 };
@@ -1716,7 +1716,7 @@ export function filterHTResourceSearch(htId, query) {
     
     listEl.innerHTML = availableResources.map(res => `
         <div class="search-result-item" onmousedown="OL.toggleHTResource('${htId}', '${res.id}')">
-            🛠️ ${esc(res.name)}
+            ${esc(res.name)}
         </div>
     `).join('') || '<div class="search-result-item muted">No resources found</div>';
 };
@@ -1827,7 +1827,7 @@ export function deleteSOP(clientId, htId) {
         const backlinks = OL.getSOPBacklinks(htId);
         if (backlinks.length > 0) {
             const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
-            if (!confirm(`⚠️ WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
+            if (!confirm(`WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
         }
     }
 
@@ -1843,7 +1843,7 @@ export function deleteSOP(clientId, htId) {
     // 3. Contextual Execution
     if (isVaultView) {
         // --- MASTER VAULT DELETE ---
-        if (!confirm(`⚠️ PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
+        if (!confirm(`PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
         
         state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
         // Scrub the ID from every single client's shared list
@@ -1878,7 +1878,7 @@ export function deleteSOP(clientId, htId) {
 export function importHowToToProject() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📚 Link Master SOP</div>
+            <div class="modal-title-text">Link Master SOP</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -1910,7 +1910,7 @@ export function filterMasterHowToImport(query) {
 
     listEl.innerHTML = available.map(ht => `
         <div class="search-result-item" onmousedown="OL.toggleSOPSharing('${client.id}', '${ht.id}'); OL.closeModal();">
-            📖 ${esc(ht.name)}
+            ${esc(ht.name)}
         </div>
     `).join('') || `<div class="search-result-item muted">No unlinked guides found.</div>`;
 };
@@ -1983,7 +1983,7 @@ export function filterTaskHowToSearch(taskId, query, isVault, clientId) {
     container.innerHTML = results.map(guide => `
         <div class="search-result-item is-clickable" 
              onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault}, '${clientId || ''}')">
-            📖 ${esc(guide.name)}
+            ${esc(guide.name)}
         </div>
     `).join('');
 };
@@ -2164,7 +2164,7 @@ export function filterResourceSOPLinker(resId, query) {
 
     listEl.innerHTML = availableSOPs.map(sop => `
         <div class="search-result-item" onmousedown="OL.toggleSOPToResource('${sop.id}', '${resId}')">
-            📖 ${esc(sop.name)}
+            ${esc(sop.name)}
         </div>
     `).join('') || '<div class="search-result-item muted">No unlinked SOPs found</div>';
 }

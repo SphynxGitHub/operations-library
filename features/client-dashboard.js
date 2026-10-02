@@ -104,7 +104,7 @@ export function renderClientDashboard() {
         if (!getActiveClient()) {
             container.innerHTML = `
                 <div>
-                    <div class="spinner">⏳</div>
+                    <div class="spinner"><i data-lucide="hourglass" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></div>
                     <h3 class="muted">Connecting to Registry...</h3>
                 </div>`;
             return;
@@ -121,7 +121,7 @@ export function renderClientDashboard() {
             <div class="header-actions">
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
                 ${!isPartnerViewer && state.adminMode === true ? `<button class="btn small soft" onclick="OL.openStatusKpis()" title="Where projects are and how long they stay">Pipeline KPIs</button>` : ''}
-                ${!isPartnerViewer ? `<button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>` : ''}
+                ${!isPartnerViewer ? `<button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">Migration</button>` : ''}
                 ${isPartnerViewer ? `<button class="btn small soft" onclick="OL.editPipelineStatuses()" title="Customize your pipeline stages">Edit Statuses</button>` : ''}
                 ${isPartnerViewer ? `<button class="btn small soft" onclick="OL.openOnboardingWizard()" title="Guided setup" style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="rocket" style="width:14px;height:14px;"></i> Get Started
@@ -460,7 +460,7 @@ export async function createNewClient({ name, contact = '', email = '', status =
   const teamNotification = {
     id: notificationId,
     type: "client_onboarded",
-    title: "🚀 New Client Onboarded",
+    title: "New Client Onboarded",
     message: `${name} has been onboarded to Operations Library.`,
     clientId: clientId,
     clientName: name,
@@ -523,7 +523,7 @@ function referenceTemplates() {
             ]
         },
         { name: "Compliance Documents", type: "Compliance", adminPinned: true, 
-          isContainer: true, // 🚀 Custom flag for specific UI
+          isContainer: true, // Custom flag for specific UI
           files: [
               { name: "ADV", url: "", id: uid() },
               { name: "CRS", url: "", id: uid() },
@@ -622,7 +622,7 @@ export function getDynamicPartners() {
         .map(c => ({
             id: c.id,
             name: c.meta.name,
-            logo: "🤝"
+            logo: ""
         }));
 };
 
@@ -733,7 +733,7 @@ export function openClientProfileModal(clientId) {
 
     const partnerDropdownHtml = `
         <div class="card-section" style="margin-top: 20px; padding: 15px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 8px;">
-            <label class="modal-section-label" style="color: var(--accent);">🤝 LINK TO PARTNER PORTAL</label>
+            <label class="modal-section-label" style="color: var(--accent);">LINK TO PARTNER PORTAL</label>
             <div style="margin-top: 10px;">
                 <select class="modal-input tiny" 
                         style="width: 100%; cursor: pointer;"
@@ -1369,7 +1369,7 @@ export function renderPartnerDashboard(leadProject, container) {
         <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
+                    <h1 style="margin:0;">${esc(leadProject.meta.name)} Portfolio</h1>
                     <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
                 </div>
                 ${(!window.IS_GUEST || window.location.search.includes('access=')) ? `
@@ -1390,7 +1390,7 @@ export function renderPartnerDashboard(leadProject, container) {
                 </div>
             `).join('') : `
                 <div style="grid-column: 1/-1; padding: 100px; text-align: center; opacity: 0.5;">
-                    <div style="font-size: 40px; margin-bottom: 20px;">📂</div>
+                    <div style="font-size: 40px; margin-bottom: 20px;"><i data-lucide="folder-open" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></div>
                     <h3>No clients assigned yet.</h3>
                     <p class="small">Assign clients to this partner in their Profile Settings.</p>
                 </div>

@@ -162,7 +162,7 @@ OL.renderBusinessTimeReports = function() {
                 return `
                     <div class="card" style="padding: 14px; cursor:pointer;" onclick="OL.openTimeReportModal('${c.id}')" title="Click for Itemized Client Audit">
                         <div style="font-weight:bold; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between;">
-                            <span>📁 ${esc(c.meta?.name || c.id)}</span>
+                            <span>${esc(c.meta?.name || c.id)}</span>
                             <span class="tiny muted">${m.burnRate}% Scoped</span>
                         </div>
                         <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
@@ -289,7 +289,7 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                         return `
                             <tr style="border-bottom: 1px solid var(--line);">
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); font-weight: 600;">
-                                    ${esc(t.title || t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">📝 ${esc(t.timeAuditNote)}</div>` : ''}
+                                    ${esc(t.title || t.name)}${t.timeAuditNote ? `<div class="tiny muted" style="margin-top:2px;">${esc(t.timeAuditNote)}</div>` : ''}
                                 </td>
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center;">
                                     ${OL.renderProjectPill ? OL.renderProjectPill(t.clientId, t.clientName) : esc(t.clientName)}
@@ -385,7 +385,7 @@ OL.renderClientReportView = function(clientId) {
             </div>
         </div>
 
-        <h4>📋 Task Itemization & Time Audit</h4>
+        <h4>Task Itemization & Time Audit</h4>
         <div class="table-scroll-container" style="position: relative; max-height: 400px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px;">
             <table class="matrix-table" style="width:100%; border-collapse: collapse; font-size:12px;">
                 <thead style="position: sticky; top: 0; z-index: 10; background: var(--panel-dark, #111); border-bottom: 2px solid var(--line);">

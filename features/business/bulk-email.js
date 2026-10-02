@@ -63,7 +63,7 @@ OL.renderBulkEmailToolbar = function() {
     const reqs = chosen && OL.listProjectRequests ? OL.listProjectRequests(chosen).filter(r => !['Done', "Don't Do"].includes(r.status)) : [];
     bar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:520; padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; border:1px solid #a855f7; background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:94vw;';
     bar.innerHTML = `
-        <strong class="tiny" style="white-space:nowrap;">✉️ ${ids.length} email${ids.length === 1 ? '' : 's'} selected</strong>
+        <strong class="tiny" style="white-space:nowrap;">${ids.length} email${ids.length === 1 ? '' : 's'} selected</strong>
         <button class="btn tiny soft" onclick="OL.bulkEmailAction('archive')"><i data-lucide="archive" style="width:11px;height:11px;"></i> Archive</button>
         <button class="btn tiny soft" onclick="OL.bulkEmailAction('unarchive')"><i data-lucide="inbox" style="width:11px;height:11px;"></i> To inbox</button>
         <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.bulkEmailAction('delete')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i> Delete</button>

@@ -379,7 +379,7 @@ export function renderFunctionModalInnerContent(fn, client) {
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
             <div class="banner info">
-                💠 This function is a <b>Master Vault Reference</b>. App mappings and project standards are saved locally.
+                This function is a <b>Master Vault Reference</b>. App mappings and project standards are saved locally.
             </div>
         ` : ''}
 

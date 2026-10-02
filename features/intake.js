@@ -362,7 +362,7 @@ function questionHtml(q, answers, client) {
         input = `
             <div id="${id}">
                 ${list.map((f, i) => `<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; font-size:13px;">
-                    <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;">📄 ${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>` : esc(f.name)}</span>
+                    <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;">${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>` : esc(f.name)}</span>
                     <button class="btn tiny soft" title="Removes it from this list only; the file stays in Drive" onclick="OL.intakeRemoveFile(${i})">✕</button></div>`).join('')}
                 <label class="btn small soft" style="cursor:pointer; display:inline-flex !important; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin:0;">Choose PDF files…
                     <input type="file" accept="application/pdf,.pdf" multiple style="display:none !important;" onchange="OL.intakeUploadFiles(this.files); this.value='';">
@@ -395,7 +395,7 @@ function renderStep() {
     const last = stepNeighbor(ob, 1) === null;
     openModal(`
         <div class="modal-head">
-            <div class="modal-title-text">📝 Intake questionnaire — ${esc(client.meta?.name || '')} · Step ${pos + 1} of ${vis.length}</div>
+            <div class="modal-title-text">Intake questionnaire — ${esc(client.meta?.name || '')} · Step ${pos + 1} of ${vis.length}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.intakeSaveAndClose()">Save &amp; close</button>
         </div>

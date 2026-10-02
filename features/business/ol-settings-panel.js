@@ -51,7 +51,7 @@ const PANEL_STYLE = `<style>
 
 OL.renderOlSettingsPanel = function() {
     const s = getOlSettings();
-    const t = s.templates, d = s.draftingFollowUp, ic = s.introCall, sc = s.scheduling;
+    const t = s.templates, d = s.draftingFollowUp, ic = s.introCall, sc = s.scheduling, zr = s.zapRepull;
     const linkable = new Set(s.emailLinkableResourceTypes || []);
     const banner = state.masterHasOlSettings ? '' : `<div class="card" style="padding:12px 16px; margin-bottom:14px; border:1px solid #f59e0b;"><b>One-time setup needed.</b> <span class="small">Run <code>supabase/migrations/2026_10_ol_settings.sql</code> in the Supabase SQL editor. Until then the defaults below are used and changes here cannot be saved.</span></div>`;
 
@@ -74,6 +74,13 @@ OL.renderOlSettingsPanel = function() {
             field('Task title', text('os-df-title', d.taskTitle), 'Fills in: {round} {client} {days}') +
             field('Task description', area('os-df-desc', d.taskDescription), 'Fills in: {round} {client} {days}') +
             field('Assigned to', personSelect('os-df-assignee', d.assignee, 'The project\'s Communications person'))) }
+
+        ${section('Zap export re-pull (Ongoing Maintenance)', 'Keeps each Ongoing Maintenance client\'s flow map current. A task to pull a fresh Zap JSON export is created once for each client already on the plan, once when a client is onboarded, and each time a new plan period starts.',
+            `<div style="margin-bottom:10px;">${check('os-zr-enabled', zr.enabled !== false, 'Create these re-pull tasks')}</div>` +
+            field('Task title', text('os-zr-title', zr.taskTitle), 'Fills in: {client} {reason}') +
+            field('Task description', area('os-zr-desc', zr.taskDescription), 'Fills in: {client} {reason}') +
+            `<div class="os-row">${field('Due (days from creation)', numIn('os-zr-due', zr.dueInDays), 'For a new plan period, the task is due on its start date if that is later.')}` +
+            `${field('Assigned to', personSelect('os-zr-assignee', zr.assignee, 'The project\'s Communications person'))}</div>`)}
 
         ${section('Intro calls', 'A calendar event matched to a project whose title contains one of the words below gets a review task ahead of the call.',
             `<div style="margin-bottom:10px;">${check('os-ic-enabled', ic.enabled !== false, 'Create a review task for intro calls')}</div>` +
@@ -127,6 +134,7 @@ OL.saveOlSettings = function() {
             enabled: on('os-df-enabled'), afterDays: Math.max(1, num('os-df-after', d.draftingFollowUp.afterDays)), repeatEveryDays: Math.max(1, num('os-df-repeat', d.draftingFollowUp.repeatEveryDays)),
             taskTitle: v('os-df-title'), taskDescription: v('os-df-desc'), assignee: v('os-df-assignee'),
         },
+        zapRepull: { enabled: on('os-zr-enabled'), taskTitle: v('os-zr-title'), taskDescription: v('os-zr-desc'), dueInDays: Math.round(num('os-zr-due', d.zapRepull.dueInDays)), assignee: v('os-zr-assignee') },
         introCall: { enabled: on('os-ic-enabled'), titleKeywords: v('os-ic-words'), daysBefore: num('os-ic-days', d.introCall.daysBefore), taskTitle: v('os-ic-title'), assignee: v('os-ic-assignee') },
         scheduling: {
             greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,

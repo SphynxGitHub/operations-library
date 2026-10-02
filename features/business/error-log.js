@@ -703,7 +703,7 @@ OL.emailErrorInContext = function(id) {
     if (typeof OL.openComposeEmailModal !== 'function') { alert('Email is not available here.'); return; }
     OL.closeModal?.();
     OL.openComposeEmailModal({
-        title: `✉️ Email about error${client ? ' · ' + (client.meta?.name || '') : ''}`,
+        title: `Email about error${client ? ' · ' + (client.meta?.name || '') : ''}`,
         to,
         subject: `${client?.meta?.name ? client.meta.name + ' — ' : ''}Error: ${r.title || r.service || 'automation'}`,
         bodyHtml,

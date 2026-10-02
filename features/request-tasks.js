@@ -208,7 +208,7 @@ function linkPickerHtml(client, item) {
     const pending = String(item.status || '') === 'Backlog';
     const linkedClient = rows.some((r) => r.linked && r.client);
     return `
-        <div class="modal-head"><div class="modal-title-text">🔗 Link tasks to: ${esc(requestName(client, item))}</div><div class="spacer"></div>
+        <div class="modal-head"><div class="modal-title-text">Link tasks to: ${esc(requestName(client, item))}</div><div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeLinkTasksModal()">Done</button></div>
         <div class="modal-body" style="max-width:640px;">
             <div class="tiny muted" style="margin-bottom:8px;">Tick a task to link it to this request; untick to unlink. This includes the client's tasks.${pending ? ' This request is Pending (not in a round yet).' : ''}</div>

@@ -57,7 +57,7 @@ export function createZapImport(deps) {
   const active = () => { const id = state.activeClientId; return { id, client: state.clients && state.clients[id] }; };
   const libraryOf = (client) => { client.projectData = client.projectData || {}; client.projectData.localResources = client.projectData.localResources || []; return client.projectData.localResources; };
   const findCard = (library, zap) => library.find((r) => r.type === 'Zap' && (String(r.originalZapId) === String(zap.zapId)
-    || String(r.name || '').toLowerCase() === `⚡ ${String(zap.zapName || '').replace(/^⚡\s*/, '').trim()}`.toLowerCase()));
+    || String(r.name || '').replace(/^⚡\s*/, '').trim().toLowerCase() === String(zap.zapName || '').replace(/^⚡\s*/, '').trim().toLowerCase()));
 
   // ---------- reading the file and working out what is different ----------
 

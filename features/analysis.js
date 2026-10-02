@@ -209,7 +209,7 @@ export async function deleteAnalysis(anlyId, isVaultMode) {
     if (container) container.innerHTML = ""; // Wipe the matrix from view immediately
     
     state.activeMatrixId = null;
-    window.isMatrixActive = false; // 🔓 Release the lock
+    window.isMatrixActive = false; // Release the lock
 
     renderAnalysisModule(isVaultMode);
     console.log("🗑️ Analysis deleted and persisted.");
@@ -391,7 +391,7 @@ export function pushMatrixToMasterLibrary(anlyId) {
     state.master.analyses.push(masterCopy);
 
     OL.persist().then(() => {
-        alert(`✅ "${anly.name}" saved to Vault with app data.`);
+        alert(`"${anly.name}" saved to Vault with app data.`);
         window.location.hash = '#/vault/analyses';
         renderAnalysisModule(true);
     });
@@ -500,7 +500,7 @@ export function openAnalysisMatrix(analysisId, isMaster) {
                                                 <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})">×</button>
                                             </div>
                                             <span class="is-clickable" onclick="OL.openAppModal('${matchedApp?.id}')" style="${isWinner ? 'color: var(--vault-gold); font-weight: bold;' : ''}">
-                                                ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown')}
+                                                ${isWinner ? '' : ''}${esc(matchedApp?.name || 'Unknown')}
                                             </span>
                                         </div>
                                     </th>`;
@@ -566,7 +566,7 @@ export function openAnalysisMatrix(analysisId, isMaster) {
                             <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line); font-weight: bold; padding:.5%;">
                                 ${totalWeight.toFixed(1)}%
                                 <div id="balance-button" onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
-                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️</div>
+                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%"></div>
                             </td>
                             ${(anly.apps || []).map(appObj => {
                                 const score = OL.calculateAnalysisScore(appObj, anly.features || []);
@@ -697,7 +697,7 @@ export function renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspa
                 <tr class="category-header-row" style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--line);">
                     <td colspan="${totalColspan}" style="padding: 10px 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="tiny muted">📁</span>
+                            <span class="tiny muted"><i data-lucide="folder" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                             <span class="is-clickable"
                                   style="color: var(--accent); font-weight: bold; text-transform: uppercase; cursor: pointer;"
                                   onclick="OL.openCategoryManagerModal('${analysisId}', '${esc(catName)}', ${masterFlag})">
@@ -719,7 +719,7 @@ export function renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspa
                             style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
                             onclick="OL.editFeatureModal('${analysisId}', '${featId}', ${masterFlag})">
                         ${esc(feat.name)}
-                        <span style="font-size: 10px; opacity: 0.3;">📝</span>
+                        <span style="font-size: 10px; opacity: 0.3;"><i data-lucide="pencil" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                     </span>
                 </div>
                 <div style="font-size: 10px; color: var(--text-dim); line-height: 1.3; font-style: italic; max-width: 260px; padding-left: 20px;">
@@ -1301,7 +1301,7 @@ export function renameMatrix(anlyId, newName, isMaster) {
 // PRICING PARAMETERS //
 // 🎯 Optimized Total Cost Calculation
 export function calculateAppTotalCost(appObj) {
-    let total = 0; // 🚀 No longer starts with basePrice
+    let total = 0; // No longer starts with basePrice
 
     // 1. Calculate Tier Cost (High-Water Mark)
     const activeTierNames = new Set();
@@ -1448,7 +1448,7 @@ export function filterAnalysisAppSearch(anlyId, isMaster, query) {
     let html = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.executeAddAppToAnalysis('${anlyId}', '${app.id}', ${isMaster})">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>💻 ${esc(app.name)}</span>
+                <span>${esc(app.name)}</span>
                 <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}">
                     ${String(app.id).startsWith('local') ? 'LOCAL' : 'MASTER'}
                 </span>
@@ -1474,7 +1474,7 @@ export function filterAnalysisAppSearch(anlyId, isMaster, query) {
 export function addAppToAnalysis(anlyId, isMaster) {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">💻 Add App to Matrix</div>
+            <div class="modal-title-text">Add App to Matrix</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -1534,7 +1534,7 @@ export function filterSwapAppSearch(anlyId, oldAppId, isMaster, query) {
     listEl.innerHTML = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.executeSwapAppInAnalysis('${anlyId}', '${oldAppId}', '${app.id}', ${isMaster})">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>💻 ${esc(app.name)}</span>
+                <span>${esc(app.name)}</span>
                 <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}">
                     ${String(app.id).startsWith('local') ? 'LOCAL' : 'MASTER'}
                 </span>
@@ -1702,7 +1702,7 @@ export function universalFeatureSearch(query, anlyId, isMaster, targetElementId,
             document.getElementById('feat-cat-input').value = '${esc(feat.category || "General")}';
             this.parentElement.style.display = 'none';
         ">
-            ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
+            ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
         </div>
     `).join('');
 
@@ -1784,7 +1784,7 @@ export function syncFeatureChanges(oldName, newData, isVault) {
 export function promptFeatureCategory(anlyId, featName, isMaster) {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📁 Step 2: Category for "${esc(featName)}"</div>
+            <div class="modal-title-text">Step 2: Category for "${esc(featName)}"</div>
         </div>
         <div class="modal-body">
             <input type="text" id="cat-focus-target" class="modal-input" 
@@ -1854,7 +1854,7 @@ export function openCategoryManagerModal(anlyId, catName, isMaster) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📁 Manage Category: ${esc(catName)}</div>
+            <div class="modal-title-text">Manage Category: ${esc(catName)}</div>
         </div>
         <div class="modal-body">
             <label class="modal-section-label">Rename Category Globally</label>
@@ -1873,7 +1873,7 @@ export function openCategoryManagerModal(anlyId, catName, isMaster) {
                 <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,0.2);">
                     ${uniqueLibFeats.length > 0 ? uniqueLibFeats.map(f => `
                         <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
-                            <span>✨ ${esc(f.name)}</span>
+                            <span>${esc(f.name)}</span>
                             <button class="btn tiny soft" onclick="OL.executeAddFeature('${anlyId}', '${esc(f.name)}', ${isMaster}, '${esc(catName)}', true)">+ Add</button>
                         </div>
                     `).join('') : '<div class="padding-20 muted tiny center">All library features for this category are already in your matrix.</div>'}
@@ -1959,7 +1959,7 @@ export function executeAddCategoryToAnalysis(anlyId, catName, isMaster) {
                 newRow.innerHTML = `
                     <td colspan="${totalColspan}" style="padding: 10px 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="tiny muted">📁</span>
+                            <span class="tiny muted"><i data-lucide="folder" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                             <span style="color: var(--accent); font-weight: bold; text-transform: uppercase;">
                                 ${esc(cleanName)}
                             </span>
@@ -2079,7 +2079,7 @@ export function openGlobalContentManager() {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📚 Content & Library Manager</div>
+            <div class="modal-title-text">Content & Library Manager</div>
         </div>
         <div class="modal-body">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -2131,7 +2131,7 @@ export function renderLibraryManagerRows(allFeats = []) {
                 <tr class="lib-category-header" style="background: rgba(255,255,255,0.03);">
                     <td colspan="3" style="padding: 12px 10px; border-bottom: 1px solid var(--line);">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="opacity: 0.5;">📁</span>
+                            <span style="opacity: 0.5;"><i data-lucide="folder" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                             <span style="font-weight: bold; color: var(--accent); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px;">
                                 ${esc(rawCat)}
                             </span>
@@ -2146,7 +2146,7 @@ export function renderLibraryManagerRows(allFeats = []) {
         html += `
             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                 <td style="padding-left: 35px; width: 5%;">
-                    ${isMaster ? '🔒' : '✏️'}
+                    ${isMaster ? '<i data-lucide="lock" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="pencil" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>'}
                 </td>
                 <td style="padding: 10px 8px;">
                     ${isMaster ? 
@@ -2231,7 +2231,7 @@ export function editFeatureModal(anlyId, featId, isMaster) {
     const currentCat = feat.category || "General";
 
     const html = `
-        <div class="modal-head"><div class="modal-title-text">⚙️ Edit Feature</div></div>
+        <div class="modal-head"><div class="modal-title-text">Edit Feature</div></div>
         <div class="modal-body">
             <div style="margin-bottom: 15px;">
                 <label class="modal-section-label">Feature Name</label>
@@ -2315,7 +2315,7 @@ export async function finalizeFeatureAddition(anlyId, featName, category, isMast
     // 1. Check if already on this matrix
     const onMatrix = (anly.features || []).some(f => f.name.toLowerCase() === cleanName.toLowerCase());
     if (onMatrix) {
-        alert(`🚫 "${cleanName}" is already in this analysis matrix.`);
+        alert(`"${cleanName}" is already in this analysis matrix.`);
         return;
     }
 
@@ -2357,7 +2357,7 @@ export function addFeatureToAnalysis(anlyId, isMaster) {
     const excludeData = JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;');
 
     const html = `
-        <div class="modal-head"><div class="modal-title-text">🔎 Add Feature</div></div>
+        <div class="modal-head"><div class="modal-title-text">Add Feature</div></div>
         <div class="modal-body">
             <label class="modal-section-label">Feature Name</label>
             <input type="text" id="feat-name-input" class="modal-input" 
@@ -2418,7 +2418,7 @@ export function pushFeatureToVault(featName) {
       masterInbox.categories.push(feat.category);
     }
     OL.persist();
-    alert(`✅ "${featName}" copied to Vault Submissions.`);
+    alert(`"${featName}" copied to Vault Submissions.`);
   }
   OL.openGlobalContentManager();
 };
@@ -2586,7 +2586,7 @@ export function universalCategorySearch(query, type, targetElementId, extraParam
         return `
             <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
                 <div onmousedown="event.stopPropagation(); OL.handleCategorySelection('${esc(cat)}', '${type}', window._tmpSearchParams)" style="flex:1;">
-                    <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
+                    <span>${isFunction ? '<i data-lucide="settings" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="folder" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>'} ${esc(cat)}</span>
                 </div>
             </div>`;
     }).join('');

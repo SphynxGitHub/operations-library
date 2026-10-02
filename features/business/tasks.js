@@ -1641,7 +1641,7 @@ OL.openEditTaskAssigneeDropdown = function(event, clientId, taskId) {
     if (window.lucide) lucide.createIcons();
 };
 
-// ⏱️ Timer & Quick Time Logging Dropdown
+// ⏱ Timer & Quick Time Logging Dropdown
 OL.openTaskTimerDropdown = function(event, clientId, taskId) {
     const popover = OL.createPopoverContainer(event);
     const isTimerRunning = OL.activeTaskTimer.taskId === taskId;
@@ -2051,10 +2051,10 @@ OL.renderProjectPill = function(clientId, name, opts = {}) {
     const label = esc(name || (clientId && state.clients?.[clientId]?.meta?.name) || 'Unknown Project');
     const extraClass = opts.extraClass ? ` ${opts.extraClass}` : '';
     if (!clientId) {
-        return `<span class="pill tiny project-pill is-static${extraClass}">📁 ${label}</span>`;
+        return `<span class="pill tiny project-pill is-static${extraClass}">${label}</span>`;
     }
     const stop = opts.stopPropagation !== false ? "event.stopPropagation();" : "";
-    return `<span class="pill tiny project-pill${extraClass}" onclick="${stop} OL.navigateToClientProject('${clientId}')" title="Jump to ${label}">📁 ${label}</span>`;
+    return `<span class="pill tiny project-pill${extraClass}" onclick="${stop} OL.navigateToClientProject('${clientId}')" title="Jump to ${label}">${label}</span>`;
 };
 
 // name + the clientId whose roster it should resolve against -> a
@@ -2187,7 +2187,7 @@ OL.renderInContextTaskModal = function(client, task) {
                     <button class="btn tiny soft" onclick="OL.deleteTask('${client?.id}', '${task.id}')" style="color:#ef4444; font-weight:bold; display:flex; align-items:center; gap:4px;" title="Delete Task">
                         <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
                     </button>
-<button class="btn tiny soft" onclick="OL.openContextCompose({ kind: 'task', clientId: '${client?.id}', id: '${task.id}' })" title="New email about this task (opens docked; this window stays open)" style="flex-shrink:0;">✉️ Email</button>
+<button class="btn tiny soft" onclick="OL.openContextCompose({ kind: 'task', clientId: '${client?.id}', id: '${task.id}' })" title="New email about this task (opens docked; this window stays open)" style="flex-shrink:0;">Email</button>
                                         <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0;">✕</button>
                 </div>
             </div>
@@ -2343,7 +2343,7 @@ OL.renderInContextTaskModal = function(client, task) {
 
                     ${task.timeAuditNote ? `
                         <div style="margin-bottom: 20px; padding:10px; background:rgba(251, 191, 36, 0.08); border:1px solid #fbbf24; border-radius:6px;" class="tiny">
-                            <strong>📝 Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
+                            <strong>Retroactive Time Audit Note:</strong> ${esc(task.timeAuditNote)}
                         </div>
                     ` : ''}
 
@@ -2400,7 +2400,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
         const evt = OL._taskParentEventCache?.[task.parentEventId];
         parentLinkHTML = `<div class="tiny muted" style="margin-bottom:8px; cursor:pointer;" onclick="OL.closeModal(); OL.openCalendarEventModal('${task.parentEventId}')"><i data-lucide="corner-left-up" style="width:10px;height:10px;vertical-align:sub;"></i> Part of event <strong>${esc(evt ? evt.title : 'event')}</strong> — comments here also show on its thread</div>`;
         if (task.meetingSummaryEventId) {
-            parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openMeetingSummaryEmail('${task.meetingSummaryEventId}')">✉️ Prepare summary email</button>`;
+            parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openMeetingSummaryEmail('${task.meetingSummaryEventId}')">Prepare summary email</button>`;
         }
     }
 
@@ -2410,11 +2410,11 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
     }
 
     if (task.reviewNotifyKey) {
-        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openReviewNotification('${task.reviewNotifyKey}', '${client?.id || ''}')">📨 Open the notification</button>`;
+        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openReviewNotification('${task.reviewNotifyKey}', '${client?.id || ''}')">Open the notification</button>`;
     }
 
     if (task.testRunId) {
-        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openTestRun('${task.testRunId}', '${client?.id || ''}')">🧪 Open checklist</button>`;
+        parentLinkHTML += `<button class="btn tiny primary" style="margin-bottom:8px;" onclick="OL.closeModal(); OL.openTestRun('${task.testRunId}', '${client?.id || ''}')">Open checklist</button>`;
     }
 
     return `
@@ -2977,7 +2977,7 @@ OL.renderRichTextField = function(opts) {
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Heading" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'h4')">H</button>
                 ${btn('insertUnorderedList', '• List', 'Bullet list')}
                 ${btn('insertOrderedList', '1. List', 'Numbered list')}
-                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')">❝</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')"></button>
                 ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
                 <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
                 ${btn('justifyLeft', '<i data-lucide="align-left" style="width:11px;height:11px;"></i>', 'Align left')}
@@ -4013,7 +4013,7 @@ OL.loadLinkedEmailsForTask = async function(taskId) {
         return;
     }
     if (!data || !data.length) {
-        container.innerHTML = `No emails linked yet — use the 🔗 icon on an email in Communications to link one here.`;
+        container.innerHTML = `No emails linked yet — use the icon on an email in Communications to link one here.`;
         return;
     }
 
@@ -4130,7 +4130,7 @@ OL.openEditTaskTimeModal = function(clientId, taskId) {
             <div class="modal-body">
                 <div style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 6px; border: 1px solid var(--line);">
                     <strong style="display:block; font-size:13px;">${esc(task.title || task.name)}</strong>
-                    <div class="tiny muted" style="margin-top:2px;">📁 ${esc(client.meta?.name || clientId)}</div>
+                    <div class="tiny muted" style="margin-top:2px;">${esc(client.meta?.name || clientId)}</div>
                 </div>
 
                 <form onsubmit="event.preventDefault(); OL.saveTaskTimeEdit('${clientId}', '${taskId}');">
@@ -4295,7 +4295,7 @@ OL.openQuickRequestPicker = function() {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔎 Add Request — ${esc(client.meta?.name || clientId)}</div>
+            <div class="modal-title-text">Add Request — ${esc(client.meta?.name || clientId)}</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -4333,12 +4333,12 @@ OL.filterQuickRequestResources = function(query, clientId) {
 
     let html = "";
     if (localMatches.length > 0) {
-        html += `<div class="search-group-header">📍 Available in Project</div>`;
+        html += `<div class="search-group-header">Available in Project</div>`;
         html += localMatches.map(res => `
             <div class="search-result-item" onmousedown="OL.executeQuickRequestAdd('${res.id}', '${clientId}')">
                 <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🛠️</span>
+                        <span><i data-lucide="wrench" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                         <div>
                             <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
                             <div class="tiny muted">${esc(res.type || "General")}</div>
@@ -4350,12 +4350,12 @@ OL.filterQuickRequestResources = function(query, clientId) {
         `).join('');
     }
     if (masterMatches.length > 0) {
-        html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
+        html += `<div class="search-group-header" style="margin-top:10px;">Master Vault Standards</div>`;
         html += masterMatches.map(res => `
             <div class="search-result-item" onmousedown="OL.executeQuickRequestAdd('${res.id}', '${clientId}')">
                 <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🛠️</span>
+                        <span><i data-lucide="wrench" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                         <div>
                             <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
                             <div class="tiny muted">${esc(res.type || "General")}</div>

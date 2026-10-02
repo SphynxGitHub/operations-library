@@ -67,7 +67,6 @@ function localEntries() {
 }
 
 const GROUP_ORDER = ['Projects', 'Tasks', 'Requests', 'Resources', 'Applications', 'Functions', 'Emails', 'Meetings', 'Errors'];
-const GROUP_ICON = { Projects: '📁', Tasks: '☑️', Requests: '📝', Resources: '🧩', Applications: '💻', Functions: '⚙️', Emails: '✉️', Meetings: '📅', Errors: '⚠️' };
 
 // Best matches first: a title that starts with the query, then one that contains it, then matches elsewhere.
 export function rankEntries(entries, query) {
@@ -118,7 +117,7 @@ function panelHtml(query, local, remote, searching) {
     const body = GROUP_ORDER.filter((g) => groups[g]).map((g) => {
         const list = groups[g];
         const shown = st.expanded[g] ? list : list.slice(0, PER_GROUP);
-        return `<div class="search-category-label">${GROUP_ICON[g]} ${g} <span class="muted" style="font-weight:400;">(${list.length})</span></div>`
+        return `<div class="search-category-label">${g} <span class="muted" style="font-weight:400;">(${list.length})</span></div>`
             + shown.map((e) => {
                 st.shown.push(e);
                 return `<div class="search-result-item" data-gs="${st.shown.length - 1}" style="display:flex; justify-content:space-between; gap:10px; cursor:pointer;" onmousedown="event.preventDefault(); OL.globalSearchOpen(${st.shown.length - 1})">

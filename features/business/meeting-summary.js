@@ -196,7 +196,7 @@ OL.applyExtensionTimeEntries = async function() {
                 applied += ok.length;
             }
         }
-        if (applied) { console.log(`⏱️ Applied ${applied} time entr${applied === 1 ? 'y' : 'ies'} from the Chrome extension.`); OL.refreshTaskView?.(); }
+        if (applied) { console.log(`⏱ Applied ${applied} time entr${applied === 1 ? 'y' : 'ies'} from the Chrome extension.`); OL.refreshTaskView?.(); }
     } catch (err) {
         console.warn('Time entry check failed:', err?.message || err);
     } finally {
@@ -647,7 +647,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
 
     openModal(OL.composeShellHtml({
         prefix: 'ms',
-        title: '✉️ Meeting summary email',
+        title: 'Meeting summary email',
         toLabel: 'To (everyone on the meeting except you)',
         subject: draft.subject,
         messageHtml: messageTextToHtml(draft.message, OL._msState.recordingUrl), messageMinHeight: 260,

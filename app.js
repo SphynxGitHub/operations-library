@@ -258,11 +258,11 @@ OL.importDatabaseBackup = function() {
                     updateAndSync(() => {
                         Object.assign(state, importedData);
                     });
-                    alert("✅ System state restored successfully!");
+                    alert("System state restored successfully!");
                     window.location.reload();
                 }
             } catch (err) {
-                alert("❌ Invalid JSON backup file.");
+                alert("Invalid JSON backup file.");
             }
         };
         reader.readAsText(file);
@@ -426,11 +426,11 @@ OL.importDatabaseBackup = function() {
                     updateAndSync(() => {
                         Object.assign(state, importedData);
                     });
-                    alert("✅ System state restored successfully!");
+                    alert("System state restored successfully!");
                     window.location.reload();
                 }
             } catch (err) {
-                alert("❌ Invalid JSON backup file.");
+                alert("Invalid JSON backup file.");
             }
         };
         reader.readAsText(file);
@@ -659,7 +659,7 @@ window.buildLayout = function () {
                 ` : ''}
 
                 ${(isAdmin || effectiveAdminMode || state.teamMemberMode) && !state.activeClientId ? `
-                    <!-- 🏢 BUSINESS MANAGER MENU -->
+                    <!-- BUSINESS MANAGER MENU -->
                     <div class="client-nav-zone admin-workspace">
                         <div class="menu-category-label">Business Manager</div>
                         <nav class="menu">
@@ -671,7 +671,7 @@ window.buildLayout = function () {
                             `).join('')}
                         </nav>
                         
-                        <!-- 🏛️ TEMPLATE VAULT / BUILDER MENU -->
+                        <!-- TEMPLATE VAULT / BUILDER MENU -->
                         ${permittedMasterTabs.length > 0 ? `
                             <div class="divider" style="margin: 15px 0;"></div>
                             <div class="menu-category-label">Template Vault</div>
@@ -686,7 +686,7 @@ window.buildLayout = function () {
                         ` : ''}
                     </div>
                 ` : client ? `
-                    <!-- 📁 CLIENT PROJECT WORKSPACE MENU -->
+                    <!-- CLIENT PROJECT WORKSPACE MENU -->
                     <div class="client-nav-zone">
                         <div class="menu-category-label">Project Workspace</div>
                         <div class="client-profile-trigger" 
@@ -700,7 +700,7 @@ window.buildLayout = function () {
                             <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                             <div class="client-info">
                                 <div class="client-name">${esc(client.meta.name)}</div>
-                                <div class="client-meta">${isOwnPartnerLogin ? 'Partner Portal' : (!isPublic && !clientLogin) ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                                <div class="client-meta">${isOwnPartnerLogin ? 'Partner Portal' : (!isPublic && !clientLogin) ? 'View Profile ' : 'Project Portal'}</div>
                             </div>
                         </div>
 
@@ -708,7 +708,7 @@ window.buildLayout = function () {
                             <button class="btn tiny primary" 
                                     style="margin: 10px 0; width: 100%; background: #fbbf24; color: black; font-weight: bold; border: none;"
                                     onclick="window.location.hash='#/partner-dashboard'">
-                                👁️ VIEW AS PORTFOLIO
+                                VIEW AS PORTFOLIO
                             </button>
                         ` : ''}
 
@@ -757,7 +757,7 @@ window.buildLayout = function () {
                                 return `
                                     <a href="${item.href}" class="${isActive ? 'active' : ''}">
                                         <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
-                                        <span class="menu-item">${item.label}</span>${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                                        <span class="menu-item">${item.label}</span>${perm === 'view' ? '<i data-lucide="lock" class="lock-icon" title="Read Only" style="width:12px;height:12px;"></i>' : ''}
                                     </a>
                                 `;
                             }).join('')}
@@ -769,7 +769,7 @@ window.buildLayout = function () {
                 `}
             </div>
 
-            <!-- 🚀 SYSTEM UTILITY BAR (Fixed Footer) -->
+            <!-- SYSTEM UTILITY BAR (Fixed Footer) -->
             <div class="sidebar-footer" style="padding: 12px; border-top: 1px solid var(--line);">
                 <div class="tiny muted uppercase bold" style="margin-bottom:6px; font-size:9px; letter-spacing:0.05em;">System Controls</div>
                 ${typeof OL.renderSystemUtilityBar === 'function' ? OL.renderSystemUtilityBar() : ''}
@@ -901,7 +901,7 @@ window.handleRoute = function () {
             main.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
                     <div style="text-align:center;">
-                        <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                        <div style="font-size:24px;margin-bottom:10px;"><i data-lucide="hourglass" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></div>
                         <div>Loading project...</div>
                     </div>
                 </div>`;
@@ -1084,7 +1084,7 @@ OL.handleGlobalSearch = function(query) {
         html += `<div class="search-category-label">Projects</div>`;
         html += matchedClients.map(c => `
             <div class="search-result-item" onclick="OL.switchClient('${c.id}')">
-                <span>📁 ${esc(c.meta?.name || 'Unnamed')}</span>
+                <span>${esc(c.meta?.name || 'Unnamed')}</span>
                 <span class="tiny muted">${esc(c.meta?.status || '')}</span>
             </div>
         `).join('');
@@ -1094,7 +1094,7 @@ OL.handleGlobalSearch = function(query) {
         html += `<div class="search-category-label">Master Apps</div>`;
         html += matchedApps.map(a => `
             <div class="search-result-item" onclick="OL.openAppModal('${a.id}')">
-                <span>💻 ${esc(a.name || 'Unnamed')}</span>
+                <span>${esc(a.name || 'Unnamed')}</span>
                 <span class="tiny muted">Master Vault</span>
             </div>
         `).join('');
@@ -1137,7 +1137,7 @@ document.addEventListener('mousedown', (e) => {
     });
 });
 
-// ⌨️ GLOBAL ESCAPE-TO-CLOSE LISTENER
+// ⌨ GLOBAL ESCAPE-TO-CLOSE LISTENER
 document.addEventListener('keydown', (e) => {
     // 1. ESCAPE: Clear overlays
     if (e.key === 'Escape') {
@@ -1167,7 +1167,7 @@ document.addEventListener('keydown', (e) => {
         
         if (isInput) {
             e.target.blur(); 
-            console.log("⌨️ Entry saved via Enter");
+            console.log("⌨ Entry saved via Enter");
         }
     }
 });
@@ -1185,7 +1185,7 @@ OL.getCurrentContext = function() {
             data: state.master || {}, // Fallback to empty object
             isMaster: true,
             namespace: 'res-vlt-',
-            label: '🛡️ GLOBAL VAULT'
+            label: 'GLOBAL VAULT'
         };
     }
     
@@ -1195,7 +1195,7 @@ OL.getCurrentContext = function() {
             data: client.projectData,
             isMaster: false,
             namespace: 'local-prj-',
-            label: `📁 PROJECT: ${client.meta.name}`
+            label: `PROJECT: ${client.meta.name}`
         };
     }
 
@@ -1203,7 +1203,7 @@ OL.getCurrentContext = function() {
     return { 
         data: { localResources: [], resources: [] }, 
         isMaster: false, 
-        label: '⚠️ NO CONTEXT' 
+        label: 'NO CONTEXT' 
     };
 };
 
@@ -1214,7 +1214,7 @@ OL.registerView = function(renderFn) {
     if (document.querySelector('.matrix-table-container')) {
         OL.currentRenderer = renderFn;
         console.log(`🛡️ View Context Updated Silently (Matrix Active): ${renderFn.name}`);
-        return; // 🛑 Stop the process here!
+        return; // Stop the process here!
     }
 
     OL.currentRenderer = renderFn;
@@ -1293,3 +1293,17 @@ OL.handlePillInteraction = function(event, appId, fnId) {
         OL.openFunctionModal(fnId);
     }
 };
+
+
+// Icons written as <i data-lucide="..."> anywhere in the app (modals, menus, cards) are drawn as soon as they are added to the page.
+(function watchForIcons() {
+    if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+    let queued = false;
+    const draw = () => { queued = false; try { if (window.lucide) window.lucide.createIcons(); } catch (e) { /* icons are decoration */ } };
+    const start = () => new MutationObserver((muts) => {
+        if (queued) return;
+        if (!muts.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && (n.matches?.('i[data-lucide]') || n.querySelector?.('i[data-lucide]'))))) return;
+        queued = true; setTimeout(draw, 30);
+    }).observe(document.body, { childList: true, subtree: true });
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();

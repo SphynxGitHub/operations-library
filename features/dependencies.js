@@ -167,7 +167,7 @@ export function renderDependencySection(clientId, kind, id) {
             ${blockedBy.some((d) => d.kind === 'task' && d.item?.askKind && !isDone('task', d.item))
                 ? `<div class="tiny muted" style="padding:3px 6px;"><i data-lucide="clock" style="width:10px;height:10px;"></i> Waiting on the client for one of these — this is treated the same as flipping the task to a "Pending Client ..." status.</div>` : ''}
         </div>
-        ${(kind === 'task' || kind === 'request') ? `<button type="button" class="btn tiny soft" style="margin-bottom:6px; width:100%; justify-content:center;" onclick="OL.askClientAsDependency('${esc(clientId)}', '${kind}', '${esc(String(id))}')">✉️ Ask the client for something new…</button>` : ''}
+        ${(kind === 'task' || kind === 'request') ? `<button type="button" class="btn tiny soft" style="margin-bottom:6px; width:100%; justify-content:center;" onclick="OL.askClientAsDependency('${esc(clientId)}', '${kind}', '${esc(String(id))}')"> Ask the client for something new…</button>` : ''}
         <div class="dep-picker" data-dep-key="${esc(key)}">
         <input type="text" id="dep-search-${esc(key)}" class="modal-input tiny" placeholder="+ Add something this waits on (task, request, resource)…" value="${esc(OL._depSearch[key] || '')}" autocomplete="off"
                style="width:100%;" onfocus="OL.openDependencyPicker('${esc(clientId)}', '${kind}', '${esc(String(id))}')"

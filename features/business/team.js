@@ -65,7 +65,7 @@ OL.renderSphynxTeamPage = function() {
                         
                         <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
                             ${window.FORCE_ADMIN && m.authUserId === state.currentUser?.id ? `
-                                <span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Your admin login is linked to this card">✅ This is you</span>
+                                <span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Your admin login is linked to this card">This is you</span>
                             ` : window.FORCE_ADMIN ? `
                                 <button class="btn tiny soft" style="white-space:nowrap; font-size:10px; padding:3px 8px;" onclick="OL.linkMyAdminLoginToTeamMember('${m.id}')" title="Link your admin login to this card">
                                     Set Profile
@@ -73,9 +73,9 @@ OL.renderSphynxTeamPage = function() {
                             ` : ''}
                             
                             ${m.authUserId
-                                ? `<span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Has logged in">✅ Logged in</span>`
+                                ? `<span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Has logged in">Logged in</span>`
                                 : (m.setupToken
-                                    ? `<span class="tiny bold" style="color:#fbbf24; white-space:nowrap;" title="Setup link sent">⏳ Link sent</span>`
+                                    ? `<span class="tiny bold" style="color:#fbbf24; white-space:nowrap;" title="Setup link sent">Link sent</span>`
                                     : `<span class="tiny muted" style="white-space:nowrap;" title="No login set up">— No login</span>`)}
                             
                             <button class="btn tiny soft" onclick="OL.openTeamAccessModal('${m.id}')" title="Login & Permissions" style="padding:3px 8px; font-size:10px; display:inline-flex; align-items:center; gap:4px;">
@@ -216,9 +216,9 @@ OL.openTeamAccessModal = function(memberId) {
     const perms = member.permissions || {};
 
     const loginStatusHTML = member.authUserId
-        ? `<span style="color:#48bb78;">✅ ${esc(member.name)} has already logged in.</span>`
+        ? `<span style="color:#48bb78;">${esc(member.name)} has already logged in.</span>`
         : member.setupToken
-            ? `<span style="color:#fbbf24;">⏳ Setup link generated, not claimed yet.</span>`
+            ? `<span style="color:#fbbf24;">Setup link generated, not claimed yet.</span>`
             : `<span class="muted">No login set up yet.</span>`;
 
     const content = `

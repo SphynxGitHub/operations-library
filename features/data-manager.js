@@ -157,7 +157,7 @@ export function renderGlobalDataManager() {
 export function openMasterDataImporter() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🏛️ Import Master Data Tags</div>
+            <div class="modal-title-text">Import Master Data Tags</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -193,7 +193,7 @@ export function filterMasterDataImport(query) {
         <div class="search-result-item" onmousedown="OL.executeDataImport('${dp.id}')">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <span>${dp.isBundle ? '📦' : '🏷️'}</span>
+                    <span>${dp.isBundle ? '<i data-lucide="package" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="tag" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>'}</span>
                     <div>
                         <div class="bold">${esc(dp.name)}</div>
                         <div class="tiny muted">${dp.isBundle ? (dp.childIds?.length || 0) + ' Fields' : dp.key}</div>
@@ -244,12 +244,12 @@ export function renderDataRow(dp, allBundles) {
     return `
         <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
             <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${dp.id}')">
-                <div class="bold" style="font-size: 13px;">🏷️ ${esc(dp.name)}</div>
+                <div class="bold" style="font-size: 13px;">${esc(dp.name)}</div>
                 <div class="tiny muted" style="font-family: monospace;">${dp.key}</div>
             </div>
             <div class="pills-row" style="flex: 1; justify-content: flex-end;">
-                ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:8px;">📦 ${esc(b.name)}</span>`).join('')}
-                <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')">🔍</button>
+                ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:8px;">${esc(b.name)}</span>`).join('')}
+                <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')"><i data-lucide="search" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></button>
             </div>
         </div>
     `;
@@ -260,7 +260,7 @@ export function renderBundleRow(bn, allFields) {
     return `
         <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
             <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${bn.id}')">
-                <div class="bold" style="color: #fbbf24;">📦 ${esc(bn.name)}</div>
+                <div class="bold" style="color: #fbbf24;">${esc(bn.name)}</div>
                 <div class="tiny muted">${childCount} linked fields</div>
             </div>
             <button class="btn tiny soft" onclick="OL.editBundle('${bn.id}')">Map Fields</button>
@@ -289,26 +289,26 @@ export function openDataDetailModal(id) {
 
     let html = `
         <div class="modal-head">
-            <div class="modal-title-text">${dp.isBundle ? '📦' : '🏷️'} ${esc(dp.name)}</div>
+            <div class="modal-title-text">${dp.isBundle ? '<i data-lucide="package" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="tag" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>'} ${esc(dp.name)}</div>
         </div>
         <div class="modal-body">
             ${linkedResource ? `
                 <div class="card-section" style="background: rgba(56, 189, 248, 0.1); border: 1px solid #38bdf8; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <div class="tiny accent bold uppercase" style="margin-bottom: 5px;">Linked Logic Source</div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>📖 ${esc(linkedResource.name)}</span>
+                        <span>${esc(linkedResource.name)}</span>
                         <button class="btn tiny primary" onclick="OL.openResourceModal('${linkedResource.id}')">View Rules ➔</button>
                     </div>
                 </div>
             ` : ''}
 
             <div class="card-section">
-                <label class="modal-section-label">📉 DATA USAGE & FLOW</label>
+                <label class="modal-section-label">DATA USAGE & FLOW</label>
                 ${OL.renderDataFlowMiniMap(id)}
             </div>
 
             <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">📍 PROJECT BACKLINKS</label>
+                <label class="modal-section-label">PROJECT BACKLINKS</label>
                 <div class="dp-manager-list">
                     ${usage.map(u => `
                         <div class="pill soft is-clickable" style="margin-bottom:5px; display:flex; justify-content:space-between;" onclick="OL.openResourceModal('${u.resId}')">
@@ -390,7 +390,7 @@ export function editBundle(bundleId) {
 
     let html = `
         <div class="modal-head">
-            <div class="modal-title-text">📦 Edit Bundle: ${esc(bundle.name)}</div>
+            <div class="modal-title-text">Edit Bundle: ${esc(bundle.name)}</div>
         </div>
         <div class="modal-body">
             <div class="dp-manager-list">
@@ -451,7 +451,7 @@ export function renderDataTagPills(resId, stepId, datapoints) {
         return `
             <div class="pill purple" ${jumpAction} 
                  style="background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; display:flex; align-items:center; gap:5px; cursor:${jumpAction ? 'pointer' : 'default'}; padding: 4px 8px; border-radius: 4px;">
-                <span style="font-size:10px;">${dp.linkToResource ? '🔗' : '🏷️'} ${esc(dp.name)}</span>
+                <span style="font-size:10px;">${dp.linkToResource ? '<i data-lucide="link" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="tag" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>'} ${esc(dp.name)}</span>
                 <b class="is-clickable" style="opacity:0.5; padding: 0 4px; font-size: 12px;" 
                    onclick="event.stopPropagation(); OL.removeStepDatapoint('${resId}', '${stepId}', ${idx})">×</b>
             </div>

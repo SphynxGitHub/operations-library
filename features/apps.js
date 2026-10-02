@@ -173,7 +173,7 @@ export function renderAppsGrid() {
 export function openVaultDeploymentModal(clientId) {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">☁️ Deploy Master App</div>
+            <div class="modal-title-text">Deploy Master App</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -423,7 +423,7 @@ export function renderAppModalInnerContent(app, client) {
 
     const externalLinkHtml = `
         <div class="card-section" style="margin-bottom: 20px;">
-            <label class="modal-section-label">🌐 APP ACCESS LINK</label>
+            <label class="modal-section-label">APP ACCESS LINK</label>
             <div style="display: flex; gap: 10px; margin-top: 8px;">
                 <input type="text" class="modal-input tiny" 
                       style="flex: 1;"
@@ -434,10 +434,10 @@ export function renderAppModalInnerContent(app, client) {
                 ${app.loginUrl ? `
                     <a href="${app.loginUrl}" target="_blank" class="btn primary tiny" 
                       style="display: flex; align-items: center; gap: 6px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 15px;">
-                      🚀 LAUNCH
+                      LAUNCH
                     </a>
                 ` : `
-                    <button class="btn tiny soft" disabled style="opacity: 0.5; cursor: not-allowed;">🚀 LAUNCH</button>
+                    <button class="btn tiny soft" disabled style="opacity: 0.5; cursor: not-allowed;">LAUNCH</button>
                 `}
             </div>
             <div class="tiny muted" style="margin-top: 5px;">Direct link to the application login or dashboard.</div>
@@ -447,14 +447,14 @@ export function renderAppModalInnerContent(app, client) {
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
             <div class="banner info" style="margin-bottom:20px; padding:10px; background:rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius:6px; font-size:11px;">
-                💠 This app is linked to the <b>Master Vault</b>. Automation capabilities are synced globally, while notes and categories remain private to this project.
+                This app is linked to the <b>Master Vault</b>. Automation capabilities are synced globally, while notes and categories remain private to this project.
             </div>
         ` : ''}
 
         ${externalLinkHtml}
 
         <div class="card-section" style="background: var(--panel-soft); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 20px;">
-            <label class="modal-section-label">${isMasterCard ? '🏛️ MASTER VAULT TIER DEFINITIONS' : '💳 CLIENT SUBSCRIPTION'}</label>
+            <label class="modal-section-label">${isMasterCard ? 'MASTER VAULT TIER DEFINITIONS' : 'CLIENT SUBSCRIPTION'}</label>
             
             ${isMasterCard ? `
                 <div class="stacked-tiers-list" style="margin-top:10px;">
@@ -491,7 +491,7 @@ export function renderAppModalInnerContent(app, client) {
                                     ${esc(t.name)} ($${t.price}/mo)
                                 </option>
                             `).join('')}
-                            <option value="Custom" ${app.clientTier === 'Custom' ? 'selected' : ''}>⚠️ Custom / Other</option>
+                            <option value="Custom" ${app.clientTier === 'Custom' ? 'selected' : ''}>Custom / Other</option>
                         </select>
                     </div>
                     <div class="input-group" style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
@@ -540,11 +540,11 @@ export function renderAppModalInnerContent(app, client) {
         </div>
 
         <div class="card-section" style="margin-top: 20px;">
-            <label class="modal-section-label">📊 Featured In Analysis Matrices</label>
+            <label class="modal-section-label">Featured In Analysis Matrices</label>
             <div class="pills-row" style="margin-top:10px;">
                 ${linkedAnalyses.length > 0 ? linkedAnalyses.map(anly => `
                     <span class="pill tiny soft is-clickable" onclick="OL.openAnalysisMatrix('${anly.id}')">
-                        📈 ${esc(anly.name)}
+                        ${esc(anly.name)}
                     </span>
                 `).join('') : '<span class="tiny muted italic">No linked analyses found.</span>'}
             </div>
@@ -570,11 +570,11 @@ export function renderAppModalInnerContent(app, client) {
             </div>
         </div>
         <div class="card-section" style="margin-top: 20px;">
-            <label class="modal-section-label">📖 Linked How-To Guides</label>
+            <label class="modal-section-label">Linked How-To Guides</label>
             <div class="pills-row">
                 ${linkedGuides.map(guide => `
                     <span class="pill tiny soft is-clickable" onclick="OL.openGuideEditor('${guide.id}')">
-                        📖 ${esc(guide.name)}
+                        ${esc(guide.name)}
                     </span>
                 `).join('')}
                 ${linkedGuides.length === 0 ? '<span class="tiny muted italic">No guides linked to this tool.</span>' : ''}
@@ -836,7 +836,7 @@ export function promoteAppToMaster(clientId, localAppId) {
     
     state.master.apps.push(masterCopy);
     OL.persist();
-    alert("✅ App promoted to Master Vault.");
+    alert("App promoted to Master Vault.");
     renderAppsGrid();
 };
 
@@ -894,7 +894,7 @@ export function provisionMasterAppInto(client, masterApp) {
                 client.projectData.localApps.push({
                     id: `local-util-${util.key}-${Date.now()}-${i}`,
                     name: util.name,
-                    isHidden: true, // 🔒 THE SECRET FLAG
+                    isHidden: true, // THE SECRET FLAG
                     notes: "System Utility (Auto-added with Zapier)",
                     functionIds: [],
                     capabilities: []
@@ -1328,7 +1328,7 @@ export function pushSpecToMaster(appId, localIdx) {
     );
 
     if (exists) {
-        return alert(`❌ The Master App "${masterApp.name}" already has a ${specToPush.type} named "${specToPush.name}".`);
+        return alert(`The Master App "${masterApp.name}" already has a ${specToPush.type} named "${specToPush.name}".`);
     }
 
     if (!confirm(`Standardize "${specToPush.name}"? This will add it to the Vault for ALL clients.`)) return;

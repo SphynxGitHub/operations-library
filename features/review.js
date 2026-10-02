@@ -76,7 +76,7 @@ function roundStatusHtmlInner(client, sheet, round, isCurrent = true) {
     if (s.kind === 'building' || s.kind === 'testing') return `<span class="tiny muted" style="margin-left:8px;">${esc(s.text)}</span>`;
     if (s.kind === 'ready_to_notify') {
         const none = s.state && s.state.mode === 'none';
-        return pill('✅ Passed testing', '#22c55e') + (isStaff
+        return pill('Passed testing', '#22c55e') + (isStaff
             ? (none ? btn('Close round', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '')
               + btn(none ? 'Send client the checklist…' : 'Notify client…', `OL.openReviewNotification('${esc(key)}', '${esc(client.id)}')`)
               + (none ? '' : btn('Close without client review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`))
@@ -87,15 +87,15 @@ function roundStatusHtmlInner(client, sheet, round, isCurrent = true) {
         const allPassed = !!(cr && cr.total && cr.reviewed >= cr.total && !cr.failed);
         const approved = s.state && s.state.clientApprovedAt;
         const seen = approved
-            ? pill(`✅ Client approved ${String(s.state.clientApprovedAt).slice(0, 10)}`, '#22c55e')
+            ? pill(`Client approved ${String(s.state.clientApprovedAt).slice(0, 10)}`, '#22c55e')
             : cr && cr.total
             ? (allPassed
-                ? pill('✅ Client passed every step', '#22c55e')
+                ? pill('Client passed every step', '#22c55e')
                 : `<span class="tiny muted" style="margin-left:8px;">Client reviewed ${cr.reviewed}/${cr.total}${cr.failed ? `, ${cr.failed} issue${cr.failed === 1 ? '' : 's'}` : ''}</span>`)
             : '';
-        return pill(`📋 ${s.text}`, '#38bdf8') + seen + (isStaff ? btn('Edit dates…', `OL.editReviewDatesFor('${esc(key)}', '${esc(client.id)}')`) + btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
+        return pill(`${s.text}`, '#38bdf8') + seen + (isStaff ? btn('Edit dates…', `OL.editReviewDatesFor('${esc(key)}', '${esc(client.id)}')`) + btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
     }
-    if (s.kind === 'review_ended') return pill(`⏰ ${s.text}`, '#f59e0b') + (isStaff ? btn('Extend 10 days', `OL.extendReviewFor('${esc(key)}', '${esc(client.id)}')`) + btn('Edit dates…', `OL.editReviewDatesFor('${esc(key)}', '${esc(client.id)}')`) + btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
+    if (s.kind === 'review_ended') return pill(`${s.text}`, '#f59e0b') + (isStaff ? btn('Extend 10 days', `OL.extendReviewFor('${esc(key)}', '${esc(client.id)}')`) + btn('Edit dates…', `OL.editReviewDatesFor('${esc(key)}', '${esc(client.id)}')`) + btn('Close review', `OL.closeReviewFor('${esc(key)}', '${esc(client.id)}')`) : '');
     if (s.kind === 'closed') return `<span class="tiny muted" style="margin-left:8px;">${esc(s.text)}</span>`;
     return '';
 }
@@ -171,7 +171,7 @@ export async function openReviewNotification(key, clientId) {
     OL.initRecipients('rv', { to: contacts.map((m) => m.email).filter(Boolean), directory: OL.personDirectory(client) });
     openModal(OL.composeShellHtml({
         prefix: 'rv',
-        title: `📨 Notify client: Round ${st.round} review`,
+        title: `Notify client: Round ${st.round} review`,
         introHtml: `<div class="tiny muted" style="margin-bottom:12px;">
                 Every request in this round has passed testing (concluded ${esc(st.concludedAt)}). Choose the review type, check the dates, edit the email, and send.
                 Sending starts the review (and creates the check-in tasks, for a review period). The client's checklist has ${steps} step${steps === 1 ? '' : 's'} in ${checklist.sections.length} section${checklist.sections.length === 1 ? '' : 's'}, with no results.

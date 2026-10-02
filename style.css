@@ -1862,3 +1862,29 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 }
 .modal-input.due-overdue::-webkit-datetime-edit { color: #ef4444 !important; }
 .modal-input.due-overdue::-webkit-calendar-picker-indicator { filter: invert(33%) sepia(90%) saturate(3000%) hue-rotate(345deg); }
+
+
+/* ---- System Importer Hub ---------------------------------------------------------------------------- */
+.ih-lede { margin: 0 0 16px; line-height: 1.5; }
+.ih-note { margin: 0 0 16px; padding: 9px 12px; border-radius: 8px; font-size: 12px; border: 1px solid var(--panel-border); }
+.ih-note-ok { border-color: rgba(34,197,94,0.45); background: rgba(34,197,94,0.08); color: #86efac; }
+.ih-note-error { border-color: rgba(239,68,68,0.5); background: rgba(239,68,68,0.08); color: #fca5a5; }
+.ih-group { margin-bottom: 18px; }
+.ih-group-title { font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.ih-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.ih-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 14px 14px 12px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--panel-border); background: rgba(255,255,255,0.02); color: inherit; font: inherit; transition: border-color .15s, background .15s, transform .15s; }
+.ih-tile:hover:not(:disabled) { border-color: var(--accent); background: rgba(var(--accent-rgb),0.06); transform: translateY(-2px); }
+.ih-tile:disabled { cursor: default; opacity: .55; }
+.ih-tile.is-busy { opacity: 1; border-color: var(--accent); }
+.ih-icon { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 8px;
+    background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
+.ih-icon svg, .ih-icon i { width: 16px; height: 16px; }
+.ih-tile.is-off .ih-icon { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+.ih-name { font-size: 13px; font-weight: 600; }
+.ih-desc { font-size: 11px; color: var(--text-muted); }
+.ih-status { font-size: 10.5px; color: var(--text-muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--panel-border); width: 100%; }
+.ih-tile.is-off .ih-status { color: #fbbf24; }
+
+/* Which service a flow-map card was pulled from (replaces the old emoji + "Cal:" name prefixes) */
+.fv-card-source { font-size: 9px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--panel-border); color: var(--text-muted); margin-left: 6px; text-transform: none; }

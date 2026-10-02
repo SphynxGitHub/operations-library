@@ -254,7 +254,8 @@ export function zapToResource(zap, opts = {}) {
     id: resId,
     type: 'Zap',
     archetype: 'Multi-Step',
-    name: `⚡ ${String(zap.zapName || `Zap ${zap.zapId}`).replace(/^⚡\s*/, '').trim()}`,
+    name: String(zap.zapName || `Zap ${zap.zapId}`).replace(/^⚡\s*/, '').trim(),
+    source: 'zapier',
     originalZapId: String(zap.zapId),
     externalUrl: zapEditorUrl(zap.zapId),
     isExpanded: true,
@@ -270,7 +271,7 @@ export function zapToResource(zap, opts = {}) {
 
 // Keeps everything a person did by hand on an existing card (status, description, notes, owner, position, tags...).
 // Only the fields the import itself owns are replaced.
-const IMPORT_OWNED = ['type', 'archetype', 'name', 'originalZapId', 'externalUrl', 'steps', 'zapMeta'];
+const IMPORT_OWNED = ['type', 'archetype', 'name', 'source', 'originalZapId', 'externalUrl', 'steps', 'zapMeta'];
 export function mergeIntoExisting(oldRes, newRes) {
   const merged = { ...oldRes };
   for (const k of IMPORT_OWNED) if (newRes[k] !== undefined) merged[k] = newRes[k];

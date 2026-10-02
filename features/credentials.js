@@ -14,7 +14,7 @@ function secretFieldHtml(conn) {
     if (conn.secretSet) {
         return `
             <div style="display:flex; align-items:center; gap:8px; padding:6px 4px; font-size:11px;">
-                <span>🔒 Stored securely${conn.secretHint ? ` <span class="muted" style="font-family:monospace;">••••${esc(conn.secretHint)}</span>` : ''}</span>
+                <span>Stored securely${conn.secretHint ? ` <span class="muted" style="font-family:monospace;">••••${esc(conn.secretHint)}</span>` : ''}</span>
                 <button class="btn tiny soft" onclick="OL.replaceAccessSecret('${conn.id}')">Replace</button>
                 <button class="btn tiny soft" onclick="OL.clearAccessSecret('${conn.id}')">Remove</button>
             </div>`;
@@ -22,7 +22,7 @@ function secretFieldHtml(conn) {
     if (String(conn.secret || '').trim()) {
         return `
             <div style="display:flex; align-items:center; gap:8px; padding:6px 4px; font-size:11px; color:#fbbf24;">
-                <span>⚠️ Stored in plain text</span>
+                <span>Stored in plain text</span>
                 <button class="btn tiny primary" onclick="OL.secureAccessSecret('${conn.id}')">Move to secure storage</button>
             </div>`;
     }
@@ -81,7 +81,7 @@ export function renderAccessSection(ownerId, type) {
                                         style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" 
                                         onclick="${jumpTarget}" 
                                         title="Jump to ${esc(linkedObj?.name)}">
-                                    ${type === "member" ? "💻" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
+                                    ${esc(linkedObj?.name || "Unknown")}
                                 </strong>
                             </div>
 
@@ -143,7 +143,7 @@ export function filterAccessSearch(ownerId, type, query) {
 
     listEl.innerHTML = matches.map(item => `
         <div class="search-result-item" onclick="OL.linkAccess('${ownerId}', '${item.id}', '${type}')">
-            ${type === "member" ? "💻" : "👨‍💼"} ${esc(item.name)}
+            ${esc(item.name)}
         </div>
     `).join('');
 }
@@ -326,9 +326,9 @@ export function renderCredentialRow(clientId, cred, idx, perm) {
                 <select class="perm-select" style="width:100px;"
                         onchange="OL.updateCredentialStatus('${clientId}', ${idx}, this.value)"
                         ${!isFull ? "disabled" : ""}>
-                    <option value="Pending" ${cred.status === "Pending" ? "selected" : ""}>⏳ Pending</option>
-                    <option value="Verified" ${cred.status === "Verified" ? "selected" : ""}>✅ Verified</option>
-                    <option value="Invalid" ${cred.status === "Invalid" ? "selected" : ""}>❌ Invalid</option>
+                    <option value="Pending" ${cred.status === "Pending" ? "selected" : ""}>Pending</option>
+                    <option value="Verified" ${cred.status === "Verified" ? "selected" : ""}>Verified</option>
+                    <option value="Invalid" ${cred.status === "Invalid" ? "selected" : ""}>Invalid</option>
                 </select>
             </td>
             <td>

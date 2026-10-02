@@ -360,7 +360,7 @@ export function renderScopingSheet() {
              style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <span class="tiny accent bold uppercase" style="display:block; font-size:9px;">Surgical View Active</span>
-                <span style="color: white; font-weight: bold;">📍 Showing scoped details for linked resource</span>
+                <span style="color: white; font-weight: bold;">Showing scoped details for linked resource</span>
             </div>
             <button class="btn tiny primary" 
                     onclick="state.scopingFilterActive = false; state.scopingTargetId = null; renderScopingSheet()">
@@ -837,7 +837,7 @@ export function openTeamAssignmentModal(itemId) {
 
     let html = `
         <div class="modal-head">
-            <div class="modal-title-text">👥 Assign Team to Item</div>
+            <div class="modal-title-text">Assign Team to Item</div>
             <button class="btn small soft" onclick="OL.closeModal()">Done</button>
         </div>
         <div class="modal-body">
@@ -852,7 +852,7 @@ export function openTeamAssignmentModal(itemId) {
                              style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--line);"
                              onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
                             <div style="display:flex; align-items:center; gap:10px;">
-                                <span>${isAssigned ? '✅' : '⬜'}</span>
+                                <span>${isAssigned ? '✓' : '☐'}</span>
                                 <span style="${isAssigned ? 'font-weight:bold; color:var(--accent);' : ''}">${esc(m.name)}</span>
                             </div>
                             <span class="tiny muted uppercase">${esc(m.roles?.[0] || 'Member')}</span>
@@ -954,7 +954,7 @@ export function renderUnitBadges(dataObject, res) {
 export function addResourceToScope() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔎 Add Resource to Scope</div>
+            <div class="modal-title-text">Add Resource to Scope</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -1041,12 +1041,12 @@ export function filterResourceForScope(query) {
     let html = "";
 
     if (localMatches.length > 0) {
-        html += `<div class="search-group-header">📍 Available in Project</div>`;
+        html += `<div class="search-group-header">Available in Project</div>`;
         html += localMatches.map(res => renderResourceSearchResult(res, 'local')).join('');
     }
 
     if (masterMatches.length > 0) {
-        html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
+        html += `<div class="search-group-header" style="margin-top:10px;">Master Vault Standards</div>`;
         html += masterMatches.map(res => renderResourceSearchResult(res, 'vault')).join('');
     }
 
@@ -1062,7 +1062,7 @@ export function renderResourceSearchResult(res, tagClass) {
         <div class="search-result-item" onmousedown="OL.executeScopeAdd('${res.id}')">
             <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <span>🛠️</span>
+                    <span><i data-lucide="wrench" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></span>
                     <div>
                         <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
                         <div class="tiny muted">${esc(res.type || "General")}</div>
@@ -1234,8 +1234,8 @@ export function renderGrandTotals(lineItems, baseRate) {
     area.innerHTML = `
     <div class="grand-totals-bar">
       <div class="grand-actions">
-        <button class="btn tiny soft" onclick="OL.printScopingSheet()">🖨️ PDF</button>
-        ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>` : ''}
+        <button class="btn tiny soft" onclick="OL.printScopingSheet()">PDF</button>
+        ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">Adjustments</button>` : ''}
       </div>
 
       <div class="total-item-gross">
@@ -1295,10 +1295,10 @@ export function openDiscountManager() {
 
   let html = `
     <div class="modal-head">
-      <div class="modal-title-text">💰 Financial Adjustments</div>
+      <div class="modal-title-text">Financial Adjustments</div>
       <button class="btn tiny soft"
         onclick="if(confirm('Clear all discounts?')) OL.clearAllDiscounts()">
-        🔄 Reset
+        Reset
       </button>
     </div>
 
@@ -1505,7 +1505,7 @@ export function openTypeDetailModal(typeKey) {
 
   const html = `
         <div class="modal-head">
-            <div class="modal-title-text">⚙️ Pricing Folder: ${esc(typeData?.type || typeKey)}</div>
+            <div class="modal-title-text">Pricing Folder: ${esc(typeData?.type || typeKey)}</div>
         </div>
         <div class="modal-body">
             <label class="modal-section-label">Active Rates</label>
@@ -1656,7 +1656,7 @@ export function openDependencyManager(lineItemId) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔗 Manage Dependencies for: ${esc(targetRes?.name)}</div>
+            <div class="modal-title-text">Manage Dependencies for: ${esc(targetRes?.name)}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
@@ -1667,7 +1667,7 @@ export function openDependencyManager(lineItemId) {
                     const depRes = OL.getResourceById(depItem?.resourceId);
                     return `
                         <div class="dp-manager-row" style="display:flex; justify-content:space-between; align-items:center;">
-                            <span>🎯 ${esc(depRes?.name || "Unknown Item")}</span>
+                            <span>${esc(depRes?.name || "Unknown Item")}</span>
                             <button class="btn-icon-tiny" onclick="OL.toggleDependency('${lineItemId}', '${depId}')">×</button>
                         </div>
                     `;
@@ -1704,7 +1704,7 @@ export function filterDependencySearch(currentResId, mode, query) {
         );
         html = matches.map(t => `
             <div class="search-result-item" onmousedown="OL.addDependency('${currentResId}', '${t.id}', 'task')">
-                <span>📋 ${esc(t.name)}</span>
+                <span>${esc(t.name)}</span>
             </div>
         `).join('');
 
@@ -1776,7 +1776,7 @@ export async function addDependency(resId, depId, type) {
     
     const depTarget = OL.getResourceById(depId);
     if (depTarget?.dependencies?.some(d => d.id === resId)) {
-        alert("🚫 Circular Dependency detected! This item already depends on the current one.");
+        alert("Circular Dependency detected! This item already depends on the current one.");
         return;
     }
 
@@ -1812,7 +1812,7 @@ export function openRequestDetailDrawer(client, req) {
 
   const html = `
     <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:12px;">
-      <div class="modal-title-text" style="font-weight:700; font-size:16px;">📋 Request Details: ${esc(req.actionName || 'Scoping Item')}</div>
+      <div class="modal-title-text" style="font-weight:700; font-size:16px;">Request Details: ${esc(req.actionName || 'Scoping Item')}</div>
       <button class="btn tiny soft" onclick="OL.closeModal()">✕</button>
     </div>
 
@@ -1922,7 +1922,7 @@ export function openRequestLineModal(itemId) {
 
     const html = `
         <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line);">
-            <div class="modal-title-text" style="font-weight:700; font-size:16px;">${isEdit ? '✏️ Edit Request' : '➕ Add Request'}</div>
+            <div class="modal-title-text" style="font-weight:700; font-size:16px;">${isEdit ? 'Edit Request' : 'Add Request'}</div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
         <div class="modal-body" style="padding-top:14px;">
@@ -2417,7 +2417,7 @@ export function openAskModal(itemId, blockFor = null) {
 
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📨 Ask client</div>
+            <div class="modal-title-text">Ask client</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>

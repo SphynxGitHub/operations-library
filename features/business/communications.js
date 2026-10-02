@@ -1901,7 +1901,7 @@ OL.renderGmailAttachments = function(m) {
                         </span>
                         ${alreadyLinked(a.storagePath)
                             ? `<span class="tiny" style="color:var(--accent);">Linked</span>`
-                            : `<button class="btn tiny soft" data-path="${esc(a.storagePath)}" data-name="${esc(a.filename)}" onclick="OL.openExcerptLinkPicker('${esc(m.id)}', '📎 ' + this.dataset.name, 'attachment', this.dataset.path)">Link this attachment</button>`}
+                            : `<button class="btn tiny soft" data-path="${esc(a.storagePath)}" data-name="${esc(a.filename)}" onclick="OL.openExcerptLinkPicker('${esc(m.id)}', '' + this.dataset.name, 'attachment', this.dataset.path)">Link this attachment</button>`}
                     </div>
                 `).join('')}
             </div>
@@ -2353,7 +2353,7 @@ OL.openComposeEmailModal = function(options = {}) {
 
     const html = OL.composeShellHtml({
         prefix: 'compose',
-        title: st.title || (isReply ? '↩ Reply' : '✉️ Compose Email'),
+        title: st.title || (isReply ? '↩ Reply' : 'Compose Email'),
         headExtraHtml: st.docked ? `<button class="btn tiny soft" title="Minimize" onclick="OL.toggleComposeDockMinimized()">▁</button>` : '',
         closeAction: 'OL.closeCompose()',
         introHtml: st.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(st.linked_client_id) : '',
@@ -2447,7 +2447,7 @@ OL.openContextCompose = function(explicit) {
 
     opts.to = [...new Set(to)].join(', ');
     opts.subject = subjectBits.length ? `${client?.meta?.name ? client.meta.name + ' — ' : ''}${subjectBits[0]}` : '';
-    opts.title = `✉️ New email${client ? ' · ' + (client.meta?.name || '') : ''}${subjectBits.length ? ' · ' + subjectBits[0] : ''}`;
+    opts.title = `New email${client ? ' · ' + (client.meta?.name || '') : ''}${subjectBits.length ? ' · ' + subjectBits[0] : ''}`;
     opts.suggestedPeople = (client?.projectData?.teamMembers || []).filter(m => m.email).map(m => ({ name: m.name, email: m.email }));
     if (ctx.kind === 'task' && opts.linked_task_id) {
         // Pre-tick the task you were looking at in the "open tasks" list.
@@ -2468,7 +2468,7 @@ OL.addComposeRecipient = function(email) { OL.addRecipient('compose', 'to', emai
         const b = document.createElement('button');
         b.id = 'compose-launcher';
         b.title = 'New email about what you’re looking at (Alt+E)';
-        b.textContent = '✉️';
+        b.innerHTML = '<i data-lucide="mail" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>';
         b.style.cssText = 'position:fixed; left:18px; bottom:18px; z-index:590; width:44px; height:44px; border-radius:50%; border:1px solid var(--accent); background:var(--panel-dark, #111); font-size:18px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.35);';
         b.onclick = () => OL.openContextCompose();
         document.body.appendChild(b);
@@ -2513,7 +2513,7 @@ OL.renderComposeTaskPicker = function() {
     const shown = open.filter(t => !q || `${t.title || t.name} ${t.assignee || ''}`.toLowerCase().includes(q));
     box.innerHTML = open.length ? `
         <details ${inc.size ? 'open' : ''} style="padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
-            <summary class="tiny bold" style="cursor:pointer;">✅ Open tasks for ${esc(client.meta?.name || 'this project')} (${open.length})${inc.size ? ` · ${inc.size} included` : ''}</summary>
+            <summary class="tiny bold" style="cursor:pointer;">Open tasks for ${esc(client.meta?.name || 'this project')} (${open.length})${inc.size ? ` · ${inc.size} included` : ''}</summary>
             <div class="tiny muted" style="margin:6px 0;">Tick any to list them in the email as next steps / reminders.</div>
             <input type="text" class="modal-input tiny" placeholder="Filter…" value="${esc(st.taskFilter || '')}" style="width:100%; margin-bottom:6px;"
                    oninput="const v=this.value; OL.reRenderPreservingFocus(() => { OL._composeState.taskFilter = v; OL.renderComposeTaskPicker(); })">
@@ -2602,8 +2602,8 @@ OL.renderComposeAttachments = function() {
     if (!box || !st) return;
     const chip = (label, sub, kind, i) => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">${label} <span class="muted" style="font-size:9px;">${sub}</span><button type="button" class="btn tiny ghost" style="padding:0 3px;" onclick="OL.removeComposeAttachment('${kind}', ${i})">✕</button></span>`;
     box.innerHTML = [
-        ...st.attachments.map((a, i) => chip(`📎 ${esc(a.filename)}`, `${Math.max(1, Math.round(a.size / 1024))} KB`, 'file', i)),
-        ...st.projectFiles.map((f, i) => chip(`🔗 ${esc(f.name)}`, f.library ? 'Library link' : 'Drive link', 'project', i))
+        ...st.attachments.map((a, i) => chip(`${esc(a.filename)}`, `${Math.max(1, Math.round(a.size / 1024))} KB`, 'file', i)),
+        ...st.projectFiles.map((f, i) => chip(`${esc(f.name)}`, f.library ? 'Library link' : 'Drive link', 'project', i))
     ].join('') || '<span class="tiny muted">None.</span>';
 };
 // Project (Drive) files from the linked task/request/resource and its
@@ -2780,7 +2780,7 @@ OL._buildComposeBody = function() {
     const built = OL.assembleEmail({
         messageHtml: msgHtml,
         sectionsHtml: taskList.html, sectionsText: taskList.text.trim(),
-        extraHtml: files ? `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `📎 <a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>` : '',
+        extraHtml: files ? `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `<a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>` : '',
         extraText: files ? 'Files:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n') : '',
         signature: OL.signatureParts(OL.signatureIncluded('compose')),
         quotedHtml: (st.quoted || st.quotedHtml)
@@ -3645,7 +3645,7 @@ OL.promptThreadFollowUp = async function(emailId, links) {
     if (!box) { box = document.createElement('div'); box.id = 'thread-followup-prompt'; document.body.appendChild(box); }
     box.style.cssText = 'position:fixed; right:20px; bottom:20px; z-index:530; max-width:380px; padding:14px 16px; border:1px solid var(--accent); background:var(--panel-dark, #111); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.4);';
     box.innerHTML = `
-        <div class="small bold" style="margin-bottom:4px;">💡 ${others.length} other message${others.length === 1 ? '' : 's'} in this conversation ${others.length === 1 ? "isn't" : "aren't"} linked — link ${others.length === 1 ? 'it' : 'them'} the same way?</div>
+        <div class="small bold" style="margin-bottom:4px;">${others.length} other message${others.length === 1 ? '' : 's'} in this conversation ${others.length === 1 ? "isn't" : "aren't"} linked — link ${others.length === 1 ? 'it' : 'them'} the same way?</div>
         <div class="tiny muted" style="margin-bottom:10px;">Suggestion only — nothing has been changed.</div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="btn tiny primary" onclick="OL.applyThreadFollowUp(true, false)">Link them the same way</button>

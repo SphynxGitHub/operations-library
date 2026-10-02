@@ -765,7 +765,7 @@ export function openMaintenanceRequestModal(itemId) {
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(l)}</option>`;
     const covered = new Set((item?.resourceIds || []).map(String));
     const resources = (client.projectData?.localResources || []).filter((r) => r && !String(r.id).startsWith('step-'));
-    openModal(`${modalHead(isEdit ? '✏️ Edit client request' : '➕ Add client request')}
+    openModal(`${modalHead(isEdit ? 'Edit client request' : 'Add client request')}
         <div class="modal-body" style="padding-top:14px;">
             ${field('Title', `<input id="mr-title" type="text" class="modal-input" placeholder="e.g. Intake form redirect loops" value="${esc(item?.name || '')}" autofocus>`)}
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">

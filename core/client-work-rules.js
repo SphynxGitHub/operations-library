@@ -517,6 +517,58 @@ export function planPeriodReminders(client, periods, ctx) {
 }
 
 // ------------------------------------------------------------------------------------------
+// 5b. Zap JSON re-pull for Ongoing Maintenance clients
+// ------------------------------------------------------------------------------------------
+// The flow map is only as current as the last Zap export, and Zapier needs a login, so the export itself stays a
+// manual step. This makes sure it is not forgotten: one task, "Re-pull Zap JSON export", appears
+//   - once for a client already on Ongoing Maintenance (the first time this runs for them: a baseline), and
+//   - once for a client who has just become Ongoing Maintenance (onboarding), and
+//   - once each time a new plan period starts (a renewal, or the first period of a new onboard).
+// A period is only ever acted on once (pd.zapRepull.seen). If a re-pull task is already open, or one was made in the
+// last 30 days (a new onboard gets one task, not two when its first plan period is started), nothing more is made.
+// Wording, assignee and due date are settings (Automations > Templates & settings).
+export const ZAP_REPULL_TAG = 'zap-repull';
+const ZAP_REPULL_QUIET_DAYS = 30;
+
+export function planZapRepull(client, periods, ctx) {
+    const pd = client?.projectData;
+    const cfg = ctx.zapRepull;
+    if (!pd || !cfg || cfg.enabled === false || !ctx.isOngoing || !ctx.isOngoing(client)) return [];
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    const ids = (periods || []).filter((p) => p && p.id != null).map((p) => String(p.id));
+    const mine = pd.clientTasks.filter((t) => t && t.autoTag === ZAP_REPULL_TAG);
+    const make = (reason, dueFrom) => {
+        const vars = { client: client.meta?.name || 'client', reason };
+        const title = fillTemplate(cfg.taskTitle, vars).trim() || `Re-pull Zap JSON export: ${vars.client}`;
+        const due = dueFrom && dueFrom > ctx.today ? dueFrom : addDays(ctx.today, Math.max(0, Number(cfg.dueInDays) || 0));
+        const t = {
+            id: ctx.uid(), title, name: title, description: fillTemplate(cfg.taskDescription, vars),
+            status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: due,
+            isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now, autoTag: ZAP_REPULL_TAG,
+        };
+        pd.clientTasks.unshift(t);
+        return t.id;
+    };
+    const recentOrOpen = () => mine.some((t) => isOpen(t, ctx) || daysBetween(day(t.createdAt), ctx.today) < ZAP_REPULL_QUIET_DAYS);
+
+    // First time for this client: the baseline. Every plan period that exists now is covered by it.
+    if (!pd.zapRepull) {
+        pd.zapRepull = { seen: ids, at: ctx.today };
+        if (mine.length) return [];
+        return [make(ctx.justConverted ? 'This client has just moved to Ongoing Maintenance.' : 'Baseline re-pull for an existing Ongoing Maintenance client.')];
+    }
+
+    const seen = new Set((pd.zapRepull.seen || []).map(String));
+    const fresh = (periods || []).filter((p) => p && p.id != null && !seen.has(String(p.id)));
+    if (!fresh.length) return [];
+    fresh.forEach((p) => seen.add(String(p.id)));
+    pd.zapRepull.seen = [...seen];
+    if (recentOrOpen()) return [];
+    const newest = fresh.slice().sort((a, b) => day(b.start_date).localeCompare(day(a.start_date)))[0];
+    return [make(`A new plan period starts ${day(newest.start_date)}.`, day(newest.start_date))];
+}
+
+// ------------------------------------------------------------------------------------------
 // 6. Working rounds left in Drafting
 // ------------------------------------------------------------------------------------------
 // ONE follow-up task per project, covering every working round that has been in Drafting too long — not one task per
@@ -656,6 +708,7 @@ function contextNow(extra = {}) {
         staleDays: Number(state.master?.staleDays) || DEFAULT_STALE_DAYS,
         thirdPartyStatusNoteAssignee: state.master?.thirdPartyStatusNoteAssignee || 'Anthony',
         drafting: getOlSettings().draftingFollowUp,
+        zapRepull: getOlSettings().zapRepull,
         isOngoing, ...extra,
     };
 }
@@ -672,14 +725,20 @@ export function snoozeClientFollowUp(client) {
 export function onClientBecameOngoing(client) {
     const ctx = contextNow({ justConverted: true });
     reconcileQuarterlyCheckIns(client, ctx);
-    return reconcileMaintenance(client, ctx);
+    const out = reconcileMaintenance(client, ctx);
+    const zap = planZapRepull(client, [], ctx);
+    if (zap.length) out.created.push(...zap);
+    return out;
 }
 export function createQuarterlyCheckInFor(client) { return createQuarterlyCheckIn(client, contextNow()); }
 export function syncPeriodReminders(clientId, periods) {
     const client = state.clients?.[clientId];
     if (!client) return [];
-    const created = planPeriodReminders(client, periods, contextNow());
-    if (created.length && window.OL?.markClientDirty) { window.OL.markClientDirty(clientId); window.OL.persist?.(); }
+    const ctx = contextNow();
+    const before = JSON.stringify(client.projectData?.zapRepull || null);
+    const created = planPeriodReminders(client, periods, ctx);
+    created.push(...planZapRepull(client, periods, ctx));
+    if ((created.length || JSON.stringify(client.projectData?.zapRepull || null) !== before) && window.OL?.markClientDirty) { window.OL.markClientDirty(clientId); window.OL.persist?.(); }
     return created;
 }
 
@@ -838,4 +897,4 @@ export function openClientTasksForId(clientId, taskId) {
     return openClientTasksFor(client, t, contextNow());
 }
 
-Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
+Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });

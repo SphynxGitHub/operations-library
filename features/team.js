@@ -26,8 +26,8 @@ const loginFor = (clientId, memberId) => (OL._projectLogins[clientId]?.rows || [
 function loginBadgeHtml(clientId, memberId) {
     if (!isStaff()) return '';
     const row = loginFor(clientId, memberId);
-    if (row?.auth_user_id) return '<span class="tiny bold" style="color:#48bb78;" title="Has a portal login">✅ Portal login</span>';
-    if (row?.setup_token) return '<span class="tiny bold" style="color:#fbbf24;" title="Setup link made, not used yet">⏳ Link sent</span>';
+    if (row?.auth_user_id) return '<span class="tiny bold" style="color:#48bb78;" title="Has a portal login">Portal login</span>';
+    if (row?.setup_token) return '<span class="tiny bold" style="color:#fbbf24;" title="Setup link made, not used yet">Link sent</span>';
     return '<span class="tiny muted">— No login</span>';
 }
 
@@ -38,11 +38,11 @@ function memberLoginSectionHtml(client, member) {
     const body = !slot?.loaded ? '<div class="tiny muted">Loading…</div>'
         : slot.error ? `<div class="tiny" style="color:#f59e0b;">${esc(slot.error)}</div>`
         : row?.auth_user_id ? `
-            <div class="tiny" style="color:#48bb78; margin-bottom:8px;">✅ ${esc(member.name)} has a login${row.claimed_at ? ` (since ${esc(new Date(row.claimed_at).toLocaleDateString())})` : ''}${row.setup_email ? ` · ${esc(row.setup_email)}` : ''}.</div>
+            <div class="tiny" style="color:#48bb78; margin-bottom:8px;">${esc(member.name)} has a login${row.claimed_at ? ` (since ${esc(new Date(row.claimed_at).toLocaleDateString())})` : ''}${row.setup_email ? ` · ${esc(row.setup_email)}` : ''}.</div>
             <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.removeMemberLogin('${esc(client.id)}', '${esc(member.id)}')">Remove login</button>
             <div class="tiny muted" style="margin-top:6px;">Removing it signs them out of this project for good; you can invite them again later.</div>`
         : `
-            <div class="tiny ${row?.setup_token ? '' : 'muted'}" style="margin-bottom:8px; ${row?.setup_token ? 'color:#fbbf24;' : ''}">${row?.setup_token ? `⏳ Setup link made for ${esc(row.setup_email || '')}, not used yet.` : 'No login yet.'}</div>
+            <div class="tiny ${row?.setup_token ? '' : 'muted'}" style="margin-bottom:8px; ${row?.setup_token ? 'color:#fbbf24;' : ''}">${row?.setup_token ? `Setup link made for ${esc(row.setup_email || '')}, not used yet.` : 'No login yet.'}</div>
             <button class="btn tiny primary" style="width:100%;" onclick="OL.copyMemberSetupLink('${esc(client.id)}', '${esc(member.id)}')">${row?.setup_token ? 'Regenerate & Copy Setup Link' : 'Generate & Copy Setup Link'}</button>
             <div id="member-link-${esc(member.id)}" class="tiny muted" style="margin-top:6px; word-break:break-all;">Uses the email above. They'll see everything this project's View Profile settings allow${client.meta?.status === 'Partner' ? ', including the clients this partner manages' : ''}.</div>`;
     return `
@@ -322,7 +322,7 @@ export function openTeamMemberModal(memberId, draftObj = null) {
 
         <div class="modal-body" style="padding: 20px;">
 
-            <!-- 📧 📱 NEW: CONTACT INFORMATION CARD SECTION -->
+            <!-- NEW: CONTACT INFORMATION CARD SECTION -->
             <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
                 <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
                     <i data-lucide="contact" style="width:14px; height:14px;"></i> Contact Information
@@ -536,7 +536,7 @@ export function filterTeamMapList(itemId, query) {
         .map(
             (m) => `
         <div class="search-result-item" onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
-            👨‍💼 ${esc(m.name)} <span class="tiny muted">(Existing Member)</span>
+            ${esc(m.name)} <span class="tiny muted">(Existing Member)</span>
         </div>
     `,
         )
