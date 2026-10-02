@@ -42,6 +42,12 @@ export const DEFAULT_OL_SETTINGS = {
         dueInDays: 7,
         assignee: '',   // blank = the project's Communications person, else the general Sphynx task pool
     },
+    // Outside services (Calendly, Wealthbox, Redtail, Jotform...): a project's connected services that have been pulled once
+    // are pulled again by themselves, when the project is opened, after this many hours.
+    integrations: {
+        autoPull: true,
+        everyHours: 24,
+    },
     introCall: {
         enabled: true,
         titleKeywords: 'intro call',        // comma separated; a calendar event whose title contains any of these

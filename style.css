@@ -1911,3 +1911,41 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fv-callout-note { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
 .fv-callout-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
 .fv-callout-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+
+/* Importer Hub: change log and Zap references to check */
+.ih-log { border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
+.ih-log-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; font-size: 11px; line-height: 1.4; border-bottom: 1px solid var(--panel-border); }
+.ih-log-row:last-child { border-bottom: none; }
+.ih-log-when { flex: 0 0 62px; color: var(--text-muted); font-size: 10px; }
+.ih-log-src { flex: 0 0 auto; font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Flow-map cards: pulled-from-a-service warnings */
+.fv-card-warn { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 99px; color: #f59e0b; border: 1px solid rgba(245,158,11,0.45); background: rgba(245,158,11,0.08); cursor: help; }
+
+
+/* Form logic map (features/jotform-logic.js) */
+.jl-body { max-width: 860px; }
+.jl-summary { font-size: 12px; color: var(--text-dim); margin-bottom: 14px; }
+.jl-empty { padding: 28px; text-align: center; font-size: 12px; color: var(--text-muted); border: 1px dashed var(--panel-border); border-radius: 10px; }
+.jl-rule { border: 1px solid var(--panel-border); border-left-width: 3px; border-radius: 10px; padding: 10px 12px 12px; margin-bottom: 10px; background: rgba(255,255,255,0.015); }
+.jl-rule.is-off { opacity: .55; border-style: dashed; }
+.jl-k-field { border-left-color: #22c55e; } .jl-k-page { border-left-color: #38bdf8; } .jl-k-email { border-left-color: #a855f7; }
+.jl-k-url, .jl-k-message { border-left-color: #14b8a6; } .jl-k-other { border-left-color: var(--text-muted); }
+.jl-rule-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.jl-n { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.jl-kind { font-size: 11px; font-weight: 600; }
+.jl-off { font-size: 10px; color: #f59e0b; margin-left: auto; }
+.jl-flow { display: flex; align-items: stretch; gap: 10px; }
+.jl-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.jl-lbl { font-size: 9px; font-weight: 700; letter-spacing: .08em; color: var(--text-muted); }
+.jl-arrow { flex: 0 0 auto; display: flex; align-items: center; padding-top: 14px; color: var(--text-muted); }
+.jl-chip { font-size: 11px; line-height: 1.35; padding: 5px 9px; border-radius: 7px; border: 1px solid var(--panel-border); background: var(--panel-dark); word-break: break-word; }
+.jl-chip .jl-val { color: var(--accent); font-weight: 600; }
+.jl-join { font-size: 9px; font-weight: 700; color: var(--text-muted); padding-left: 4px; }
+.jl-v-show { border-color: rgba(34,197,94,.45); background: rgba(34,197,94,.08); }
+.jl-v-hide { border-color: rgba(148,163,184,.5); background: rgba(148,163,184,.1); text-decoration: line-through; text-decoration-color: rgba(148,163,184,.6); }
+.jl-v-skip { border-color: rgba(56,189,248,.45); background: rgba(56,189,248,.08); }
+.jl-v-email { border-color: rgba(168,85,247,.45); background: rgba(168,85,247,.08); }
+.jl-v-msg { border-color: rgba(20,184,166,.45); background: rgba(20,184,166,.08); }
+@media (max-width: 640px) { .jl-flow { flex-direction: column; } .jl-arrow { padding: 0; transform: rotate(90deg); align-self: flex-start; } }

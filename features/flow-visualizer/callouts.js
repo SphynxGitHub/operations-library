@@ -61,6 +61,17 @@ export function calloutsFor(res, lookup = (id) => (window.OL?.getResourceById ? 
     });
   });
 
+  // A pulled Jotform form: its conditional logic (loaded on request, features/jotform-logic.js).
+  if (res.source === 'jotform' && res.externalId != null) {
+    const fl = res.formLogic;
+    out.push({
+      key: 'logic', source: 'logic', kind: 'form', name: fl ? `Form logic (${(fl.rules || []).length})` : 'Form logic',
+      url: '', usedIn: [], loaded: !!fl, loadedAt: fl && fl.at,
+      note: fl ? ((fl.rules || []).length ? `Show or hide questions, page skips and emails in this form. Loaded ${typeof OL.logicAgo === 'function' ? OL.logicAgo(fl.at) : ''}.` : 'This form has no conditional logic.')
+               : 'Which questions show or hide, where it skips to, and which emails it sends. Load it to see it as a map.',
+    });
+  }
+
   (res.callouts || []).forEach((c) => {
     if (!c || !c.id) return;
     out.push({ key: `m:${c.id}`, source: 'manual', kind: KIND[c.kind] ? c.kind : 'other', id: c.id, name: c.name || 'Untitled', url: safeUrl(c.url), note: c.note || '', usedIn: [] });
@@ -89,6 +100,9 @@ function panelHtml(res, c) {
       ${c.missing ? `<div class="fv-callout-meta">The linked library item is no longer there.</div>` : ''}
       <div class="fv-callout-actions">
         ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open ${icon('external-link', 11)}</a>` : ''}
+        ${c.source === 'logic' ? `
+          ${c.loaded ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); OL.openJotformLogicMap('${rid}')">Open logic map</button>` : ''}
+          <button type="button" class="btn tiny ${c.loaded ? 'soft' : 'primary'}" onclick="event.stopPropagation(); OL.loadJotformLogic('${rid}', { open: ${c.loaded ? 'false' : 'true'} })">${c.loaded ? 'Refresh' : 'Load form logic'}</button>` : ''}
         ${c.source === 'link' && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.linkId)}', null, 'cards')">In library</button>` : ''}
         ${c.source === 'manual' ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditCallout('${rid}','${esc(c.id)}')">Edit</button>
           <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvRemoveCallout('${rid}','${esc(c.id)}')">Remove</button>` : ''}
@@ -180,5 +194,5 @@ function removeCallout(resId, calloutId) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvCalloutStrip: calloutStrip, fvCalloutsFor: calloutsFor, fvCalloutLinkIds: calloutLinkIds, fvCalloutKinds: CALLOUT_KINDS,
-  fvToggleCallout: toggle, fvEditCallout: editCallout, fvSaveCallout: saveCallout, fvRemoveCallout: removeCallout,
+  fvRefreshCallouts: refresh, fvToggleCallout: toggle, fvEditCallout: editCallout, fvSaveCallout: saveCallout, fvRemoveCallout: removeCallout,
 });

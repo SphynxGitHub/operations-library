@@ -5,7 +5,8 @@
 //                 API key kept in secure storage. It replaces the old Firebase proxies: the app no
 //                 longer holds the key or sends it in a web address. Supported: Wealthbox, Jotform,
 //                 Calendly, ActiveCampaign, MailerLite, YouCanBookMe, Redtail, Process Street. Each
-//                 returns the same shape the app already reads.
+//                 returns the same shape the app already reads. Jotform with a formId returns that one
+//                 form's conditional logic (rules and questions) instead of the form list.
 //
 // CALLED BY:      The Import Hub and the sync buttons in a client project.
 //
@@ -60,7 +61,7 @@ serve(async (req) => {
     key = String(stored);
 
     console.log(`integration-import: ${authz.role} ${authz.userId} ran ${service} for ${clientId}`);
-    const result = await runImport(service, key, { baseUrl: body?.baseUrl, page: Number(body?.page) || undefined, email: body?.email }, fetch);
+    const result = await runImport(service, key, { baseUrl: body?.baseUrl, page: Number(body?.page) || undefined, email: body?.email, formId: body?.formId }, fetch);
     return json(result);
 
   } catch (err: any) {

@@ -583,6 +583,16 @@ export async function loadFullClient(clientId) {
         // Cards saved before the emoji clean-up carry names like "Cal: Intro Call"; strip them in memory (saved with the next write).
         try { if (typeof window !== 'undefined' && typeof window.OL?.cleanLegacyResourceNames === 'function') window.OL.cleanLegacyResourceNames(state.clients[clientId]); } catch (e) { console.warn('Name clean-up skipped:', e); }
 
+        // Opening a project: refresh the outside services it has already pulled (Calendly, Wealthbox, Redtail...) if they are
+        // out of date. Quiet, once per project per visit; features/integrations.js autoPullIntegrations has the rules.
+        try {
+            const c = state.clients[clientId];
+            if (typeof window !== 'undefined' && !c._autoPullQueued && typeof window.OL?.autoPullActiveClient === 'function') {
+                c._autoPullQueued = true;
+                setTimeout(() => { if (state.activeClientId === clientId) window.OL.autoPullActiveClient(); }, 5000);
+            }
+        } catch (e) { /* never block opening a project */ }
+
         // Repair: everywhere else in the app hardcodes scopingSheets[0] as
         // the main (non-maintenance) sheet. A client whose very first-ever
         // request came in through Client Requests/Maintenance before the
@@ -620,6 +630,8 @@ export async function switchClient(id) {
     }
 
     await loadFullClient(id);
+    // Switching to a project: refresh its outside services if they are out of date (cheap when they are not).
+    try { setTimeout(() => { if (state.activeClientId === id) window.OL?.autoPullActiveClient?.(); }, 5000); } catch (e) { /* never block switching */ }
 
     const urlParams = new URLSearchParams(window.location.search);
     urlParams.set('client', id);

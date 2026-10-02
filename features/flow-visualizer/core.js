@@ -1843,6 +1843,8 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
                 ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'var(--panel)')}
             </div>
           <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>${res.source && OL._fvSourceLabels[res.source] ? `<span class="fv-card-source">${esc(OL._fvSourceLabels[res.source])}</span>` : ''}
+          ${res.missingUpstream ? `<span class="fv-card-warn" title="No longer returned by ${esc(OL._fvSourceLabels[res.source] || 'the service')} (since ${esc(String(res.missingUpstream.since || '').slice(0, 10))}). It may have been deleted or renamed there.">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} Removed upstream</span>` : ''}
+          ${res.zapMeta && res.zapMeta.externalIssues && res.zapMeta.externalIssues.length ? `<span class="fv-card-warn" title="${esc(res.zapMeta.externalIssues.map(i => `${i.step}: ${i.label} (${i.state === 'removed_upstream' ? 'removed from the service' : i.state === 'not_pulled' ? 'service not pulled yet' : 'not found in the last pull'})`).join('\n'))}">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} ${res.zapMeta.externalIssues.length} to check</span>` : ''}
           <span class="fv-card-step-num">${num}</span>
         </div>
         <div class="fv-card-name">${esc(res.name)}</div>

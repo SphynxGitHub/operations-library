@@ -24,6 +24,9 @@
 
 // ---------- small helpers ----------------------------------------------------------------------
 
+import { extractExternalRefs, tieExternalToZaps } from '../core/external-sync.js';
+export { tieExternalToZaps };
+
 const firstDefined = (...v) => v.find((x) => x !== undefined && x !== null && x !== '');
 
 // A fast, non-cryptographic fingerprint (cyrb53) of any JSON-able value, to tell "changed" from "unchanged".
@@ -247,6 +250,7 @@ export function zapToResource(zap, opts = {}) {
       connectionId: s.connectionId, connectionLabel: s.connectionLabel,
       hookKey: s.hookKey, hasAutomaticIssues: s.hasAutomaticIssues || undefined,
       summary: summarizeStep(s, byId),
+      refs: (() => { const r = extractExternalRefs(s); return r.length ? r : undefined; })(),   // forms, event types, templates this step uses (core/external-sync.js)
     },
   }));
 

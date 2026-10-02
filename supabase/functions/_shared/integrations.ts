@@ -41,7 +41,28 @@ export function cleanActiveCampaignBase(raw: unknown): string {
   return base;
 }
 
-export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string }, f: FetchFn): Promise<any> {
+// A form's conditional logic: the rules (show/hide, skip to a page, send an email...) and the questions they refer to.
+// Jotform returns each rule's "terms" and "action" as JSON text, and the whole list as text on some accounts; they are
+// handed on as they come and read by the app (core/jotform-logic.js). Only the form id and the key are sent to Jotform.
+export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn): Promise<any> {
+  const id = String(formId ?? "").trim();
+  if (!/^\d{6,20}$/.test(id)) throw new BadRequest("The form id must be the number from the form's address.");
+  const k = encodeURIComponent(key);
+  const [props, qs] = await Promise.all([
+    getJson(f, `https://api.jotform.com/form/${id}/properties?apiKey=${k}`, {}, key),
+    getJson(f, `https://api.jotform.com/form/${id}/questions?apiKey=${k}`, {}, key),
+  ]);
+  let conditions: any = props?.content?.conditions ?? props?.content?.properties?.conditions ?? [];
+  if (typeof conditions === "string") { try { conditions = JSON.parse(conditions); } catch { conditions = []; } }
+  if (!Array.isArray(conditions)) conditions = Object.values(conditions || {});
+  const questions = Object.values(qs?.content || {}).map((q: any) => ({
+    qid: String(q?.qid ?? ""), type: String(q?.type ?? ""), text: String(q?.text ?? "").slice(0, 200), name: String(q?.name ?? "").slice(0, 80),
+    order: Number(q?.order) || 0, options: typeof q?.options === "string" ? q.options.slice(0, 400) : "",
+  })).filter((q: any) => q.qid);
+  return { form_id: id, conditions, questions };
+}
+
+export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string }, f: FetchFn): Promise<any> {
   switch (service) {
     case "wealthbox": {
       let all: any[] = [];
@@ -54,6 +75,7 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       return { workflow_templates: all };
     }
     case "jotform": {
+      if (opts.formId !== undefined && opts.formId !== null && opts.formId !== "") return await jotformFormLogic(opts.formId, key, f);
       let all: any[] = [];
       const limit = 50;
       for (let offset = 0; offset < 500; offset += limit) {

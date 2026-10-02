@@ -21,6 +21,8 @@ import {
     parseClickUpMinutes, parseClickUpDate, parseClickUpAssignees, parseClickUpBillable, applyImportedTime, guessClientFromFileName,
 } from '../core/clickup-import.js';
 import { importFrom, secureEntry } from '../core/secrets.js';
+import { reconcileExternal, logExternalPull, tieExternalToZaps, EXTERNAL_SOURCES } from '../core/external-sync.js';
+import { getOlSettings } from '../core/ol-settings.js';
 
 //======================= CLICKUP CSV IMPORT =======================//
 // One-way import of ClickUp tasks (+ comments + tracked time) from a
@@ -588,96 +590,54 @@ export function bulkImportZaps(isMaster = false) {
     }
 };
 
-export async function syncWealthbox(client) {
-    // 1. Find Wealthbox Credentials in the Access Registry
+// ---- Pulling from outside services ---------------------------------------------------------------------------
+// Every importer below turns what its service returned into cards and hands them to commitPull, which merges them into
+// the project's library by the service's own id (core/external-sync.js): positions, lanes, notes and links added by hand
+// stay, renames are renames, items the service no longer has are flagged (not deleted), and the cards are tied to the
+// Zap steps that use them. Each importer returns that summary.
+const needsSetup = (msg) => Object.assign(new Error(msg), { skip: true });   // an automatic pull never asks questions: it skips
+
+function refreshAfterPull(client) {
+    setTimeout(() => {
+        try {
+            if (state.activeClientId !== client.id) return;
+            if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
+            // only redraw a page that is actually on screen
+            if (document.getElementById('resource-library-results') && typeof OL.renderResourceManager === 'function') OL.renderResourceManager(client);
+            if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') OL.renderVisualizer(false);
+        } catch (e) { console.warn('Redraw after a pull failed:', e); }
+    }, 150);
+}
+
+function commitPull(client, source, items, extra = {}) {
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    const summary = reconcileExternal(client.projectData.localResources, source, items);
+    (extra.logicChanged || []).forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });   // a form whose logic changed counts as changed
+    logExternalPull(client.projectData, summary);
+    tieExternalToZaps(client.projectData.localResources);
+    markClientDirty(client.id);
+    refreshAfterPull(client);
+    return summary;
+}
+
+const placeholderStep = (source, id, name, appName) => ({ id: `${source}-${id}-s0`, name, appName });
+
+export async function syncWealthbox(client, opts = {}) {
     const wbCreds = findRegistryEntry(client, APP_NAME_HINTS.wealthbox);
-    if (!hasKey(wbCreds)) {
-        throw new Error("Wealthbox API Key not found in Credentials section.");
-    }
+    if (!hasKey(wbCreds)) throw new Error("Wealthbox API Key not found in Credentials.");
     await secureEntry(client, wbCreds);   // a key still in plain text moves to secure storage first
 
-    // 2. The backend fetches the workflow templates using the stored key
-    console.log("📡 Asking the backend to fetch Wealthbox templates...");
     const result = await importFrom('wealthbox', client.id, wbCreds.id);
     const templates = result.workflow_templates || [];
 
-    console.log(`📥 Wealthbox: Found ${templates.length} templates.`);
-
-    // 3. Process each template into your Library
-    templates.forEach(wf => {
-        const resourceData = {
-            id: `wb-${wf.id}`,
-            externalId: wf.id,
-            name: wf.name,
-            source: 'wealthbox',
-            type: 'Workflow',  
-            visible: true, 
-            category: 'Flows',
-            archetype: 'Multi-Level',
-            
-            // 🎯 TYPO FIXED: Was 'isExpannded'
-            isExpanded: true, 
-
-            steps: (wf.workflow_steps || []).map((s, idx) => ({
-                id: `wb-step-${wf.id}-${idx}`,
-                name: s.name,
-                description: s.description || "",
-                appName: 'Wealthbox'
-            }))
-        };
-
-        // 🎯 ADD THIS: Register with the system so it "sticks"
-        OL.upsertExternalResource(client, resourceData);
-    });
-    console.log(`✅ Wealthbox sync complete: ${templates.length} templates.`);
-
-    // 🎯 THE STICKY FIX: 
-    // We use a small timeout (100ms) to ensure the Data Layer is finished 
-    // before we scream at the UI Layer to wake up.
-    setTimeout(() => {
-        const activeId = OL.state.activeClientId;
-        const clientObj = OL.state.clients[activeId];
-        
-        // 1. Ensure the metadata is forced (matching your console logic)
-        if (clientObj && clientObj.projectData.localResources) {
-            clientObj.projectData.localResources.forEach(res => {
-                if (res.source === 'wealthbox' || String(res.id || '').startsWith('wb-')) {
-                    res.type = 'Workflow';
-                    res.visible = true;
-                    res.category = 'Flows';
-                }
-            });
-        }
-
-        // 2. Reset Search State
-        OL.state.libSearch = ""; 
-
-        // 3. Trigger the internal filters
-        if (typeof OL.syncResourceLibraryFilters === 'function') {
-            OL.syncResourceLibraryFilters();
-        }
-
-        // 4. Force the render (Use BOTH potential names to be safe)
-        if (typeof OL.renderResourceManager === 'function') {
-            OL.renderResourceManager(clientObj);
-        } else if (typeof OL.renderLibrary === 'function') {
-            OL.renderLibrary(clientObj);
-        }
-
-        // 5. Force the HTML search bar to unlock
-        const input = document.getElementById('lib-filter-input');
-        if (input) {
-            input.disabled = false;
-            input.style.pointerEvents = 'auto';
-            input.style.opacity = '1';
-        }
-
-        console.log("🔓 Search bar auto-unlocked via Timeout.");
-    }, 100);
-
-    return templates.length;
+    const items = templates.map((wf) => ({
+        externalId: wf.id, name: wf.name, type: 'Workflow', category: 'Flows', archetype: 'Multi-Level',
+        steps: (wf.workflow_steps || []).length
+            ? wf.workflow_steps.map((s, idx) => ({ id: `wb-${wf.id}-s${idx}`, name: s.name, description: s.description || '', appName: 'Wealthbox' }))
+            : [placeholderStep('wb', wf.id, 'Workflow Template', 'Wealthbox')],
+    }));
+    return commitPull(client, 'wealthbox', items);
 };
-
 
 // Names saved before the emoji clean-up carry a prefix such as "Cal: " with a symbol in front. Matching ignores it, and
 // cleanLegacyResourceNames() removes it from saved cards (keeping which service the card came from in .source).
@@ -788,7 +748,45 @@ function timeAgo(iso) {
     return `${Math.round(hrs / 24)} days ago`;
 }
 
-// 📡 THE SYNC ORCHESTRATOR: runs one service, records when it last ran, and reports in the hub instead of a pop-up.
+const SYNC_FN = {
+    wealthbox: (c, o) => syncWealthbox(c, o), redtail: (c, o) => syncRedtail(c, o), jotform: (c, o) => importJotform(c, o),
+    calendly: (c, o) => importCalendly(c, o), ycbm: (c, o) => importYCBM(c, o), activecampaign: (c, o) => importActiveCampaign(c, o),
+    mailerlite: (c, o) => importMailerLite(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
+};
+const emptySummary = (key) => ({ source: key, total: 0, added: [], renamed: [], changed: [], missing: [], restored: [], emptyPull: false });
+const changeCount = (s) => (s ? s.added.length + s.renamed.length + s.changed.length + s.missing.length + s.restored.length : 0);
+
+function describeSummary(label, s) {
+    if (!s) return `${label}: nothing to pull.`;
+    const bits = [];
+    if (s.added.length) bits.push(`${s.added.length} new`);
+    if (s.renamed.length + s.changed.length) bits.push(`${s.renamed.length + s.changed.length} changed`);
+    if (s.missing.length) bits.push(`${s.missing.length} removed upstream`);
+    if (s.restored.length) bits.push(`${s.restored.length} back`);
+    if (s.emptyPull) bits.push('the service returned nothing, so nothing was flagged');
+    return `${label}: ${s.total} item${s.total === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(', ') : ' · no changes'}`;
+}
+
+function recordSyncError(client, key, e) {
+    const pd = client.projectData; pd.integrationSync = pd.integrationSync || {};
+    pd.integrationSync[key] = { ...(pd.integrationSync[key] || {}), error: String(e?.message || e).slice(0, 200), errorAt: new Date().toISOString() };
+    markClientDirty(client.id);
+}
+
+// Runs one service for one project. Returns the summary of what changed.
+async function runOneSync(client, key, opts = {}) {
+    const fn = SYNC_FN[key];
+    if (!fn) throw new Error(`Unknown service: ${key}`);
+    const r = await fn(client, opts);
+    return (r && typeof r === 'object') ? r : emptySummary(key);
+}
+
+const hasPulledBefore = (client, key) => {
+    const cfg = EXTERNAL_SOURCES[key] || { legacyPrefixes: [] };
+    return (client.projectData?.localResources || []).some((r) => r && (r.source === key || (!r.source && cfg.legacyPrefixes.some((p) => String(r.id || '').startsWith(p)))));
+};
+
+// 📡 THE SYNC ORCHESTRATOR (one service, from a tile in the hub): runs it, records when, and reports in the hub.
 export async function syncExternalIntegrations(serviceKey) {
     const client = getActiveClient();
     if (!client) { OL._importHub = { ...(OL._importHub || {}), note: { kind: 'error', text: 'No active project selected.' } }; return openImportHub(); }
@@ -796,46 +794,97 @@ export async function syncExternalIntegrations(serviceKey) {
 
     OL._importHub = { busy: serviceKey, note: null };
     openImportHub();
-
     try {
-        let count = 0;
-        switch (serviceKey) {
-            case 'wealthbox': count = await OL.syncWealthbox(client); break;
-            case 'jotform': count = await OL.importJotform(client); break;
-            case 'calendly': count = await OL.importCalendly(client); break;
-            case 'activecampaign': count = await OL.importActiveCampaign(client); break;
-            case 'mailerlite': count = await OL.importMailerLite(client); break;
-            case 'ycbm': count = await OL.importYCBM(client); break;
-            case 'redtail': count = await OL.syncRedtail(client); break;
-            case 'processstreet':
-            case 'process-street': count = await OL.syncProcessStreet(client); break;
-        }
-        count = Number(count) || 0;
-        client.projectData.integrationSync = { ...(client.projectData.integrationSync || {}), [serviceKey]: { at: new Date().toISOString(), count } };
-        await OL.persist();
-        if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
-        OL._importHub = { busy: null, note: { kind: 'ok', text: `${HUB_LABEL[serviceKey] || serviceKey}: ${count} item${count === 1 ? '' : 's'} updated.` } };
+        const key = serviceKey === 'process-street' ? 'processstreet' : serviceKey;
+        const summary = await runOneSync(client, key, {});
+        await persist();
+        OL._importHub = { busy: null, note: { kind: 'ok', text: describeSummary(HUB_LABEL[key] || key, summary) } };
     } catch (e) {
         console.error(`${serviceKey} sync error:`, e);
+        recordSyncError(client, serviceKey, e);
         OL._importHub = { busy: null, note: { kind: 'error', text: `${HUB_LABEL[serviceKey] || serviceKey}: ${e.message || 'sync failed'}` } };
     }
     openImportHub();
 };
 
+// Every connected service, one after another ("Sync all" in the hub).
+export async function syncAllIntegrations() {
+    const client = getActiveClient();
+    if (!client || OL._importHub?.busy) return;
+    OL._importHub = { busy: 'all', note: null };
+    openImportHub();
+    const lines = []; let failed = 0;
+    for (const g of HUB_GROUPS) for (const it of g.items) {
+        if (it.csv || !hasKey(getCredsForApp(client, it.creds))) continue;
+        try { lines.push(describeSummary(it.name, await runOneSync(client, it.key, {}))); }
+        catch (e) { failed++; recordSyncError(client, it.key, e); lines.push(`${it.name}: ${e.skip ? 'needs setup (' + e.message + ')' : (e.message || 'failed')}`); }
+    }
+    try { await persist(); } catch (e) { console.warn('Save after Sync all failed:', e); }
+    OL._importHub = { busy: null, note: { kind: failed ? 'error' : 'ok', text: lines.length ? lines.join('\n') : 'No service has an API key in Credentials yet.' } };
+    openImportHub();
+};
+
+// ---- Automatic pulling ---------------------------------------------------------------------------------------
+// When a project is opened (and once an hour while it stays open), every connected service that has been pulled before and
+// is older than the interval in Automations > Templates & settings is pulled again, quietly. A service never pulled stays a
+// deliberate first click. A failure is remembered (shown in the hub) and not retried for six hours; a service that needs a
+// question answered (an account email, an API URL) is skipped. It runs in this browser on the open project, so what it
+// writes is saved the same way as any edit.
+const AUTO_RETRY_AFTER_ERROR_MS = 6 * 3600 * 1000;
+export async function autoPullIntegrations(client) {
+    try {
+        if (!client || !client.projectData || client._metaOnly || window.IS_GUEST) return null;
+        if (!(state.adminMode === true || state.teamMemberMode === true)) return null;
+        if (state.activeClientId !== client.id) return null;
+        if (OL._autoPull?.running || OL._importHub?.busy) return null;
+        const cfg = getOlSettings().integrations || {};
+        if (cfg.autoPull === false) return null;
+        const everyMs = Math.max(1, Number(cfg.everyHours) || 24) * 3600 * 1000;
+        const synced = client.projectData.integrationSync || {};
+        const nowMs = Date.now();
+
+        OL._autoPull = { running: true };
+        const results = [];
+        for (const g of HUB_GROUPS) for (const it of g.items) {
+            if (it.csv || !hasKey(getCredsForApp(client, it.creds))) continue;
+            const last = synced[it.key] || {};
+            if (!last.at && !hasPulledBefore(client, it.key)) continue;                      // the first pull is a deliberate click
+            if (last.at && nowMs - Date.parse(last.at) < everyMs) continue;                   // pulled recently
+            if (last.errorAt && nowMs - Date.parse(last.errorAt) < AUTO_RETRY_AFTER_ERROR_MS) continue;
+            try { results.push(await runOneSync(client, it.key, { auto: true })); }
+            catch (e) { if (!e.skip) { console.warn(`Automatic ${it.name} pull failed:`, e); recordSyncError(client, it.key, e); } }
+        }
+        if (results.length || Object.values(client.projectData.integrationSync || {}).some((v) => v && v.errorAt)) { markClientDirty(client.id); await persist(); }
+        const changed = results.filter((s) => changeCount(s));
+        if (changed.length && typeof OL.showToast === 'function') OL.showToast(`Updated from your services. ${changed.map((s) => describeSummary(EXTERNAL_SOURCES[s.source]?.label || s.source, s)).join(' | ')}`);
+        return results;
+    } catch (e) {
+        console.warn('Automatic pull stopped:', e);
+        return null;
+    } finally { OL._autoPull = null; }
+}
+
+OL.autoPullActiveClient = () => { const c = getActiveClient(); if (c) return autoPullIntegrations(c); };
+if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { OL.autoPullActiveClient(); }, 60 * 60 * 1000);
+
 export function openImportHub() {
     const client = getActiveClient();
     const st = OL._importHub || {};
-    const synced = client?.projectData?.integrationSync || {};
+    const pd = client?.projectData || {};
+    const synced = pd.integrationSync || {};
+    const connectedAny = client ? HUB_GROUPS.some((g) => g.items.some((it) => !it.csv && hasKey(getCredsForApp(client, it.creds)))) : false;
 
     const tile = (it) => {
         const entry = it.creds && client ? getCredsForApp(client, it.creds) : null;
         const connected = it.csv ? true : hasKey(entry);
         const last = synced[it.key];
-        const busy = st.busy === it.key;
+        const busy = st.busy === it.key || st.busy === 'all';
         const status = busy ? 'Syncing...'
             : it.csv ? 'Upload a ClickUp export'
             : !connected ? 'Add the API key in Credentials'
-            : last ? `Last synced ${timeAgo(last.at)}${Number.isFinite(last.count) ? ` · ${last.count} items` : ''}`
+            : last && last.error && (!last.at || Date.parse(last.errorAt || 0) > Date.parse(last.at)) ? `Last attempt failed ${timeAgo(last.errorAt)}: ${last.error}`
+            : last && last.at ? `Last synced ${timeAgo(last.at)}${Number.isFinite(last.count) ? ` · ${last.count} items` : ''}${last.missing ? ` · ${last.missing} removed upstream` : ''}`
+            : hasPulledBefore(client, it.key) ? 'Pulled before · will refresh automatically'
             : 'Connected · not synced yet';
         const action = it.csv ? "OL.openClickUpImportModal()" : `OL.syncExternalIntegrations('${it.key}')`;
         return `
@@ -847,127 +896,127 @@ export function openImportHub() {
             </button>`;
     };
 
+    // What changed in the last pulls, and which Zap steps point at something that was not found.
+    const log = (pd.integrationLog || []).slice(0, 6);
+    const logHtml = log.length ? `
+        <div class="ih-group">
+            <div class="ih-group-title">Recent changes</div>
+            <div class="ih-log">${log.map((e) => {
+                const label = EXTERNAL_SOURCES[e.source]?.label || e.source;
+                const parts = [];
+                if (e.added?.length) parts.push(`new: ${e.added.slice(0, 3).map(esc).join(', ')}${e.added.length > 3 ? ` +${e.added.length - 3}` : ''}`);
+                if (e.renamed?.length) parts.push(`renamed: ${e.renamed.slice(0, 2).map((r) => `${esc(r.from)} to ${esc(r.to)}`).join(', ')}`);
+                if (e.changed?.length) parts.push(`changed: ${e.changed.slice(0, 3).map(esc).join(', ')}`);
+                if (e.missing?.length) parts.push(`removed upstream: ${e.missing.slice(0, 3).map(esc).join(', ')}`);
+                if (e.restored?.length) parts.push(`back: ${e.restored.slice(0, 3).map(esc).join(', ')}`);
+                return `<div class="ih-log-row"><span class="ih-log-when">${esc(timeAgo(e.at))}</span><span class="ih-log-src">${esc(label)}</span><span>${parts.join(' · ')}</span></div>`;
+            }).join('')}</div>
+        </div>` : '';
+
+    const issues = (pd.localResources || []).filter((r) => r && r.type === 'Zap' && r.zapMeta?.externalIssues?.length)
+        .flatMap((z) => z.zapMeta.externalIssues.map((i) => ({ zap: z.name, ...i })));
+    const issueHtml = issues.length ? `
+        <div class="ih-group">
+            <div class="ih-group-title">Zaps pointing at something to check (${issues.length})</div>
+            <div class="ih-log">${issues.slice(0, 8).map((i) => `<div class="ih-log-row"><span class="ih-log-src">${esc(i.zap)}</span><span>${esc(i.step)} uses ${esc(EXTERNAL_SOURCES[i.source]?.label || i.source)} “${esc(i.label)}”: ${i.state === 'removed_upstream' ? 'removed from the service' : i.state === 'not_pulled' ? 'that service has not been pulled yet' : 'not found in the last pull'}</span></div>`).join('')}${issues.length > 8 ? `<div class="tiny muted" style="padding:4px 0;">and ${issues.length - 8} more</div>` : ''}</div>
+        </div>` : '';
+
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">System Importer Hub</div>
+            <div class="spacer"></div>
+            ${connectedAny ? `<button class="btn small primary" ${st.busy ? 'disabled' : ''} onclick="OL.syncAllIntegrations()">${st.busy === 'all' ? 'Syncing...' : 'Sync all'}</button>` : ''}
             <button class="btn small soft" onclick="OL._importHub = null; OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <p class="tiny muted ih-lede">Pull live data from your connected services into ${client ? `<strong>${esc(client.meta?.name || 'this project')}</strong>` : 'the active project'}. Keys are read from the project's Credentials and never leave the server.</p>
-            ${st.note ? `<div class="ih-note ih-note-${st.note.kind}">${esc(st.note.text)}</div>` : ''}
+            <p class="tiny muted ih-lede">Pull live data from your connected services into ${client ? `<strong>${esc(client.meta?.name || 'this project')}</strong>` : 'the active project'}. Services already pulled once refresh by themselves when the project is opened. Keys are read from the project's Credentials and never leave the server.</p>
+            ${st.note ? `<div class="ih-note ih-note-${st.note.kind}" style="white-space:pre-line;">${esc(st.note.text)}</div>` : ''}
             ${HUB_GROUPS.map((g) => `
                 <div class="ih-group">
                     <div class="ih-group-title">${g.title}</div>
                     <div class="ih-grid">${g.items.map(tile).join('')}</div>
                 </div>`).join('')}
+            ${issueHtml}
+            ${logHtml}
         </div>
     `;
     openModal(html);
 };
 
-export async function importCalendly(client) {
+export async function importCalendly(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'calendly');
     if (!hasKey(creds)) throw new Error("Calendly API Key missing in Credentials.");
     await secureEntry(client, creds);
 
-    console.log("📡 Asking the backend to fetch Calendly event types...");
     const data = await importFrom('calendly', client.id, creds.id);
     const events = data.collection || [];
 
-    events.forEach(ev => {
-        const externalId = ev.uri.split('/').pop(); 
-        
-        OL.upsertExternalResource(client, {
-            id: `cal-${externalId}`,
-            externalId: externalId,
-            name: ev.name,
-            source: 'calendly',
-            type: 'Event',
-            externalUrl: ev.scheduling_url,
+    const items = events.map((ev) => {
+        const externalId = String(ev.uri || '').split('/').pop();
+        return {
+            externalId, name: ev.name, type: 'Event', externalUrl: ev.scheduling_url,
             description: ev.description || "Calendly Event Type",
-            steps: [{ 
-                id: uid(), 
-                name: "Client Schedules Appointment", 
-                appName: "Calendly" 
-            }]
-        });
-    });
-
-    return events.length;
+            steps: [{ id: `cal-${externalId}-s0`, name: "Client Schedules Appointment", appName: "Calendly" }],
+        };
+    }).filter((i) => i.externalId);
+    return commitPull(client, 'calendly', items);
 };
 
-export async function importYCBM(client) {
+export async function importYCBM(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'youcanbookme');
     if (!hasKey(creds)) throw new Error("YCBM API Key missing in App Credentials.");
 
     // The account email is kept in the entry's username field (it is not a secret), or asked for once.
     let email = creds.username;
     if (!email || email.trim() === "") {
+        if (opts.auto) throw needsSetup('The YouCanBook.me account email has not been entered yet.');
         email = prompt("Please enter your YouCanBookMe account email:");
-        if (!email) return 0; // User cancelled
+        if (!email) return null; // User cancelled
         creds.username = email.trim();
         OL.persist();
     }
     await secureEntry(client, creds);
 
     // The backend combines the email and the stored key into the login YouCanBookMe expects.
-    console.log("📡 Asking the backend to fetch YCBM profiles...");
     const profiles = await importFrom('ycbm', client.id, creds.id, { email: email.trim() });
 
-    profiles.forEach(p => {
-        OL.upsertExternalResource(client, {
-            externalId: p.id,
-            name: p.title,
-            source: 'ycbm',
-            type: 'Event',
-            externalUrl: `https://${p.subdomain}.youcanbook.me`,
-            steps: [{ id: uid(), name: "Customer Schedules via YCBM", appName: "YouCanBookMe" }]
-        });
-    });
-
-    return profiles.length;
+    const items = (profiles || []).map((p) => ({
+        externalId: p.id, name: p.title, type: 'Event', externalUrl: `https://${p.subdomain}.youcanbook.me`,
+        steps: [{ id: `ycbm-${p.id}-s0`, name: "Customer Schedules via YCBM", appName: "YouCanBookMe" }],
+    }));
+    return commitPull(client, 'ycbm', items);
 };
 
-export async function importActiveCampaign(client) {
+export async function importActiveCampaign(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'activecampaign');
     if (!hasKey(creds)) throw new Error("ActiveCampaign API Key missing in Credentials.");
 
-    // 1. Handle the Base URL (Prompt if missing). It is kept in the entry's username field (not a secret).
+    // The Base URL is kept in the entry's username field (not a secret), or asked for once.
     let baseUrl = creds.username;
     if (!baseUrl || !baseUrl.includes('http')) {
+        if (opts.auto) throw needsSetup('The ActiveCampaign API URL has not been entered yet.');
         baseUrl = prompt("Please enter your ActiveCampaign API URL (e.g., https://accountname.api-us1.com):");
-        if (!baseUrl) return 0;
-
-        // Sanitize: remove trailing slashes
+        if (!baseUrl) return null;
         baseUrl = baseUrl.trim().replace(/\/$/, "");
         creds.username = baseUrl;
         OL.persist();
     }
     await secureEntry(client, creds);
 
-    console.log("📡 Asking the backend to sync ActiveCampaign automations...");
     const data = await importFrom('activecampaign', client.id, creds.id, { baseUrl });
     const autos = data.automations || [];
 
-    autos.forEach(auto => {
-        OL.upsertExternalResource(client, {
-            id: `ac-${auto.id}`,
-            externalId: auto.id,
-            name: auto.name,
-            source: 'activecampaign',
-            type: 'Email Campaign',
-            archetype: 'Multi-Level',
-            steps: [
-                { id: uid(), name: "Trigger: " + (auto.enter_trigger || "Start"), appName: "ActiveCampaign" },
-                { id: uid(), name: "Automation Flow Sequence", appName: "ActiveCampaign" }
-            ]
-        });
-    });
-
-    return autos.length;
+    const items = autos.map((auto) => ({
+        externalId: auto.id, name: auto.name, type: 'Email Campaign', archetype: 'Multi-Level',
+        steps: [
+            { id: `ac-${auto.id}-s0`, name: "Trigger: " + (auto.enter_trigger || "Start"), appName: "ActiveCampaign" },
+            { id: `ac-${auto.id}-s1`, name: "Automation Flow Sequence", appName: "ActiveCampaign" },
+        ],
+    }));
+    return commitPull(client, 'activecampaign', items);
 };
 
-export async function importMailerLite(client) {
+export async function importMailerLite(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'mailerlite');
     if (!hasKey(creds)) throw new Error("MailerLite API Key missing.");
     await secureEntry(client, creds);
@@ -975,195 +1024,86 @@ export async function importMailerLite(client) {
     const data = await importFrom('mailerlite', client.id, creds.id);
     const automations = data.data || [];
 
-    automations.forEach(auto => {
-        OL.upsertExternalResource(client, {
-            externalId: auto.id,
-            name: auto.name,
-            source: 'mailerlite',
-            type: 'Email Campaign',
-            archetype: 'Multi-Level',
-            steps: [
-                { id: uid(), name: "Trigger: " + (auto.trigger_type || "Subscriber Joins"), appName: "MailerLite" },
-                { id: uid(), name: "Automation Flow", appName: "MailerLite" }
-            ]
-        });
-    });
-    return automations.length;
+    const items = automations.map((auto) => ({
+        externalId: auto.id, name: auto.name, type: 'Email Campaign', archetype: 'Multi-Level',
+        steps: [
+            { id: `ml-${auto.id}-s0`, name: "Trigger: " + (auto.trigger_type || "Subscriber Joins"), appName: "MailerLite" },
+            { id: `ml-${auto.id}-s1`, name: "Automation Flow", appName: "MailerLite" },
+        ],
+    }));
+    return commitPull(client, 'mailerlite', items);
 };
 
-export async function importJotform(client) {
+export async function importJotform(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'jotform');
     if (!hasKey(creds)) throw new Error("Jotform API Key missing.");
     await secureEntry(client, creds);
 
+    const data = await importFrom('jotform', client.id, creds.id);
+    const forms = data.content || data.data || (Array.isArray(data) ? data : []);
+
+    const items = forms.map((form) => ({
+        externalId: form.id, name: form.title, type: 'Form', externalUrl: `https://www.jotform.com/form/${form.id}`,
+        steps: [{ id: `jf-${form.id}-s0`, name: "User Submits Form", appName: "Jotform" }],
+    }));
+    const summary = commitPull(client, 'jotform', items);
+    // Forms whose logic was loaded before: read again, and say which changed (features/jotform-logic.js)
     try {
-        const data = await importFrom('jotform', client.id, creds.id);
-        const forms = data.content || data.data || (Array.isArray(data) ? data : []);
-
-        forms.forEach(form => {
-            OL.upsertExternalResource(client, {
-                id: `jf-${form.id}`,
-                externalId: form.id,
-                name: form.title,
-                source: 'jotform',
-                type: 'Form',
-                externalUrl: `https://www.jotform.com/form/${form.id}`,
-                steps: [{ id: uid(), name: "User Submits Form", appName: "Jotform" }]
-            });
-        });
-        return forms.length;
-    } catch (err) {
-        console.error("Fetch Interruption:", err);
-        throw err;
-    }
-};
-
-export async function syncProcessStreet(client) {
-    console.log("🚀 Starting Process Street v1.1 Sync...");
-    const targetClient = client || OL.state.clients[OL.state.activeClientId];
-    
-    try {
-        const registry = targetClient.projectData.accessRegistry || [];
-        const psCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.processstreet);
-
-        if (!hasKey(psCreds)) throw new Error("Process Street API Key missing in Credentials.");
-        await secureEntry(targetClient, psCreds);
-
-        // The backend pages through the workflows and returns them all (with their tasks).
-        console.log("📡 Asking the backend to fetch Process Street workflows...");
-        const psData = await importFrom('processstreet', targetClient.id, psCreds.id);
-        const allWorkflows = psData.items || psData.workflows || [];
-
-        console.log(`✅ Total Collected: ${allWorkflows.length} workflows.`);
-
-        if (allWorkflows.length === 0) {
-            throw new Error("Process Street returned 0 workflows. Verify your account has 'Active' workflows.");
+        if (typeof OL.refreshLoadedFormLogic === 'function') {
+            const logicChanged = await OL.refreshLoadedFormLogic(client, opts.auto ? 10 : 30);
+            if (logicChanged.length) {
+                logicChanged.forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });
+                logExternalPull(client.projectData, { ...summary, added: [], renamed: [], changed: logicChanged.map((n) => `${n} (form logic)`), missing: [], restored: [] });
+            }
         }
-
-        // 🧹 Wipe and Rebuild
-        targetClient.projectData.localResources = (targetClient.projectData.localResources || [])
-            .filter(r => !r.id.startsWith('ps-'));
-
-        allWorkflows.forEach((wf, i) => {
-            targetClient.projectData.localResources.push({
-                id: `ps-workflow-${wf.id}-${i}`,
-                externalId: wf.id,
-                name: wf.name,
-                source: 'processstreet',
-                type: 'Checklist',
-                visible: true,
-                category: 'Flows',
-                isExpanded: true,
-                steps: [] // We can fetch tasks later if needed
-            });
-        });
-
-        if (typeof OL.persist === 'function') OL.persist();
-
-        setTimeout(() => {
-            const activeId = OL.state.activeClientId;
-            if (OL.state.clients[activeId]) {
-                OL.state.clients[activeId].projectData.localResources = targetClient.projectData.localResources;
-            }
-            if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
-            if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
-        }, 300);
-
-        alert(`Success! Synced ${allWorkflows.length} Process Street workflows.`);
-
-    } catch (e) {
-        console.error("🔥 PS v1.1 Sync Error:", e);
-        alert("Sync Failed: " + e.message);
-    }
+    } catch (e) { console.warn('Form logic refresh skipped:', e); }
+    return summary;
 };
 
-// Renamed to 'syncRedtail' to break the cache
-export async function syncRedtail(client) {
+export async function syncProcessStreet(client, opts = {}) {
     const targetClient = client || OL.state.clients[OL.state.activeClientId];
-    if (!targetClient || !targetClient.projectData) return;
+    const psCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.processstreet);
+    if (!hasKey(psCreds)) throw new Error("Process Street API Key missing in Credentials.");
+    await secureEntry(targetClient, psCreds);
 
-    try {
-        const registry = targetClient.projectData.accessRegistry || [];
-        const rtCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.redtail);
-
-        if (!hasKey(rtCreds)) throw new Error("Credentials missing.");
-        await secureEntry(targetClient, rtCreds);
-
-        let allTemplates = [];
-        let currentPage = 1;
-        let totalPages = 1;
-
-        console.log("📡 Starting Paginated Sync...");
-
-        // 🎯 THE PAGINATION LOOP
-        do {
-            const result = await importFrom('redtail', targetClient.id, rtCreds.id, { page: currentPage });
-            
-            const pageTemplates = result.workflow_templates || [];
-            allTemplates = allTemplates.concat(pageTemplates);
-            
-            // Update total pages from the API response
-            totalPages = result.total_pages || 1;
-            console.log(`📥 Received Page ${currentPage} of ${totalPages} (${pageTemplates.length} items)`);
-            
-            currentPage++;
-        } while (currentPage <= totalPages);
-
-       console.log(`✅ Total Templates Collected: ${allTemplates.length}`);
-
-        // 1. Clear out old Redtail entries first to start fresh
-        if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
-        targetClient.projectData.localResources = targetClient.projectData.localResources.filter(r => !r.id.startsWith('rt-'));
-
-        console.log("🧹 Cleared old Redtail references. Re-building from 61 items...");
-
-        allTemplates.forEach((wf, index) => {
-            // 🎯 THE FIX: Force a unique ID using the Redtail ID + Index
-            // This prevents the system from "merging" 61 items into 3.
-            const uniqueId = `rt-workflow-${wf.id || index}-${index}`;
-
-            const resourceData = {
-                id: uniqueId,
-                externalId: wf.id,
-                name: wf.name,
-                source: 'redtail',
-                type: 'Workflow',
-                visible: true,
-                category: 'Flows',
-                isExpanded: true,
-                workflowId: null,
-                archetype: 'Multi-Level',
-                steps: [{ id: `step-${uniqueId}`, name: "Workflow Template", appName: 'Redtail' }]
-            };
-
-            // 🟢 Push directly to the array - bypassing any 'upsert' logic that might be bugged
-            targetClient.projectData.localResources.push(resourceData);
-        });
-
-        console.log(`💾 Array count before persist: ${targetClient.projectData.localResources.length}`);
-
-        // 🎯 THE LOCK: Ensure the system writes this array to the DB
-        if (typeof OL.persist === 'function') OL.persist();
-
-        // 🎯 UI RECOVERY: Force the render
-        setTimeout(() => {
-            if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
-            
-            if (typeof OL.renderResourceManager === 'function') {
-                OL.renderResourceManager(targetClient);
-            }
-            
-            // Final Verification Check
-            const finalCount = targetClient.projectData.localResources.filter(r => r.id.startsWith('rt-')).length;
-            console.log(`🏁 Final verification: ${finalCount} Redtail items in memory.`);
-            
-        }, 300);
-
-        return allTemplates.length;
-    } catch (e) {
-        console.error("🔥 Sync Failed:", e);
-        throw e;
+    // The backend pages through the workflows and returns them all.
+    const psData = await importFrom('processstreet', targetClient.id, psCreds.id);
+    const all = psData.items || psData.workflows || [];
+    if (all.length === 0 && (targetClient.projectData.localResources || []).some((r) => r.source === 'processstreet')) {
+        throw new Error("Process Street returned 0 workflows. Nothing was changed. Verify your account has 'Active' workflows.");
     }
+
+    const items = all.map((wf) => ({
+        externalId: wf.id, name: wf.name, type: 'Checklist', category: 'Flows',
+        steps: [placeholderStep('ps', wf.id, 'Checklist Template', 'Process Street')],
+    }));
+    return commitPull(targetClient, 'processstreet', items);
+};
+
+export async function syncRedtail(client, opts = {}) {
+    const targetClient = client || OL.state.clients[OL.state.activeClientId];
+    if (!targetClient || !targetClient.projectData) return null;
+
+    const rtCreds = findRegistryEntry(targetClient, APP_NAME_HINTS.redtail);
+    if (!hasKey(rtCreds)) throw new Error("Redtail API Key missing in Credentials.");
+    await secureEntry(targetClient, rtCreds);
+
+    // The service answers in pages; collect them all before touching anything, so a failure part-way changes nothing.
+    let all = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+        const result = await importFrom('redtail', targetClient.id, rtCreds.id, { page });
+        all = all.concat(result.workflow_templates || []);
+        totalPages = result.total_pages || 1;
+        page++;
+    } while (page <= totalPages);
+
+    const items = all.filter((wf) => wf && wf.id != null).map((wf) => ({
+        externalId: wf.id, name: wf.name, type: 'Workflow', category: 'Flows', archetype: 'Multi-Level',
+        steps: [placeholderStep('redtail', wf.id, 'Workflow Template', 'Redtail')],
+    }));
+    return commitPull(targetClient, 'redtail', items);
 };
 
 // Which access entry holds the key for an outside system: the entry whose app name matches, preferring
@@ -1697,7 +1637,7 @@ Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
     importYCBM, importActiveCampaign, importMailerLite, importJotform,
-    syncProcessStreet, syncRedtail, getCredsForApp, printFlowMap,
+    syncProcessStreet, syncRedtail, syncAllIntegrations, autoPullIntegrations, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
     openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,
     setClickUpMapping, setClickUpTargetMode, setClickUpTargetClient,

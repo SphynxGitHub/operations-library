@@ -18,7 +18,7 @@
 // ================================================================================================
 
 import { planReorganize, applyReorganize, restoreBackup } from './zap-reorganize.js';
-import { planImport, zapToResource, mergeIntoExisting, discoverResources, fingerprint, findHookLinks, applyHookLinks, isInactiveZap, planGroups, placeZapCards } from './zap-import-core.js';
+import { planImport, zapToResource, mergeIntoExisting, tieExternalToZaps, discoverResources, fingerprint, findHookLinks, applyHookLinks, isInactiveZap, planGroups, placeZapCards } from './zap-import-core.js';
 
 const STATUS_LABEL = { new: 'New', changed: 'Changed', unchanged: 'Unchanged', baseline: 'Already here' };
 const STATUS_COLOR = { new: '#16a34a', changed: '#d97706', unchanged: '#6b7280', baseline: '#2563eb' };
@@ -213,6 +213,10 @@ export function createZapImport(deps) {
     const hookLinks = findHookLinks(model.zaps || []).links;
     if (opts.connectZaps !== false) summary.connections = applyHookLinks(library, hookLinks);
 
+    // Lines from Zap steps to the forms, event types and workflow templates pulled from outside services, and a note on any
+    // Zap that points at something not found there (core/external-sync.js).
+    try { const t = tieExternalToZaps(library); summary.externalTies = t.tied; summary.externalIssues = t.issues; } catch (e) { console.warn('Tying Zaps to outside services failed:', e); }
+
     // put the cards on the flow map: one stage, workflows for call chains and same-name families
     if (opts.stageChoice !== 'none') {
       const cand = chosen.map((i) => i.zap).filter((z) => {
@@ -359,6 +363,8 @@ export function createZapImport(deps) {
       ${r.markedBuilt ? `<li>${r.markedBuilt} card${r.markedBuilt === 1 ? '' : 's'} set to Built.</li>` : ''}
       ${r.draftsPending ? `<li>${r.draftsPending} draft-only Zap${r.draftsPending === 1 ? '' : 's'} left as Pending (never published).</li>` : ''}
       ${r.discovered ? `<li>${r.discovered} folder/spreadsheet resource${r.discovered === 1 ? '' : 's'} found and linked.</li>` : ''}
+      ${r.externalTies ? `<li>${r.externalTies} Zap step${r.externalTies === 1 ? '' : 's'} tied to forms, event types or workflow templates pulled from outside services.</li>` : ''}
+      ${r.externalIssues ? `<li>${r.externalIssues} Zap step${r.externalIssues === 1 ? '' : 's'} point${r.externalIssues === 1 ? 's' : ''} at something not found in your pulled services. See the Importer Hub for the list.</li>` : ''}
       ${r.removedFlagged ? `<li>${r.removedFlagged} card${r.removedFlagged === 1 ? '' : 's'} marked “missing from Zapier”.</li>` : ''}${hist}</ul>
       <div style="text-align:right;"><button class="btn small primary" onclick="OL.zapImportClose()">Done</button></div></div>`;
   }
