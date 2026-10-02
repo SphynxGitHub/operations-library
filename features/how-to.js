@@ -681,6 +681,119 @@ export function _geDeleteBlock(blockId) {
     }
 };
 
+// ── TEXT BLOCKS: rich text, with an HTML view for anything the rich editor can't hold ──
+// The rich editor keeps a small safe set of formatting (bold, italic, underline, lists, headings, quotes, links, alignment,
+// text color). A guide written earlier with a table, custom styling and the like opens in the HTML view so nothing is lost.
+const RICH_TAGS = new Set(['B','STRONG','I','EM','U','UL','OL','LI','BR','A','DIV','SPAN','P','H3','H4','BLOCKQUOTE','S','STRIKE','CODE','PRE']);
+export function _geHtmlNeedsSource(html) {
+    const raw = String(html || '');
+    if (!raw.trim()) return false;
+    const d = document.createElement('div');
+    d.innerHTML = raw;
+    return [...d.querySelectorAll('*')].some((el) => {
+        if (!RICH_TAGS.has(el.tagName)) return true;
+        const styles = (el.getAttribute('style') || '').split(';').map((p) => p.split(':')[0].trim().toLowerCase()).filter(Boolean);
+        return styles.some((p) => p !== 'color' && p !== 'text-align');
+    });
+}
+export function _geTextSourceMode(block) {
+    const ge = (OL._ge = OL._ge || {});
+    if (ge.forceRich && ge.forceRich.has(block.id)) return false;
+    if (ge.forceSource && ge.forceSource.has(block.id)) return true;
+    return _geHtmlNeedsSource(block.data?.html);
+}
+// Saves what is in a rich editor (cleaned to the safe set) - only when the person actually changed something, so merely
+// clicking in and out of a block never rewrites it.
+export function _geRichBlur(blockId, el) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block || !el) return;
+    const before = document.createElement('div');
+    before.innerHTML = block.data.html || '';
+    if (before.innerHTML === el.innerHTML) return;
+    const clean = typeof OL.sanitizeCommentHtml === 'function' ? OL.sanitizeCommentHtml(el.innerHTML) : el.innerHTML;
+    block.data.html = clean;
+    OL._gePersist();
+}
+export function _geToggleTextMode(blockId) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    const ge = (OL._ge = OL._ge || {});
+    ge.forceSource = ge.forceSource || new Set(); ge.forceRich = ge.forceRich || new Set();
+    const goingToRich = _geTextSourceMode(block);
+    // Take whatever is on screen first, so nothing typed is lost by switching.
+    const srcEl = document.getElementById(`ge-src-${blockId}`);
+    const richEl = document.getElementById(`ge-rt-${blockId}`);
+    if (srcEl) block.data.html = srcEl.value;
+    else if (richEl) _geRichBlur(blockId, richEl);
+    if (goingToRich && _geHtmlNeedsSource(block.data.html)
+        && !confirm("This block has HTML the rich text editor can't show, like tables or custom styling. Switching drops what it can't show. Switch anyway?")) return;
+    if (goingToRich) {
+        block.data.html = typeof OL.sanitizeCommentHtml === 'function' ? OL.sanitizeCommentHtml(block.data.html || '') : block.data.html;
+        ge.forceSource.delete(blockId); ge.forceRich.add(blockId);
+    } else {
+        ge.forceRich.delete(blockId); ge.forceSource.add(blockId);
+    }
+    OL._gePersist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) { container.innerHTML = OL._geRenderAllBlocks(ht); if (window.lucide) lucide.createIcons(); }
+}
+
+// ── DRAG AND DROP: rearrange blocks by their grip ──
+let _geDraggedBlockId = null;
+OL._geDraggedBlockId = null;
+const _geClearDropMarks = () => document.querySelectorAll('.ge-block').forEach((el) => { el.style.boxShadow = ''; });
+export function _geBlockDragStart(event, blockId) {
+    _geDraggedBlockId = blockId; OL._geDraggedBlockId = blockId;
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', `ge-block:${blockId}`); } catch (e) { /* some browsers need data to start a drag */ }
+    const el = document.getElementById(`ge-blk-${blockId}`);
+    if (el) { try { event.dataTransfer.setDragImage(el, 24, 16); } catch (e) { /* decoration only */ } setTimeout(() => { el.style.opacity = '0.45'; }, 0); }
+}
+export function _geBlockDragOver(event, blockId) {
+    if (!_geDraggedBlockId) return;           // not a block drag (a checklist item, a file...)
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    _geClearDropMarks();
+    if (blockId === _geDraggedBlockId) return;
+    const el = document.getElementById(`ge-blk-${blockId}`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const after = (event.clientY - rect.top) > rect.height / 2;
+    el.style.boxShadow = after ? '0 3px 0 0 var(--accent)' : '0 -3px 0 0 var(--accent)';
+}
+export function _geBlockDragLeave(event, blockId) {
+    const el = document.getElementById(`ge-blk-${blockId}`);
+    if (el && !el.contains(event.relatedTarget)) el.style.boxShadow = '';
+}
+export function _geBlockDrop(event, targetId) {
+    if (!_geDraggedBlockId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const draggedId = _geDraggedBlockId;
+    const el = document.getElementById(`ge-blk-${targetId}`);
+    let after = false;
+    if (el) { const rect = el.getBoundingClientRect(); after = (event.clientY - rect.top) > rect.height / 2; }
+    _geBlockDragEnd();
+    if (!draggedId || draggedId === targetId) return;
+    const ht = OL._geGetHt();
+    if (!ht || !ht.blocks) return;
+    const from = ht.blocks.findIndex(b => b.id === draggedId);
+    if (from === -1) return;
+    const [moved] = ht.blocks.splice(from, 1);
+    const to = ht.blocks.findIndex(b => b.id === targetId);
+    ht.blocks.splice(to === -1 ? ht.blocks.length : (after ? to + 1 : to), 0, moved);
+    OL._gePersist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) { container.innerHTML = OL._geRenderAllBlocks(ht); if (window.lucide) lucide.createIcons(); }
+}
+export function _geBlockDragEnd() {
+    _geDraggedBlockId = null; OL._geDraggedBlockId = null;
+    _geClearDropMarks();
+    document.querySelectorAll('.ge-block').forEach((el) => { el.style.opacity = ''; });
+}
+
 // ── MOVE BLOCK ─────────────────────────────────────
 export function _geMoveBlock(blockId, dir) {
     const ht = OL._geGetHt();
@@ -798,8 +911,17 @@ export function _geRenderBlock(block, idx, total, ht, values) {
              class="ge-block"
              style="position:relative;background:var(--panel);border:1px ${isHiddenForViewers ? 'dashed rgba(var(--accent-rgb),0.4)' : 'solid var(--panel-border)'};
                     border-radius:10px;padding:18px 20px;transition:border-color 0.15s;${isHiddenForViewers ? 'opacity:0.75;' : ''}"
+             ${canEdit ? `ondragover="OL._geBlockDragOver(event,'${block.id}')" ondragleave="OL._geBlockDragLeave(event,'${block.id}')" ondrop="OL._geBlockDrop(event,'${block.id}')"` : ''}
              onmouseenter="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='flex';"
-             onmouseleave="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
+             onmouseleave="if(OL._geDraggedBlockId) return; const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
+            ${canEdit ? `
+            <span class="ge-block-grip" draggable="true" title="Drag to reorder"
+                  ondragstart="OL._geBlockDragStart(event,'${block.id}')" ondragend="OL._geBlockDragEnd(event)"
+                  style="position:absolute;left:3px;top:12px;width:14px;height:22px;display:flex;align-items:center;justify-content:center;
+                         cursor:grab;color:var(--text-muted);opacity:0.35;transition:opacity .15s;"
+                  onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+                <i data-lucide="grip-vertical" style="width:12px;height:12px;pointer-events:none;"></i>
+            </span>` : ''}
             ${controls}
             ${isHiddenForViewers ? `<div class="tiny" style="color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><i data-lucide="eye-off" style="width:11px;height:11px;"></i> Hidden from viewers right now (condition not met)</div>` : ''}
             ${inner}
@@ -849,10 +971,25 @@ export function openHowToBlockConditionModal(blockId) {
 export function _geRenderBlockInner(block, canEdit) {
     switch (block.type) {
 
-        case 'text':
-            return `
-                ${canEdit ? `
-                    <textarea
+        case 'text': {
+            if (!canEdit) {
+                return `
+                    <div class="ol-richtext-view" style="font-size:13px;line-height:1.7;color:var(--text-main);">
+                        ${block.data.html || '<em style="opacity:0.4;">Empty text block</em>'}
+                    </div>`;
+            }
+            const asSource = OL._geTextSourceMode(block);
+            const richOk = typeof OL.renderRichTextField === 'function';
+            const toggle = richOk ? `
+                <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:4px;">
+                    ${asSource && OL._geHtmlNeedsSource(block.data.html) ? `<span style="font-size:10px;color:var(--text-muted);">Has HTML the rich editor can't show (tables, custom styles), so it opens as HTML.</span>` : ''}
+                    <button type="button" class="btn tiny soft" style="padding:2px 8px;font-size:10px;"
+                            onmousedown="event.preventDefault(); OL._geToggleTextMode('${block.id}')">${asSource ? 'Rich text' : 'HTML'}</button>
+                </div>` : '';
+            if (asSource || !richOk) {
+                return `
+                    ${toggle}
+                    <textarea id="ge-src-${block.id}"
                         style="width:100%;min-height:100px;background:var(--panel-soft);
                                border:1px solid var(--panel-border);border-radius:8px;
                                color:var(--text-main);font-size:13px;line-height:1.6;
@@ -862,16 +999,18 @@ export function _geRenderBlockInner(block, canEdit) {
                         onblur="this.style.borderColor='var(--panel-border)';
                                 OL._geUpdateBlockData('${block.id}', {html: this.value})"
                         placeholder="Type text or paste HTML..."
-                    >${block.data.html || ''}</textarea>
+                    >${esc(block.data.html || '')}</textarea>
                     <div style="font-size:9px;color:var(--text-muted);margin-top:4px;opacity:0.6;">
-                        HTML is supported — paste rich content freely.
-                    </div>
-                ` : `
-                    <div style="font-size:13px;line-height:1.7;color:var(--text-main);">
-                        ${block.data.html || '<em style="opacity:0.4;">Empty text block</em>'}
-                    </div>
-                `}
-            `;
+                        HTML view: anything is kept exactly as typed.
+                    </div>`;
+            }
+            return `
+                ${toggle}
+                ${OL.renderRichTextField({
+                    id: `ge-rt-${block.id}`, html: block.data.html || '', placeholder: 'Type your instructions...',
+                    minHeight: 100, grow: true, onBlur: `OL._geRichBlur('${block.id}', this)`,
+                })}`;
+        }
 
         case 'header':
             return `
@@ -1184,6 +1323,7 @@ export function _geChecklistDragStart(event, blockId, itemId) {
 // dragged item will land before you drop it.
 export function _geChecklistDragOver(event, blockId, itemId) {
     event.preventDefault();
+    if (!_geDraggedChecklistItemId) return;   // a whole block is being dragged, not a checklist item
     const row = document.getElementById(`ge-cli-${itemId}`);
     if (!row || itemId === _geDraggedChecklistItemId) return;
     const rect = row.getBoundingClientRect();
@@ -2205,6 +2345,8 @@ Object.assign(window.OL, {
     _geChecklistDragStart, _geChecklistDragOver, _geChecklistDragLeave, _geChecklistDrop,
     _geUpdateBlockData, _geUpdateBlockCondition, _geGuideChecklistValues, _geChecklistBlockLabel,
     _geRefreshImageBlock, _geRefreshVideoPreview,
+    _geHtmlNeedsSource, _geTextSourceMode, _geRichBlur, _geToggleTextMode,
+    _geBlockDragStart, _geBlockDragOver, _geBlockDragLeave, _geBlockDrop, _geBlockDragEnd,
     _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock,
     _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide, openHowToBlockConditionModal
 });

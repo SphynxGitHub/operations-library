@@ -1,6 +1,7 @@
 import { groupResources, groupsHtml, flattenGroups } from '../../core/resource-groups.js';
 import { esc, decodeEntities, uid, state, db, updateAndSync, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
-import { getRequestTypes } from '../../core/requests.js';
+import { getRequestTypes, nextOpenRound } from '../../core/requests.js';
+import { isMaintenanceClient, ensureMaintenanceSheet, buildMaintenanceRequest } from '../../core/maintenance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 
 const GMAIL_FEED_LIMIT = 150;
@@ -1654,7 +1655,16 @@ OL.renderExcerptLinkPicker = function() {
                         ${(typeof getRequestTypes === 'function' ? getRequestTypes() : [{key:'build',label:'Build'},{key:'revision',label:'Revision'}]).map((t) => `<option value="${esc(t.key)}" ${st.newRequestType === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
                     </select>
                     ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a request.</div>` : ''}
-                    <div class="tiny muted" style="margin-bottom:8px;">Created as "Considering" — sits on the scoping sheet, not yet scheduled into a round or activated.</div>
+                    ${state.adminMode === true ? `
+                        <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; cursor:pointer;">
+                            <input type="checkbox" ${st.activateNow ? 'checked' : ''} ${clientId ? '' : 'disabled'} onchange="OL._excerptLinkState.activateNow=this.checked; OL.renderExcerptLinkPicker();">
+                            <strong>Activate it now</strong> (set up its tasks without going to the Scoping sheet)
+                        </label>` : ''}
+                    <div class="tiny muted" style="margin-bottom:8px;">${state.adminMode === true && st.activateNow
+                        ? (clientId && isMaintenanceClient(state.clients?.[clientId])
+                            ? 'Goes into the Maintenance queue as Do Now, and the activation review opens as soon as it is linked.'
+                            : 'Goes into the next open round as Do Now. It activates when that round is approved, and the review opens then.')
+                        : 'Created in the Backlog (round 0): it waits on the scoping sheet until someone gives it a round.'}</div>
                 </div>
             ` : `
                 <input type="text" class="modal-input tiny" placeholder="Search tasks, requests, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
@@ -1692,7 +1702,7 @@ OL.renderExcerptLinkPicker = function() {
                     <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
                 ` : st.creatingNewRequest ? `
                     <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewRequest=false; OL.renderExcerptLinkPicker();">Back to search</button>
-                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">Create & link</button>
+                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">${state.adminMode === true && st.activateNow ? 'Create, link & activate' : 'Create & link'}</button>
                 ` : `
                     <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
                     <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
@@ -1785,43 +1795,76 @@ OL.confirmExcerptCreateRequest = async function() {
     const clientId = OL._gmailLinkState?.clientId;
     const title = (st.newRequestTitle || '').trim();
     if (!title || !clientId) return;
+    const activate = state.adminMode === true && st.activateNow === true;
+    const requestType = st.newRequestType || 'build';
 
     let newItemId;
+    let activateMode = null;   // 'review' = open the activation review right after linking; 'round' = it waits for its round to be approved
+    let roundForToast = null;
     await updateAndSync(() => {
         const client = state.clients[clientId];
         if (!client) return;
         if (!client.projectData) client.projectData = {};
+
+        // Activate now, on a Maintenance client: the Maintenance queue is where its requests live. They are Do Now on a
+        // sheet that is always approved, so the activation review can open straight away.
+        if (activate && isMaintenanceClient(client)) {
+            const queue = ensureMaintenanceSheet(client.projectData);
+            const built = buildMaintenanceRequest({ title, requestType, source: 'email', resourceIds: [] }, { uid, now: new Date().toISOString() });
+            queue.lineItems.push(built);
+            newItemId = built.id;
+            activateMode = 'review';
+            return;
+        }
+
         if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{ id: 'initial', lineItems: [] }];
+        const sheet = client.projectData.scopingSheets[0];
         newItemId = 'reqline-' + Date.now();
-        client.projectData.scopingSheets[0].lineItems.push({
+        const item = {
             id: newItemId,
-            // Request-only lines need a synthetic 'reqline-' resourceId, the
-            // same as the Add Request modal gives them (see saveRequestLine
-            // in features/scoping.js). Without one, getResourceById can't
-            // resolve the line and the scoping sheet silently hides it.
+            // Request-only lines need a synthetic 'reqline-' resourceId, the same as the Add Request modal gives them
+            // (see saveRequestLine in features/scoping.js). Without one, getResourceById can't resolve the line and the
+            // scoping sheet silently hides it.
             resourceId: 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
             name: title,
-            requestType: st.newRequestType || 'build',
-            // Backlog, not Considering/round 1 — lands in the scoping
-            // sheet's "Pending / Backlog" section (renderBacklogSection)
-            // for someone to actively promote with "Add to scoping sheet",
-            // rather than silently appearing already scheduled into the
-            // current round. Round stays null to match — see
-            // core/requests.js buildDesired/nextOpenRound.
-            status: 'Backlog',
+            requestType,
             responsibleParty: 'Sphynx',
-            round: null,
             teamMode: 'everyone',
             teamIds: [],
             data: {},
             manualHours: 0,
             dependencies: [],
-        });
+        };
+        if (activate) {
+            // Do Now in the next open round. The round gets its own Drafting entry, as "Add to scoping sheet" does, so it
+            // is not swept up by an old sheet-wide approval. It activates once the round is approved.
+            const target = nextOpenRound(sheet);
+            Object.assign(item, { status: 'Do Now', round: target });
+            if (!sheet.roundApprovals) sheet.roundApprovals = {};
+            const entry = sheet.roundApprovals[String(target)];
+            if (!entry || !entry.status) {
+                sheet.roundApprovals[String(target)] = { ...(entry || {}), status: 'Drafting', statusChangedAt: new Date().toISOString(), approvedAt: null, collapsed: false };
+            }
+            activateMode = 'round'; roundForToast = target;
+        } else {
+            // The Backlog is round 0: it waits on the scoping sheet until someone gives it a round (core/requests.js).
+            Object.assign(item, { status: 'Backlog', round: null });
+        }
+        (sheet.lineItems = sheet.lineItems || []).push(item);
     }, clientId);
     if (!newItemId) return;
 
     st.targetType = 'request'; st.targetId = newItemId; st.targetLabel = title;
     st.creatingNewRequest = false;
+    if (activateMode === 'review') {
+        st.afterLink = async () => { await OL.openActivationReview(clientId, newItemId); };
+    } else if (activateMode === 'round') {
+        st.afterLink = () => {
+            OL.openGmailMessageModal(st.messageId);
+            const msg = `"${title}" is in Round ${roundForToast} as Do Now. It activates once that round is approved, and the review opens then.`;
+            if (typeof OL.showToast === 'function') OL.showToast(msg);
+        };
+    }
     await OL.confirmExcerptLink();
 };
 
@@ -1858,10 +1901,13 @@ OL.confirmExcerptLink = async function() {
         if (clientId) { try { await OL.rollDownForRequest(clientId, st.targetId); } catch (e) { console.warn('Roll-down failed:', e); } }
     }
 
+    const afterLink = st.afterLink;
     OL._excerptLinkState = null;
     OL._pendingSuggestionLink = null;
     OL.closeModal();
-    OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
+    // Normally back to the email so the new link shows; "Activate it now" goes on to the activation review instead.
+    if (typeof afterLink === 'function') { try { await afterLink(); } catch (e) { console.warn('After-link step failed:', e); OL.openGmailMessageModal(st.messageId); } }
+    else OL.openGmailMessageModal(st.messageId);   // reopen fresh so the new piece-link shows
     if (updatePayload.suggestions) OL._maybePromptArchiveAfterSuggestions(st.messageId);
 };
 
@@ -2287,6 +2333,8 @@ OL.openComposeEmailModal = function(options = {}) {
         quoted: options.quoted || null,
         quotedHtml: options.quotedHtml || null,
         quotedMeta: options.quotedMeta || '',
+        // A reply does not carry the earlier emails below it: the quoted message is only added if this is ticked.
+        includeQuoted: options.includeQuoted === true,
         threadId: options.threadId || null,
         replyToMessageId: options.replyToMessageId || null,
         linked_client_id: options.linked_client_id || null,
@@ -2330,8 +2378,12 @@ OL.openComposeEmailModal = function(options = {}) {
         <div id="compose-task-picker" style="margin-bottom:10px;"></div>
 
         ${st.quoted || st.quotedHtml ? `
+            <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; cursor:pointer;">
+                <input type="checkbox" ${st.includeQuoted ? 'checked' : ''} onchange="OL._composeState.includeQuoted = this.checked">
+                Include the message I'm replying to below my reply <span class="muted">(just that message, never the chain under it)</span>
+            </label>
             <details style="margin-bottom:10px;">
-                <summary class="tiny muted" style="cursor:pointer;">Quoted original message (included when sent)</summary>
+                <summary class="tiny muted" style="cursor:pointer;">Preview of the message that would be included</summary>
                 <div class="tiny muted" style="white-space:pre-wrap; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; margin-top:4px; max-height:200px; overflow:auto;">${esc(st.quoted || '')}</div>
             </details>
         ` : ''}
@@ -2783,9 +2835,9 @@ OL._buildComposeBody = function() {
         extraHtml: files ? `<p style="margin-top:12px;"><strong>Files:</strong><br>${st.projectFiles.map(f => `<a href="${esc(f.url)}">${esc(f.name)}</a>`).join('<br>')}</p>` : '',
         extraText: files ? 'Files:\n' + st.projectFiles.map(f => `- ${f.name}: ${f.url}`).join('\n') : '',
         signature: OL.signatureParts(OL.signatureIncluded('compose')),
-        quotedHtml: (st.quoted || st.quotedHtml)
+        quotedHtml: (st.includeQuoted && (st.quoted || st.quotedHtml))
             ? `<br><div class="gmail_quote">${st.quotedMeta ? `<div>${esc(st.quotedMeta)}</div>` : ''}<blockquote class="gmail_quote" style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${st.quotedHtml ? OL.sanitizeCommentHtml(st.quotedHtml) : OL.plainTextToHtml(st.quoted)}</blockquote></div>` : '',
-        quotedText: st.quoted ? `${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n') : '',
+        quotedText: (st.includeQuoted && st.quoted) ? `${st.quotedMeta || ''}\n` + String(st.quoted).split('\n').map(l => '> ' + l).join('\n') : '',
     }, { gap: '' });   // the task list and file block carry their own spacing
     return { html: built.html, text: built.text, messageText: built.messageText };
 };
@@ -2922,7 +2974,13 @@ OL.openReplyToGmailMessage = async function(messageId, replyAll = false) {
     const parsed = OL._parseSenderHeader(m.sender);
     const replyTo = parsed?.email || m.sender || '';
     const subject = /^re:/i.test(m.subject || '') ? m.subject : `Re: ${m.subject || ''}`;
-    const quoted = OL._stripHtmlForPreview(m.body) || m.snippet || '';
+    // Only the message being replied to, never the earlier emails it carries below its own text.
+    // (A plain-text body with "Name <a@b.com>" in it is not HTML, even though it contains angle brackets.)
+    const rawBody = String(m.body || '');
+    const bodyIsHtml = !!m.body_html || /<(div|p|br|span|table|blockquote|html|body|a\s|b>|i>|ul|ol)\b/i.test(rawBody);
+    const quoted = (bodyIsHtml ? OL._latestPlain(m, false).text : OL._splitQuotedText(rawBody).latest)
+        || OL._stripHtmlForPreview(m.body) || m.snippet || '';
+    const quotedHtmlLatest = m.body_html ? OL._splitQuotedHtml(m.body_html).latest : null;
 
     let cc = '';
     if (replyAll) {
@@ -2942,7 +3000,7 @@ OL.openReplyToGmailMessage = async function(messageId, replyAll = false) {
         threadId: m.thread_id,
         replyToMessageId: m.id,
         quoted,
-        quotedHtml: m.body_html || null,
+        quotedHtml: quotedHtmlLatest,
         quotedMeta: `On ${m.date ? new Date(m.date).toLocaleString() : 'an earlier date'}, ${m.sender || 'the sender'} wrote:`,
         linked_request_id: m.linked_request_id,
         linked_client_id: m.linked_client_id,
