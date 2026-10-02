@@ -74,7 +74,7 @@ export function explainActivationRows(client, masterResources = []) {
             const round = Number.isFinite(r) && r >= 1 ? r : (status === 'Backlog' ? null : 1);
             let verdict;
             if (item.activatedAt) verdict = 'Already activated';
-            else if (status === 'Backlog') verdict = 'In Backlog: pull it into a round first';
+            else if (status === 'Backlog') verdict = 'In Backlog (round 0): give it a round first';
             else if (status !== 'Do Now') verdict = `Status is "${status || 'blank'}": only Do Now is activated`;
             else if (!named(item)) verdict = 'No name and no resource that can be found';
             else if (!isRoundApproved(sheet, round)) verdict = `Round ${round} is not Approved`;

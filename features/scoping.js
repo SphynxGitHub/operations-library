@@ -8,7 +8,7 @@
 
 import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
 import { addLink, taskAppliesToRequest } from '../core/task-links.js';
-import { getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
+import { applyDecisionAndRound, moveOutOfBacklog, decisionAndRoundOf, getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
 import { requestResourceIds, teamMultiplier, priceRequest } from '../core/request-pricing.js';
 import { backfillClientRequests } from '../core/request-backfill.js';
@@ -157,8 +157,8 @@ export async function addBacklogItemToSheet(itemId) {
             item.resourceId = 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         }
         const target = nextOpenRound(sheet);
-        item.round = target;
-        item.status = 'Considering';
+        // Backlog is round 0: giving it a round takes it out, with the decision it already had (Do Now if none).
+        moveOutOfBacklog(item, target);
         // On a sheet still carrying the old sheet-wide 'Approved' flag, a
         // round with no entry of its own counts as approved AND starts
         // collapsed — so a brand-new round would swallow the request out of
@@ -883,6 +883,7 @@ export function setTeamMode(itemId, mode) {
     }
 };
 
+const isBacklogLike = (item) => String(item?.status || '') === 'Backlog';
 export function updateLineItem(itemId, field, value) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
@@ -898,7 +899,8 @@ export function updateLineItem(itemId, field, value) {
         const previousValue = item[field];
 
         if (field === 'round') {
-            item.round = parseInt(value, 10) || 1;
+            // 0 sends it to the Backlog, 1 or more takes it out (see core/requests.js applyDecisionAndRound)
+            applyDecisionAndRound(item, isBacklogLike(item) ? (item.backlogDecision || 'Do Now') : item.status, String(value ?? '').trim() === '' ? '1' : value);
         } else {
             item[field] = value;
         }
@@ -1914,7 +1916,8 @@ export function openRequestLineModal(itemId) {
     const isReqLine = !item || String(item.resourceId || '').startsWith('reqline-');
     const typeKey = item?.requestType || 'build';   // 'meeting' is no longer a pickable default — it isn't a request type any more
     const shownTitle = item?.name || (!isReqLine ? (OL.getResourceById(item.resourceId)?.name || '') : '');
-    const status = item?.status || 'Do Now';
+    // Backlog is "round 0": the decision shown is the client's (Do Now / Do Later), the round field carries the backlog.
+    const { decision: status, round: shownRound } = decisionAndRoundOf(item);
     const party = item?.responsibleParty || 'Sphynx';
 
     const opt = (value, label, current) =>
@@ -1952,9 +1955,9 @@ export function openRequestLineModal(itemId) {
                 </div>
                 <div style="display:flex; flex-direction:column; gap:4px;">
                     <label class="tiny muted" style="font-size:10px; font-weight:600;">Client decision</label>
-                    <select id="rq-status" class="modal-input" onchange="const r=document.getElementById('rq-round'); if(r) r.disabled = (this.value === 'Backlog');">
-                        ${['Backlog', 'Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
-                        ${status === 'Done' || status === "Don't Do" ? opt(status, status, status) : ''}
+                    <select id="rq-status" class="modal-input">
+                        ${['Do Now', 'Do Later'].map(s => opt(s, s, status)).join('')}
+                        ${['Done', "Don't Do", 'Considering'].includes(status) ? opt(status, status, status) : ''}
                     </select>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:4px;">
@@ -1966,9 +1969,8 @@ export function openRequestLineModal(itemId) {
                     </select>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:4px;">
-                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Round</label>
-                    <input id="rq-round" type="number" min="1" step="1" class="modal-input" ${status === 'Backlog' ? 'disabled' : ''}
-                           value="${parseInt(item?.round, 10) || 1}">
+                    <label class="tiny muted" style="font-size:10px; font-weight:600;">Round <span style="font-weight:400;">(0 = Backlog)</span></label>
+                    <input id="rq-round" type="number" min="0" step="1" class="modal-input" value="${shownRound}">
                 </div>
             </div>
 
@@ -2077,18 +2079,16 @@ export function applyRequestFormToItem(item) {
     if (!document.getElementById('rq-title')) return item;
     const read = (id) => document.getElementById(id)?.value ?? '';
     const title = read('rq-title').trim();
-    const status = read('rq-status') || item.status || 'Do Now';
     Object.assign(item, {
         ...(title ? { name: title } : {}),
         requestType: read('rq-type') || item.requestType || 'build',
         notes: read('rq-notes').trim(),
-        status,
         responsibleParty: read('rq-party') || item.responsibleParty || 'Sphynx',
-        // A backlog item's round stays null — see core/requests.js buildDesired
-        // and nextOpenRound for why a blank round can't just fall back to 1.
-        round: status === 'Backlog' ? null : Math.max(1, parseInt(read('rq-round'), 10) || 1),
         manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
     });
+    // Decision and round together: round 0 is the Backlog (the decision is kept for when it gets a round);
+    // see core/requests.js applyDecisionAndRound.
+    applyDecisionAndRound(item, read('rq-status'), read('rq-round'));
     // Per-request role picks: only overrides are stored; blank means "use the project default".
     if (typeof OL.getRoles === 'function') {
         const picked = {};
@@ -2343,7 +2343,7 @@ export async function setRoundApprovalStatus(round, newStatus) {
 function explainRoundActivation(client, sheet, round) {
     const inRound = (sheet.lineItems || []).filter((i) => i && String(i.status || '') !== 'Backlog' && (parseInt(i.round, 10) || 1) === round);
     const backlog = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog').length;
-    if (!inRound.length) return `Round ${round} is approved, but it has no requests yet.${backlog ? ` ${backlog} request${backlog === 1 ? ' is' : 's are'} in Backlog; pull ${backlog === 1 ? 'it' : 'them'} into the round to activate.` : ''}`;
+    if (!inRound.length) return `Round ${round} is approved, but it has no requests yet.${backlog ? ` ${backlog} request${backlog === 1 ? ' is' : 's are'} in the Backlog (round 0); give ${backlog === 1 ? 'it' : 'them'} a round to activate.` : ''}`;
     const doNow = inRound.filter((i) => String(i.status || '') === 'Do Now');
     // A request only counts once it has a name, or a resource that can still be found.
     const lookup = (id) => (client.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id);

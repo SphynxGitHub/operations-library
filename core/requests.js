@@ -33,6 +33,46 @@ export const SHEET_STATUSES = ['Drafting', 'Approved', 'Declined', 'On Hold', 'C
 // Old statuses a round might still carry from before this consolidation, and what they fold into.
 export const CONSOLIDATED_SHEET_STATUSES = { 'Awaiting Go-Ahead': 'Drafting', 'Presented': 'Drafting', 'Revising': 'Drafting', 'Confirming Final Scope': 'Drafting' };
 
+// ---- Backlog is "round 0", not a client decision ---------------------------------------------------------------
+// A request is in the Backlog while it has no round (round 0). The client's decision (Do Now / Do Later) is a separate
+// thing and is kept while it waits there. The Backlog is still stored the way it always was - status "Backlog", round
+// null - because the rest of the app (pricing, the requests table, the scoping sheet) already reads it that way; what
+// changes is that the decision is remembered in item.backlogDecision and given back when the request gets a round.
+export const DEFAULT_DECISION = 'Do Now';
+export const isBacklogItem = (item) => !!item && String(item.status || '') === 'Backlog';
+
+// What the editor shows for the two fields.
+export function decisionAndRoundOf(item) {
+    if (!item) return { decision: DEFAULT_DECISION, round: 1 };
+    if (isBacklogItem(item)) return { decision: String(item.backlogDecision || DEFAULT_DECISION), round: 0 };
+    const r = parseInt(item.round, 10);
+    return { decision: String(item.status || DEFAULT_DECISION), round: Number.isFinite(r) && r >= 1 ? r : 1 };
+}
+
+// Sets both fields from what was typed. Round 0 puts the request in the Backlog (keeping its decision); any round of 1
+// or more takes it out, with the decision it had. A blank round counts as 1, as it always has.
+export function applyDecisionAndRound(item, decision, roundRaw) {
+    const dec = String(decision || '').trim() || (isBacklogItem(item) ? String(item.backlogDecision || DEFAULT_DECISION) : String(item.status || DEFAULT_DECISION));
+    const raw = String(roundRaw ?? '').trim();
+    const n = parseInt(raw, 10);
+    const toBacklog = raw !== '' && Number.isFinite(n) && n <= 0;
+    if (toBacklog) {
+        item.backlogDecision = dec === 'Backlog' ? DEFAULT_DECISION : dec;
+        item.status = 'Backlog';
+        item.round = null;
+    } else {
+        item.status = dec === 'Backlog' ? DEFAULT_DECISION : dec;
+        item.round = Number.isFinite(n) && n >= 1 ? n : 1;
+        delete item.backlogDecision;
+    }
+    return item;
+}
+
+// A backlog request put into a round (Add to scoping sheet): it keeps the decision it was given, Do Now if none was.
+export function moveOutOfBacklog(item, round) {
+    return applyDecisionAndRound(item, isBacklogItem(item) ? (item.backlogDecision || DEFAULT_DECISION) : item.status, round);
+}
+
 // A round's own status string (falls back to the sheet-wide legacy flag exactly like isRoundApproved does).
 // Used to decide whether a round is active enough for its client tasks to feed the consolidated follow-up —
 // Drafting and Approved both count; On Hold and Declined don't.
