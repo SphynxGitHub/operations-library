@@ -441,7 +441,7 @@ export function openGuideEditor(htId, draftObj = null) {
                     <div style="height:1px;background:var(--panel-border);margin:8px 0;"></div>
 
                     <!-- BLOCKS -->
-                    <div id="ge-blocks-container">
+                    <div id="ge-blocks-container" ondragover="OL._geContainerDragOver(event)" ondrop="OL._geContainerDrop(event)">
                         ${OL._geRenderAllBlocks(ht)}
                     </div>
 
@@ -788,6 +788,40 @@ export function _geBlockDrop(event, targetId) {
     const container = document.getElementById('ge-blocks-container');
     if (container) { container.innerHTML = OL._geRenderAllBlocks(ht); if (window.lucide) lucide.createIcons(); }
 }
+// Dropping in the gaps between blocks, above the first or below the last still lands on the nearest block, and the
+// guide scrolls when a block is dragged near the top or bottom edge of its window.
+function _geNearestBlockId(event) {
+    let best = null, bestD = Infinity;
+    document.querySelectorAll('#ge-blocks-container .ge-block').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const d = event.clientY < r.top ? r.top - event.clientY : event.clientY > r.bottom ? event.clientY - r.bottom : 0;
+        if (d < bestD) { bestD = d; best = el.id.replace(/^ge-blk-/, ''); }
+    });
+    return best;
+}
+function _geAutoScroll(event) {
+    let el = document.getElementById('ge-blocks-container');
+    while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) break;
+        el = el.parentElement;
+    }
+    if (!el || el === document.body) return;
+    const r = el.getBoundingClientRect(), edge = 60;
+    if (event.clientY < r.top + edge) el.scrollTop -= 14;
+    else if (event.clientY > r.bottom - edge) el.scrollTop += 14;
+}
+export function _geContainerDragOver(event) {
+    if (!_geDraggedBlockId) return;
+    _geAutoScroll(event);
+    const id = _geNearestBlockId(event);
+    if (id) OL._geBlockDragOver(event, id);
+}
+export function _geContainerDrop(event) {
+    if (!_geDraggedBlockId) return;
+    const id = _geNearestBlockId(event);
+    if (id) OL._geBlockDrop(event, id);
+}
 export function _geBlockDragEnd() {
     _geDraggedBlockId = null; OL._geDraggedBlockId = null;
     _geClearDropMarks();
@@ -915,12 +949,12 @@ export function _geRenderBlock(block, idx, total, ht, values) {
              onmouseenter="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='flex';"
              onmouseleave="if(OL._geDraggedBlockId) return; const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
             ${canEdit ? `
-            <span class="ge-block-grip" draggable="true" title="Drag to reorder"
+            <span class="ge-block-grip" draggable="true" title="Drag to reorder this block"
                   ondragstart="OL._geBlockDragStart(event,'${block.id}')" ondragend="OL._geBlockDragEnd(event)"
-                  style="position:absolute;left:3px;top:12px;width:14px;height:22px;display:flex;align-items:center;justify-content:center;
-                         cursor:grab;color:var(--text-muted);opacity:0.35;transition:opacity .15s;"
-                  onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
-                <i data-lucide="grip-vertical" style="width:12px;height:12px;pointer-events:none;"></i>
+                  style="position:absolute;left:2px;top:10px;width:18px;height:28px;display:flex;align-items:center;justify-content:center;
+                         cursor:grab;color:var(--text-muted);opacity:0.6;transition:opacity .15s;border-radius:4px;"
+                  onmouseenter="this.style.opacity='1';this.style.background='var(--panel-soft)'" onmouseleave="this.style.opacity='0.6';this.style.background=''">
+                <i data-lucide="grip-vertical" style="width:14px;height:14px;pointer-events:none;"></i>
             </span>` : ''}
             ${controls}
             ${isHiddenForViewers ? `<div class="tiny" style="color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><i data-lucide="eye-off" style="width:11px;height:11px;"></i> Hidden from viewers right now (condition not met)</div>` : ''}
@@ -980,18 +1014,20 @@ export function _geRenderBlockInner(block, canEdit) {
             }
             const asSource = OL._geTextSourceMode(block);
             const richOk = typeof OL.renderRichTextField === 'function';
-            const toggle = richOk ? `
-                <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:4px;">
-                    ${asSource && OL._geHtmlNeedsSource(block.data.html) ? `<span style="font-size:10px;color:var(--text-muted);">Has HTML the rich editor can't show (tables, custom styles), so it opens as HTML.</span>` : ''}
-                    <button type="button" class="btn tiny soft" style="padding:2px 8px;font-size:10px;"
-                            onmousedown="event.preventDefault(); OL._geToggleTextMode('${block.id}')">${asSource ? 'Rich text' : 'HTML'}</button>
-                </div>` : '';
+            // The HTML / Rich text switch is part of the format menu, not floating above it: the block's hover
+            // controls (settings, move, delete) sit in the block's top-right corner and used to cover it.
+            const modeBtn = (label, title) => `<button type="button" class="btn tiny soft" style="padding:2px 8px;font-size:10px;font-weight:600;" title="${title}"
+                    onmousedown="event.preventDefault(); OL._geToggleTextMode('${block.id}')">${label}</button>`;
+            const needsSourceNote = asSource && OL._geHtmlNeedsSource(block.data.html)
+                ? `<span style="font-size:10px;color:var(--text-muted);">Has HTML the rich editor can't show (tables, custom styles), so it opens as HTML.</span>` : '';
             if (asSource || !richOk) {
                 return `
-                    ${toggle}
+                    ${richOk ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,0.2);padding:4px 6px;border:1px solid var(--line);border-bottom:none;border-radius:6px 6px 0 0;">
+                        ${modeBtn('Rich text', 'Back to the formatted editor')}${needsSourceNote}
+                    </div>` : ''}
                     <textarea id="ge-src-${block.id}"
                         style="width:100%;min-height:100px;background:var(--panel-soft);
-                               border:1px solid var(--panel-border);border-radius:8px;
+                               border:1px solid var(--panel-border);border-radius:${richOk ? '0 0 8px 8px' : '8px'};
                                color:var(--text-main);font-size:13px;line-height:1.6;
                                padding:10px 12px;font-family:inherit;resize:vertical;outline:none;
                                transition:border-color 0.15s;box-sizing:border-box;"
@@ -1004,12 +1040,11 @@ export function _geRenderBlockInner(block, canEdit) {
                         HTML view: anything is kept exactly as typed.
                     </div>`;
             }
-            return `
-                ${toggle}
-                ${OL.renderRichTextField({
-                    id: `ge-rt-${block.id}`, html: block.data.html || '', placeholder: 'Type your instructions...',
-                    minHeight: 100, grow: true, onBlur: `OL._geRichBlur('${block.id}', this)`,
-                })}`;
+            return OL.renderRichTextField({
+                id: `ge-rt-${block.id}`, html: block.data.html || '', placeholder: 'Type your instructions...',
+                minHeight: 100, grow: true, onBlur: `OL._geRichBlur('${block.id}', this)`,
+                extraToolbarHtml: modeBtn('HTML', 'Edit as HTML'),
+            });
         }
 
         case 'header':
@@ -2346,7 +2381,7 @@ Object.assign(window.OL, {
     _geUpdateBlockData, _geUpdateBlockCondition, _geGuideChecklistValues, _geChecklistBlockLabel,
     _geRefreshImageBlock, _geRefreshVideoPreview,
     _geHtmlNeedsSource, _geTextSourceMode, _geRichBlur, _geToggleTextMode,
-    _geBlockDragStart, _geBlockDragOver, _geBlockDragLeave, _geBlockDrop, _geBlockDragEnd,
+    _geBlockDragStart, _geBlockDragOver, _geBlockDragLeave, _geBlockDrop, _geBlockDragEnd, _geContainerDragOver, _geContainerDrop,
     _geRenderAppPills, _geFilterAppSearch, _geFilterResourceSearch, _geSetResourceBlock,
     _geFilterHowToLinkSearch, _geSetHowToLinkBlock, _gePrintGuide, openHowToBlockConditionModal
 });

@@ -2967,8 +2967,9 @@ OL.plainTextToLinkedHtml = function(text) {
         .replace(/\n/g, '<br>');
 };
 
-// opts: { id, html, placeholder, minHeight, onBlur } — onBlur is a JS
-// string run with `this` = the editor element.
+// opts: { id, html, placeholder, minHeight, onBlur, extraToolbarHtml } — onBlur is a JS
+// string run with `this` = the editor element. extraToolbarHtml: extra buttons at the end of the format menu
+// (the how-to guide's HTML button), so they sit in the toolbar's own flow instead of under anything floating over a block.
 OL.renderRichTextField = function(opts) {
     const btn = (cmd, label, title, style = '') => `<button type="button" class="btn tiny soft" style="padding:2px 6px; ${style}" title="${title}" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('${cmd}')">${label}</button>`;
     return `
@@ -2988,6 +2989,7 @@ OL.renderRichTextField = function(opts) {
                 ${btn('justifyCenter', '<i data-lucide="align-center" style="width:11px;height:11px;"></i>', 'Align center')}
                 ${btn('justifyRight', '<i data-lucide="align-right" style="width:11px;height:11px;"></i>', 'Align right')}
                 ${btn('removeFormat', '<i data-lucide="remove-formatting" style="width:11px;height:11px;"></i>', 'Clear formatting')}
+                ${opts.extraToolbarHtml ? `<span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>${opts.extraToolbarHtml}` : ''}
                 ${opts.emailTools ? `
                 <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
                 <span style="position:relative; display:inline-block;">
