@@ -532,24 +532,29 @@ serve(async (req) => {
     // Actual meeting length for meetings the passes above didn't cover (summary already saved earlier, or Zoom has
     // no summary): look the finished meeting up and log from the scheduled start to the real end.
     // ---------------------------------------------------------------
-    if (!onlyEventId) {
+    {
       const elapsedStart = new Date(Date.now() - ELAPSED_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
       const nowIso = new Date().toISOString();
-      const { data: elapsedEvents, error: elapsedErr } = await supabase
+      // Meetings known to Zoom by id, and ones that only have a zoom.us/j/ link on the invite (their id is read from it).
+      let q = supabase
         .from("calendar_events")
-        .select("id, start, zoom_meeting_id, zoom_meeting_uuid")
-        .not("zoom_meeting_id", "is", null)
-        .is("zoom_elapsed_hours", null)
+        .select("id, start, location, description, zoom_meeting_id, zoom_meeting_uuid, zoom_elapsed_hours")
         .eq("all_day", false)
-        .gte("start", elapsedStart)
         .lte("end", nowIso)
-        .order("start", { ascending: false })
-        .limit(MAX_ELAPSED_EVENTS);
+        .or("zoom_meeting_id.not.is.null,location.ilike.%zoom.us/j/%,description.ilike.%zoom.us/j/%");
+      q = onlyEventId
+        ? q.eq("id", onlyEventId)
+        : q.is("zoom_elapsed_hours", null).gte("start", elapsedStart).order("start", { ascending: false }).limit(MAX_ELAPSED_EVENTS);
+      const { data: elapsedEvents, error: elapsedErr } = await q;
       if (!elapsedErr) {
         for (const evt of elapsedEvents || []) {
-          const uuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(evt.zoom_meeting_id, accessToken, evt.start);
-          if (!uuid) continue;
+          const mid = evt.zoom_meeting_id || extractZoomMeetingId(evt.location) || extractZoomMeetingId(evt.description);
+          if (!mid) continue;
+          const uuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(mid, accessToken, evt.start);
+          if (!uuid) { if (report) report.notes.push("Zoom has no past instance of this meeting yet, so no actual end time."); continue; }
+          if (!evt.zoom_meeting_uuid) await supabase.from("calendar_events").update({ zoom_meeting_id: mid, zoom_meeting_uuid: uuid }).eq("id", evt.id);
           if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(uuid, accessToken))) elapsedSaved++;
+          else if (report) report.notes.push("Zoom returned no usable actual end time for this meeting.");
         }
       } else console.error("Elapsed-time pass skipped:", elapsedErr.message);
     }
