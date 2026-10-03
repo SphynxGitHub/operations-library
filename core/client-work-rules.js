@@ -35,7 +35,7 @@ import { linksForTask, addLink } from './task-links.js';
 import { isTaskClosed, isClientWaitingStatus, isThirdPartyWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
 import { isRoundApproved, isActiveItem, getCurrentRound, roundStatusOf } from './requests.js';
-import { isOngoing } from './maintenance.js';
+import { isOngoing, hasTimeLogTab } from './maintenance.js';
 import { state, uid } from './data.js';
 import { getOlSettings, fillTemplate } from './ol-settings.js';
 
@@ -521,6 +521,59 @@ export function planPeriodReminders(client, periods, ctx) {
     return created;
 }
 
+// Hours reminders: as the open block of prepaid hours (a plan period's hours, a carryover, an ad hoc purchase, a
+// coaching client's prepaid hours) is used, one reminder task at 80%, 90%, 95% and 100% used. blocks: [{ id, kind
+// ('plan' | 'prepaid'), hours, used, endsOn }], worked out by features/maintenance.js from the hours log.
+//   - One task per block per threshold, ever (pd.hoursAlerts.seen). If time jumps past several thresholds at once
+//     (say from 70% to 96%), only the highest gets a task and the ones below are skipped.
+//   - The first time a client is looked at, anything already past a threshold is recorded without a task, so
+//     switching this on does not bury the team in reminders for hours that were used long ago.
+//   - At 100% the block is closed (see the hours page); the task says so.
+export const HOURS_ALERT_LEVELS = [80, 90, 95, 100];
+const hrs = (n) => String(Math.round(Number(n || 0) * 100) / 100);
+export function planHoursAlerts(client, blocks, ctx) {
+    const pd = client?.projectData;
+    if (!pd || !Array.isArray(blocks)) return [];
+    if (!Array.isArray(pd.clientTasks)) pd.clientTasks = [];
+    const rec = pd.hoursAlerts = pd.hoursAlerts || { seen: {} };
+    rec.seen = rec.seen || {};
+    const first = !rec.baselined;
+    const created = [];
+    blocks.forEach((b) => {
+        const total = Number(b.hours) || 0;
+        if (!b.id || total <= 0) return;
+        const pct = (Number(b.used) || 0) / total * 100;
+        const crossed = HOURS_ALERT_LEVELS.filter((l) => pct + 1e-9 >= l && !rec.seen[`${b.id}:${l}`]);
+        if (!crossed.length) return;
+        if (first) { crossed.forEach((l) => { rec.seen[`${b.id}:${l}`] = 'baseline'; }); return; }
+        const top = crossed[crossed.length - 1];
+        crossed.slice(0, -1).forEach((l) => { rec.seen[`${b.id}:${l}`] = 'skipped'; });
+        const name = client.meta?.name || 'client';
+        const what = b.kind === 'plan' ? 'plan hours' : 'prepaid hours';
+        const used = Number(b.used) || 0, left = Math.round((total - used) * 100) / 100;
+        const title = top >= 100 ? `${what[0].toUpperCase()}${what.slice(1)} used up: ${name}` : `${top}% of ${what} used: ${name}`;
+        const ask = b.kind === 'plan' ? 'Talk to the client about renewing early or adding hours.' : 'Let the client know and ask whether they want to prepay for more hours.';
+        const description = top >= 100
+            ? `The current block of ${hrs(total)} h is fully used (${hrs(used)} h)${left < 0 ? `, ${hrs(-left)} h over` : ''}. The block is closed. ${ask} Check before more billable work is done.`
+            : `${hrs(used)} of ${hrs(total)} h used in the current block${b.endsOn ? ` (it ends ${day(b.endsOn)})` : ''}, ${hrs(left)} h left. ${ask}`;
+        const t = {
+            id: ctx.uid(), title, name: title, description, status: OPEN_STATUS, assignee: communicationAssignee(client, ctx),
+            dueDate: ctx.today, isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now,
+        };
+        pd.clientTasks.unshift(t); rec.seen[`${b.id}:${top}`] = t.id; created.push(t.id);
+    });
+    if (first) rec.baselined = ctx.today;
+    return created;
+}
+export function syncHoursAlerts(clientId, blocks) {
+    const client = state.clients?.[clientId];
+    if (!client || client._metaOnly || !client.projectData) return [];
+    const before = JSON.stringify(client.projectData.hoursAlerts || null);
+    const created = planHoursAlerts(client, blocks, contextNow());
+    if (JSON.stringify(client.projectData.hoursAlerts || null) !== before && window.OL?.markClientDirty) { window.OL.markClientDirty(clientId); window.OL.persist?.(); }
+    return created;
+}
+
 // ------------------------------------------------------------------------------------------
 // 5b. Zap JSON re-pull for Ongoing Maintenance clients
 // ------------------------------------------------------------------------------------------
@@ -760,12 +813,13 @@ export async function sweepClientWorkRules() {
         for (const client of Object.values(state.clients || {})) {
             if (!client || client._metaOnly || !client.projectData || client.meta?.status === 'Partner') continue;
             out.checked++;
-            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup, client.projectData.followUpSnoozeUntil, (client.projectData.scopingSheets || []).map((sh) => sh?.roundApprovals)]);
+            const snap = () => JSON.stringify([client.projectData.clientTasks, client.projectData.maintenanceSetup, client.projectData.hoursAlerts, client.projectData.followUpSnoozeUntil, (client.projectData.scopingSheets || []).map((sh) => sh?.roundApprovals)]);
             const before = snap();
             try {
                 // Ongoing Maintenance: read the plan periods so the two reminders before a period ends exist even
                 // if nobody opens Maintenance & Hours (loadMaintenanceData makes them).
-                if (isOngoing(client) && typeof window.OL?.loadMaintenanceData === 'function') await window.OL.loadMaintenanceData(client.id, { meetings: false });
+                // Also read the hours (meetings included) for maintenance and prepaid coaching clients: that is what the 80 / 90 / 95 / 100% hours reminders are worked out from.
+                if (hasTimeLogTab(client) && typeof window.OL?.loadMaintenanceData === 'function') await window.OL.loadMaintenanceData(client.id);
                 runClientWorkRules(client, contextNow());
             } catch (e) { console.warn('Work rules sweep failed for', client.id, e); continue; }
             if (snap() !== before) {
@@ -902,4 +956,4 @@ export function openClientTasksForId(clientId, taskId) {
     return openClientTasksFor(client, t, contextNow());
 }
 
-Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
+Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, syncHoursAlerts, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });

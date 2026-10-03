@@ -16,7 +16,7 @@ import {
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
     allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
     planPriorPeriod, manualUsedHours, noteWithoutMarker, carryoverExpiry,
-    isCoachingClient, meetingTimeEntries, MEETING_ENTRY_PREFIX,
+    isCoachingClient, meetingTimeEntries, MEETING_ENTRY_PREFIX, grantRank,
 } from '../core/maintenance.js';
 import { isClientTask, isTaskBillableForHours, stampBillableFor } from '../core/billable.js';
 import { markClientDirty } from '../core/data.js';
@@ -63,12 +63,27 @@ export async function loadMaintenanceData(clientId, { meetings = true } = {}) {
         slot.loadedAt = Date.now();
         // Reminders as the active plan period nears its end (2 months and 2 weeks out). One per period per date.
         try { if (typeof OL.syncPeriodReminders === 'function') OL.syncPeriodReminders(clientId, slot.periods); } catch (e) { console.warn('Period reminders failed:', e); }
+        runHoursAlerts(clientId, slot);
     } catch (err) {
         slot.error = err.message || 'Could not load';
     } finally {
         slot.loaded = true; slot.loading = false;
     }
     return slot;
+}
+
+// 80 / 90 / 95 / 100% reminders for maintenance and prepaid coaching blocks (see planHoursAlerts in
+// core/client-work-rules.js). Staff only, and only once the hours are known (meetings loaded).
+function runHoursAlerts(clientId, slot) {
+    try {
+        const client = state.clients?.[clientId];
+        if (!client || client._metaOnly || !client.projectData || window.IS_GUEST || !canManage()) return;
+        if (!(maintenanceMode(client) !== null || isCoachingClient(client))) return;
+        if (!Array.isArray(slot.events) || !slot.grants?.length || typeof OL.syncHoursAlerts !== 'function') return;
+        const ledger = ledgerFor(client, slot);
+        const blocks = ledger.current.map((g) => ({ id: g.id, kind: g.source === 'plan_allotment' ? 'plan' : 'prepaid', hours: Number(g.hours_granted || 0), used: usedHoursOf(ledger, g), endsOn: g.expires_on }));
+        OL.syncHoursAlerts(clientId, blocks);
+    } catch (e) { console.warn('Hours reminders skipped:', e); }
 }
 
 const friendly = (err) => (err && err.code === '23505' ? 'That would duplicate something that already exists (a client can have only one active plan period). Reload and try again.' : (err?.message || 'Something went wrong.'));
@@ -200,11 +215,28 @@ function ledgerFor(client, slot) {
     // Hours available now: this period's allotment, plus carryovers and purchases that haven't expired.
     const current = grants.filter((g) => g.status !== 'expired' && String(g.expires_on).slice(0, 10) >= today
         && (g.source !== 'plan_allotment' || (active && g.period_id === active.id)))
-        .sort((a, b) => (a.source === 'plan_allotment' ? 0 : 1) - (b.source === 'plan_allotment' ? 0 : 1) || String(a.expires_on).localeCompare(String(b.expires_on)));
+        .sort((a, b) => grantRank(a) - grantRank(b) || String(a.expires_on).localeCompare(String(b.expires_on)));
     return { entries, alloc, allocations, current, opts, tasks };
 }
 // Hours used out of a grant: time charged to it from the logs, plus any usage recorded by hand for an earlier plan period.
 const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] || 0) / 60) + manualUsedHours(g)) * 1000) / 1000;
+// Blocks: each grant is a block of hours. A block is closed once its hours are used up; the OPEN block is the first
+// one (a courtesy carryover first, then the plan hours, then any other purchase, soonest to expire first: the order time is charged in) that still has hours left. The
+// paid / used / left figures describe the open block only, not every block added together.
+const EPS = 1e-6;
+const blockLeft = (ledger, g) => Math.round((Number(g.hours_granted || 0) - usedHoursOf(ledger, g)) * 1000) / 1000;
+const isBlockClosed = (ledger, g) => Number(g.hours_granted || 0) > 0 && blockLeft(ledger, g) <= EPS;
+const openBlockOf = (ledger) => ledger.current.find((g) => !isBlockClosed(ledger, g)) || null;
+// Hours used beyond every current block together (time that had nowhere left to go).
+const overflowHours = (ledger) => Math.max(0, Math.round((ledger.current.reduce((s, g) => s + usedHoursOf(ledger, g), 0) - ledger.current.reduce((s, g) => s + Number(g.hours_granted || 0), 0)) * 1000) / 1000);
+// What the bar and the summary email report: the open block, or, when every block is used up, the latest one at 100% (plus any overflow).
+function currentBlockFigures(ledger) {
+    const gs = ledger.current; if (!gs.length) return null;
+    const open = openBlockOf(ledger);
+    if (open) { const total = Number(open.hours_granted || 0), used = usedHoursOf(ledger, open); return { grant: open, total, used, left: Math.round((total - used) * 1000) / 1000, open: true }; }
+    const last = gs[gs.length - 1], total = Number(last.hours_granted || 0), over = overflowHours(ledger);
+    return { grant: last, total, used: Math.round((total + over) * 1000) / 1000, left: -over, open: false };
+}
 const allocatedCount = (ledger, g) => Object.values(ledger.allocations).filter((id) => String(id) === String(g.id)).length;
 
 // The tracking bar: one segment per grant available now (allotment, carryover, ad hoc), each filled by what's used.
@@ -232,18 +264,22 @@ function grantTasks(ledger) {
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
-    const total = gs.reduce((s, g) => s + Number(g.hours_granted || 0), 0);
-    const used = Math.round(gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 1000) / 1000;
-    const left = Math.round((total - used) * 1000) / 1000;
+    const f = currentBlockFigures(ledger);
+    const { total, used, left } = f;
     const pct = total > 0 ? Math.round((used / total) * 100) : 0;
     const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
-    const parts = gs.map((g) => `${esc(hoursText(g.hours_granted))} ${esc((GRANT_LABEL[g.source] || g.source).toLowerCase())}`).join(' + ');
+    const g = f.grant;
+    const queued = gs.filter((x) => x !== g && !isBlockClosed(ledger, x));
+    const closedCount = gs.filter((x) => isBlockClosed(ledger, x) && x !== g).length;
+    const blockName = `${(GRANT_LABEL[g.source] || g.source).toLowerCase()}${g.source === 'plan_allotment' ? '' : ` expiring ${niceDate(g.expires_on)}`}`;
     return `
         <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin:14px 0 6px;">
-            <div class="tiny bold" style="color:${left < 0 ? '#ef4444' : 'var(--text)'};">${esc(hoursText(used))} of ${esc(hoursText(total))} used (${pct}%) · ${left < 0 ? `<strong>${esc(hoursText(-left))} over</strong>` : `${esc(hoursText(left))} left`}${nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : ''}</div>
-            <div class="tiny muted">Total available: ${parts}${gs.length > 1 ? ` = ${esc(hoursText(total))}` : ''}</div>
+            <div class="tiny bold" style="color:${left < 0 ? '#ef4444' : 'var(--text)'};">${esc(hoursText(used))} of ${esc(hoursText(total))} used (${pct}%) · ${left < 0 ? `<strong>${esc(hoursText(-left))} over</strong>` : f.open ? `${esc(hoursText(left))} left` : '<strong>block closed, all used</strong>'}${nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : ''}</div>
+            <div class="tiny muted">${f.open ? 'Open block' : 'Latest block'}: ${esc(blockName)}</div>
         </div>
         <div style="height:10px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-bottom:6px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
+        ${!f.open ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">Every block of hours is used up. ${canManage() ? 'Add more hours before more billable time is logged.' : ''}</div>` : ''}
+        ${f.open && (queued.length || closedCount) ? `<div class="tiny muted" style="margin-bottom:6px;">${closedCount ? `${closedCount} earlier block${closedCount === 1 ? '' : 's'} closed (used up).` : ''}${closedCount && queued.length ? ' ' : ''}${queued.length ? `Next up when this one is used: ${queued.map((x) => esc(grantShort(x))).join(' · ')}.` : ''}</div>` : ''}
         ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
 }
 
@@ -271,7 +307,7 @@ function grantCardHtml(client, g, ledger, gt) {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
                     <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${noteWithoutMarker(g.note) ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(noteWithoutMarker(g.note))}</span>` : ''}</div>
-                    <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
+                    <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${isBlockClosed(ledger, g) ? ' · <strong>closed (used up)</strong>' : ''}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="tiny bold" style="color:${u > h ? '#ef4444' : 'var(--text)'};">${esc(hoursText(u))} of ${esc(hoursText(h))}</span>
@@ -288,14 +324,16 @@ function grantCardHtml(client, g, ledger, gt) {
 function grantCardsHtml(client, slot, ledger) {
     if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
     const gt = grantTasks(ledger);
-    const currentIds = new Set(ledger.current.map((g) => String(g.id)));
-    const earlier = slot.grants.filter((g) => !currentIds.has(String(g.id)))
+    // Blocks with hours left stay up top; used-up blocks go in the collapsed list with the expired ones.
+    const live = ledger.current.filter((g) => !isBlockClosed(ledger, g));
+    const liveIds = new Set(live.map((g) => String(g.id)));
+    const earlier = slot.grants.filter((g) => !liveIds.has(String(g.id)))
         .sort((a, b) => String(b.expires_on).localeCompare(String(a.expires_on)));
     const showEarlier = !!OL._maintShowEarlierGrants;
-    return `${ledger.current.map((g) => grantCardHtml(client, g, ledger, gt)).join('')}
-        ${earlier.length ? `<div class="tiny muted" style="margin-top:14px; cursor:pointer;" onclick="OL._maintShowEarlierGrants = !OL._maintShowEarlierGrants; OL.renderMaintenancePage()">${showEarlier ? '▾' : '▸'} Expired and earlier grants (${earlier.length})</div>
+    return `${live.length ? live.map((g) => grantCardHtml(client, g, ledger, gt)).join('') : (ledger.current.length ? '<div class="tiny muted" style="margin-top:6px;">Every block is used up. Closed blocks are listed below.</div>' : '')}
+        ${earlier.length ? `<div class="tiny muted" style="margin-top:14px; cursor:pointer;" onclick="OL._maintShowEarlierGrants = !OL._maintShowEarlierGrants; OL.renderMaintenancePage()">${showEarlier ? '▾' : '▸'} Closed, expired and earlier blocks (${earlier.length})</div>
             ${showEarlier ? earlier.map((g) => grantCardHtml(client, g, ledger, gt)).join('') : ''}` : ''}
-        <div class="tiny muted" style="margin-top:10px;">Each hour is charged to one grant only. Billable time comes out of the plan allotment first, then other hours, soonest to expire first; a carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
+        <div class="tiny muted" style="margin-top:10px;">Each hour is charged to one block only. Billable time comes out of a courtesy carryover first, then the plan allotment, then other purchases, soonest to expire first. A block closes when its hours are used up; a carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
 }
 
 function hoursLogHtml(client, ledger, window, heading, { showGrants = true } = {}) {
@@ -1031,10 +1069,9 @@ export async function prepaidHoursSummary(client) {
     if (slot.error || !slot.grants.length) return null;
     syncGrantLabel(client);
     const ledger = ledgerFor(client, slot);
-    if (!ledger.current.length) return null;
-    const total = Math.round(ledger.current.reduce((s, g) => s + Number(g.hours_granted || 0), 0) * 1000) / 1000;
-    const used = Math.round(ledger.current.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 1000) / 1000;
-    return { total, used, remaining: Math.round((total - used) * 1000) / 1000 };
+    const f = currentBlockFigures(ledger);        // the open block only, never every block added together
+    if (!f) return null;
+    return { total: Math.round(f.total * 1000) / 1000, used: Math.round(f.used * 1000) / 1000, remaining: Math.round(f.left * 1000) / 1000 };
 }
 
 window.OL = window.OL || {};

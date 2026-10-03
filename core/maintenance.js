@@ -170,13 +170,16 @@ export function hoursUsedInPeriod(tasks, period, opts = {}) {
 // closed, to come out of its courtesy carryover).
 //   1. Time on an allocated task comes out of that grant, when the entry falls inside the grant's dates (it can go
 //      over; that shows as over).
-//   2. Other time comes out of the plan allotment covering its date first, then, once that is used up, the other
-//      grants covering the date, soonest to expire first. A carryover or purchase with tasks allocated to it is
+//   2. Other time comes out of a courtesy carryover covering its date first (it expires soonest, so it goes first),
+//      then, once that is used up, the plan allotment, then any other grants covering the date (ad hoc purchases),
+//      soonest to expire first. A carryover or purchase with tasks allocated to it is
 //      held for those tasks and never takes other time.
 //   3. Anything left over is charged to the first grant it could have used (showing as over), or, if no grant
 //      covers the date, reported as unfunded.
 // Entries are charged oldest first, so earlier work uses up hours first.
 const gDay = (v) => String(v || '').slice(0, 10);
+// The order hours are used in: carryover first, then the plan allotment, then anything else (ad hoc / prepaid purchases).
+export const grantRank = (g) => (g.source === 'courtesy_carryover' ? 0 : g.source === 'plan_allotment' ? 1 : 2);
 export const grantCovers = (g, day) => !!day && day >= gDay(g.granted_on) && day <= gDay(g.expires_on);
 export const entryKey = (e) => `${e.taskId}|${e.id}`;
 
@@ -199,7 +202,7 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
             return;
         }
         const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
-            .sort((a, b) => (a.source === 'plan_allotment' ? 0 : 1) - (b.source === 'plan_allotment' ? 0 : 1) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
+            .sort((a, b) => grantRank(a) - grantRank(b) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
         if (!pool.length) { unfunded += e.minutes; return; }
         if (e.minutes <= 0) { charge(key, pool[0], e.minutes); return; }      // a correction goes back where time goes
         let left = e.minutes;
