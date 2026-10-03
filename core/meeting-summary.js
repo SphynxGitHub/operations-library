@@ -279,8 +279,22 @@ export function renderEmailBodies(body, recordingUrl) {
     return { text, html };
 }
 
+// The prepaid-hours line for a coaching client's summary email: what has been paid for, used and is left.
+// Hours show to two decimals at most (3.5, 3.75). { used, total } in hours; null/empty when there are no prepaid hours.
+const hoursNum = (n) => String(Math.round(Number(n || 0) * 100) / 100);
+export function prepaidHoursLine(prepaid) {
+    if (!prepaid || !(Number(prepaid.total) > 0)) return '';
+    const used = Number(prepaid.used) || 0, total = Number(prepaid.total);
+    const left = Math.round((total - used) * 100) / 100;
+    const lead = `We've used ${hoursNum(used)} of your ${hoursNum(total)} prepaid hours so far.`;
+    if (left > 0) return `${lead} That leaves a remaining ${hoursNum(left)} ${left === 1 ? 'hour' : 'hours'} to be used for the items listed above.`;
+    if (left === 0) return `${lead} That uses all of your prepaid hours.`;
+    return `${lead} That puts us ${hoursNum(-left)} ${left === -1 ? 'hour' : 'hours'} over your prepaid hours.`;
+}
+
 // input: { title, start, summary, attendeeEmails, senderEmail (or senderEmails), senderName, sphynxEmails,
-//          people: [{ name, email }], tasks (already filtered to this meeting), clientName, recordingUrl }
+//          people: [{ name, email }], tasks (already filtered to this meeting), clientName, recordingUrl,
+//          prepaidHours: { used, total } (coaching clients with prepaid hours: adds the hours line to the closing) }
 // Returns the pieces separately so the window can edit the message and closing as text while
 // the next steps stay tied to the real tasks: { to, recipients, subject, message, nextSteps, closing, body }.
 export function buildSummaryDraft(input) {
@@ -314,7 +328,10 @@ export function buildSummaryDraft(input) {
 
     // input.signatureAttached: the sender's signature goes at the end of the email and carries their name, so
     // {sender} in the closing fills in blank (older saved templates end with it) instead of printing the name twice.
-    const closing = fillT(tpl.closing || 'Best,\n{sender}', input.signatureAttached ? { ...tvars, sender: '' } : tvars).replace(/\s+$/, '');
+    const signoff = fillT(tpl.closing || 'Best,\n{sender}', input.signatureAttached ? { ...tvars, sender: '' } : tvars).replace(/\s+$/, '');
+    // Coaching clients with prepaid hours: the hours paid / used / left sit at the top of the closing, above the sign-off.
+    const hoursLine = prepaidHoursLine(input.prepaidHours);
+    const closing = [hoursLine, signoff].filter(Boolean).join('\n\n');
 
     const date = shortDate(input.start);
     return {

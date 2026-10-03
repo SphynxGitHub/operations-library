@@ -601,7 +601,13 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         }, client.id);
     }
 
+    // Coaching clients with prepaid hours get a paid / used / left line in the closing.
+    let prepaidHours = null;
+    try { if (typeof OL.prepaidHoursSummary === 'function') prepaidHours = await OL.prepaidHoursSummary(client); }
+    catch (e) { console.warn('Prepaid hours line skipped:', e); }
+
     const draft = buildSummaryDraft({
+        prepaidHours,
         title: evt.title,
         start: evt.start,
         summary: evt.zoom_summary || '(Add a short summary of the meeting here.)',

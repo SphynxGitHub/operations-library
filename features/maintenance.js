@@ -1023,9 +1023,23 @@ export async function migrateClientRequestsToBacklog(clientIds, { includeClosed 
     return results;
 }
 
+// Coaching clients with prepaid hours: how many were paid for, used and are left, counting the same hours the Time Log
+// shows (unexpired prepaid hours only). null for anyone else, or when no prepaid hours are logged.
+export async function prepaidHoursSummary(client) {
+    if (!client || !isCoachingClient(client)) return null;
+    const slot = await loadMaintenanceData(client.id);
+    if (slot.error || !slot.grants.length) return null;
+    syncGrantLabel(client);
+    const ledger = ledgerFor(client, slot);
+    if (!ledger.current.length) return null;
+    const total = Math.round(ledger.current.reduce((s, g) => s + Number(g.hours_granted || 0), 0) * 1000) / 1000;
+    const used = Math.round(ledger.current.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 1000) / 1000;
+    return { total, used, remaining: Math.round((total - used) * 1000) / 1000 };
+}
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    renderMaintenancePage, renderClientRequests, loadMaintenanceData,
+    prepaidHoursSummary, renderMaintenancePage, renderClientRequests, loadMaintenanceData,
     openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
     openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
     openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,
