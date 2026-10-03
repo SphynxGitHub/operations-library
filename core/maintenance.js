@@ -185,7 +185,8 @@ export const entryKey = (e) => `${e.taskId}|${e.id}`;
 
 export function allocateHours({ entries = [], grants = [], allocations = {} }) {
     const cap = {}, used = {};
-    grants.forEach((g) => { cap[g.id] = Math.round(Number(g.hours_granted || 0) * 60); used[g.id] = 0; });
+    // Hours recorded by hand as already used (an earlier period, an upgrade's overage) leave less room for time logged here.
+    grants.forEach((g) => { cap[g.id] = Math.max(0, Math.round((Number(g.hours_granted || 0) - manualUsedHours(g)) * 60)); used[g.id] = 0; });
     const byId = new Map(grants.map((g) => [String(g.id), g]));
     const reserved = new Set(Object.values(allocations).filter(Boolean).map(String)
         .filter((id) => byId.get(id) && byId.get(id).source !== 'plan_allotment'));
