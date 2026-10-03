@@ -35,7 +35,7 @@ OL.recalculateEventLoggedHours = function(evt) {
     const durationHours = Math.max(0, (new Date(evt.end) - new Date(evt.start)) / 3600000);
     const snapshot = Number(evt.duration_hours_snapshot || 0);
     if (Math.abs(durationHours - snapshot) < 0.01) return null;
-    return { logged_hours: Math.round(durationHours * 100) / 100, duration_hours_snapshot: Math.round(durationHours * 100) / 100 };
+    return { logged_hours: Math.round(durationHours * 1000) / 1000, duration_hours_snapshot: Math.round(durationHours * 1000) / 1000 };
 };
 
 OL.applyEventTimeRecalculation = async function(events) {
@@ -47,6 +47,8 @@ OL.applyEventTimeRecalculation = async function(events) {
     if (!updates.length) return;
     await Promise.all(updates.map(u =>
         db.from('calendar_events').update({ logged_hours: u.logged_hours, duration_hours_snapshot: u.duration_hours_snapshot }).eq('id', u.id)
+            // A rescheduled meeting goes back to its scheduled length (best effort: needs the 2026_10 migration).
+            .then(() => db.from('calendar_events').update({ logged_hours_source: 'scheduled', time_prompt_skipped: false }).eq('id', u.id).then(() => {}, () => {}))
     ));
 };
 
@@ -407,7 +409,7 @@ OL.renderEventRowHTML = function(evt) {
 
             <div style="display:flex; align-items:center; gap:10px;">
                 <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:4px;">
-                    <span class="tiny monospace bold" style="color:var(--accent); font-size:11px;" title="Auto-tracked from event duration">${Number(evt.logged_hours || 0).toFixed(1)}h</span>
+                    <span class="tiny monospace bold" style="color:var(--accent); font-size:11px;" title="Auto-tracked from event duration">${Number(evt.logged_hours || 0).toFixed(2)}h</span>
                     <button class="btn tiny soft" title="Edit Logged Time" onclick="OL.openEditEventTimeModal('${evt.id}')" style="display:inline-flex; align-items:center; justify-content:center; padding:3px 5px;">
                         <i data-lucide="pencil" style="width:11px;height:11px; pointer-events:none;"></i>
                     </button>
@@ -745,8 +747,8 @@ OL.openCalendarEventModal = async function(id) {
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                         <div><strong class="muted">When:</strong> ${esc(startLabel)}${endLabel ? ` – ${esc(endLabel)}` : ''}</div>
                         <div>
-                            <strong class="muted">Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(evt.logged_hours || 0).toFixed(1)}h</span>
-                            <span class="tiny muted">(auto from duration)</span>
+                            <strong class="muted">Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(evt.logged_hours || 0).toFixed(2)}h</span>
+                            <span class="tiny muted">${evt.logged_hours_source === 'zoom' ? `(from Zoom: scheduled start to actual end${evt.zoom_actual_end ? ', ended ' + esc(new Date(evt.zoom_actual_end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) : ''})` : evt.logged_hours_source === 'manual' ? '(set by hand)' : '(auto from duration)'}</span>
                             <button class="btn tiny soft" onclick="OL.openEditEventTimeModal('${evt.id}')" style="padding:2px 5px; margin-left:4px;"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                         </div>
                         <div style="grid-column: span 2; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -1518,7 +1520,7 @@ OL.openEditEventTimeModal = function(id) {
         <div style="padding: 20px; max-width: 320px; width: 100%;" onclick="event.stopPropagation()">
             <h3 style="margin:0 0 12px; font-size:15px;">Edit Logged Time</h3>
             <p class="tiny muted" style="margin-bottom:10px;">Overrides the auto-tracked duration. Resets automatically if this event is rescheduled.</p>
-            <input type="number" step="0.25" min="0" id="event-hours-input" class="modal-input tiny" value="${Number(evt.logged_hours || 0).toFixed(2)}" style="width:100%; margin-bottom:12px;">
+            <input type="number" step="0.01" min="0" id="event-hours-input" class="modal-input tiny" value="${Number(evt.logged_hours || 0).toFixed(3)}" style="width:100%; margin-bottom:12px;">
             <div style="display:flex; justify-content:flex-end; gap:8px;">
                 <button class="btn tiny soft" onclick="OL.closeModal(); OL.openCalendarEventModal('${id}')">Cancel</button>
                 <button class="btn tiny primary" onclick="OL.setEventLoggedHours('${id}', document.getElementById('event-hours-input').value)">Save</button>
@@ -1532,6 +1534,8 @@ OL.setEventLoggedHours = async function(id, hoursValue) {
     const hours = Math.max(0, parseFloat(hoursValue) || 0);
     const { error } = await db.from('calendar_events').update({ logged_hours: hours }).eq('id', id);
     if (error) { alert('Failed to update: ' + error.message); return; }
+    // Set by hand: the Zoom sync never replaces it (best effort: needs the 2026_10 migration).
+    await db.from('calendar_events').update({ logged_hours_source: 'manual', time_prompt_skipped: true }).eq('id', id).then(() => {}, () => {});
 
     [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
         const e = (list || []).find(e => e.id === id);
@@ -1933,7 +1937,7 @@ OL.processCalendarAutomations = async function() {
             if (!client) return;
 
             const durationHours = (!evt.all_day && evt.start && evt.end)
-                ? Math.round(((new Date(evt.end) - new Date(evt.start)) / 3600000) * 100) / 100
+                ? Math.round(((new Date(evt.end) - new Date(evt.start)) / 3600000) * 1000) / 1000
                 : null;
 
             OL.createIntroCallReviewTask(client, evt);

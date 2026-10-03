@@ -488,7 +488,7 @@ OL.renderBusinessTaskManager = function() {
                     <i data-lucide="bar-chart-2" style="width:14px;height:14px;"></i> Reconciliation Report
                 </button>
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Total Hours: ${totalLoggedHours.toFixed(1)}h
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Total Hours: ${totalLoggedHours.toFixed(2)}h
                 </div>
                 <button class="btn small soft" onclick="OL.renderBusinessTaskManager()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
@@ -882,11 +882,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                 <div style="display:flex; align-items:center; gap:12px;">
                     ${metrics && metrics.scopedHours > 0 ? `
                         <span class="tiny monospace" style="color:${metrics.remainingHours < 0 ? '#ef4444' : '#38bdf8'}; font-weight:bold;">
-                            Paid Scoped: ${metrics.scopedHours.toFixed(1)}h (${metrics.burnRate}% Used)
+                            Paid Scoped: ${metrics.scopedHours.toFixed(2)}h (${metrics.burnRate}% Used)
                         </span>
                     ` : ''}
                     <div class="tiny muted monospace" style="font-weight: normal; display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Time: <strong style="color:var(--accent);">${groupHours.toFixed(1)}h</strong>
+                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Time: <strong style="color:var(--accent);">${groupHours.toFixed(2)}h</strong>
                     </div>
                 </div>
             </div>
@@ -1283,7 +1283,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     </button>
 
                     <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width:38px; text-align:right; color:${isTimerRunning ? '#38bdf8' : 'var(--accent)'}; font-size:11px;">
-                        ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
+                        ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(2)}h`}
                     </span>
                 </div>
 
@@ -1986,7 +1986,7 @@ OL.stopLiveTaskTimer = function() {
     // whatever the throttled interval last managed to write, this corrects
     // it to the true elapsed time before it's logged.
     timer.elapsedSeconds = Math.floor((Date.now() - timer.startTime) / 1000);
-    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
+    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(3));
 
     if (hoursEarned > 0) {
         OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned, { start: new Date(timer.startTime).toISOString(), source: 'timer' });
@@ -2338,7 +2338,7 @@ OL.renderInContextTaskModal = function(client, task) {
                             </select>
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
-                        <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(1)}h</span></div>
+                        <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(2)}h</span></div>
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>
                         <div><strong class="muted">Task ID:</strong> <span class="monospace">${esc(task.id)}</span></div>
                     </div>

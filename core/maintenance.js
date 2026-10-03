@@ -24,9 +24,13 @@ export function maintenanceMode(client) {
 }
 export const isOngoing = (client) => maintenanceMode(client) === ONGOING;
 export const isMaintenanceClient = (client) => maintenanceMode(client) !== null;
+// Coaching clients have no plan periods or hours grants, but get the same time log (every billable and
+// non-billable entry, meetings included) on the Maintenance & Hours tab.
+export const isCoachingClient = (client) => String(client?.meta?.status || '').toLowerCase().replace(/\s+/g, ' ').trim() === 'coaching';
+export const hasTimeLogTab = (client) => isMaintenanceClient(client) || isCoachingClient(client);
 
 export function maintenanceTabAllowed(client, key) {
-    if (key === 'maintenance') return isMaintenanceClient(client);
+    if (key === 'maintenance') return hasTimeLogTab(client);
     if (key === 'client-requests') return true;
     if (key === 'errors') return isOngoing(client) || client?.modules?.[key] === true;
     return true;
@@ -95,7 +99,10 @@ const dayOf = (v) => {
 
 // include(task): whether the task's time belongs here at all (client tasks don't).
 // isBillable(task): whether its time counts against the allotment.
-export function periodTimeEntries(tasks, period, { include = () => true, isBillable = () => false } = {}) {
+// skipSources: time-log entry sources to leave out (e.g. 'automation', the scheduled length an automation rule logged
+// when it made a meeting task, once the meeting itself is counted from the calendar). They still count as itemized,
+// so a task's un-itemized "earlier" time is worked out the same.
+export function periodTimeEntries(tasks, period, { include = () => true, isBillable = () => false, skipSources = [] } = {}) {
     if (!period) return [];
     const inPeriod = (d) => !!d && d >= period.start_date && d <= period.due_date;
     const out = [];
@@ -108,6 +115,7 @@ export function periodTimeEntries(tasks, period, { include = () => true, isBilla
         log.forEach((e) => {
             const m = Number(e?.minutes) || 0;
             itemized += m;
+            if (skipSources.length && skipSources.includes(e?.source)) return;
             const day = dayOf(e?.end || e?.start);
             if (m && inPeriod(day)) out.push({ ...base, id: e.id || `${t.id}-${out.length}`, date: day, minutes: m, by: e.by || '', note: e.note || '', source: e.source || '' });
         });
@@ -118,9 +126,36 @@ export function periodTimeEntries(tasks, period, { include = () => true, isBilla
     return out.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 }
 
+// ---- meetings: calendar events linked to the client count as time too ----
+// events: calendar_events rows (id, title, start, end, all_day, logged_hours, billable, assignee(s), logged_hours_source).
+// Only meetings that have ended, are not all-day, and have time logged. period limits them by the day they started.
+// isBillable(evt): whether the meeting counts against the hours (events carry their own flag).
+export const MEETING_ENTRY_PREFIX = 'event:';
+export function meetingTimeEntries(events, period, { isBillable = (e) => e.billable !== false, now = new Date() } = {}) {
+    const inPeriod = (d) => !period || (!!d && d >= period.start_date && d <= period.due_date);
+    const out = [];
+    (events || []).forEach((e) => {
+        if (!e || e.all_day || !e.start) return;
+        const ended = e.end ? new Date(e.end) <= now : new Date(e.start) <= now;
+        const minutes = Math.round((Number(e.logged_hours) || 0) * 60);
+        if (!ended || minutes <= 0) return;
+        const day = dayOf(e.start);
+        if (!inPeriod(day)) return;
+        const who = Array.isArray(e.assignees) && e.assignees.length ? e.assignees.join(', ') : (e.assignee || '');
+        const src = e.logged_hours_source;
+        out.push({
+            taskId: MEETING_ENTRY_PREFIX + e.id, id: MEETING_ENTRY_PREFIX + e.id, eventId: e.id, isMeeting: true,
+            title: e.title || 'Meeting', billable: !!isBillable(e), date: day, minutes, by: who,
+            note: src === 'zoom' ? 'Meeting · actual length from Zoom' : src === 'manual' ? 'Meeting · time set by hand' : 'Meeting · scheduled length',
+            source: 'meeting',
+        });
+    });
+    return out;
+}
+
 export function summarizePeriodTime(entries) {
     const min = (list) => list.reduce((s, e) => s + e.minutes, 0);
-    const toH = (m) => Math.max(0, Math.round((m / 60) * 100) / 100);
+    const toH = (m) => Math.max(0, Math.round((m / 60) * 1000) / 1000);
     return { billableHours: toH(min(entries.filter((e) => e.billable))), nonBillableHours: toH(min(entries.filter((e) => !e.billable))) };
 }
 

@@ -166,7 +166,7 @@ OL.renderBusinessTaskManager = function() {
                     <i data-lucide="bar-chart-2" style="width:14px;height:14px;"></i> Reconciliation Report
                 </button>
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Total Hours: ${totalLoggedHours.toFixed(1)}h
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Total Hours: ${totalLoggedHours.toFixed(2)}h
                 </div>
                 <button class="btn small soft" onclick="OL.renderBusinessTaskManager()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
@@ -325,11 +325,11 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                 <div style="display:flex; align-items:center; gap:12px;">
                     ${metrics && metrics.scopedHours > 0 ? `
                         <span class="tiny monospace" style="color:${metrics.remainingHours < 0 ? '#ef4444' : '#38bdf8'}; font-weight:bold;">
-                            Paid Scoped: ${metrics.scopedHours.toFixed(1)}h (${metrics.burnRate}% Used)
+                            Paid Scoped: ${metrics.scopedHours.toFixed(2)}h (${metrics.burnRate}% Used)
                         </span>
                     ` : ''}
                     <div class="tiny muted monospace" style="font-weight: normal; display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Time: <strong style="color:var(--accent);">${groupHours.toFixed(1)}h</strong>
+                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Time: <strong style="color:var(--accent);">${groupHours.toFixed(2)}h</strong>
                     </div>
                 </div>
             </div>
@@ -405,7 +405,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                             </button>
 
                             <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width: 48px; text-align: right; color: ${isTimerRunning ? '#38bdf8' : 'var(--accent)'};">
-                                ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(1)}h`}
+                                ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(2)}h`}
                             </span>
 
                             <button class="btn tiny soft" title="Add 0.5 hours" onclick="OL.logTaskHours('${t.clientId}', '${t.id}', 0.5)">+0.5</button>
@@ -559,17 +559,17 @@ OL.renderClientReportView = function(clientId) {
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px;">
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(2)}h</div>
                 <div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Logged Hours Used</div>
-                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(2)}h</div>
                 <div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Remaining Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(2)}h</div>
                 <div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
@@ -601,7 +601,7 @@ OL.renderClientReportView = function(clientId) {
                             <td><strong>${esc(t.title || t.name)}</strong></td>
                             <td style="text-align:center;">${OL.renderTeamPill(t.assignee || 'Sphynx', t.clientId)}</td>
                             <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
-                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
+                            <td style="text-align:right; font-weight:bold;">${hours.toFixed(3)}h</td>
                             <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                             <td style="text-align:center;">
                                 <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">Edit Log</button>
@@ -650,7 +650,7 @@ OL.renderBusinessTimeReports = function() {
             </div>
             <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h ($${totalValue.toLocaleString()})
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(2)}h ($${totalValue.toLocaleString()})
                 </div>
                 <button class="btn small soft" onclick="OL.renderBusinessTimeReports()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="rotate-cw" style="width:14px;height:14px;"></i> Refresh
@@ -669,7 +669,7 @@ OL.renderBusinessTimeReports = function() {
                             <span class="tiny muted">${m.burnRate}% Used</span>
                         </div>
                         <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
-                            ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
+                            ${m.loggedHours.toFixed(2)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(2)}h</span>
                         </div>
                         <div class="tiny muted" style="margin-top:2px;">
                             Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">$${m.remainingValue.toLocaleString()}</strong>
@@ -759,11 +759,11 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                 <div style="display:flex; align-items:center; gap:12px;">
                     ${metrics && metrics.scopedHours > 0 ? `
                         <span class="tiny monospace" style="color:${metrics.remainingHours < 0 ? '#ef4444' : '#38bdf8'}; font-weight:bold;">
-                            Paid Scoped: ${metrics.scopedHours.toFixed(1)}h (${metrics.burnRate}% Used)
+                            Paid Scoped: ${metrics.scopedHours.toFixed(2)}h (${metrics.burnRate}% Used)
                         </span>
                     ` : ''}
                     <div class="tiny muted monospace" style="font-weight: normal; display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Value: <strong style="color:var(--accent);">$${groupValue.toLocaleString()} (${groupHours.toFixed(1)}h)</strong>
+                        <i data-lucide="clock" style="width:12px;height:12px;"></i> Group Value: <strong style="color:var(--accent);">$${groupValue.toLocaleString()} (${groupHours.toFixed(2)}h)</strong>
                     </div>
                 </div>
             </div>
@@ -794,7 +794,7 @@ OL.renderTimeReportTableGroups = function(allTasks, hourlyRate) {
                                 <td style="text-align:center;">${OL.renderProjectPill(t.clientId, t.clientName)}</td>
                                 <td style="text-align:center;">${OL.renderTeamPill(t.assignee, t.clientId)}</td>
                                 <td style="text-align:center;"><span class="pill tiny accent">${esc(t.status || 'Pending')}</span></td>
-                                <td style="text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>
+                                <td style="text-align:right; font-weight:bold;">${hours.toFixed(3)}h</td>
                                 <td style="text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>
                                 <td style="text-align:center;">
                                     <button class="btn tiny soft" onclick="OL.openEditTaskTimeModal('${t.clientId}', '${t.id}')">Edit Log</button>
@@ -961,16 +961,16 @@ OL.exportClientTimeReportCSV = function(clientId) {
     csv += `Client Name,${client.meta?.name || clientId}\n`;
     csv += `Report Date,${new Date().toLocaleDateString()}\n`;
     csv += `Base Hourly Rate,$${metrics.hourlyRate}/hr\n`;
-    csv += `Total Scoped Hours,${metrics.scopedHours.toFixed(2)}h\n`;
-    csv += `Total Logged Hours,${metrics.loggedHours.toFixed(2)}h\n`;
-    csv += `Remaining Balance Hours,${metrics.remainingHours.toFixed(2)}h\n\n`;
+    csv += `Total Scoped Hours,${metrics.scopedHours.toFixed(3)}h\n`;
+    csv += `Total Logged Hours,${metrics.loggedHours.toFixed(3)}h\n`;
+    csv += `Remaining Balance Hours,${metrics.remainingHours.toFixed(3)}h\n\n`;
 
     csv += `Task Title,Assignee,Status,Due Date,Logged Hours,Calculated Value ($),Audit Note\n`;
 
     tasks.forEach(t => {
         const hours = Number(t.loggedHours || t.hoursLogged || 0);
         const val = hours * metrics.hourlyRate;
-        csv += `"${(t.title || t.name).replace(/"/g, '""')}","${t.assignee || 'Sphynx'}","${t.status || 'Pending'}","${t.dueDate || ''}",${hours.toFixed(2)},${val.toFixed(2)},"${(t.timeAuditNote || '').replace(/"/g, '""')}"\n`;
+        csv += `"${(t.title || t.name).replace(/"/g, '""')}","${t.assignee || 'Sphynx'}","${t.status || 'Pending'}","${t.dueDate || ''}",${hours.toFixed(3)},${val.toFixed(2)},"${(t.timeAuditNote || '').replace(/"/g, '""')}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1016,7 +1016,7 @@ OL.stopLiveTaskTimer = function() {
 
     clearInterval(timer.intervalId);
 
-    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(2));
+    const hoursEarned = Number((timer.elapsedSeconds / 3600).toFixed(3));
 
     if (hoursEarned > 0) {
         OL.logTaskHours(timer.clientId, timer.taskId, hoursEarned);

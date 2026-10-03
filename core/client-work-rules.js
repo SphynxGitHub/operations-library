@@ -765,7 +765,7 @@ export async function sweepClientWorkRules() {
             try {
                 // Ongoing Maintenance: read the plan periods so the two reminders before a period ends exist even
                 // if nobody opens Maintenance & Hours (loadMaintenanceData makes them).
-                if (isOngoing(client) && typeof window.OL?.loadMaintenanceData === 'function') await window.OL.loadMaintenanceData(client.id);
+                if (isOngoing(client) && typeof window.OL?.loadMaintenanceData === 'function') await window.OL.loadMaintenanceData(client.id, { meetings: false });
                 runClientWorkRules(client, contextNow());
             } catch (e) { console.warn('Work rules sweep failed for', client.id, e); continue; }
             if (snap() !== before) {

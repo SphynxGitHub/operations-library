@@ -16,6 +16,7 @@ import {
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
     allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
     planPriorPeriod, manualUsedHours, noteWithoutMarker, carryoverExpiry,
+    isCoachingClient, meetingTimeEntries, MEETING_ENTRY_PREFIX,
 } from '../core/maintenance.js';
 import { isClientTask, isTaskBillableForHours, stampBillableFor } from '../core/billable.js';
 import { markClientDirty } from '../core/data.js';
@@ -25,17 +26,31 @@ export function todayIso(now = new Date()) {
     return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
 }
 const niceDate = (iso) => (iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '');
-const hoursText = (n) => `${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} h`;
+const hoursText = (n) => `${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 })} h`;
 const SOURCE_LABEL = Object.fromEntries(REQUEST_SOURCES.map((s) => [s.key, s.label]));
 const GRANT_LABEL = { plan_allotment: 'Plan allotment', courtesy_carryover: 'Courtesy carryover', ad_hoc_purchase: 'Ad hoc purchase' };
 
 // ---------------- the database side ----------------
 OL._maint = OL._maint || {};
 
-export async function loadMaintenanceData(clientId) {
+// Meetings (calendar events linked to the client) that have started and have time logged. Staff read them from
+// the calendar table; a client login cannot, so it gets null and uses the copy staff saved on the project.
+const MEETING_COLS = 'id, title, start, end, all_day, assignee, assignees, billable, logged_hours, logged_hours_source';
+const MEETING_COLS_BASIC = 'id, title, start, end, all_day, assignee, assignees, billable, logged_hours';
+async function loadMeetingEvents(clientId) {
+    if (window.IS_GUEST || (window.OL?.isClientLogin && window.OL.isClientLogin())) return null;
+    const run = (cols) => db.from('calendar_events').select(cols).eq('linked_client_id', clientId).eq('all_day', false)
+        .gt('logged_hours', 0).lte('start', new Date().toISOString()).order('start', { ascending: false }).limit(2000);
+    let r = await run(MEETING_COLS);
+    if (r.error) r = await run(MEETING_COLS_BASIC);          // logged_hours_source not added yet (migration not run)
+    return r.error ? null : (r.data || []);
+}
+
+export async function loadMaintenanceData(clientId, { meetings = true } = {}) {
     const slot = OL._maint[clientId] = OL._maint[clientId] || { periods: [], grants: [], loaded: false };
     slot.loading = true;
     try {
+        if (meetings) slot.events = await loadMeetingEvents(clientId);
         const [p, g] = await Promise.all([
             db.from('maintenance_plan_period').select('*').eq('client_id', clientId).order('start_date', { ascending: false }),
             db.from('hours_grant').select('*').eq('client_id', clientId).order('expires_on', { ascending: true }),
@@ -137,6 +152,37 @@ const grantShort = (g) => `${GRANT_LABEL[g.source] || g.source} · ${hoursText(g
 // Every time entry on the client's own Sphynx work (client tasks excluded) across the dates any grant covers, and
 // which grant each billable hour comes out of (core/maintenance.js allocateHours). Staff resolve billable status
 // live; a client login uses what staff last saved on the task.
+// Meetings count as time: staff read them from the calendar, a client login reads the copy staff saved on the project.
+const meetingsKnown = (client, slot) => Array.isArray(slot.events) || Array.isArray(client.projectData?.meetingTimeLog);
+function meetingEntriesFor(client, slot, period) {
+    if (Array.isArray(slot.events)) return meetingTimeEntries(slot.events, period);
+    const saved = client.projectData?.meetingTimeLog;
+    return Array.isArray(saved) ? saved.filter((e) => e && (!period || (e.date >= period.start_date && e.date <= period.due_date))) : [];
+}
+// The time an automation rule logged when it made a meeting task was just the scheduled length; once the meeting
+// itself is counted (with Zoom's real length, or what someone confirmed) those entries are left out.
+const taskTimeOpts = (client, slot) => ({
+    include: (t) => !isClientTask(t, client),
+    isBillable: (t) => isTaskBillableForHours(t, client),
+    skipSources: meetingsKnown(client, slot) ? ['automation'] : [],
+});
+function allEntries(client, slot, tasks, period, opts) {
+    return [...periodTimeEntries(tasks, period, opts), ...meetingEntriesFor(client, slot, period)]
+        .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+}
+// Staff: save the client's meeting time on the project so a client login (which cannot read the calendar) counts the same hours.
+function stampMeetingTime(client, slot) {
+    if (window.IS_GUEST || !Array.isArray(slot.events) || !client.projectData) return false;
+    const cutoff = todayIso(new Date(Date.now() - 730 * 86400000));
+    const entries = meetingTimeEntries(slot.events, null).filter((e) => e.date >= cutoff);
+    if (JSON.stringify(entries) === JSON.stringify(client.projectData.meetingTimeLog || [])) return false;
+    client.projectData.meetingTimeLog = entries;
+    return true;
+}
+const openEntryJs = (clientId, taskId) => String(taskId).startsWith(MEETING_ENTRY_PREFIX)
+    ? `OL.openCalendarEventModal('${esc(String(taskId).slice(MEETING_ENTRY_PREFIX.length))}')`
+    : `OL.openTaskInContext && OL.openTaskInContext('${esc(clientId)}', '${esc(taskId)}')`;
+
 function ledgerFor(client, slot) {
     const today = todayIso();
     const tasks = client.projectData?.clientTasks || [];
@@ -144,8 +190,9 @@ function ledgerFor(client, slot) {
     const allocations = {};
     tasks.forEach((t) => { if (t && t.hoursGrantId && grants.some((g) => String(g.id) === String(t.hoursGrantId))) allocations[t.id] = t.hoursGrantId; });
     const days = grants.flatMap((g) => [String(g.granted_on).slice(0, 10), String(g.expires_on).slice(0, 10)]).filter(Boolean).sort();
-    const opts = { include: (t) => !isClientTask(t, client), isBillable: (t) => isTaskBillableForHours(t, client) };
-    const entries = days.length ? periodTimeEntries(tasks, { start_date: days[0], due_date: days[days.length - 1] > today ? days[days.length - 1] : today }, opts) : [];
+    const opts = taskTimeOpts(client, slot);
+    const win = days.length ? { start_date: days[0], due_date: days[days.length - 1] > today ? days[days.length - 1] : today } : null;
+    const entries = win ? allEntries(client, slot, tasks, win, opts) : [];
     const alloc = allocateHours({ entries, grants, allocations });
     const active = slot.periods.find((p) => p.status === 'active');
     // Hours available now: this period's allotment, plus carryovers and purchases that haven't expired.
@@ -155,7 +202,7 @@ function ledgerFor(client, slot) {
     return { entries, alloc, allocations, current, opts, tasks };
 }
 // Hours used out of a grant: time charged to it from the logs, plus any usage recorded by hand for an earlier plan period.
-const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] || 0) / 60) + manualUsedHours(g)) * 100) / 100;
+const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] || 0) / 60) + manualUsedHours(g)) * 1000) / 1000;
 const allocatedCount = (ledger, g) => Object.values(ledger.allocations).filter((id) => String(id) === String(g.id)).length;
 
 // The tracking bar: one segment per grant available now (allotment, carryover, ad hoc), each filled by what's used.
@@ -184,8 +231,8 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? ' Add an ad hoc purchase or start a plan period.' : ''}</div>`;
     const total = gs.reduce((s, g) => s + Number(g.hours_granted || 0), 0);
-    const used = Math.round(gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 100) / 100;
-    const left = Math.round((total - used) * 100) / 100;
+    const used = Math.round(gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 1000) / 1000;
+    const left = Math.round((total - used) * 1000) / 1000;
     const pct = total > 0 ? Math.round((used / total) * 100) : 0;
     const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
     const parts = gs.map((g) => `${esc(hoursText(g.hours_granted))} ${esc((GRANT_LABEL[g.source] || g.source).toLowerCase())}`).join(' + ');
@@ -212,7 +259,7 @@ function grantCardHtml(client, g, ledger, gt) {
     const taskRows = tasks.map((t) => {
         const split = (gt.taskGrants[t.taskId]?.size || 0) > 1;
         const pinned = String(ledger.allocations[t.taskId] || '') === String(g.id);
-        return `<div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-top:1px solid var(--line); cursor:pointer;" onclick="OL.openTaskInContext && OL.openTaskInContext('${esc(client.id)}', '${esc(t.taskId)}')">
+        return `<div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-top:1px solid var(--line); cursor:pointer;" onclick="${openEntryJs(client.id, t.taskId)}">
             <span>${esc(t.title)}${pinned ? ' <span class="pill tiny soft" title="Set aside for this grant">set aside</span>' : ''}${split ? ' <span class="muted" title="Part of this task\'s time came out of another grant; only the part charged here is shown">(split)</span>' : ''}</span>
             <span style="white-space:nowrap; ${t.over ? 'color:#ef4444;' : ''}">${esc(durText(t.minutes))}</span>
         </div>`;
@@ -249,7 +296,7 @@ function grantCardsHtml(client, slot, ledger) {
         <div class="tiny muted" style="margin-top:10px;">Each hour is charged to one grant only. Billable time comes out of the plan allotment first, then other hours, soonest to expire first; a carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
 }
 
-function hoursLogHtml(client, ledger, window, heading) {
+function hoursLogHtml(client, ledger, window, heading, { showGrants = true } = {}) {
     const entries = ledger.entries.filter((e) => e.date >= window.start_date && e.date <= window.due_date);
     // The same work on two different tasks (same name, day and time), e.g. imported from ClickUp and also
     // logged here, would be counted twice. Flag it so one copy can be removed.
@@ -271,7 +318,7 @@ function hoursLogHtml(client, ledger, window, heading) {
             return `<span style="color:${c.over ? '#ef4444' : GRANT_COLOR[g?.source] || 'inherit'};">${esc(GRANT_LABEL[g?.source] || 'Grant')}${c.over ? ' (over)' : ''}</span>`;
         });
         const label = parts.length ? parts.join(' + ') : '<span style="color:#f59e0b;">No grant covers this date</span>';
-        if (!canManage() || !pickable.length) return label;
+        if (e.isMeeting || !canManage() || !pickable.length) return label;      // a meeting's hours come out of the plan like any other; they are not set aside per task
         const cur = String(ledger.allocations[e.taskId] || '');
         // Choosing a grant here sets it for the whole task, so all its time comes out of that grant.
         return `<div>${label}</div><select class="modal-input tiny" style="margin-top:3px; padding:1px 4px; width:auto; max-width:190px;" onclick="event.stopPropagation()" onchange="OL.setTaskHoursGrant('${esc(e.taskId)}', this.value)" title="Which hours this task's time comes out of">
@@ -279,13 +326,13 @@ function hoursLogHtml(client, ledger, window, heading) {
             ${pickable.map((g) => `<option value="${esc(g.id)}" ${cur === String(g.id) ? 'selected' : ''}>${esc(grantShort(g))}</option>`).join('')}
         </select>`;
     };
-    const rows = shown.map((e) => `<tr style="border-top:1px solid var(--line); cursor:pointer; vertical-align:top;" onclick="OL.openTaskInContext && OL.openTaskInContext('${esc(client.id)}', '${esc(e.taskId)}')">
+    const rows = shown.map((e) => `<tr style="border-top:1px solid var(--line); cursor:pointer; vertical-align:top;" onclick="${openEntryJs(client.id, e.taskId)}">
             <td style="white-space:nowrap; padding:6px 8px 6px 0;">${esc(niceDate(e.date))}</td>
-            <td style="padding:6px 8px 6px 0;">${esc(e.title)}${isDup(e) ? ' <span class="pill tiny" style="border:1px solid #f59e0b; color:#f59e0b;" title="Another task has the same name, date and time">possible duplicate</span>' : ''}${e.note ? `<div class="tiny muted">${esc(e.note)}</div>` : ''}</td>
+            <td style="padding:6px 8px 6px 0;">${e.isMeeting ? '<span class="pill tiny soft" style="margin-right:4px;">Meeting</span>' : ''}${esc(e.title)}${isDup(e) ? ' <span class="pill tiny" style="border:1px solid #f59e0b; color:#f59e0b;" title="Another task has the same name, date and time">possible duplicate</span>' : ''}${e.note ? `<div class="tiny muted">${esc(e.note)}</div>` : ''}</td>
             <td style="padding:6px 8px 6px 0;" class="muted">${esc(e.by)}</td>
-            <td style="text-align:right; white-space:nowrap; padding:6px 8px 6px 0;">${esc(durText(e.minutes))}</td>
+            <td style="text-align:right; white-space:nowrap; padding:6px 8px 6px 0;">${esc(durText(e.minutes))}<div class="tiny muted">${esc((e.minutes / 60).toFixed(3))} h</div></td>
             <td style="padding:6px 8px 6px 0;"><span class="pill tiny" style="border:1px solid ${e.billable ? '#22c55e' : '#94a3b8'}; color:${e.billable ? '#22c55e' : '#94a3b8'};">${e.billable ? 'Billable' : 'Non-billable'}</span></td>
-            <td style="padding:6px 0;" class="tiny">${countedAgainst(e)}</td>
+            ${showGrants ? `<td style="padding:6px 0;" class="tiny">${countedAgainst(e)}</td>` : ''}
         </tr>`).join('');
     return `
         <div class="card" style="padding:16px; margin-top:16px;">
@@ -298,7 +345,7 @@ function hoursLogHtml(client, ledger, window, heading) {
                 <div style="display:flex; gap:6px;">${btn('billable', 'Billable')}${btn('non-billable', 'Non-billable')}${btn('all', `All (${entries.length})`)}</div>
             </div>
             ${shown.length ? `<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;">
-                <thead><tr style="text-align:left;" class="tiny muted uppercase"><th>Date</th><th>Task</th><th>By</th><th style="text-align:right;">Time</th><th></th><th>Counted against</th></tr></thead>
+                <thead><tr style="text-align:left;" class="tiny muted uppercase"><th>Date</th><th>Task</th><th>By</th><th style="text-align:right;">Time</th><th></th>${showGrants ? '<th>Counted against</th>' : ''}</tr></thead>
                 <tbody>${rows}</tbody></table></div>`
             : `<div class="tiny muted">${entries.length ? 'Nothing in this filter.' : 'No time logged in this window yet.'}</div>`}
         </div>`;
@@ -368,12 +415,33 @@ const adHocWindow = (ledger) => {
     return { start_date: starts[0] || todayIso(), due_date: todayIso() };
 };
 
+// Coaching clients have no plan periods or hours grants: just the time log, every entry (meetings included),
+// with the billable and non-billable totals.
+function renderCoachingTimeLog(main, client) {
+    const slot = slotFor(client.id);
+    if (canManage() && !window.IS_GUEST && stampBillableFor(client)) { markClientDirty(client.id); OL.persist?.(); }
+    const stale = slot.loaded && Date.now() - (slot.loadedAt || 0) > 30000;
+    if ((!slot.loaded || stale) && !slot.loading) loadMaintenanceData(client.id).then(() => renderMaintenancePage());
+    if (slot.loaded && canManage() && stampMeetingTime(client, slot)) { markClientDirty(client.id); OL.persist?.(); }
+    const head = `<div class="section-header"><div><h2><i data-lucide="clock" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time Log</h2>
+        <div class="small muted">${esc(client.meta?.name || '')} · <span class="pill tiny soft">Coaching</span></div></div></div>`;
+    if (!slot.loaded) { main.innerHTML = `${head}<div class="tiny muted">Loading...</div>`; return; }
+    const tasks = client.projectData?.clientTasks || [];
+    const all = { start_date: '0000-01-01', due_date: '9999-12-31' };
+    const entries = allEntries(client, slot, tasks, all, taskTimeOpts(client, slot));
+    const first = entries.length ? entries[entries.length - 1].date : todayIso();
+    const ledger = { entries, alloc: { charges: {}, usedMinutes: {}, unfundedMinutes: 0 }, allocations: {}, current: [], tasks };
+    main.innerHTML = `${head}${hoursLogHtml(client, ledger, { start_date: first, due_date: todayIso() }, 'Time log · all time', { showGrants: false })}`;
+    if (window.lucide) window.lucide.createIcons();
+}
+
 export function renderMaintenancePage() {
     const main = document.getElementById('mainContent');
     const client = getActiveClient();
     if (!main) return;
     if (!client) { main.innerHTML = '<div class="card" style="padding:20px;">Pick a client first.</div>'; return; }
     const mode = maintenanceMode(client);
+    if (mode === null && isCoachingClient(client)) { renderCoachingTimeLog(main, client); return; }
     if (mode === null) {
         main.innerHTML = `<div class="section-header"><h2><i data-lucide="wrench" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Maintenance &amp; Hours</h2></div>
             <div class="card" style="padding:20px;">${canManage()
@@ -390,6 +458,7 @@ export function renderMaintenancePage() {
     // another login or tab show up without a full page reload.
     const stale = slot.loaded && Date.now() - (slot.loadedAt || 0) > 30000;
     if ((!slot.loaded || stale) && !slot.loading) loadMaintenanceData(client.id).then(() => renderMaintenancePage());
+    if (slot.loaded && !slot.error && canManage() && stampMeetingTime(client, slot)) { markClientDirty(client.id); OL.persist?.(); }
     const periods = slot.periods;
     const history = periods.filter((p) => p.status !== 'active');
     const ledger = slot.loaded && !slot.error ? ledgerFor(client, slot) : null;

@@ -112,6 +112,46 @@ async function resolvePastMeetingUuid(meetingId: string, accessToken: string, ap
   return best.uuid;
 }
 
+
+// ---- the real length of a meeting ----
+// Time is counted from the SCHEDULED start to the ACTUAL end Zoom reports, so a meeting that ran long counts in
+// full and one that ended early counts only what elapsed. The summary carries the meeting's start and end, so it
+// needs no extra Zoom permission; the past-meeting record is the fallback. Anything that looks wrong (an end before
+// the scheduled start, or more than 12 hours) is ignored and the scheduled length stays.
+const MAX_MEETING_HOURS = 12;
+const MAX_ELAPSED_EVENTS = 15;
+const ELAPSED_LOOKBACK_DAYS = 7;
+
+function elapsedFromScheduledStart(scheduledStartIso: string | null, actualEndIso: string | null): number | null {
+  if (!scheduledStartIso || !actualEndIso) return null;
+  const hours = (new Date(actualEndIso).getTime() - new Date(scheduledStartIso).getTime()) / 3600000;
+  if (!Number.isFinite(hours) || hours <= 0 || hours > MAX_MEETING_HOURS) return null;
+  return Math.round(hours * 1000) / 1000;
+}
+
+async function actualMeetingTimes(meetingUuid: string, accessToken: string, summaryPayload?: any): Promise<{ start: string | null; end: string } | null> {
+  if (summaryPayload?.meeting_end_time) return { start: summaryPayload.meeting_start_time || null, end: summaryPayload.meeting_end_time };
+  try {
+    const res = await fetch(`https://api.zoom.us/v2/past_meetings/${encodeZoomUuid(meetingUuid)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    const m = await res.json();
+    return m?.end_time ? { start: m.start_time || null, end: m.end_time } : null;
+  } catch (_) { return null; }
+}
+
+// Saves what Zoom reported on the event and, unless someone set the time by hand, makes it the logged time.
+// Two separate updates so a column that is not there yet (see the 2026_10 migration) never blocks the sync.
+async function saveActualMeetingTime(supabase: any, evt: { id: string; start: string | null }, times: { start: string | null; end: string } | null): Promise<boolean> {
+  const elapsed = elapsedFromScheduledStart(evt.start, times?.end || null);
+  if (elapsed === null || !times) return false;
+  const a = await supabase.from("calendar_events").update({ zoom_actual_start: times.start, zoom_actual_end: times.end, zoom_elapsed_hours: elapsed }).eq("id", evt.id);
+  if (a.error) { console.error(`Could not save Zoom actual time for ${evt.id}:`, a.error.message); return false; }
+  const b = await supabase.from("calendar_events").update({ logged_hours: elapsed, logged_hours_source: "zoom" })
+    .eq("id", evt.id).or("logged_hours_source.is.null,logged_hours_source.neq.manual");
+  if (b.error) console.error(`Could not set logged time from Zoom for ${evt.id}:`, b.error.message);
+  return true;
+}
+
 // Zoom has returned action items in a few shapes over time: next_steps as
 // strings, next_steps as objects, or only a markdown summary_content with a
 // "Next steps" section. All of them are handled; the bullet scan is last.
@@ -304,6 +344,7 @@ serve(async (req) => {
       .filter(evt => evt.resolvedMeetingId);
 
     let summariesPostedCount = 0;
+    let elapsedSaved = 0;
     let actionItemsFound = 0;
     let noSummaryYetCount = 0;
     let otherErrorCount = 0;
@@ -327,6 +368,7 @@ serve(async (req) => {
         // No summary (yet) — but remember the meeting so the recording
         // pass below can still pick it up.
         await supabase.from("calendar_events").update({ zoom_meeting_id: zoomMeetingId, zoom_meeting_uuid: meetingUuid }).eq("id", evt.id);
+        if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(meetingUuid, accessToken))) elapsedSaved++;
         noSummaryYetCount++;
         if (report) report.summary = "none — Zoom has no AI Companion summary for this meeting (summaries must be turned on in the meeting, and only the host's account gets them)";
         continue;
@@ -365,6 +407,7 @@ serve(async (req) => {
         .eq("id", evt.id);
       if (updateErr) { console.error(`Failed to update calendar event ${evt.id}:`, updateErr.message); continue; }
       summariesPostedCount++;
+      if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(meetingUuid, accessToken, summaryPayload))) elapsedSaved++;
       if (report) { report.summary = "saved"; report.actionItems = actionItems.length; }
     }
 
@@ -485,14 +528,41 @@ serve(async (req) => {
       await supabase.from("calendar_events").update(extraPatch).eq("id", evt.id).then(() => {}, () => {});
     }
 
+    // ---------------------------------------------------------------
+    // Actual meeting length for meetings the passes above didn't cover (summary already saved earlier, or Zoom has
+    // no summary): look the finished meeting up and log from the scheduled start to the real end.
+    // ---------------------------------------------------------------
+    if (!onlyEventId) {
+      const elapsedStart = new Date(Date.now() - ELAPSED_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const nowIso = new Date().toISOString();
+      const { data: elapsedEvents, error: elapsedErr } = await supabase
+        .from("calendar_events")
+        .select("id, start, zoom_meeting_id, zoom_meeting_uuid")
+        .not("zoom_meeting_id", "is", null)
+        .is("zoom_elapsed_hours", null)
+        .eq("all_day", false)
+        .gte("start", elapsedStart)
+        .lte("end", nowIso)
+        .order("start", { ascending: false })
+        .limit(MAX_ELAPSED_EVENTS);
+      if (!elapsedErr) {
+        for (const evt of elapsedEvents || []) {
+          const uuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(evt.zoom_meeting_id, accessToken, evt.start);
+          if (!uuid) continue;
+          if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(uuid, accessToken))) elapsedSaved++;
+        }
+      } else console.error("Elapsed-time pass skipped:", elapsedErr.message);
+    }
+
     return new Response(JSON.stringify({
       scannedEvents: zoomEvents.length,
+      elapsedSaved,
       summariesPostedCount,
       actionItemsFound,
       tasksCreatedCount: 0, // tasks are created by the app now
       discoveredCount,
       ...(report ? { eventReport: report } : {}),
-      version: "2026-09c",
+      version: "2026-10",
       noSummaryYetCount,
       otherErrorCount,
       firstOtherError,

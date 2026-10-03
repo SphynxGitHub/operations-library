@@ -54,7 +54,7 @@ export function renderClientTaskManager() {
                     <i data-lucide="check-circle" style="width:14px;height:14px;"></i> Followed up · next ${esc(OL.formatDayKey ? OL.formatDayKey(fuWaitUntil, { month: 'short', day: 'numeric' }) : fuWaitUntil)}
                 </div>` : ''}
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(1)}h
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(2)}h
                 </div>
             </div>
         </div>

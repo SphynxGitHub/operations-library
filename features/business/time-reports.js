@@ -109,7 +109,7 @@ OL.renderBusinessTimeReports = function() {
             <!-- GRAND TOTAL BAR -->
             <div class="pill accent" style="padding: 6px 12px; display: flex; gap: 12px; align-items: center; font-size: 12px; font-weight: bold; flex-shrink:0;">
                 <i data-lucide="clock" style="width:14px;height:14px;"></i>
-                <span>Logged: <span style="color:var(--text);">${totalLoggedHours.toFixed(1)}h</span></span>
+                <span>Logged: <span style="color:var(--text);">${totalLoggedHours.toFixed(2)}h</span></span>
                 ${canSeeMoney() ? `<span style="opacity: 0.3;">|</span>
                 <span>Grand Value: <span style="color:var(--accent); font-size: 14px;">$${totalValue.toLocaleString()}</span></span>` : ''}
             </div>
@@ -166,10 +166,10 @@ OL.renderBusinessTimeReports = function() {
                             <span class="tiny muted">${m.burnRate}% Scoped</span>
                         </div>
                         <div style="font-size: 18px; font-weight: 900; color: ${m.remainingHours < 0 ? '#ef4444' : 'var(--accent)'};">
-                            ${m.loggedHours.toFixed(1)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(1)}h</span>
+                            ${m.loggedHours.toFixed(2)}h <span class="tiny muted" style="font-weight:normal;">/ ${m.scopedHours.toFixed(2)}h</span>
                         </div>
                         <div class="tiny muted" style="margin-top:2px;">
-                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">${canSeeMoney() ? '$' + m.remainingValue.toLocaleString() : m.remainingHours.toFixed(1) + 'h'}</strong>
+                            Balance: <strong style="color:${m.remainingHours < 0 ? '#ef4444' : '#22c55e'}">${canSeeMoney() ? '$' + m.remainingValue.toLocaleString() : m.remainingHours.toFixed(2) + 'h'}</strong>
                         </div>
                     </div>
                 `;
@@ -301,7 +301,7 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                                     <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
                                 </td>
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold;">
-                                    ${hours.toFixed(2)}h                                 </td>
+                                    ${hours.toFixed(3)}h                                 </td>
                                 ${canSeeMoney() ? `<td style="padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: right; font-weight: bold; color: var(--accent);">                                     $${val.toLocaleString()}
                                 </td>` : ''}
                                 <td style="padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: center;">
@@ -342,7 +342,7 @@ OL.renderTimeReportTableGroups = function(filteredTasks, hourlyRate) {
                         <span class="pill tiny soft">${groupTasks.length} entries</span>
                     </div>
                     <div class="tiny bold" style="color:var(--accent); display:flex; gap:12px;">
-                        <span>Hours: ${groupHours.toFixed(1)}h</span>
+                        <span>Hours: ${groupHours.toFixed(2)}h</span>
                         ${canSeeMoney() ? `<span>Value: $${groupSubtotal.toLocaleString()}</span>` : ''}
                     </div>
                 </div>
@@ -365,17 +365,17 @@ OL.renderClientReportView = function(clientId) {
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px;">
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Paid Scoped Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: #38bdf8; margin-top: 4px;">${metrics.scopedHours.toFixed(2)}h</div>
                 ${canSeeMoney() ? `<div class="tiny muted">$${metrics.scopedValue.toLocaleString()} Gross</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Logged Hours Used</div>
-                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: var(--accent); margin-top: 4px;">${metrics.loggedHours.toFixed(2)}h</div>
                 ${canSeeMoney() ? `<div class="tiny muted">$${metrics.usedValue.toLocaleString()} Value</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
                 <div class="tiny muted uppercase bold">Remaining Hours</div>
-                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(1)}h</div>
+                <div style="font-size: 20px; font-weight: 900; color: ${metrics.remainingHours < 0 ? '#ef4444' : '#22c55e'}; margin-top: 4px;">${metrics.remainingHours.toFixed(2)}h</div>
                 ${canSeeMoney() ? `<div class="tiny muted">$${metrics.remainingValue.toLocaleString()} Balance</div>` : ''}
             </div>
             <div class="card" style="padding: 12px; text-align: center;">
@@ -412,7 +412,7 @@ OL.renderClientReportView = function(clientId) {
                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:center;">
                                     <span class="pill tiny accent">${esc(t.status || 'Pending')}</span>
                                 </td>
-                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold;">${hours.toFixed(2)}h</td>${canSeeMoney() ? `                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>` : ''}
+                                <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold;">${hours.toFixed(3)}h</td>${canSeeMoney() ? `                                 <td style="padding:10px 12px; border-right:1px solid var(--line); text-align:right; font-weight:bold; color:var(--accent);">$${val.toLocaleString()}</td>` : ''}
                                 <td style="padding:10px 12px; text-align:center;">
                                     <button class="btn tiny soft icon-only" title="Edit Log" onclick="OL.openEditTaskTimeModal('${clientId}', '${t.id}')">
                                         <i data-lucide="pencil" style="width:12px; height:12px;"></i>
