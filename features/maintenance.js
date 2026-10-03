@@ -29,6 +29,8 @@ const niceDate = (iso) => (iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00Z
 const hoursText = (n) => `${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 })} h`;
 const SOURCE_LABEL = Object.fromEntries(REQUEST_SOURCES.map((s) => [s.key, s.label]));
 const GRANT_LABEL = { plan_allotment: 'Plan allotment', courtesy_carryover: 'Courtesy carryover', ad_hoc_purchase: 'Ad hoc purchase' };
+// A coaching client's prepaid hours are stored as ad hoc purchases (same grant, same expiry rules); only the name differs.
+const syncGrantLabel = (client) => { GRANT_LABEL.ad_hoc_purchase = isCoachingClient(client) ? 'Prepaid hours' : 'Ad hoc purchase'; };
 
 // ---------------- the database side ----------------
 OL._maint = OL._maint || {};
@@ -229,7 +231,7 @@ function grantTasks(ledger) {
 // purchases) in one bar, with the breakdown underneath.
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
-    if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? ' Add an ad hoc purchase or start a plan period.' : ''}</div>`;
+    if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const total = gs.reduce((s, g) => s + Number(g.hours_granted || 0), 0);
     const used = Math.round(gs.reduce((s, g) => s + usedHoursOf(ledger, g), 0) * 1000) / 1000;
     const left = Math.round((total - used) * 1000) / 1000;
@@ -418,20 +420,38 @@ const adHocWindow = (ledger) => {
 // Coaching clients have no plan periods or hours grants: just the time log, every entry (meetings included),
 // with the billable and non-billable totals.
 function renderCoachingTimeLog(main, client) {
+    syncGrantLabel(client);
     const slot = slotFor(client.id);
     if (canManage() && !window.IS_GUEST && stampBillableFor(client)) { markClientDirty(client.id); OL.persist?.(); }
     const stale = slot.loaded && Date.now() - (slot.loadedAt || 0) > 30000;
     if ((!slot.loaded || stale) && !slot.loading) loadMaintenanceData(client.id).then(() => renderMaintenancePage());
     if (slot.loaded && canManage() && stampMeetingTime(client, slot)) { markClientDirty(client.id); OL.persist?.(); }
     const head = `<div class="section-header"><div><h2><i data-lucide="clock" style="width:24px;height:24px;vertical-align:sub;margin-right:8px;color:var(--accent);"></i>Time Log</h2>
-        <div class="small muted">${esc(client.meta?.name || '')} · <span class="pill tiny soft">Coaching</span></div></div></div>`;
+        <div class="small muted">${esc(client.meta?.name || '')} · <span class="pill tiny soft">Coaching</span></div></div>
+        ${canManage() ? '<button class="btn small primary" onclick="OL.openAdHocPurchaseModal()">+ Log prepaid hours</button>' : ''}</div>`;
     if (!slot.loaded) { main.innerHTML = `${head}<div class="tiny muted">Loading...</div>`; return; }
-    const tasks = client.projectData?.clientTasks || [];
-    const all = { start_date: '0000-01-01', due_date: '9999-12-31' };
-    const entries = allEntries(client, slot, tasks, all, taskTimeOpts(client, slot));
-    const first = entries.length ? entries[entries.length - 1].date : todayIso();
-    const ledger = { entries, alloc: { charges: {}, usedMinutes: {}, unfundedMinutes: 0 }, allocations: {}, current: [], tasks };
-    main.innerHTML = `${head}${hoursLogHtml(client, ledger, { start_date: first, due_date: todayIso() }, 'Time log · all time', { showGrants: false })}`;
+    if (slot.error) { main.innerHTML = `${head}<div class="card" style="padding:16px; border-left:3px solid #ef4444;">Could not load the hours data: ${esc(slot.error)}</div>`; return; }
+    const hasGrants = slot.grants.length > 0;
+    const ledger = ledgerFor(client, slot);     // entries cover the dates the prepaid hours cover; with none, just today
+    let body;
+    if (hasGrants) {
+        const starts = slot.grants.map((g) => String(g.granted_on).slice(0, 10)).sort();
+        const win = { start_date: starts[0], due_date: todayIso() };
+        const nonBillable = summarizePeriodTime(ledger.entries.filter((e) => e.date >= win.start_date && e.date <= win.due_date)).nonBillableHours;
+        body = `<div class="card" style="padding:16px;"><div class="bold">Prepaid hours</div>
+                <div class="tiny muted" style="margin-top:4px;">Hours the client paid for ahead of time. Billable time comes out of them, soonest to expire first.</div>
+                ${totalBarHtml(ledger, { nonBillableHours: nonBillable })}</div>
+            ${hoursLogHtml(client, ledger, win, 'Time log · since first prepaid hours')}
+            <div class="card" style="padding:16px; margin-top:16px;"><h3 style="margin:0 0 10px;">Prepaid hours by purchase</h3>${grantCardsHtml(client, slot, ledger)}</div>`;
+    } else {
+        const tasks = client.projectData?.clientTasks || [];
+        const entries = allEntries(client, slot, tasks, { start_date: '0000-01-01', due_date: '9999-12-31' }, taskTimeOpts(client, slot));
+        const first = entries.length ? entries[entries.length - 1].date : todayIso();
+        const plain = { entries, alloc: { charges: {}, usedMinutes: {}, unfundedMinutes: 0 }, allocations: {}, current: [], tasks };
+        body = `${canManage() ? '<div class="card" style="padding:12px 16px; margin-bottom:16px;" ><span class="tiny muted">No prepaid hours logged yet. Use <strong>Log prepaid hours</strong> to track what is left.</span></div>' : ''}
+            ${hoursLogHtml(client, plain, { start_date: first, due_date: todayIso() }, 'Time log · all time', { showGrants: false })}`;
+    }
+    main.innerHTML = head + body;
     if (window.lucide) window.lucide.createIcons();
 }
 
@@ -440,6 +460,7 @@ export function renderMaintenancePage() {
     const client = getActiveClient();
     if (!main) return;
     if (!client) { main.innerHTML = '<div class="card" style="padding:20px;">Pick a client first.</div>'; return; }
+    syncGrantLabel(client);
     const mode = maintenanceMode(client);
     if (mode === null && isCoachingClient(client)) { renderCoachingTimeLog(main, client); return; }
     if (mode === null) {
@@ -505,6 +526,7 @@ export function openGrantTasksModal(grantId) {
     const client = getActiveClient(); if (!client || !canManage()) return;
     const slot = slotFor(client.id);
     const grant = slot.grants.find((g) => String(g.id) === String(grantId)); if (!grant) return;
+    syncGrantLabel(client);
     const grantsById = new Map(slot.grants.map((g) => [String(g.id), g]));
     const closed = new Set(closedNames());
     const tasks = (client.projectData?.clientTasks || []).filter((t) => t && !isClientTask(t, client))
@@ -678,16 +700,19 @@ export async function submitClosePeriod(periodId) {
 
 export function openAdHocPurchaseModal() {
     const client = getActiveClient(); if (!client) return;
-    openModal(`${modalHead('Ad hoc purchase')}<div class="modal-body" style="padding-top:14px;">
-        <p class="tiny muted" style="margin-bottom:14px;">Hours bought as needed. They expire one year after the purchase date.</p>
+    syncGrantLabel(client);
+    const coaching = isCoachingClient(client);
+    openModal(`${modalHead(coaching ? 'Log prepaid hours' : 'Ad hoc purchase')}<div class="modal-body" style="padding-top:14px;">
+        <p class="tiny muted" style="margin-bottom:14px;">${coaching ? 'Hours the client has paid for ahead of time. Billable time on their coaching calls and tasks comes out of these hours. They expire one year after the date paid unless you set a different date.' : 'Hours bought as needed. They expire one year after the purchase date.'}</p>
         ${field('Hours', `<input id="ah-hours" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 10">`)}
-        ${field('Purchase date', `<input id="ah-date" type="date" class="modal-input" value="${todayIso()}">`)}
+        ${field(coaching ? 'Date paid' : 'Purchase date', `<input id="ah-date" type="date" class="modal-input" value="${todayIso()}">`)}
+        ${coaching ? field('Expires (optional)', `<input id="ah-exp" type="date" class="modal-input">`) : ''}
         ${field('Note (optional)', `<input id="ah-note" type="text" class="modal-input" placeholder="e.g. Invoice 1042">`)}
-        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitAdHocPurchase()">Add hours</button></div>`);
+        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitAdHocPurchase()">${coaching ? 'Log prepaid hours' : 'Add hours'}</button></div>`);
 }
 export async function submitAdHocPurchase() {
     const client = getActiveClient(); if (!client) return;
-    const res = await saveAdHoc(client.id, { hours: val('ah-hours'), purchasedOn: val('ah-date'), note: val('ah-note') });
+    const res = await saveAdHoc(client.id, { hours: val('ah-hours'), purchasedOn: val('ah-date'), note: val('ah-note'), expiresOn: val('ah-exp') });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -697,7 +722,8 @@ const STATUS_LABEL = { active: 'Active', used_up: 'Used up', expired: 'Expired' 
 function findGrant(grantId) { const client = getActiveClient(); return { client, grant: slotFor(client?.id).grants.find((g) => String(g.id) === String(grantId)) }; }
 
 export function openEditGrantModal(grantId) {
-    const { grant } = findGrant(grantId); if (!grant || !canManage()) return;
+    const { client: gc, grant } = findGrant(grantId); if (!grant || !canManage()) return;
+    syncGrantLabel(gc);
     const adHoc = grant.source === 'ad_hoc_purchase';
     const d = (v) => esc(String(v || '').slice(0, 10));
     openModal(`${modalHead(`Edit ${esc((GRANT_LABEL[grant.source] || 'grant').toLowerCase())}`)}<div class="modal-body" style="padding-top:14px;">

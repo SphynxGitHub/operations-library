@@ -314,11 +314,17 @@ export function planPriorPeriod({ clientId, start, due, allotment, used, carryHo
 }
 
 // An ad hoc purchase: hours that expire a year after they are bought.
-export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '' }) {
+// Also used for a coaching client's prepaid hours. expiresOn (optional) replaces the default of a year after purchase.
+export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '', expiresOn = '' }) {
     const h = cleanHours(hours);
     if (h <= 0) return { error: 'Enter the number of hours.' };
     if (!validDate(purchasedOn)) return { error: 'Enter a valid purchase date.' };
-    return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: adHocExpiry(purchasedOn), status: 'active', note: String(note || '').trim() || null } };
+    let expires = adHocExpiry(purchasedOn);
+    if (!isBlank(expiresOn)) {
+        if (!validDate(expiresOn) || expiresOn <= purchasedOn) return { error: 'The expiry date must be after the purchase date.' };
+        expires = expiresOn;
+    }
+    return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: expires, status: 'active', note: String(note || '').trim() || null } };
 }
 
 // Edit an ad hoc purchase or a courtesy carryover. (A plan allotment is edited through its plan period.)
