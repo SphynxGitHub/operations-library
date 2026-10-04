@@ -2171,3 +2171,11 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fv-step-card .fv-step-callouts .fv-callout-panel { position: absolute; left: calc(100% + 10px); top: 0; margin: 0; width: 240px; z-index: 80; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
 .fv-step-card:has(.fv-callout-panel) { z-index: 60; }
 .fv-list-item .fv-step-callouts .fv-callout-panel { max-width: 320px; }
+
+/* ---- amber text readable on a light page (it was tuned for the dark theme) ---- */
+body.light-mode .fv-flag-chip[style*="--c:#F5B800"] { --c: #1e3a8a !important; }
+body.light-mode .fo-draft-chip, body.light-mode .fo-draft { color: #1e3a8a; border-color: #1e3a8a; }
+body.light-mode .fo-mini-q, body.light-mode .fo-qbadge { color: #fff; background: #1e3a8a; }
+body.light-mode .fv-steps-res-head [style*="#e8a83a"], body.light-mode .fv-list-res-head [style*="#e8a83a"],
+body.light-mode .fv-step-card [style*="color:#e8a83a"], body.light-mode .fv-card-type-label[style*="#e8a83a"] { color: #1e3a8a !important; }
+body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #1e3a8a !important; }

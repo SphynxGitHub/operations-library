@@ -219,7 +219,7 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .fv-flag { display: inline-flex !important; background: #fff !important; border: 1.2px solid #334155 !important; box-shadow: none !important; padding: 1px 5px !important; }
 .fv-flag-add { display: none !important; }
 .fv-flag-no { font-size: 10px; font-weight: 800; color: #0f172a !important; }
-.fv-flag-no.k-Q { color: #b45309 !important; } .fv-flag-no.k-A { color: #0f766e !important; } .fv-flag-no.k-N { color: #475569 !important; }
+.fv-flag-no.k-Q { color: #1e3a8a !important; } .fv-flag-no.k-A { color: #0f766e !important; } .fv-flag-no.k-N { color: #475569 !important; }
 /* the list that ends the printout: normal flow, so it can run onto as many pages as it needs */
 .apx { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; color: #0f172a; page-break-before: always; break-before: page; padding: 0 2px; }
 .apx-head { display: flex; gap: 12px; align-items: baseline; border-bottom: 1.5px solid #0f172a; padding-bottom: 6px; margin-bottom: 14px; }
@@ -243,6 +243,12 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .fv-used-chip { color: #0f766e !important; border: 1.2px dashed #0f766e !important; background: #fff !important; }
 .fv-used-pg { color: #0f766e !important; font-weight: 700; }
 .fv-step-card { box-shadow: none !important; break-inside: avoid; }
+/* the Frame-out draft chip and the add-a-step row are for the screen only */
+.fo-draft-chip, .fo-draft-chip-link, .fo-draft, .fo-inline, .fo-open-btn { display: none !important; }
+/* amber text is hard to read on white paper */
+.fv-flag-chip[style*="--c:#F5B800"] { --c: #1e3a8a !important; }
+.fv-steps-res-head [style*="#e8a83a"], .fv-step-card [style*="color:#e8a83a"] { color: #1e3a8a !important; }
+.fv-steps-res-head [style*="background:#e8a83a"] { background: #1e3a8a !important; }
 /* collateral chips print as numbered tags; the list at the end carries the names and links */
 .fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 1px 6px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
 .fv-co-no { font-weight: 800; color: #0f766e; }
