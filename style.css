@@ -1903,6 +1903,13 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fv-card:hover .fv-callout-add, .fv-card.selected .fv-callout-add, .fv-callouts:not(.has-items) .fv-callout-add:focus { display: inline-flex; }
 .fv-callouts.has-items .fv-callout-add { display: inline-flex; opacity: 0; transition: opacity .15s; }
 .fv-card:hover .fv-callouts.has-items .fv-callout-add, .fv-card.selected .fv-callouts.has-items .fv-callout-add { opacity: 1; }
+/* Callouts outside the card canvas (Steps and List views): the + shows on hover, like it does on a card */
+.fv-callout-host:hover .fv-callout-add, .fv-callout-host:focus-within .fv-callout-add,
+.fv-callout-host:hover .fv-callouts.has-items .fv-callout-add { display: inline-flex; opacity: 1; }
+.fv-list-res-head { margin: 10px 0 4px; padding: 0 2px; }
+.fv-list-res-title { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.fv-list-res-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.fv-steps-res-head .fv-callout-panel { position: absolute; z-index: 40; width: 240px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
 .fv-callout-panel { margin-top: 6px; padding: 9px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--accent); cursor: default; }
 .fv-callout-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .fv-callout-kind { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); }

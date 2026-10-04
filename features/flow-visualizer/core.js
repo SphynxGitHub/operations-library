@@ -561,8 +561,11 @@ export function _fvAutoLinkSteps(resources) {
     return changed;
 };
 // ── SHARED STATE ─────────────────────────────────────────
+// The Swimlanes tab is hidden: the flow map opens on Steps, and a "flowchart" choice saved by an earlier session
+// (or a link that asks for it) opens on Steps too. The Swimlanes drawing code is still here for the Board export.
+const fvStartLayout = () => { const v = sessionStorage.getItem('fv_layout'); return v === 'list' || v === 'steps' ? v : 'steps'; };
 if (!OL._fv) OL._fv = {
-    layout: sessionStorage.getItem('fv_layout') || 'flowchart',
+    layout: fvStartLayout(),
     zoom: 1,
     showConnections: true,
     stageFilter: '',
@@ -606,7 +609,7 @@ export function renderVisualizer() {
   const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
   if (!OL._fv) OL._fv = {
-        layout: sessionStorage.getItem('fv_layout') || 'flowchart', zoom: 1,
+        layout: fvStartLayout(), zoom: 1,
         showConnections: true, stageFilter: '',
         globalsExpanded: false,
         searchMatches: [], searchIdx: -1,
@@ -671,16 +674,6 @@ export function renderVisualizer() {
 
         <!-- Layout switcher -->
         <div class="fv-layout-toggle-group" style="display: inline-flex; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px;">
-            <button class="fv-layout-btn ${OL._fv.layout === 'flowchart' ? 'active' : ''}" 
-                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer; transition: all 0.15s; 
-                           background: ${OL._fv.layout === 'flowchart' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
-                           color: ${OL._fv.layout === 'flowchart' ? 'var(--accent)' : 'var(--text-muted)'};"
-                    onclick="OL._fv.layout = 'flowchart'; sessionStorage.setItem('fv_layout', 'flowchart'); OL.renderVisualizer();"
-                    title="Swimlanes View">
-                <i data-lucide="columns-3" style="width: 13px; height: 13px;"></i>
-                <span>Swimlanes</span>
-            </button>
-        
             <button class="fv-layout-btn ${OL._fv.layout === 'steps' ? 'active' : ''}" 
                     style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer; transition: all 0.15s; 
                            background: ${OL._fv.layout === 'steps' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
@@ -803,7 +796,7 @@ export function renderVisualizer() {
                 border-radius:10px;padding:6px;z-index:100;min-width:160px;
                 box-shadow:0 8px 24px rgba(0,0,0,0.3);">
                 ${[
-                    { view:'flowchart', icon:'columns-3',   label:'Swimlanes' },
+                    { view:'flowchart', icon:'columns-3',   label:'Board View' },
                     { view:'list',      icon:'list',         label:'List View' },
                     { view:'steps',     icon:'hexagon',      label:'Steps View' },
                     { view:'diagram-portrait',  icon:'workflow', label:'Flow diagram (portrait)',  call:"OL.printFlowDiagram('portrait')" },
@@ -972,6 +965,15 @@ export function _fvRenderFlowchart(stages, resources) {
   OL._fvSyncRailHeights();
   OL._fvSetupRailScroll();
 };
+
+// A resource's heading in the List view: its name, with its callouts (templates, sheets, docs, folders) under it.
+function _fvListResHead(res) {
+  const tc = OL._fvGetType ? OL._fvGetType(res.type) : { color: 'var(--accent)' };
+  return `<div class="fv-list-res-head fv-callout-host" onclick="event.stopPropagation()">
+    <div class="fv-list-res-title"><span class="fv-list-res-dot" style="background:${tc.color};"></span><span>${esc(res.name)}</span></div>
+    ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}
+  </div>`;
+}
 
 export function _fvRenderList(stages, resources) {
   const body = document.getElementById('fv-body');
@@ -2073,7 +2075,7 @@ export function _fvRenderSteps(resources) {
   const ZONE_HDR  = 22;   // stage label height
   const WF_PAD    = 14;   // padding inside workflow sub-zone
   const WF_HDR    = 26;   // workflow sub-zone label height
-  const RES_HDR   = 28;   // resource column header height
+  const RES_HDR   = 50;   // resource column header height: the name, then the callout chips under it
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
   const PAD_X     = 48;
@@ -2266,14 +2268,19 @@ export function _fvRenderSteps(resources) {
         const tc   = OL._fvGetType(res.type);
         const colX = resBaseX.get(res);
         const hdrEl = document.createElement('div');
+        hdrEl.className = 'fv-callout-host fv-steps-res-head';
         hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
-          width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
+          width:${CARD_W}px;z-index:6;`;
         hdrEl.innerHTML = `
-          <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
-          <span title="${esc(res.name)}"
-                style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
-                       letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                       text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
+            <span title="${esc(res.name)}"
+                  style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
+                         letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
+                         text-overflow:ellipsis;max-width:${CARD_W - (res.isDraft ? 104 : 20)}px;">${esc(res.name)}</span>
+            ${res.isDraft ? `<span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open</span>` : ''}
+          </div>
+          ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}`;
         frag.appendChild(hdrEl);
         resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
       });
@@ -3538,7 +3545,7 @@ export function _fvBuildListShell(stages, resources) {
                 const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
                 totalStageStepsCount += steps.length;
                 
-                return steps.map((step, idx) => {
+                return (steps.length ? _fvListResHead(res) : '') + steps.map((step, idx) => {
                     // 🎯 PASS WORKFLOW CONTEXT IF IT'S A GLOBAL CLONE INSTANCE
                     // This tells the step renderer to append a unique suffix to the HTML IDs 
                     // (e.g., id="step-${step.id}-${wf.id}") so different copies stay isolated.
@@ -3591,7 +3598,7 @@ export function _fvBuildListShell(stages, resources) {
                 const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
                 totalStageStepsCount += steps.length;
                 
-                return steps.map((step, idx) => 
+                return (steps.length ? _fvListResHead(res) : '') + steps.map((step, idx) => 
                     OL._fvRenderListStep(step, res, idx, globalIds, resources, 0, new Set())
                 ).join('');
             }).join('');

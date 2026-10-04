@@ -1137,7 +1137,7 @@ export function printFlowMap(view) {
     const workflows = data.workflows || [];
 
     const clientName = client?.meta?.name || 'Flow Map';
-    const viewLabel  = { flowchart: 'Swimlanes', list: 'List', steps: 'Steps' }[view] || view;
+    const viewLabel  = { flowchart: 'Board', list: 'List', steps: 'Steps' }[view] || view;
     const date       = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
 
     let bodyHtml = '';
