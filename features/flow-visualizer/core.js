@@ -22,6 +22,8 @@
 
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
+import { layoutDraft, routeDraftLink } from '../../core/frameout.js';
+const isDraftLayoutResource = (res) => !!(res && res.isDraft && res.source === 'frameout' && (res.steps || []).length);
 import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js';
 
 //===========================INFINITE GRID (V2 CONSOLIDATED)===========================
@@ -493,6 +495,8 @@ export function _fvGetEffectiveOut(step, res) {
 export function _fvLayoutResource(res) {
     // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
     if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols });
+    // Processes made in Frame-out: the Yes and No paths run down their own columns beside the main line
+    if (isDraftLayoutResource(res)) return layoutDraft(res.steps);
     const steps = res.steps || [];
 
     // Find which steps are branch targets and who their parent is
@@ -2730,9 +2734,30 @@ export function _fvDrawStepConnections(resources) {
         const cp1x = isVert ? fx : fx + (dx > 0 ?  tension : -tension);
         const cp1y = isVert ? fy + (dy > 0 ?  tension : -tension) : fy;
         const cp2x = isVert ? tx : tx + (dx > 0 ? -tension :  tension);
-        const cp2y = isVert ? ty + (dy > 0 ? -tension :  tension) : ty;
+        const cp2y = isVert ? ty + (dy > 0 ?  -tension :  tension) : ty;
 
-        const d = `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
+        let d = `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
+
+        // Processes made in Frame-out: lines run in straight pieces through the gaps between cards, so they never cross one
+        let draftRoute = null;
+        if (!isCrossResource && sourceRes.isDraft && sourceRes.source === 'frameout') {
+          draftRoute = routeDraftLink(
+            { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
+            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, STEP_GAP);
+          if (draftRoute) {
+            const R = 8, pts = draftRoute.points;
+            d = `M ${pts[0][0]} ${pts[0][1]}`;
+            for (let i = 1; i < pts.length; i++) {
+              const [px, py] = pts[i - 1], [cx, cy] = pts[i];
+              if (i < pts.length - 1) {                       // round the corner at pts[i]
+                const [nx, ny] = pts[i + 1];
+                const r = Math.min(R, Math.hypot(cx - px, cy - py) / 2, Math.hypot(nx - cx, ny - cy) / 2);
+                const ux = Math.sign(cx - px), uy = Math.sign(cy - py), vx = Math.sign(nx - cx), vy = Math.sign(ny - cy);
+                d += ` L ${cx - ux * r} ${cy - uy * r} Q ${cx} ${cy} ${cx + vx * r} ${cy + vy * r}`;
+              } else d += ` L ${cx} ${cy}`;
+            }
+          }
+        }
 
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
         const isLoop     = outRule.type === 'loop';
@@ -2749,6 +2774,24 @@ export function _fvDrawStepConnections(resources) {
         if (isImplicit) path.setAttribute('stroke-dasharray', '4,4');
         else if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
         frag.appendChild(path);
+
+        // A draft process's decision lines say Yes or No in words, beside the decision, instead of the logic icon
+        if (draftRoute && draftRoute.label && /^(yes|no)$/i.test((outRule.rule || '').trim())) {
+          const word = (outRule.rule || '').trim().replace(/^./, (c) => c.toUpperCase());
+          const lw = word.length * 6.4 + 12;
+          const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          pill.setAttribute('x', draftRoute.label[0] - lw / 2); pill.setAttribute('y', draftRoute.label[1] - 8);
+          pill.setAttribute('width', lw); pill.setAttribute('height', 16); pill.setAttribute('rx', 8);
+          pill.setAttribute('fill', '#0b1220'); pill.setAttribute('stroke', color); pill.setAttribute('stroke-width', '1');
+          frag.appendChild(pill);
+          const lt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          lt.setAttribute('x', draftRoute.label[0]); lt.setAttribute('y', draftRoute.label[1] + 3.5);
+          lt.setAttribute('text-anchor', 'middle'); lt.setAttribute('font-size', '9.5'); lt.setAttribute('font-weight', '700');
+          lt.setAttribute('fill', color); lt.setAttribute('font-family', 'DM Sans, sans-serif'); lt.setAttribute('pointer-events', 'none');
+          lt.textContent = word;
+          frag.appendChild(lt);
+          return;
+        }
 
         // Logic icon on line midpoint (implicit links get no icon)
         const hasRule  = !isImplicit && outRule.rule?.trim();
