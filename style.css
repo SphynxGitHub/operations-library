@@ -2150,3 +2150,22 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fo-inline-input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px dashed #4a5d78; background: var(--bg); color: var(--text-main); font: inherit; font-size: 11px; }
 .fo-open-btn { background: none; border: none; color: var(--accent); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; padding: 2px 0; }
 @media (max-width: 900px) { .fo-main { flex-direction: column; } .fo-panel { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--panel-border); max-height: 40vh; } .fo-segs { display: none; } }
+
+/* ---- rename in place (features/flow-visualizer/rename.js) ---- */
+.fv-rename-target { cursor: text; border-radius: 3px; }
+.fv-rename-target:hover { opacity: 1 !important; outline: 1px dashed var(--accent); outline-offset: 2px; }
+.fv-rename-target.fv-renaming { outline: 1px solid var(--accent); outline-offset: 2px; background: var(--panel); color: var(--text-main); text-overflow: clip; user-select: text; }
+
+/* ---- collateral callouts on a step (features/flow-visualizer/step-callouts.js) ---- */
+.fv-step-callouts { margin-top: 6px; }
+.fv-step-callouts .fv-callout-add { display: none; }
+.fv-step-callouts.has-items .fv-callout-add { display: inline-flex; opacity: 0; transition: opacity .15s; }
+.fv-step-card:hover .fv-step-callouts .fv-callout-add, .fv-step-card.selected .fv-step-callouts .fv-callout-add,
+.fv-list-item:hover .fv-step-callouts .fv-callout-add, .fv-list-item.selected .fv-step-callouts .fv-callout-add,
+.fv-step-callouts .fv-callout-add:focus-visible { display: inline-flex; opacity: 1; }
+/* a step with nothing attached takes no room on the card; the + appears at its bottom edge on hover, so the map does not shift */
+.fv-step-callouts.fv-sco-card:not(.has-items) { position: absolute; right: 8px; bottom: -10px; margin: 0; z-index: 5; }
+.fv-step-callouts.fv-sco-row:not(.has-items) { margin-top: 0; }
+.fv-step-callouts.fv-sco-row:not(.has-items) .fv-callout-add { position: absolute; right: 36px; top: 6px; }
+.fv-step-card .fv-step-callouts .fv-callout-panel { position: absolute; left: 0; top: 100%; width: 240px; z-index: 80; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.fv-list-item .fv-step-callouts .fv-callout-panel { max-width: 320px; }

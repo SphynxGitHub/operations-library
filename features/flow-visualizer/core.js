@@ -999,7 +999,7 @@ export function _fvRenderFlowchart(stages, resources) {
 function _fvListResHead(res) {
   const tc = OL._fvGetType ? OL._fvGetType(res.type) : { color: 'var(--accent)' };
   return `<div class="fv-list-res-head fv-callout-host" id="fv-list-res-${res.id}" data-res-id="${res.id}" onclick="event.stopPropagation()">
-    <div class="fv-list-res-title"><span class="fv-list-res-dot" style="background:${tc.color};"></span><span>${esc(res.name)}</span>${typeof OL.fvUsedChip === 'function' ? OL.fvUsedChip(res) : ''}</div>
+    <div class="fv-list-res-title"><span class="fv-list-res-dot" style="background:${tc.color};"></span><span class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}" title="Double-click to rename">${esc(res.name)}</span>${typeof OL.fvUsedChip === 'function' ? OL.fvUsedChip(res) : ''}</div>
     ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}
   </div>`;
 }
@@ -2254,7 +2254,9 @@ export function _fvRenderSteps(resources) {
         color:var(--text-muted);opacity:0.4;white-space:nowrap;overflow:hidden;
         text-overflow:ellipsis;max-width:260px;cursor:default;`;
       stageLblEl.textContent = stage.name;
-      stageLblEl.title = stage.name;
+      stageLblEl.title = `${stage.name} (double-click to rename)`;
+      stageLblEl.className = 'fv-rename-target';
+      stageLblEl.dataset.fvRename = 'stage'; stageLblEl.dataset.id = stage.id;
       frag.appendChild(stageLblEl);
     }
 
@@ -2293,7 +2295,9 @@ export function _fvRenderSteps(resources) {
         color:var(--accent);opacity:0.55;white-space:nowrap;overflow:hidden;
         text-overflow:ellipsis;max-width:${wfWidth - 10}px;cursor:default;`;
       wfLblEl.textContent = workflow.name;
-      wfLblEl.title = workflow.name;
+      wfLblEl.title = `${workflow.name} (double-click to rename)`;
+      wfLblEl.className = 'fv-rename-target';
+      wfLblEl.dataset.fvRename = 'workflow'; wfLblEl.dataset.id = workflow.id;
       frag.appendChild(wfLblEl);
 
       const wfContentTop = wfY + WF_PAD + WF_HDR;
@@ -2313,7 +2317,7 @@ export function _fvRenderSteps(resources) {
         hdrEl.innerHTML = `
           <div style="display:flex;align-items:center;gap:5px;">
             <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
-            <span title="${esc(res.name)}"
+            <span title="${esc(res.name)} (double-click to rename)" class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}"
                   style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                          letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
                          text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>
@@ -2379,6 +2383,7 @@ export function _fvRenderSteps(resources) {
                       <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}
                     </div>
                   </div>
+                  ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'card') : ''}
                 </div>
                 <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
                      showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
@@ -3711,7 +3716,7 @@ export function _fvBuildListShell(stages, resources) {
             <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
                 <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:var(--panel-soft); padding:8px 12px; border-radius:6px;">
                     <div class="fv-list-stage-num" style="background:var(--accent); color:black; font-weight:bold; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:11px;">${si + 1}</div>
-                    <div class="fv-list-stage-name" style="font-weight:bold; font-size:14px; color:var(--text-main);">${esc(stage.name)}</div>
+                    <div class="fv-list-stage-name fv-rename-target" data-fv-rename="stage" data-id="${esc(stage.id)}" title="Double-click to rename" style="font-weight:bold; font-size:14px; color:var(--text-main);">${esc(stage.name)}</div>
                     <div class="fv-list-stage-line" style="flex:1; height:1px; background:var(--line); margin:0 10px;"></div>
                     <div class="fv-list-stage-count" style="font-size:11px; color:var(--text-muted); font-weight:500;">${totalStageStepsCount} steps</div>
                     
@@ -4555,6 +4560,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
               
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
               ${typeof OL.fvRefChip === 'function' && step.refResId ? `<div style="margin-top:3px;">${OL.fvRefChip(step, res)}</div>` : ''}
+              ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'row') : ''}
           </div>
 
           ${tags}
@@ -6677,6 +6683,8 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     ${typeof OL.fvRefPicker === 'function' ? OL.fvRefPicker(resId, step, `OL.fvSetStepRef('${resId}', '${step.id}', this.value)`) : ''}
                     <div class="tiny muted" style="margin-top:4px;">For a process used in several places: this step shows a link that jumps to it, and the printout notes the page.</div>
                 </div>
+
+                ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
 
                 <div class="inspector-section">
                     <label class="section-label">
