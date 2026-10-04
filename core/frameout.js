@@ -204,13 +204,16 @@ export function deriveLinks(steps, resId) {
 // ---- the Steps view on the flow map ----------------------------------------------------------------------------
 // Where each step of a draft process sits on the flow map's Steps view, in the same shape the Zap lane layout uses, so the
 // map's own stacking (stackColumns in features/zap-layout.js) turns it into real positions once card heights are known.
-//   * the main line runs down column 0
-//   * a decision's Yes steps run down column 1 and its No steps down column 2 (column 1 if there are no Yes steps), each
-//     starting below the decision
+//   * the main line runs down column 0, and a decision's Yes steps carry straight on down it
+//   * the No steps run down column 1, starting level with the first Yes step
+//   * when only one path has steps, those steps go to column 1 and the empty path's line runs straight down column 0 past them
 //   * the step after a decision (where the paths join) waits until every step of both paths is placed above it
-// Returns { [stepId]: { colOffset, row, parentId, laneMode: true, after?, extraGap? } }
-export function layoutDraft(allSteps) {
+//   * opts.maxCols = 1 (the One column arrangement, or a narrow window or page): everything stays in column 0, the No steps
+//     below the Yes steps, and the lines that would run through a card go round it down the right-hand side instead
+// Returns { [stepId]: { colOffset, row, parentId, laneMode: true, parentGap?, after?, extraGap? } }
+export function layoutDraft(allSteps, opts = {}) {
   const steps = (allSteps || []).filter(Boolean);
+  const oneCol = Number.isFinite(opts.maxCols) && opts.maxCols < 2;
   const layout = {};
   const main = steps.filter((s) => !s.branchOf);
   main.forEach((s, i) => { layout[s.id] = { colOffset: 0, row: i, parentId: null, laneMode: true }; });
@@ -218,30 +221,43 @@ export function layoutDraft(allSteps) {
     if (d.kind !== 'decision') return;
     const yes = steps.filter((s) => s.branchOf === d.id && s.path !== 'no');
     const no = steps.filter((s) => s.branchOf === d.id && s.path === 'no');
-    const place = (lane, col) => lane.forEach((s, j) => { layout[s.id] = { colOffset: col, row: i + 1 + j, parentId: j === 0 ? d.id : null, laneMode: true }; });
-    place(yes, 1);
-    place(no, yes.length ? 2 : 1);
+    // parentGap: room under the decision for the Yes / No word to sit on the line
+    const place = (lane, col) => lane.forEach((s, j) => { layout[s.id] = { colOffset: col, row: i + 1 + j, parentId: j === 0 ? d.id : null, parentGap: j === 0 ? 14 : 0, laneMode: true }; });
+    if (oneCol) { place(yes, 0); place(no, 0); }
+    else if (yes.length && no.length) { place(yes, 0); place(no, 1); }
+    else if (yes.length) place(yes, 1);
+    else if (no.length) place(no, 1);
     const next = main[i + 1];
-    if (next && (yes.length || no.length)) { layout[next.id].after = yes.concat(no).map((x) => x.id); layout[next.id].extraGap = 26; }   // room for the lines from the ends of the paths to run across
+    if (next && !oneCol && (yes.length || no.length)) { layout[next.id].after = yes.concat(no).map((x) => x.id); layout[next.id].extraGap = 26; }   // room for the lines from the ends of the paths to run across
   });
   steps.forEach((s, i) => { if (!layout[s.id]) layout[s.id] = { colOffset: 0, row: steps.length + i, parentId: null, laneMode: true }; });
   return layout;
 }
 
 // The route of one line between two cards of a draft process, as straight pieces that stay in the gaps between cards.
-// f and t are { left, top, right, bottom }. Returns { points: [[x, y], ...], kind, label: [x, y] } or null when the cards
-// aren't arranged the way draft processes are (the caller then draws its usual curve).
-//   down            same column: straight down
-//   right-down      out of the right side of a decision, across above the paths, then down into the top of a path
-//   down-across-down  from the end of a path, down below every path, across, then down into the step where the paths join
-export function routeDraftLink(f, t, gap = 14) {
-  const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2;
+// f and t are { left, top, right, bottom }. Returns { points: [[x, y], ...], kind, label: [x, y] | null } or null when the
+// cards aren't arranged the way draft processes are (the caller then draws its usual curve).
+//   down              same column: straight down; the Yes / No word sits just under the card it leaves
+//   right-down        out of the right side of a decision, then down into the top of a path in the next column
+//   down-across-down  from the end of a path, down below every card, across, then down into the step where the paths join
+//   round-the-side    same column but a card sits between them (the One column arrangement): out of the right side, down the
+//                     gutter beside the cards, and in at the right side of the target. fromDecision picks the gutter
+//                     (nearer for a decision's line, further out for the end of a path) so two lines never share one.
+// others: the rest of the cards of the process, to tell whether a straight line down would run through one.
+export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false) {
+  const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2, tcy = (t.top + t.bottom) / 2;
   if (Math.abs(fcx - tcx) < 2) {
     if (t.top < f.bottom - 1) return null;
-    return { points: [[fcx, f.bottom], [tcx, t.top]], kind: 'down', label: [fcx + 16, f.bottom + Math.min(14, (t.top - f.bottom) / 2)] };
+    const blocked = (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
+    if (blocked) {
+      const gx = Math.max(f.right, t.right) + (fromDecision ? 22 : 38);
+      return { points: [[f.right, fcy], [gx, fcy], [gx, tcy], [t.right, tcy]], kind: 'round-the-side', label: [f.right + 24, fcy - 10] };
+    }
+    const room = t.top - f.bottom;
+    return { points: [[fcx, f.bottom], [tcx, t.top]], kind: 'down', label: room >= 26 ? [fcx + 24, f.bottom + 14] : null };
   }
   if (tcx > fcx && t.top >= f.bottom - 1) {
-    return { points: [[f.right, fcy], [tcx, fcy], [tcx, t.top]], kind: 'right-down', label: [f.right + 22, fcy - 9] };
+    return { points: [[f.right, fcy], [tcx, fcy], [tcx, t.top]], kind: 'right-down', label: [f.right + 24, fcy - 10] };
   }
   if (tcx < fcx && t.top >= f.bottom - 1) {
     const chY = t.top - (gap + 6);                     // the step that joins the paths sits low enough (extraGap) to leave this channel

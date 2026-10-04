@@ -496,7 +496,7 @@ export function _fvLayoutResource(res) {
     // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
     if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols });
     // Processes made in Frame-out: the Yes and No paths run down their own columns beside the main line
-    if (isDraftLayoutResource(res)) return layoutDraft(res.steps);
+    if (isDraftLayoutResource(res)) return layoutDraft(res.steps, { maxCols: OL._fv._laneCols });
     const steps = res.steps || [];
 
     // Find which steps are branch targets and who their parent is
@@ -581,7 +581,9 @@ if (!OL._fv) OL._fv = {
 };
 
 // Arrangement of the Steps view: 'auto' (fit the window), 'wide' (side by side) or 'tall' (one column)
-if (!OL._fv.flowShape) OL._fv.flowShape = sessionStorage.getItem('fv_flow_shape') || 'auto';
+// 'auto' (fit the window) | 'wide' (no limit) | 'tall' (one column) | a number: the most columns allowed across a row
+const fvShapeFrom = (v) => (['auto', 'wide', 'tall'].includes(v) ? v : (Number(v) >= 1 ? Math.floor(Number(v)) : 'auto'));
+if (!OL._fv.flowShape) OL._fv.flowShape = fvShapeFrom(sessionStorage.getItem('fv_flow_shape') || 'auto');
 // When the window is resized in Auto, re-flow the Steps view if the number of columns that fit has changed
 if (!OL._fv._resizeBound) {
     OL._fv._resizeBound = true;
@@ -589,11 +591,13 @@ if (!OL._fv._resizeBound) {
     window.addEventListener('resize', () => {
         clearTimeout(_fvResizeTimer);
        _fvResizeTimer = setTimeout(() => {
-            if (OL._fv.layout !== 'steps' || OL._fv.flowShape !== 'auto' || OL._fv._colsOverride) return;
+            if (OL._fv.layout !== 'steps' || OL._fv.flowShape === 'wide' || OL._fv.flowShape === 'tall' || OL._fv._colsOverride) return;
             if (!document.getElementById('fv-content')) return;
             const wrap = document.getElementById('fv-canvas-wrap');
             const w = ((wrap && wrap.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
-            if (chooseCols('auto', w) !== OL._fv._renderedCols) OL.renderVisualizer();
+            const fit = chooseCols('auto', w);
+            const want = typeof OL._fv.flowShape === 'number' ? Math.min(OL._fv.flowShape, fit) : fit;
+            if (want !== OL._fv._renderedCols) OL.renderVisualizer();
         }, 250);
    });
 }
@@ -749,10 +753,11 @@ export function renderVisualizer() {
             </button>
           </div>
           <!-- Arrangement: fit the window, or force side by side / one column -->
-          <select class="fv-select" style="max-width:120px;" title="How the diagram is arranged"
+          <select class="fv-select" style="max-width:140px;" title="How the diagram is arranged: fit the window, or the most columns allowed across a row"
                   onchange="OL.fvSetFlowShape(this.value)">
             <option value="auto" ${OL._fv.flowShape === 'auto' ? 'selected' : ''}>Fit window</option>
             <option value="wide" ${OL._fv.flowShape === 'wide' ? 'selected' : ''}>Side by side</option>
+            ${[6, 5, 4, 3, 2].map((n) => `<option value="${n}" ${OL._fv.flowShape === n ? 'selected' : ''}>Up to ${n} columns</option>`).join('')}
             <option value="tall" ${OL._fv.flowShape === 'tall' ? 'selected' : ''}>One column</option>
           </select>
         ` : ''}
@@ -2027,7 +2032,7 @@ const _fvStepHeights = new WeakMap();
  
 // Arrangement choice for the Steps view
 export function fvSetFlowShape(shape) {
-  OL._fv.flowShape = ['auto', 'wide', 'tall'].includes(shape) ? shape : 'auto';
+  OL._fv.flowShape = fvShapeFrom(shape);
   sessionStorage.setItem('fv_flow_shape', OL._fv.flowShape);
   OL.renderVisualizer();
 }
@@ -2092,7 +2097,11 @@ export function _fvRenderSteps(resources) {
   {
     const wrapEl = document.getElementById('fv-canvas-wrap');
     const availW = ((wrapEl && wrapEl.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
-    const maxCols = chooseCols(OL._fv._colsOverride || OL._fv.flowShape || 'auto', availW, { cardW: CARD_W, colGap: COL_GAP, padX: PAD_X });
+    const colBox = { cardW: CARD_W, colGap: COL_GAP, padX: PAD_X };
+    // A number is a cap on columns across a row, never more than fit the window (printing passes its own exact count)
+    const maxCols = OL._fv._colsOverride ? chooseCols(OL._fv._colsOverride, availW, colBox)
+      : typeof OL._fv.flowShape === 'number' ? Math.min(OL._fv.flowShape, chooseCols('auto', availW, colBox))
+      : chooseCols(OL._fv.flowShape || 'auto', availW, colBox);
     OL._fv._laneCols = Number.isFinite(maxCols) ? maxCols : undefined;   // read by _fvLayoutResource (paths wrap into rows)
     OL._fv._renderedCols = maxCols;
     if (Number.isFinite(maxCols)) {
@@ -2741,9 +2750,12 @@ export function _fvDrawStepConnections(resources) {
         // Processes made in Frame-out: lines run in straight pieces through the gaps between cards, so they never cross one
         let draftRoute = null;
         if (!isCrossResource && sourceRes.isDraft && sourceRes.source === 'frameout') try {
+          const others = (sourceRes.steps || []).filter((x) => x.id !== sourceStep.id && String(x.id) !== String(tStepId))
+            .map((x) => elById.get(`fv-step-${sourceRes.id}-${x.id}`)).filter(Boolean).map((el) => { const r = rectOf(el); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
           draftRoute = routeDraftLink(
             { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
-            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 14);
+            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 14, others,
+            /^(yes|no)$/i.test((outRule.rule || '').trim()));
           if (draftRoute) {
             const R = 8, pts = draftRoute.points;
             d = `M ${pts[0][0]} ${pts[0][1]}`;

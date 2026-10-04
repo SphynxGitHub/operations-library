@@ -162,7 +162,7 @@ export function stackColumns(cards, layout, startY, gap, hOf, minYOf) {
   cards.forEach(({ step, el }) => {
     const li = layout[String(step.id)] || { colOffset: 0, parentId: null };
     let top = colY.has(li.colOffset) ? colY.get(li.colOffset) : startY;
-    if (li.parentId && placed.has(String(li.parentId))) top = Math.max(top, placed.get(String(li.parentId)).bottom + gap);
+    if (li.parentId && placed.has(String(li.parentId))) top = Math.max(top, placed.get(String(li.parentId)).bottom + gap + (li.parentGap || 0));
     (li.after || []).forEach((id) => { if (placed.has(String(id))) top = Math.max(top, placed.get(String(id)).bottom + gap + (li.extraGap || 0)); });   // extraGap: room for a line to run across
     const floor = minYOf ? minYOf(el) : undefined;
     if (floor !== undefined && floor > top) top = floor;

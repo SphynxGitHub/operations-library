@@ -221,7 +221,9 @@ export async function printFlowDiagram(deps, opts = {}) {
   popup.document.write('<p style="font-family:sans-serif;padding:24px;color:#475569;">Preparing the diagram&hellip;</p>');
   try {
     OL._fv.layout = 'steps';
-    OL._fv._colsOverride = chooseCols(null, box.w / PRINT_TARGET_SCALE);          // re-arrange to fit the paper
+    const fitCols = chooseCols(null, box.w / PRINT_TARGET_SCALE);                 // as many columns as fit the paper ...
+    const capCols = typeof OL._fv.flowShape === 'number' ? OL._fv.flowShape : Infinity;   // ... but never more than the "Up to N columns" choice
+    OL._fv._colsOverride = Math.min(fitCols, capCols);                            // re-arrange to fit the paper
     OL.renderVisualizer();
     const ready = await waitForDiagram(doc);
     const contentEl = doc.getElementById('fv-content');
