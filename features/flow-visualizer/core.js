@@ -6526,6 +6526,10 @@ export function openInspector(resId = null, stepTarget = null, mode = 'steps') {
         return;
     }
     
+    // the flow map's panel rules (scrolling included) are written for id v2-inspector-panel; a panel that was re-made
+    // since the map drew still has the original id, so give it the map's id before it opens
+    const rawPanel = document.getElementById('inspector-panel');
+    if (rawPanel && !document.getElementById('v2-inspector-panel')) rawPanel.id = 'v2-inspector-panel';
     const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;

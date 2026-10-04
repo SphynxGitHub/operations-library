@@ -1639,6 +1639,13 @@ body.is-visualizer .pane-inspector, body.is-visualizer #v2-inspector-panel { tra
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 99px; }
 #v2-inspector-panel #inspector-content { width: 100%; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 0 !important; margin: 0 !important; display: flex; flex-direction: column; height: 100%; }
 #v2-inspector-panel .inspector-scroll-content #inspector-content { height: auto !important; }
+/* The same rules when the panel still has its original id (it is renamed to v2-inspector-panel when the flow map draws, but a
+   panel that was re-made, or opened some other way, keeps the old id): without these the editor was cut off and could not scroll. */
+body.is-visualizer #inspector-panel.pane-inspector { overflow: hidden !important; display: flex !important; flex-direction: column; min-width: 0; height: 100%; padding: 20px 20px 0 20px; }
+body.is-visualizer #inspector-panel .inspector-scroll-content { flex: 1; min-height: 0; overflow-y: auto !important; overflow-x: hidden; min-width: 0; width: 100%; height: 100%; margin: 0 !important; box-sizing: border-box; display: block; visibility: visible; }
+body.is-visualizer #inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
+body.is-visualizer #inspector-panel .inspector-scroll-content::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 99px; }
+body.is-visualizer #inspector-panel #inspector-content { width: 100%; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 0 !important; margin: 0 !important; display: flex; flex-direction: column; height: auto !important; }
 #v2-inspector-panel.open, #inspector-panel.open { min-width: 380px; width: 380px; }
 #v2-inspector-panel:not(.open), #inspector-panel:not(.open) { min-width: 0; width: 0; overflow: hidden; border: none !important; }
 
