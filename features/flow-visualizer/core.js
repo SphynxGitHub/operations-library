@@ -2075,7 +2075,8 @@ export function _fvRenderSteps(resources) {
   const ZONE_HDR  = 22;   // stage label height
   const WF_PAD    = 14;   // padding inside workflow sub-zone
   const WF_HDR    = 26;   // workflow sub-zone label height
-  const RES_HDR   = 50;   // resource column header height: the name, then the callout chips under it
+  // resource column header height: the name, then (for a draft) its Open chip, then the callout chips
+  const RES_HDR   = (resources || []).some((r) => r && r.isDraft) ? 70 : 50;
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
   const PAD_X     = 48;
@@ -2277,9 +2278,9 @@ export function _fvRenderSteps(resources) {
             <span title="${esc(res.name)}"
                   style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                          letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                         text-overflow:ellipsis;max-width:${CARD_W - (res.isDraft ? 104 : 20)}px;">${esc(res.name)}</span>
-            ${res.isDraft ? `<span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open</span>` : ''}
+                         text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>
           </div>
+          ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
           ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}`;
         frag.appendChild(hdrEl);
         resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
