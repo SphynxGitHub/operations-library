@@ -332,6 +332,7 @@ function inlineAddRowHtml(resId) {
   return `<div class="fo-inline" onclick="event.stopPropagation()">
     <input id="${esc(id)}" class="fo-inline-input" type="text" autocomplete="off" aria-label="Add a draft step" placeholder="Add a step. Enter adds, @client sets who, ? flags a question"
            onclick="event.stopPropagation()" onkeydown="event.stopPropagation(); if(event.key==='Enter'){event.preventDefault();OL.foInlineAdd('${esc(resId)}', this.value)}">
+    <button type="button" class="fo-open-btn" onclick="event.stopPropagation(); OL.openFrameOut('${esc(resId)}')">Open in Frame-out</button>
   </div>`;
 }
 

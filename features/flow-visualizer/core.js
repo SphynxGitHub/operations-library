@@ -1813,9 +1813,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
           </div>
         `;
       }).join('')}
-      ${res.isDraft && typeof OL.foInlineAddRow === 'function' ? `
-        ${OL.foInlineAddRow(res.id)}
-        <div style="padding:2px 12px 6px;"><button type="button" class="fo-open-btn" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')">Open in Frame-out</button></div>` : ''}
+      ${res.isDraft && typeof OL.foInlineAddRow === 'function' ? OL.foInlineAddRow(res.id) : ''}
     </div>
   ` : '';
 
@@ -1852,7 +1850,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
                 ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'var(--panel)')}
             </div>
           <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>${res.source && OL._fvSourceLabels[res.source] ? `<span class="fv-card-source">${esc(OL._fvSourceLabels[res.source])}</span>` : ''}
-          ${res.isDraft ? '<span class="fo-draft-chip">DRAFT</span>' : ''}
+          ${res.isDraft ? `<span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open</span>` : ''}
           ${res.missingUpstream ? `<span class="fv-card-warn" title="No longer returned by ${esc(OL._fvSourceLabels[res.source] || 'the service')} (since ${esc(String(res.missingUpstream.since || '').slice(0, 10))}). It may have been deleted or renamed there.">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} Removed upstream</span>` : ''}
           ${res.zapMeta && res.zapMeta.externalIssues && res.zapMeta.externalIssues.length ? `<span class="fv-card-warn" title="${esc(res.zapMeta.externalIssues.map(i => `${i.step}: ${i.label} (${i.state === 'removed_upstream' ? 'removed from the service' : i.state === 'not_pulled' ? 'service not pulled yet' : 'not found in the last pull'})`).join('\n'))}">${OL.getLucideSVG('triangle-alert', 9, 'currentColor')} ${res.zapMeta.externalIssues.length} to check</span>` : ''}
           <span class="fv-card-step-num">${num}</span>
