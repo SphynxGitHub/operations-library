@@ -22,7 +22,7 @@
 
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
-import { layoutDraft, routeDraftLink } from '../../core/frameout.js';
+import { layoutDraft, routeDraftLink, edgesOf } from '../../core/frameout.js';
 const isDraftLayoutResource = (res) => !!(res && res.isDraft && res.source === 'frameout' && (res.steps || []).length);
 import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js';
 
@@ -545,6 +545,20 @@ export function _fvLayoutResource(res) {
 export function _fvAutoLinkSteps(resources) {
     let changed = false;
     (resources || []).forEach(res => {
+        // A process made in Frame-out has its lines worked out from the steps (see core/frameout.js), and the end of a
+        // Yes or No path is meant to have no line out. So no "next step" line is added to it; and one that an earlier
+        // version added (the end of the Yes path joined to the first No step) is taken off again.
+        if (isDraftLayoutResource(res)) {
+            const wanted = new Set(edgesOf(res.steps || []).map(e => `${e.from}>${e.to}`));
+            (res.steps || []).forEach((step, idx) => {
+                const next = (res.steps || [])[idx + 1];
+                if (!next || !step.logic || !Array.isArray(step.logic.out)) return;
+                const bad = step.logic.out.filter(l => !l._draft && l.targetId === `${res.id}-${next.id}` && !(l.rule || '').trim()
+                    && !(l.loopLimit || '').toString().trim() && !(l.delayValue || '').toString().trim() && !wanted.has(`${step.id}>${next.id}`));
+                if (bad.length) { step.logic.out = step.logic.out.filter(l => !bad.includes(l)); changed = true; }
+            });
+            return;
+        }
         (res.steps || []).forEach((step, idx) => {
             if (!step.logic) step.logic = { in: [], out: [] };
             if (!step.logic.out) step.logic.out = [];
