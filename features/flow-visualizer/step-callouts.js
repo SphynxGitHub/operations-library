@@ -16,7 +16,8 @@
 // ================================================================================================
 
 import { esc, uid, getActiveClient, persist, markClientDirty } from '../../core/data.js';
-import { CALLOUT_KINDS, calloutKindForType } from './callouts.js';
+import { CALLOUT_KINDS, calloutKindForType, calloutsFor } from './callouts.js';
+import { orderedResources } from './step-items.js';
 
 const KIND = Object.fromEntries(CALLOUT_KINDS.map((k) => [k.key, k]));
 const OL = () => window.OL;
@@ -85,7 +86,7 @@ function innerHtml(step, res) {
   const list = calloutsOf(step); const open = openSet(); const r = esc(res.id), s = esc(step.id);
   const chips = list.map((c) => {
     const k = KIND[c.kind] || KIND.other; const on = open.has(`${keyOf(res.id, step.id)}|${c.id}`);
-    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" title="${esc(k.label)}: ${esc(c.name)}"
+    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" data-co-key="${esc(c.id)}" title="${esc(k.label)}: ${esc(c.name)}"
       onclick="event.stopPropagation(); OL.fvToggleStepCallout('${r}','${s}','${esc(c.id)}')">${icon(k.icon, 11)}<span>${esc(clip(c.name, 16))}</span></button>`;
   }).join('');
   const panels = list.filter((c) => open.has(`${keyOf(res.id, step.id)}|${c.id}`)).map((c) => panelHtml(res.id, step.id, c)).join('');
@@ -213,8 +214,72 @@ function remove(resId, stepId, calloutId) {
   afterChange(resId, stepId);
 }
 
+// ---- the printout --------------------------------------------------------------------------------------------
+// Every piece of collateral in map order, numbered C1, C2 ...: those on a step, and those on a process card.
+// [{ no, label, kind, name, url, note, resId, stepId, key, where }]   (key matches the chip's data-co-key)
+export function collectCollateral(pd = project()) {
+  const out = [];
+  const wfOf = (res) => (pd.workflows || []).find((w) => (w.resourceIds || []).map(String).includes(String(res.id)));
+  orderedResources(pd).forEach((res) => {
+    if (res.isArchived) return;
+    const wf = wfOf(res); const base = [wf && wf.name, res.name].filter(Boolean).join(' \u203a ');
+    calloutsFor(res).filter((c) => c.source !== 'logic').forEach((c) => {
+      out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, resId: String(res.id), stepId: '', key: c.key, where: `${base} (whole process)` });
+    });
+    (res.steps || []).forEach((step, idx) => {
+      if (step.isArchived) return;
+      calloutsOf(step).forEach((c) => {
+        out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, resId: String(res.id), stepId: String(step.id), key: c.id, where: `${base} \u203a Step ${idx + 1}: ${step.name || 'Unnamed step'}` });
+      });
+    });
+  });
+  out.forEach((e, i) => { e.no = i + 1; e.label = `C${i + 1}`; });
+  return out;
+}
+export const collateralNumbers = (entries) => { const m = {}; entries.forEach((e) => { m[`${e.resId}|${e.stepId}|${e.key}`] = e.label; }); return m; };
+
+// On the printed copy of a card: chips become numbered tags (buttons are hidden on paper), and the add / mini-card bits go
+export function annotateCollateral(el, numbers) {
+  if (!el || typeof el.querySelectorAll !== 'function' || !numbers) return;
+  el.querySelectorAll('.fv-callout-panel, .fv-callout-add').forEach((n) => n.remove());
+  el.querySelectorAll('[data-step-callouts-for], [data-callouts-for]').forEach((strip) => {
+    let resId = ''; let stepId = '';
+    if (strip.hasAttribute('data-step-callouts-for')) [resId, stepId] = strip.getAttribute('data-step-callouts-for').split('|');
+    else resId = strip.getAttribute('data-callouts-for');
+    let kept = 0;
+    strip.querySelectorAll('.fv-callout-chip').forEach((chip) => {
+      const label = numbers[`${resId}|${stepId}|${chip.getAttribute('data-co-key')}`];
+      if (!label) { chip.remove(); return; }
+      const tag = chip.ownerDocument.createElement('span');
+      tag.className = chip.className.replace('is-open', '').trim() + ' fv-co-print';
+      tag.innerHTML = `<b class="fv-co-no">${label}</b>${chip.innerHTML}`;
+      chip.replaceWith(tag); kept++;
+    });
+    if (!kept) strip.remove();
+  });
+}
+
+export function collateralAppendixHtml(entries, { title = 'Collateral and Templates', sub = '' } = {}) {
+  if (!entries || !entries.length) return '';
+  const e2 = (s) => esc(s);
+  const rows = entries.map((e) => {
+    const k = KIND[e.kind] || KIND.other;
+    return `<tr class="apx-row">
+      <td class="apx-no">${e2(e.label)}</td>
+      <td class="apx-ctype">${e2(k.label)}</td>
+      <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}<div class="apx-where">${e2(e.where)}</div></td>
+      <td class="apx-link">${e.url ? e2(e.url) : '<span class="apx-none">No link</span>'}</td></tr>`;
+  }).join('');
+  return `<section class="apx apx-collateral">
+    <div class="apx-head"><span class="apx-title">${e2(title)}</span><span class="apx-sub">${e2(sub)}</span></div>
+    <div class="apx-group"><table class="apx-table">
+      <tr class="apx-th"><th>No.</th><th>Type</th><th>Name and where it is used</th><th>Link</th></tr>
+      ${rows}</table></div></section>`;
+}
+
 window.OL = window.OL || {};
 Object.assign(window.OL, {
+  fvCollectCollateral: collectCollateral, fvCollateralNumbers: collateralNumbers, fvAnnotateCollateral: annotateCollateral, fvCollateralAppendixHtml: collateralAppendixHtml,
   fvStepCalloutStrip: stepCalloutStrip, fvStepCalloutInspector: stepCalloutInspector, fvStepCalloutsOf: calloutsOf,
   fvToggleStepCallout: toggle, fvEditStepCallout: edit, fvStepCalloutPick: pick, fvSaveStepCallout: save, fvRemoveStepCallout: remove,
 });

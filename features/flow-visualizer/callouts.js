@@ -116,7 +116,7 @@ export function calloutStripInner(res) {
   const chips = list.map((c) => {
     const k = KIND[c.kind] || KIND.other;
     const on = open.has(`${res.id}|${c.key}`);
-    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" title="${esc(k.label)}: ${esc(c.name)}"
+    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" data-co-key="${esc(c.key)}" title="${esc(k.label)}: ${esc(c.name)}"
               onclick="event.stopPropagation(); OL.fvToggleCallout('${esc(res.id)}','${esc(c.key)}')">${icon(k.icon, 11)}<span>${esc(clip(c.name, 18))}</span></button>`;
   }).join('');
   const panels = list.filter((c) => open.has(`${res.id}|${c.key}`)).map((c) => panelHtml(res, c)).join('');

@@ -145,7 +145,7 @@ export function annotateRefs(el, pageNo, plan) {
 // height is no taller than the paper. (An earlier version placed the full-height diagram inside a clipping box and moved
 // it with a transform; the browser still laid out the tall box and split it at its own page boundaries when printing,
 // which cut cards in half, scattered arrows and added extra pages.)
-export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, orientation, title, subtitle, date, headHtml = '', heightOf, inherit, itemNo = null, appendixHtml = '' }) {
+export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, orientation, title, subtitle, date, headHtml = '', heightOf, inherit, itemNo = null, collateralNo = null, appendixHtml = '' }) {
   const hOf = heightOf || ((el) => el.offsetHeight);
   const kids = Array.from(contentEl.children).map((el) => {
     const bg = isBackground(el);
@@ -159,6 +159,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
     return { top: k.top, headOf: /fv-steps-res-head/.test(cls) && k.el.dataset ? k.el.dataset.resId : undefined, refsTo: chips };
   }), pages);
   refPlan.itemNo = itemNo;
+  refPlan.collateral = collateralNo;
   const paper = PAGE_PX[orientation === 'landscape' ? 'landscape' : 'portrait'];
   const pageContentH = paper.h - 2 * PRINT_MARGIN;
   const sheets = pages.map((pg, i) => {
@@ -175,6 +176,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
         c.style.top = `${k.top - pg.y0}px`;
       }
       annotateRefs(c, i + 1, refPlan);
+      if (collateralNo && typeof window !== 'undefined' && window.OL && window.OL.fvAnnotateCollateral) window.OL.fvAnnotateCollateral(c, collateralNo);
       parts.push(c.outerHTML);
     }
     const svg = svgEl
@@ -241,6 +243,12 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .fv-used-chip { color: #0f766e !important; border: 1.2px dashed #0f766e !important; background: #fff !important; }
 .fv-used-pg { color: #0f766e !important; font-weight: 700; }
 .fv-step-card { box-shadow: none !important; break-inside: avoid; }
+/* collateral chips print as numbered tags; the list at the end carries the names and links */
+.fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 1px 6px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
+.fv-co-no { font-weight: 800; color: #0f766e; }
+.apx-ctype { width: 96px; font-size: 11px; color: #475569; }
+.apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }
+.apx-none { color: #94a3b8; }
 </style></head>
 <body class="light-mode">
 ${sheets}
@@ -317,8 +325,12 @@ export async function printFlowDiagram(deps, opts = {}) {
     const itemNo = { byStep: {}, byId: {} };
     entries.filter((e) => !e.item.done).forEach((e) => { const k = `${e.res.id}|${e.step.id}`; (itemNo.byStep[k] = itemNo.byStep[k] || []).push(e.label); });
     const appendixHtml = entries.length && typeof OL.fvItemsAppendixHtml === 'function' ? OL.fvItemsAppendixHtml(entries, { title: 'Questions and Action Items', sub: `${client}  \u00b7  ${today}` }) : '';
+    // collateral (forms, email templates, sheets, docs): numbered tags on the cards and a list with the links at the end
+    const coEntries = typeof OL.fvCollectCollateral === 'function' ? OL.fvCollectCollateral() : [];
+    const collateralNo = typeof OL.fvCollateralNumbers === 'function' ? OL.fvCollateralNumbers(coEntries) : null;
+    const collateralHtml = coEntries.length && typeof OL.fvCollateralAppendixHtml === 'function' ? OL.fvCollateralAppendixHtml(coEntries, { title: 'Collateral and Templates', sub: `${client}  \u00b7  ${today}` }) : '';
     const html = buildPrintHtml({
-      itemNo, appendixHtml,
+      itemNo, collateralNo, appendixHtml: appendixHtml + collateralHtml,
       contentEl, svgEl, width, height, pages, scale, orientation,
       title: client, subtitle: `Flow diagram (${orientation})`, date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       headHtml: collectHeadHtml(doc), inherit: readInheritedText(contentEl, win),
