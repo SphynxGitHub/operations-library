@@ -44,7 +44,7 @@ const clip = (s, n) => { const t = clean(s); return t.length > n ? t.slice(0, n 
 //   "Advisor reviews the packet @client"          a step, done by the client
 //   "Prepares the packet @us ? who signs off"     a step to confirm, with the question to ask
 //   "/if Joint account?"                          a decision (the next steps are on its Yes path)
-//   "/no"   "/join"                               switch to the No path / back to the main line
+//   "/yes"  "/no"  "/join"                        switch to the Yes path / the No path / back to the main line
 // Returns { kind: 'step'|'decision'|'command'|'empty', ... }.
 export function parseFrameLine(input) {
   let text = clean(input);
@@ -54,9 +54,10 @@ export function parseFrameLine(input) {
   if (cmd) {
     const c = cmd[1].toLowerCase();
     if (c === 'no' || c === 'else' || c === 'otherwise') return { kind: 'command', command: 'no' };
+    if (c === 'yes') return { kind: 'command', command: 'yes' };
     if (c === 'join' || c === 'end' || c === 'then' || c === 'merge') return { kind: 'command', command: 'join' };
     if (c === 'if' || c === 'decision' || c === 'when') { text = cmd[2]; if (!clean(text)) return { kind: 'empty', hint: 'Type the question after /if, like /if Joint account?' }; return { ...parseBody(text), kind: 'decision' }; }
-    return { kind: 'empty', hint: `Not a command I know: /${c}. Try /if, /no or /join.` };
+    return { kind: 'empty', hint: `Not a command I know: /${c}. Try /if, /yes, /no or /join.` };
   }
   return { ...parseBody(text), kind: 'step' };
 }
@@ -119,6 +120,12 @@ export function applyFrameLine(steps, parsed, rand, state = {}) {
       state.ctx = { decisionId: ctx.decisionId, path: 'no' };
       return { ok: true, message: 'Now adding the No path. /join goes back to the main line.' };
     }
+    if (parsed.command === 'yes') {
+      if (!ctx) return { ok: false, message: 'There is no decision open. Start one with /if.' };
+      if (ctx.path !== 'no') return { ok: false, message: 'You are already on the Yes path. /no switches to the No path.' };
+      state.ctx = { decisionId: ctx.decisionId, path: 'yes' };
+      return { ok: true, message: 'Now adding the Yes path. New steps go before the No path steps. /join goes back to the main line.' };
+    }
     if (!ctx) return { ok: false, message: 'There is no decision open.' };
     state.ctx = null;
     return { ok: true, message: 'Back on the main line.' };
@@ -128,8 +135,17 @@ export function applyFrameLine(steps, parsed, rand, state = {}) {
 
   const step = newDraftStep(parsed, rand);
   if (parsed.kind === 'step' && ctx) { step.branchOf = ctx.decisionId; step.path = ctx.path; }
-  steps.push(step);
-  state.ctx = contextOf(steps);
+  // A Yes step added after the No path was started goes in right after the decision's last Yes step, ahead of the No
+  // steps: the lines are drawn from the order of the steps, and the Yes path always comes first.
+  let at = steps.length;
+  if (parsed.kind === 'step' && ctx && ctx.path !== 'no') {
+    const di = steps.findIndex((s) => s.id === ctx.decisionId);
+    let last = di;
+    steps.forEach((s, i) => { if (s.branchOf === ctx.decisionId && s.path !== 'no') last = i; });
+    if (di >= 0) at = last + 1;
+  }
+  steps.splice(at, 0, step);
+  state.ctx = at < steps.length - 1 ? ctx : contextOf(steps);       // stays on the Yes path when the step went in ahead of the No path
   return { ok: true, step, message: parsed.kind === 'decision' ? 'Decision added. The next steps go on its Yes path. /no switches to No, /join goes back.' : '' };
 }
 

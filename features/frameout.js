@@ -296,7 +296,7 @@ function render(opts = {}) {
   const seg = (t, m) => `<button type="button" class="fo-seg ${fo.mode === m ? 'on' : ''}" onclick="OL.foSetMode('${m}')" aria-pressed="${fo.mode === m}">${t}</button>`;
   const banner = fo.msg ? `<div class="fo-msg" role="status">${esc(fo.msg)}</div>` : '';
   const pathBar = openDecision ? `<div class="fo-pathbar">Adding the <b>${ctx.path === 'no' ? 'No' : 'Yes'}</b> path of “${esc(openDecision.name)}”
-      ${ctx.path === 'yes' ? '<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/no\')">Switch to No</button>' : ''}<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/join\')">Back to the main line</button></div>` : '';
+      ${ctx.path === 'yes' ? '<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/no\')">Switch to No</button>' : '<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/yes\')">Switch to Yes</button>'}<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/join\')">Back to the main line</button></div>` : '';
   el.innerHTML = `
     <div class="fo-top">
       <div class="fo-top-l"><button type="button" class="fo-btn" onclick="OL.foClose()">Exit</button>
@@ -318,7 +318,7 @@ function render(opts = {}) {
         <input id="fo-input" class="fo-input" type="text" autocomplete="off" placeholder="${esc(fo.prompt || (card.steps.length ? 'What happens next?' : 'What kicks this process off?'))}" value="${esc(typed)}" onkeydown="if(event.key==='Enter'){event.preventDefault();OL.foSubmit()}">
         <button type="button" class="fo-btn primary big" onclick="OL.foSubmit()">Add step</button>
       </div>
-      <div class="fo-keys"><span><kbd>@client</kbd> <kbd>@us</kbd> <kbd>@system</kbd> who does it</span><span><kbd>?</kbd> flag a question</span><span><kbd>/if</kbd> yes / no decision</span><span><kbd>/no</kbd> <kbd>/join</kbd> switch path</span><span><kbd>Esc</kbd> stop typing</span></div>
+      <div class="fo-keys"><span><kbd>@client</kbd> <kbd>@us</kbd> <kbd>@system</kbd> who does it</span><span><kbd>?</kbd> flag a question</span><span><kbd>/if</kbd> yes / no decision</span><span><kbd>/yes</kbd> <kbd>/no</kbd> <kbd>/join</kbd> switch path</span><span><kbd>Esc</kbd> stop typing</span></div>
     </div>`;
   if (window.lucide) window.lucide.createIcons();
   const input = document.getElementById('fo-input');
