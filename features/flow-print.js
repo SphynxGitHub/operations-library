@@ -123,6 +123,13 @@ export function annotateRefs(el, pageNo, plan) {
     const slot = chip.querySelector('.fv-ref-pg');
     if (pg && slot) slot.textContent = pg === pageNo ? ' \u00b7 this page' : ` \u00b7 p. ${pg}`;
   });
+  // the flag on a card prints the numbers the list at the end uses: Q1 Q2 A1 N1
+  if (plan.itemNo) el.querySelectorAll('.fv-flag[data-item-ids]').forEach((flag) => {
+    const key = `${flag.closest('.fv-step-card')?.dataset.resId || ''}|${flag.closest('.fv-step-card')?.dataset.stepId || ''}`;
+    const labels = (plan.itemNo.byStep[key] || []);
+    if (!labels.length) return;
+    flag.innerHTML = labels.map((l) => `<span class="fv-flag-chip fv-flag-no k-${l[0]}">${l}</span>`).join('');
+  });
   el.querySelectorAll('.fv-used-wrap[data-used-res]').forEach((w) => {
     const pgs = plan.usedPages[w.getAttribute('data-used-res')] || [];
     const slot = w.querySelector('.fv-used-pg');
@@ -138,7 +145,7 @@ export function annotateRefs(el, pageNo, plan) {
 // height is no taller than the paper. (An earlier version placed the full-height diagram inside a clipping box and moved
 // it with a transform; the browser still laid out the tall box and split it at its own page boundaries when printing,
 // which cut cards in half, scattered arrows and added extra pages.)
-export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, orientation, title, subtitle, date, headHtml = '', heightOf, inherit }) {
+export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, orientation, title, subtitle, date, headHtml = '', heightOf, inherit, itemNo = null, appendixHtml = '' }) {
   const hOf = heightOf || ((el) => el.offsetHeight);
   const kids = Array.from(contentEl.children).map((el) => {
     const bg = isBackground(el);
@@ -151,6 +158,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
     const chips = typeof k.el.querySelectorAll === 'function' ? Array.from(k.el.querySelectorAll('.fv-ref-chip[data-ref-res]')).map((c) => c.getAttribute('data-ref-res')) : [];
     return { top: k.top, headOf: /fv-steps-res-head/.test(cls) && k.el.dataset ? k.el.dataset.resId : undefined, refsTo: chips };
   }), pages);
+  refPlan.itemNo = itemNo;
   const paper = PAGE_PX[orientation === 'landscape' ? 'landscape' : 'portrait'];
   const pageContentH = paper.h - 2 * PRINT_MARGIN;
   const sheets = pages.map((pg, i) => {
@@ -203,7 +211,31 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .pg-inner #fv-svg-layer { pointer-events: none; z-index: 2; overflow: hidden !important; }
 @supports not (zoom: 1) { .pg-inner { zoom: normal !important; transform: scale(var(--s)); position: absolute; left: 0; top: 0; } }
 .fv-pin-btn, button { display: none !important; }
-.fv-back-pill, .fv-used-pop { display: none !important; }
+.fv-back-pill, .fv-used-pop, .fv-items-pop, .fv-items-drawer { display: none !important; }
+/* flags on the cards print as the numbers of the list at the end */
+/* the flag is a <button>, and every other button is hidden for print, so it has to be switched back on */
+.fv-flag { display: inline-flex !important; background: #fff !important; border: 1.2px solid #334155 !important; box-shadow: none !important; padding: 1px 5px !important; }
+.fv-flag-add { display: none !important; }
+.fv-flag-no { font-size: 10px; font-weight: 800; color: #0f172a !important; }
+.fv-flag-no.k-Q { color: #b45309 !important; } .fv-flag-no.k-A { color: #0f766e !important; } .fv-flag-no.k-N { color: #475569 !important; }
+/* the list that ends the printout: normal flow, so it can run onto as many pages as it needs */
+.apx { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; color: #0f172a; page-break-before: always; break-before: page; padding: 0 2px; }
+.apx-head { display: flex; gap: 12px; align-items: baseline; border-bottom: 1.5px solid #0f172a; padding-bottom: 6px; margin-bottom: 14px; }
+.apx-title { font-size: 18px; font-weight: 800; } .apx-sub { font-size: 10px; color: #64748b; margin-left: auto; }
+.apx-group { margin-bottom: 18px; }
+.apx-h2 { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 2.5px solid #0f172a; break-after: avoid; }
+.apx-h2 span { color: #64748b; font-weight: 600; margin-left: 4px; } .apx-h2.muted { color: #64748b; }
+.apx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.apx-th th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; padding: 2px 6px 4px; font-weight: 700; }
+.apx-row { break-inside: avoid; page-break-inside: avoid; }
+.apx-row td { padding: 6px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.apx-no { width: 34px; font-weight: 800; white-space: nowrap; }
+.apx-where { font-size: 10px; color: #64748b; margin-top: 2px; }
+.apx-ans { height: 26px; border-bottom: 1px dotted #94a3b8; margin-top: 4px; }
+.apx-who { width: 120px; font-size: 11px; } .apx-due { width: 56px; font-size: 11px; white-space: nowrap; }
+.apx-box { width: 40px; text-align: center; } .apx-box span { display: inline-block; width: 13px; height: 13px; border: 1.4px solid #334155; border-radius: 3px; }
+.apx-row.done td { color: #64748b; text-decoration: line-through; }
+.apx-lines i { display: block; height: 26px; border-bottom: 1px solid #cbd5e1; }
 /* the "See another process" callouts print in colour-safe teal with the page number */
 .fv-ref-chip { color: #0f766e !important; border: 1.2px solid #0f766e !important; background: #f0fdfa !important; }
 .fv-used-chip { color: #0f766e !important; border: 1.2px dashed #0f766e !important; background: #fff !important; }
@@ -212,6 +244,7 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style></head>
 <body class="light-mode">
 ${sheets}
+${appendixHtml}
 </body></html>`;
 }
 
@@ -278,7 +311,14 @@ export async function printFlowDiagram(deps, opts = {}) {
     const scale = fitScale(box.w, width, 1);
     const pages = planPageBreaks(collectIntervals(contentEl), height, (box.h - PRINT_SLACK) / scale);
     const client = opts.title || 'Flow map';
+    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    // questions, action items and notes: numbered flags on the cards and the list at the end
+    const entries = typeof OL.fvCollectItems === 'function' ? OL.fvCollectItems() : [];
+    const itemNo = { byStep: {}, byId: {} };
+    entries.filter((e) => !e.item.done).forEach((e) => { const k = `${e.res.id}|${e.step.id}`; (itemNo.byStep[k] = itemNo.byStep[k] || []).push(e.label); });
+    const appendixHtml = entries.length && typeof OL.fvItemsAppendixHtml === 'function' ? OL.fvItemsAppendixHtml(entries, { title: 'Questions and Action Items', sub: `${client}  \u00b7  ${today}` }) : '';
     const html = buildPrintHtml({
+      itemNo, appendixHtml,
       contentEl, svgEl, width, height, pages, scale, orientation,
       title: client, subtitle: `Flow diagram (${orientation})`, date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       headHtml: collectHeadHtml(doc), inherit: readInheritedText(contentEl, win),

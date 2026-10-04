@@ -806,6 +806,11 @@ export function renderVisualizer() {
             <i data-lucide="pen-line" style="width:13px;height:13px;"></i>
             Frame out
         </button>
+        <button class="fv-btn" style="gap:6px;" title="Every question, action item and note from your review sessions" onclick="OL.fvToggleItemsDrawer()">
+            <i data-lucide="flag" style="width:13px;height:13px;"></i>
+            Questions &amp; actions
+            <span id="fv-items-count" class="fv-items-count" style="display:${(typeof OL.fvItemsOpenCount === 'function' && OL.fvItemsOpenCount()) ? 'inline-block' : 'none'};">${typeof OL.fvItemsOpenCount === 'function' ? OL.fvItemsOpenCount() : 0}</span>
+        </button>
         <div style="position:relative;display:inline-flex;">
             <button class="fv-btn" style="gap:6px;"
                     id="fv-print-btn"
@@ -2361,6 +2366,7 @@ export function _fvRenderSteps(resources) {
                         onclick="event.stopPropagation();OL._fvTogglePin('${res.id}','${step.id}')">
                   ${OL.getLucideSVG(step.pinned?'pin':'pin-off',10,'currentColor')}
                 </button>
+                ${typeof OL.fvFlagHtml === 'function' ? OL.fvFlagHtml(step, res) : ''}
                 <div class="fv-step-card-accent" style="background:${tc.color};"></div>
                 <div class="fv-step-card-body" onclick="event.stopPropagation();OL._fvSelectStep('${res.id}','${step.id}')">
                   <div style="display:flex;align-items:flex-start;gap:7px;">
@@ -4552,6 +4558,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
           </div>
 
           ${tags}
+          ${typeof OL.fvFlagHtml === 'function' ? OL.fvFlagHtml(step, res) : ''}
           ${resBadge}
           ${hasNesting ? `
             <span class="fv-substep-toggle"

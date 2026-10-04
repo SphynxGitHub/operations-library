@@ -23,6 +23,7 @@ import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
 import * as OLFlowCallouts from './features/flow-visualizer/callouts.js';
 import * as OLFlowReferences from './features/flow-visualizer/references.js';
+import * as OLFlowStepItems from './features/flow-visualizer/step-items.js';
 import * as OLJotformLogic from './features/jotform-logic.js';
 import * as OLFrameOut from './features/frameout.js';
 import * as OLBusinessManager from './features/business/index.js';
