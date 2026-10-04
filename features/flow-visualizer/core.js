@@ -6542,6 +6542,12 @@ export function openInspector(resId = null, stepTarget = null, mode = 'steps') {
     if (!panel || !content) return;
  
     // 🎯 RESTORE INTERNAL SCROLL LAYER VISIBILITY
+    // Opening again after the panel was closed: closing leaves it at width 0 (and leaving the flow map hides it), and
+    // only the other opener (the resource list) used to clear that. Without this the step editor opened at zero width:
+    // the grid column was 380px wide but the panel inside it was empty.
+    panel.style.display = '';
+    panel.style.width = '';
+    panel.style.minWidth = '';
     panel.style.overflow = '';
     const scrollContent = panel.querySelector('.inspector-scroll-content');
     if (scrollContent) {
