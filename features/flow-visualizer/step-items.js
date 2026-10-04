@@ -321,11 +321,20 @@ function drawerHtml() {
       <button type="button" class="fv-items-go alt" ${untasked ? '' : 'disabled'} onclick="OL.fvMakeAllTasks()">Create tasks ${untasked ? `(${untasked})` : ''}</button></div>`;
 }
 export function renderDrawer() { const d = document.getElementById('fv-items-drawer'); if (d) { const keep = d.querySelector('.fv-drawer-list')?.scrollTop || 0; d.innerHTML = drawerHtml(); const l = d.querySelector('.fv-drawer-list'); if (l) l.scrollTop = keep; } updateToolbarCount(); }
+// The step editor docks on the right of the flow map. The list sits to the left of it while it is open, so clicking a
+// card shows the editor instead of opening it behind the list.
+export function positionDrawer() {
+  const d = document.getElementById('fv-items-drawer'); if (!d) return;
+  const insp = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
+  const w = insp && insp.classList.contains('open') ? Math.max(insp.offsetWidth || 0, 380) : 0;
+  d.style.right = `${w}px`; d.style.maxWidth = `calc(100vw - ${w}px)`;
+}
 export function toggleDrawer() {
   const d = document.getElementById('fv-items-drawer');
   if (d) { d.remove(); return; }
   const el = document.createElement('div'); el.id = 'fv-items-drawer'; el.className = 'fv-items-drawer'; el.innerHTML = drawerHtml();
   document.body.appendChild(el);
+  positionDrawer();
 }
 export const closeDrawer = () => document.getElementById('fv-items-drawer')?.remove();
 export function itemsFilter(group, key) { drawerState[group] = key; renderDrawer(); }
@@ -371,5 +380,5 @@ Object.assign(window.OL, {
   fvFlagHtml: flagHtml, fvItemsOf: itemsOf, fvCollectItems: collectItems, fvNumberItems: numberItems, fvItemsAppendixHtml: itemsAppendixHtml, fvItemsText: itemsText,
   fvOpenStepItems: openStepItems, fvCloseStepItems: closeStepItems, fvItemKind: itemKind, fvItemStarter: itemStarter, fvItemAdd: itemAdd, fvItemSet: itemSet,
   fvItemRemove: itemRemove, fvItemMakeTask: itemMakeTask, fvToggleItemsDrawer: toggleDrawer, fvCloseItemsDrawer: closeDrawer, fvItemsFilter: itemsFilter,
-  fvCopyItems: copyItems, fvAddWhoQuestions: addWhoQuestions, fvMakeAllTasks: makeAllTasks, fvItemsOpenCount: openCount, fvRefreshItemFlags: updateToolbarCount,
+  fvCopyItems: copyItems, fvAddWhoQuestions: addWhoQuestions, fvMakeAllTasks: makeAllTasks, fvItemsOpenCount: openCount, fvRefreshItemFlags: updateToolbarCount, fvPositionItemsDrawer: positionDrawer,
 });

@@ -60,7 +60,7 @@ export function refChip(step, res) {
   const t = resById(step.refResId);
   const name = t ? t.name : 'a process that was removed';
   const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}')`;
-  return `<span class="fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(step.refResId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-name">See ${esc(name)}</span><span class="fv-ref-pg"></span></span>`;
+  return `<span class="fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(step.refResId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">See ${esc(name)}</span><span class="fv-ref-pg"></span></span></span>`;
 }
 
 // "Used in N places" on the process that others refer to
@@ -143,7 +143,7 @@ export function showBackPill() {
   const top = s[s.length - 1];
   const p = document.createElement('div');
   p.id = 'fv-back-pill'; p.className = 'fv-back-pill'; p.setAttribute('role', 'group');
-  p.innerHTML = `<button type="button" class="fv-back-btn" onclick="OL.fvBack()" title="Go back to where you were">&#8592; Back to &ldquo;${esc(String(top.label).slice(0, 42))}&rdquo;${s.length > 1 ? ` <span class="fv-back-count">${s.length}</span>` : ''}</button><button type="button" class="fv-back-x" aria-label="Dismiss" title="Dismiss" onclick="OL.fvClearBack()">&#10005;</button>`;
+  p.innerHTML = `<button type="button" class="fv-back-btn" onclick="OL.fvBack()" title="Go back to where you were">&#8592; Back to &ldquo;${esc(String(top.label))}&rdquo;${s.length > 1 ? ` <span class="fv-back-count">${s.length}</span>` : ''}</button><button type="button" class="fv-back-x" aria-label="Dismiss" title="Dismiss" onclick="OL.fvClearBack()">&#10005;</button>`;
   host.appendChild(p);
 }
 

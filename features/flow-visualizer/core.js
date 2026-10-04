@@ -3545,7 +3545,7 @@ export function closeInspectorPanel() {
 
     const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     if (panel) {
-        panel.classList.remove('open');
+        panel.classList.remove('open'); if (typeof OL.fvPositionItemsDrawer === 'function') OL.fvPositionItemsDrawer();
         panel.id = 'inspector-panel';
         panel.style.width = '0';
         panel.style.minWidth = '0';
@@ -3786,7 +3786,7 @@ export function _fvOpenStepsList(resId) {
     console.log('panel in DOM:', document.contains(panel));
     console.groupEnd();
 
-  panel.classList.add('open');
+  panel.classList.add('open'); if (typeof OL.fvPositionItemsDrawer === 'function') OL.fvPositionItemsDrawer();
     panel.style.width = '';
   panel.style.minWidth = '';
 
@@ -6231,7 +6231,7 @@ export async function commitQuickStep(resId) {
                 // Not returning to the docked Inspector — make sure it isn't                
                 // left open behind the modal from an earlier Visualizer visit.                
                 const dockedPanel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');                
-                if (dockedPanel) dockedPanel.classList.remove('open');               
+                if (dockedPanel) dockedPanel.classList.remove('open');                if (typeof OL.fvPositionItemsDrawer === 'function') OL.fvPositionItemsDrawer();
                 OL.openResourceModal(resId);            
             }        
         } else {
@@ -6551,7 +6551,7 @@ export function openInspector(resId = null, stepTarget = null, mode = 'steps') {
     // 🎯 Get Context Data
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
-    panel.classList.add('open');
+    panel.classList.add('open'); if (typeof OL.fvPositionItemsDrawer === 'function') OL.fvPositionItemsDrawer();
 
     // Force grid open
     const layout = document.querySelector('.three-pane-layout');
