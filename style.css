@@ -2167,5 +2167,7 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fv-step-callouts.fv-sco-card:not(.has-items) { position: absolute; right: 8px; bottom: -10px; margin: 0; z-index: 5; }
 .fv-step-callouts.fv-sco-row:not(.has-items) { margin-top: 0; }
 .fv-step-callouts.fv-sco-row:not(.has-items) .fv-callout-add { position: absolute; right: 36px; top: 6px; }
-.fv-step-card .fv-step-callouts .fv-callout-panel { position: absolute; left: 0; top: 100%; width: 240px; z-index: 80; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+/* the mini card opens beside its step (not over the step below, which also hides the arrow) and sits above the arrows */
+.fv-step-card .fv-step-callouts .fv-callout-panel { position: absolute; left: calc(100% + 10px); top: 0; margin: 0; width: 240px; z-index: 80; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.fv-step-card:has(.fv-callout-panel) { z-index: 60; }
 .fv-list-item .fv-step-callouts .fv-callout-panel { max-width: 320px; }

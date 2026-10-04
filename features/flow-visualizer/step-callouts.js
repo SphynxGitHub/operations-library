@@ -73,7 +73,7 @@ function panelHtml(resId, stepId, c) {
       <button type="button" class="fv-callout-x" title="Close" onclick="event.stopPropagation(); OL.fvToggleStepCallout('${r}','${s}','${esc(c.id)}')">${icon('x', 11)}</button></div>
     <div class="fv-callout-title">${esc(c.name)}</div>
     ${c.note ? `<div class="fv-callout-note">${esc(clip(c.note, 400))}</div>` : ''}
-    ${c.missing ? '<div class="fv-callout-meta">The linked library item is no longer there.</div>' : ''}
+    ${c.missing ? '<div class="fv-callout-meta">The linked library item is no longer there.</div>' : (!c.url ? '<div class="fv-callout-meta">No link yet. Use Edit to add one.</div>' : '')}
     <div class="fv-callout-actions">
       ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open ${icon('external-link', 11)}</a>` : ''}
       ${c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.libId)}', null, 'cards')">In library</button>` : ''}
