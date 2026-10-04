@@ -221,8 +221,8 @@ export function layoutDraft(allSteps, opts = {}) {
     if (d.kind !== 'decision') return;
     const yes = steps.filter((s) => s.branchOf === d.id && s.path !== 'no');
     const no = steps.filter((s) => s.branchOf === d.id && s.path === 'no');
-    // parentGap: room under the decision for the Yes / No word to sit on the line
-    const place = (lane, col) => lane.forEach((s, j) => { layout[s.id] = { colOffset: col, row: i + 1 + j, parentId: j === 0 ? d.id : null, parentGap: j === 0 ? 14 : 0, laneMode: true }; });
+    // (the map gives a draft process's cards enough room between them for the Yes / No word to sit on the line)
+    const place = (lane, col) => lane.forEach((s, j) => { layout[s.id] = { colOffset: col, row: i + 1 + j, parentId: j === 0 ? d.id : null, parentGap: 0, laneMode: true }; });
     if (oneCol) { place(yes, 0); place(no, 0); }
     else if (yes.length && no.length) { place(yes, 0); place(no, 1); }
     else if (yes.length) place(yes, 1);

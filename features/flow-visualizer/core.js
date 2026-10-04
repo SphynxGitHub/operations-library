@@ -2050,6 +2050,8 @@ export function _fvRenderSteps(resources) {
   const stages    = data.stages || [];
   const wfAll     = OL.getWorkflows() || [];
   const STEP_GAP  = 14;
+  const DRAFT_GAP = 28;   // processes made in Frame-out get more room between cards, so the arrows and the Yes / No words fit
+  const gapFor    = (res) => (res && res.isDraft && res.source === 'frameout' ? DRAFT_GAP : STEP_GAP);
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
@@ -2508,7 +2510,7 @@ export function _fvRenderSteps(resources) {
             byRes.forEach((cards, res) => {
               const lay = layoutOf.get(res);
               if (isLaneLayout(lay)) {   // imported Zap: every column (lane) stacks on its own
-                stackColumns(cards, lay, y, STEP_GAP, hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
+                stackColumns(cards, lay, y, gapFor(res), hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
                 return;
               }
               let ry = y;
@@ -2534,7 +2536,7 @@ export function _fvRenderSteps(resources) {
             byRes.forEach((cards, res) => {
                  const lay = layoutOf.get(res);
                  if (isLaneLayout(lay)) {   // imported Zap: paths sit side by side, each lane stacks down from its path step
-                     const out = stackColumns(cards, lay, y, STEP_GAP, hOf, (el) => minY.get(el));
+                     const out = stackColumns(cards, lay, y, gapFor(res), hOf, (el) => minY.get(el));
                      cards.forEach(({ step, el }) => {
                          const top = out.tops.get(el);
                           if (!step.pinned) { el.style.top = top + 'px'; step.coords.y = top; }
@@ -2754,10 +2756,10 @@ export function _fvDrawStepConnections(resources) {
             .map((x) => elById.get(`fv-step-${sourceRes.id}-${x.id}`)).filter(Boolean).map((el) => { const r = rectOf(el); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
           draftRoute = routeDraftLink(
             { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
-            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 14, others,
+            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 28, others,
             /^(yes|no)$/i.test((outRule.rule || '').trim()));
           if (draftRoute) {
-            const R = 8, pts = draftRoute.points;
+            const R = 12, pts = draftRoute.points;
             d = `M ${pts[0][0]} ${pts[0][1]}`;
             for (let i = 1; i < pts.length; i++) {
               const [px, py] = pts[i - 1], [cx, cy] = pts[i];
