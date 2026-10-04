@@ -2740,10 +2740,10 @@ export function _fvDrawStepConnections(resources) {
 
         // Processes made in Frame-out: lines run in straight pieces through the gaps between cards, so they never cross one
         let draftRoute = null;
-        if (!isCrossResource && sourceRes.isDraft && sourceRes.source === 'frameout') {
+        if (!isCrossResource && sourceRes.isDraft && sourceRes.source === 'frameout') try {
           draftRoute = routeDraftLink(
             { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
-            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, STEP_GAP);
+            { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 14);
           if (draftRoute) {
             const R = 8, pts = draftRoute.points;
             d = `M ${pts[0][0]} ${pts[0][1]}`;
@@ -2757,7 +2757,7 @@ export function _fvDrawStepConnections(resources) {
               } else d += ` L ${cx} ${cy}`;
             }
           }
-        }
+        } catch (err) { draftRoute = null; console.warn('Draft line routing skipped:', err); }
 
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
         const isLoop     = outRule.type === 'loop';
