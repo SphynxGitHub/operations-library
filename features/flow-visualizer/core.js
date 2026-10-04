@@ -2312,15 +2312,18 @@ export function _fvRenderSteps(resources) {
         hdrEl.className = 'fv-callout-host fv-steps-res-head';
         hdrEl.id = `fv-reshead-${res.id}`;
         hdrEl.dataset.resId = res.id;
+        const _lay = resLayouts.get(res) || {};
+        const _maxOff = Math.max(0, ...Object.values(_lay).map(l => l.colOffset));
+        const headW = Math.max(CARD_W, (1 + _maxOff) * (CARD_W + COL_GAP) - COL_GAP);
         hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
-          width:${CARD_W}px;z-index:6;`;
+          width:${headW}px;z-index:6;`;
         hdrEl.innerHTML = `
           <div style="display:flex;align-items:center;gap:5px;">
             <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
             <span title="${esc(res.name)} (double-click to rename)" class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}"
                   style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                          letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                         text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>
+                         text-overflow:ellipsis;max-width:${headW - 20}px;">${esc(res.name)}</span>
           </div>
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
           ${typeof OL.fvUsedChip === 'function' && OL.fvUsedChip(res) ? `<div style="margin-top:4px;">${OL.fvUsedChip(res)}</div>` : ''}
@@ -2826,7 +2829,7 @@ export function _fvDrawStepConnections(resources) {
           const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           pill.setAttribute('x', draftRoute.label[0] - lw / 2); pill.setAttribute('y', draftRoute.label[1] - 8);
           pill.setAttribute('width', lw); pill.setAttribute('height', 16); pill.setAttribute('rx', 8);
-          pill.setAttribute('fill', '#0b1220'); pill.setAttribute('stroke', color); pill.setAttribute('stroke-width', '1');
+          pill.style.fill = 'var(--panel)'; pill.setAttribute('stroke', color); pill.setAttribute('stroke-width', '1');
           frag.appendChild(pill);
           const lt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           lt.setAttribute('x', draftRoute.label[0]); lt.setAttribute('y', draftRoute.label[1] + 3.5);
@@ -2849,7 +2852,7 @@ export function _fvDrawStepConnections(resources) {
 
           const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
-          bg.setAttribute('fill', '#fff');
+          bg.style.fill = 'var(--panel)';
           bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
           frag.appendChild(bg);
 
