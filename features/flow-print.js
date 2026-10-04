@@ -98,6 +98,38 @@ export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight) 
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Page numbers for the "See another process" callouts (features/flow-visualizer/references.js).
+//   items  [{ top, headOf?: resId, refsTo?: [resId, ...] }]: a process's heading, and the steps that point at a process
+//   pages  [{ y0, y1 }] from planPageBreaks
+// Returns { headPage: { resId: pageNumber }, usedPages: { resId: [pageNumber, ...] } }; page numbers start at 1.
+export function planRefPages(items, pages) {
+  const pageOf = (y) => { for (let i = 0; i < (pages || []).length; i++) if (y >= pages[i].y0 - 1 && y < pages[i].y1) return i + 1; return null; };
+  const headPage = {}; const used = {};
+  (items || []).forEach((it) => {
+    const pg = pageOf(it.top);
+    if (!pg) return;
+    if (it.headOf != null && headPage[it.headOf] == null) headPage[it.headOf] = pg;
+    (it.refsTo || []).forEach((r) => { (used[r] = used[r] || new Set()).add(pg); });
+  });
+  const usedPages = {}; Object.keys(used).forEach((r) => { usedPages[r] = Array.from(used[r]).sort((a, b) => a - b); });
+  return { headPage, usedPages };
+}
+
+// Writes the page numbers into the copy of an element that goes on page `pageNo`.
+export function annotateRefs(el, pageNo, plan) {
+  if (!el || typeof el.querySelectorAll !== 'function' || !plan) return;
+  el.querySelectorAll('.fv-ref-chip[data-ref-res]').forEach((chip) => {
+    const pg = plan.headPage[chip.getAttribute('data-ref-res')];
+    const slot = chip.querySelector('.fv-ref-pg');
+    if (pg && slot) slot.textContent = pg === pageNo ? ' \u00b7 this page' : ` \u00b7 p. ${pg}`;
+  });
+  el.querySelectorAll('.fv-used-wrap[data-used-res]').forEach((w) => {
+    const pgs = plan.usedPages[w.getAttribute('data-used-res')] || [];
+    const slot = w.querySelector('.fv-used-pg');
+    if (pgs.length && slot) slot.textContent = `${pgs.length === 1 ? 'p.' : 'pp.'} ${pgs.join(', ')}`;
+  });
+}
+
 // The HTML of the print window. `contentEl` / `svgEl` are the live diagram elements; they are copied, never moved.
 //   headHtml  the app's own <link>/<style> tags, so the cards look the same on paper
 //
@@ -113,6 +145,12 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
     return { el, top: num(el.style.top), h: bg ? num(el.style.height) : hOf(el), bg };
   });
   const svgInner = svgEl ? svgEl.innerHTML : '';
+  // where each shared process and each "See ..." step ended up, so the callouts can name the page
+  const refPlan = planRefPages(kids.filter((k) => !k.bg).map((k) => {
+    const cls = (k.el.className || '').toString();
+    const chips = typeof k.el.querySelectorAll === 'function' ? Array.from(k.el.querySelectorAll('.fv-ref-chip[data-ref-res]')).map((c) => c.getAttribute('data-ref-res')) : [];
+    return { top: k.top, headOf: /fv-steps-res-head/.test(cls) && k.el.dataset ? k.el.dataset.resId : undefined, refsTo: chips };
+  }), pages);
   const paper = PAGE_PX[orientation === 'landscape' ? 'landscape' : 'portrait'];
   const pageContentH = paper.h - 2 * PRINT_MARGIN;
   const sheets = pages.map((pg, i) => {
@@ -128,6 +166,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
       } else {
         c.style.top = `${k.top - pg.y0}px`;
       }
+      annotateRefs(c, i + 1, refPlan);
       parts.push(c.outerHTML);
     }
     const svg = svgEl
@@ -164,6 +203,11 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .pg-inner #fv-svg-layer { pointer-events: none; z-index: 2; overflow: hidden !important; }
 @supports not (zoom: 1) { .pg-inner { zoom: normal !important; transform: scale(var(--s)); position: absolute; left: 0; top: 0; } }
 .fv-pin-btn, button { display: none !important; }
+.fv-back-pill, .fv-used-pop { display: none !important; }
+/* the "See another process" callouts print in colour-safe teal with the page number */
+.fv-ref-chip { color: #0f766e !important; border: 1.2px solid #0f766e !important; background: #f0fdfa !important; }
+.fv-used-chip { color: #0f766e !important; border: 1.2px dashed #0f766e !important; background: #fff !important; }
+.fv-used-pg { color: #0f766e !important; font-weight: 700; }
 .fv-step-card { box-shadow: none !important; break-inside: avoid; }
 </style></head>
 <body class="light-mode">

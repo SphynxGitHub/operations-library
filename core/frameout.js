@@ -44,6 +44,7 @@ const clip = (s, n) => { const t = clean(s); return t.length > n ? t.slice(0, n 
 //   "Advisor reviews the packet @client"          a step, done by the client
 //   "Prepares the packet @us ? who signs off"     a step to confirm, with the question to ask
 //   "/if Joint account?"                          a decision (the next steps are on its Yes path)
+//   "Send the form -> Completed Form"             the step points at another process (it shows a link on the map)
 //   "/yes"  "/no"  "/join"                        switch to the Yes path / the No path / back to the main line
 // Returns { kind: 'step'|'decision'|'command'|'empty', ... }.
 export function parseFrameLine(input) {
@@ -71,6 +72,7 @@ function parseBody(text) {
   else if (/\?\?$/.test(text)) { text = text.replace(/\?\?$/, ''); question = ''; }
 
   let owner = null;
+  let ref = null;
   // in the name: at the start or the end of the line it is a tag and goes; in the middle ("Email the @client a copy") it stays as the word
   text = text.replace(/(^|\s)@(\w+)(?=\s|$)/g, (m, sp, w, off, whole) => {
     const o = ownerFromWord(w); if (!o) return m;
@@ -80,7 +82,10 @@ function parseBody(text) {
   });
   // an owner typed after the question ("x ? who signs off @us") counts and is not part of the question
   if (question) question = question.replace(/(^|\s)@(\w+)(?=\s|$)/g, (m, sp, w) => { const o = ownerFromWord(w); if (!o) return m; if (!owner) owner = o; return sp; });
-  return { name: clean(text), owner, question: question === null ? null : clean(question) };
+  // "Send the form -> Completed Form": the step points at another process by name (the app finds it)
+  const rf = text.match(/^(.*?)\s*->\s*(\S.*)$/);
+  if (rf && clean(rf[1])) { text = rf[1]; ref = clean(rf[2]); }
+  return { name: clean(text), owner, question: question === null ? null : clean(question), ref };
 }
 
 const stepId = (rand) => `id_${rand()}`;
@@ -95,6 +100,7 @@ export function newDraftStep(parsed, rand = () => Math.random().toString(36).sli
     logic: { in: [], out: [] }, links: [], datapoints: [],
   };
   if (parsed.question !== null && parsed.question !== undefined) step.question = { text: parsed.question || `Confirm: ${parsed.name}`, done: false };
+  if (parsed.ref) step.refName = parsed.ref;       // the app swaps this for refResId once it finds the process
   return step;
 }
 

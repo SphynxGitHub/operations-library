@@ -922,6 +922,7 @@ export function renderVisualizer() {
 
   // Populate workbench if open
   if (OL._fv._wbTab) OL._fvPopulateWb(OL._fv._wbTab, resources);
+  if (typeof OL.fvShowBackPill === 'function') OL.fvShowBackPill();      // the Back pill from a "See ..." jump survives a redraw
 
   // Setup interactions
   OL._fvSetupZoom();
@@ -992,8 +993,8 @@ export function _fvRenderFlowchart(stages, resources) {
 // A resource's heading in the List view: its name, with its callouts (templates, sheets, docs, folders) under it.
 function _fvListResHead(res) {
   const tc = OL._fvGetType ? OL._fvGetType(res.type) : { color: 'var(--accent)' };
-  return `<div class="fv-list-res-head fv-callout-host" onclick="event.stopPropagation()">
-    <div class="fv-list-res-title"><span class="fv-list-res-dot" style="background:${tc.color};"></span><span>${esc(res.name)}</span></div>
+  return `<div class="fv-list-res-head fv-callout-host" id="fv-list-res-${res.id}" data-res-id="${res.id}" onclick="event.stopPropagation()">
+    <div class="fv-list-res-title"><span class="fv-list-res-dot" style="background:${tc.color};"></span><span>${esc(res.name)}</span>${typeof OL.fvUsedChip === 'function' ? OL.fvUsedChip(res) : ''}</div>
     ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}
   </div>`;
 }
@@ -2101,7 +2102,8 @@ export function _fvRenderSteps(resources) {
   const WF_PAD    = 14;   // padding inside workflow sub-zone
   const WF_HDR    = 26;   // workflow sub-zone label height
   // resource column header height: the name, then (for a draft) its Open chip, then the callout chips
-  const RES_HDR   = (resources || []).some((r) => r && r.isDraft) ? 70 : 50;
+  const RES_HDR   = ((resources || []).some((r) => r && r.isDraft) ? 70 : 50)
+    + (typeof OL.fvRefUsers === 'function' && (resources || []).some((r) => r && OL.fvRefUsers(r.id).length) ? 22 : 0);
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
   const PAD_X     = 48;
@@ -2299,6 +2301,8 @@ export function _fvRenderSteps(resources) {
         const colX = resBaseX.get(res);
         const hdrEl = document.createElement('div');
         hdrEl.className = 'fv-callout-host fv-steps-res-head';
+        hdrEl.id = `fv-reshead-${res.id}`;
+        hdrEl.dataset.resId = res.id;
         hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
           width:${CARD_W}px;z-index:6;`;
         hdrEl.innerHTML = `
@@ -2310,6 +2314,7 @@ export function _fvRenderSteps(resources) {
                          text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>
           </div>
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
+          ${typeof OL.fvUsedChip === 'function' && OL.fvUsedChip(res) ? `<div style="margin-top:4px;">${OL.fvUsedChip(res)}</div>` : ''}
           ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}`;
         frag.appendChild(hdrEl);
         resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
@@ -2365,7 +2370,7 @@ export function _fvRenderSteps(resources) {
                                  align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
                     <div style="min-width:0;flex:1;">
                       <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
-                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}</div>
+                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}
                     </div>
                   </div>
                 </div>
@@ -4543,6 +4548,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
               <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600; font-size:13px; color:var(--text-main);">${esc(step.name || 'Unnamed Step')}</span>
               
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
+              ${typeof OL.fvRefChip === 'function' && step.refResId ? `<div style="margin-top:3px;">${OL.fvRefChip(step, res)}</div>` : ''}
           </div>
 
           ${tags}
@@ -6645,6 +6651,14 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
                     </div>
                     ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> SEE ANOTHER PROCESS
+                    </label>
+                    ${typeof OL.fvRefPicker === 'function' ? OL.fvRefPicker(resId, step, `OL.fvSetStepRef('${resId}', '${step.id}', this.value)`) : ''}
+                    <div class="tiny muted" style="margin-top:4px;">For a process used in several places: this step shows a link that jumps to it, and the printout notes the page.</div>
                 </div>
 
                 <div class="inspector-section">

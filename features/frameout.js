@@ -124,6 +124,7 @@ function submit() {
   const input = document.getElementById('fo-input');
   const text = input ? input.value : '';
   const res = applyFrameLine(card.steps, parseFrameLine(text), rand, sessionOf(card.id));
+  if (res.ok && res.step) { const note = resolveRef(res.step, card); if (note) res.message = note; }
   fo.msg = res.message || '';
   if (!res.ok) { fo.input = text; render({ focus: true }); return; }
   fo.input = ''; fo.prompt = '';
@@ -138,8 +139,20 @@ function rename(value) { const card = cardOf(OL._fo?.resId); if (!card) return; 
 
 // ---- editing the selected step ------------------------------------------------------------------------------------
 const selectedStep = () => { const fo = OL._fo; const card = fo && cardOf(fo.resId); return card ? card.steps.find((s) => s.id === fo.selectedId) : null; };
+// "-> Completed Form" typed after a step: find the process by name and point the step at it
+function resolveRef(step, card) {
+  if (!step.refName) return '';
+  const name = String(step.refName).trim().toLowerCase(); delete step.refName;
+  const pool = library().filter((r) => r && !r.isDeleted && String(r.id) !== String(card.id) && (r.steps || []).length);
+  const exact = pool.filter((r) => String(r.name || '').trim().toLowerCase() === name);
+  const near = exact.length ? exact : pool.filter((r) => String(r.name || '').trim().toLowerCase().startsWith(name));
+  if (near.length === 1) { step.refResId = String(near[0].id); return `Linked to "${near[0].name}".`; }
+  return near.length > 1 ? `More than one process starts with "${name}". Pick the one you mean in the panel.` : `No process named "${name}" yet. Pick one in the panel when it exists.`;
+}
+
 function editStep(field, value) {
   const card = cardOf(OL._fo?.resId); const s = selectedStep(); if (!card || !s) return;
+  if (field === 'ref') { if (value) s.refResId = String(value); else delete s.refResId; commit(card, { redraw: true }); return; }
   if (field === 'name') { const v = String(value || '').trim(); if (v) s.name = v; }
   else if (field === 'owner') { s.owner = value || ''; s.assignees = value ? assigneesFor(value) : []; }
   else if (field === 'tool') { s.appName = String(value || '').trim(); }
@@ -197,10 +210,12 @@ const ownerTag = (o) => (o && OWNERS[o] ? `<b class="fo-owner" style="color:${OW
 
 function nodeHtml(n, s, sel) {
   const q = s.question && !s.question.done ? '<span class="fo-qbadge" title="To confirm">?</span>' : '';
+  const refTarget = s.refResId ? library().find((r) => String(r.id) === String(s.refResId)) : null;
+  const refBadge = s.refResId ? `<span class="fo-refbadge" title="${esc(refTarget ? `See ${refTarget.name}` : 'Points at a process that was removed')}">&#8599;</span>` : '';
   const tool = s.appName ? `<span class="fo-tool">${esc(s.appName)}</span>` : '';
   const cls = ['fo-node', s.kind === 'decision' ? 'is-decision' : '', sel ? 'is-sel' : '', s.question && !s.question.done ? 'has-q' : ''].filter(Boolean).join(' ');
   const inner = s.kind === 'decision' ? `<span class="fo-text">${esc(s.name)}</span>` : `<span class="fo-text">${ownerTag(s.owner)}<br>${esc(s.name)}</span>${tool}`;
-  return `<div class="${cls}" data-id="${esc(s.id)}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;" onclick="OL.foSelect('${esc(s.id)}')" tabindex="0" role="button" aria-label="${esc(s.name)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();OL.foSelect('${esc(s.id)}')}">${inner}${q}</div>`;
+  return `<div class="${cls}" data-id="${esc(s.id)}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;" onclick="OL.foSelect('${esc(s.id)}')" tabindex="0" role="button" aria-label="${esc(s.name)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();OL.foSelect('${esc(s.id)}')}">${inner}${q}${refBadge}</div>`;
 }
 
 function pathD(points, r = 10) {
@@ -261,6 +276,7 @@ function panelHtml(card, fo) {
       ${s.kind === 'decision' ? '' : `<div class="fo-lbl">Who does it</div><div class="fo-pills">${ownerBtns}</div>
       <label class="fo-lbl" for="fo-edit-tool">Tool (a guess is fine)</label>
       <input id="fo-edit-tool" class="fo-field" type="text" value="${esc(s.appName || '')}" placeholder="e.g. Redtail, Jotform" onchange="OL.foEdit('tool', this.value)">`}
+      ${s.kind === 'decision' || typeof OL.fvRefPicker !== 'function' ? '' : `<div class="fo-lbl">See another process</div>${OL.fvRefPicker(card.id, s, "OL.foEdit('ref', this.value)")}`}
       <label class="fo-lbl" for="fo-edit-q">To confirm with the client</label>
       <input id="fo-edit-q" class="fo-field" type="text" value="${esc(s.question ? s.question.text : '')}" placeholder="Leave empty if there is nothing to confirm" onchange="OL.foEdit('question', this.value)">
       <div class="fo-row"><button type="button" class="fo-btn" onclick="OL.foMove(-1)">Move earlier</button><button type="button" class="fo-btn" onclick="OL.foMove(1)">Move later</button><button type="button" class="fo-btn danger" onclick="OL.foDeleteStep()">Delete</button></div>
@@ -340,6 +356,7 @@ function inlineAdd(resId, text) {
   const card = cardOf(resId); if (!card) return;
   const res = applyFrameLine(card.steps, parseFrameLine(text), rand, sessionOf(card.id));
   if (!res.ok) { if (res.message) toast(res.message); return; }
+  if (res.step) { const note = resolveRef(res.step, card); if (note) res.message = note; }
   if (res.message) toast(res.message);
   repairBranches(card.steps); deriveLinks(card.steps, card.id);
   const client = getActiveClient(); if (client) markClientDirty(client.id);
