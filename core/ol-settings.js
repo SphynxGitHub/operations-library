@@ -70,6 +70,9 @@ export const DEFAULT_OL_SETTINGS = {
         // The most hours of ONE task counted on a single day. A task estimated longer than this is spread over several
         // working days, this many hours each (the last day gets what is left). 0 = never split.
         maxHoursPerDay: 2,
+        // Once a person's total for a day (meetings + tasks) reaches this many hours, tasks on that day move to a later day
+        // until it is back under. Meetings never move. 0 = off.
+        rollOverHours: 7,
         windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
         // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
         // assigned to (approving their own task); otherwise the fallback.

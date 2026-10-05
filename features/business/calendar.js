@@ -1,7 +1,8 @@
-import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients, getBusinessScopedClients, getBusinessScopeClientIds } from '../../core/data.js';
 import { meetingHoursForDay, queuedTaskHoursForDay, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { isGenericAssignee } from '../../core/task-assignees.js';
-import { loadWorkload } from '../../core/workload.js';
+import { loadWorkload, loadAllMeetings, loadAllTasks } from '../../core/workload.js';
+import { planRollovers } from '../../core/rebalance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
@@ -677,6 +678,60 @@ OL.loadAvailabilityEvents = async function() {
     OL._availabilityTasks = load.tasks;
 };
 
+// -------------------------------------------------------------
+// ROLL OVER FULL DAYS
+// -------------------------------------------------------------
+// When a person's day (meetings + tasks) reaches the roll-over limit (Templates & settings, default 7h), the newest
+// not-started tasks on it move to the next day that fits, until it is back under. See core/rebalance.js for the rules.
+// Runs after every calendar sync, and from the button on the Availability view. Staff only: it needs every project's
+// meetings and tasks, and a partial view would plan on wrong numbers.
+OL.rollOverFullDays = async function(opts = {}) {
+    const toast = (msg) => { if (typeof OL.showToast === 'function') OL.showToast(msg); else console.log(msg); };
+    if (OL._rollingOver) return 0;
+    const cfg = getOlSettings().scheduling;
+    if (!(Number(cfg.rollOverHours) > 0)) { if (opts.manual) toast('Roll-over is off: set "Move tasks to a later day once a day reaches" above 0 in Templates & settings.'); return 0; }
+    if (getBusinessScopeClientIds() !== null) return 0;
+    OL._rollingOver = true;
+    try {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const to = new Date(today); to.setDate(to.getDate() + 35);
+        await loadAllTasks();   // opens projects that were not loaded yet
+        const events = await loadAllMeetings(today, to);
+        const entries = getBusinessScopedClients().flatMap(c => (c.projectData?.clientTasks || []).map(task => ({ clientId: c.id, clientStatus: c.meta?.status, task })));
+        const moves = planRollovers({ events, entries, cfg, todayKey: availKey(today) });
+
+        const byClient = {};
+        moves.forEach(m => { (byClient[m.clientId] = byClient[m.clientId] || []).push(m); });
+        for (const [clientId, list] of Object.entries(byClient)) {
+            await updateAndSync(() => {
+                const tasks = state.clients?.[clientId]?.projectData?.clientTasks || [];
+                list.forEach(m => {
+                    const t = tasks.find(x => String(x.id) === String(m.taskId));
+                    if (!t) return;
+                    t.autoRolls = [...(t.autoRolls || []), { from: m.oldDueDate, to: m.newDueDate, at: new Date().toISOString() }].slice(-5);
+                    t.dueDate = m.newDueDate;
+                    if (m.newSlots.length > 1) t.workSlots = m.newSlots; else delete t.workSlots;
+                });
+            }, clientId);
+        }
+
+        if (moves.length) {
+            toast(`${moves.length} task${moves.length === 1 ? '' : 's'} moved to a later day: a day reached ${cfg.rollOverHours}h.`);
+            console.log('Roll-over moves:', moves.map(m => `${m.assignee}: "${m.title}" ${m.oldDueDate} → ${m.newDueDate}`));
+        } else if (opts.manual) {
+            toast(`No one has a day at ${cfg.rollOverHours}h or more.`);
+        }
+        return moves.length;
+    } catch (e) {
+        console.error('Roll-over failed:', e);
+        if (opts.manual) toast('Roll-over failed, see the console.');
+        return 0;
+    } finally {
+        OL._rollingOver = false;
+        if (opts.manual && OL.calendarState.view === 'calendar' && OL.calendarState.calendarSubView === 'availability') OL.renderBusinessCalendar();
+    }
+};
+
 OL.shiftAvailability = function(deltaWeeks) {
     const cur = OL.calendarState.availStart ? new Date(OL.calendarState.availStart) : availMonday(new Date());
     cur.setDate(cur.getDate() + deltaWeeks * 7);
@@ -767,7 +822,10 @@ OL.renderCalendarAvailability = function() {
                 <button class="btn tiny soft" onclick="OL.availabilityToday()">This week</button>
             </div>
             <strong style="font-size:14px;">Availability for new projects · ${rangeLabel}</strong>
-            <button class="btn tiny soft" onclick="OL.shiftAvailability(1)">Next <i data-lucide="chevron-right"></i></button>
+            <div style="display:flex; gap:6px;">
+                <button class="btn tiny soft" onclick="OL.rollOverFullDays({ manual: true })" title="Move the newest not-started tasks off any day at ${cfg.rollOverHours}h or more (meetings + tasks). Also runs after every calendar sync.">Roll over full days</button>
+                <button class="btn tiny soft" onclick="OL.shiftAvailability(1)">Next <i data-lucide="chevron-right"></i></button>
+            </div>
         </div>
         <div class="tiny" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px;">${legend}</div>
         <div class="tiny muted" style="margin-bottom:12px;">A project can be given a day when at least one person on it is at or under the level its status allows — ${rules}. Hours are meetings plus tasks already due, across all projects. Cut-offs and limits are set in Automations → Templates &amp; settings.</div>
@@ -1855,6 +1913,7 @@ OL.fetchLiveGoogleCalendar = async function() {
         if (OL.calendarState.view === 'grid') await OL.loadCalendarGridMonth();
 
         await OL.processCalendarAutomations();
+        await OL.rollOverFullDays();   // a new meeting can push a day to the limit
 
         OL.calendarState.lastSyncSummary = syncResult;
     } catch (err) {

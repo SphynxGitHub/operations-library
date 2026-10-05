@@ -2348,6 +2348,7 @@ OL.renderInContextTaskModal = function(client, task) {
                             </select>
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
+                        ${task.autoRolls?.length ? (() => { const r = task.autoRolls[task.autoRolls.length - 1]; return `<div class="tiny muted" style="grid-column:1 / -1;">Moved automatically from ${esc(String(r.from || '').slice(0, 10))} to ${esc(String(r.to || '').slice(0, 10))}: that day reached the daily limit.</div>`; })() : ''}
                         <div title="How long this task will take. Counts toward the day's load in scheduling and the Calendar Availability view. Blank counts as 1h.">
                             <strong class="muted">Est. hours:</strong>
                             <input type="number" min="0" step="0.25" class="modal-input tiny" style="width:70px; display:inline-block; padding:2px 6px;" value="${task.estimatedHours ?? ''}" placeholder="1" onchange="OL.setTaskEstimate('${client?.id}', '${task.id}', this.value)">
