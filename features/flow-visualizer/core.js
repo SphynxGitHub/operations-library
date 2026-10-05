@@ -2103,11 +2103,16 @@ export function _fvRenderSteps(resources) {
   const CARD_W    = 180;
   const COL_GAP   = 52;
   const ZONE_PAD  = 20;
-  const ZONE_HDR  = 22;   // stage label height
+  // While the printout is being drawn the layout is tightened: no stage label when there is only one stage, and a short
+  // process heading (the draft chip is not printed, so its room is given back).
+  const PRINTING  = !!(OL._fv && OL._fv._printing);
+  const SHOW_STAGE_LBL = !PRINTING || stageGroups.filter(g => g.stage).length > 1;
+  const ZONE_HDR  = SHOW_STAGE_LBL ? 22 : 0;   // stage label height
   const WF_PAD    = 14;   // padding inside workflow sub-zone
   const WF_HDR    = 26;   // workflow sub-zone label height
   // resource column header height: the name, then (for a draft) its Open chip, then the callout chips
-  const RES_HDR   = ((resources || []).some((r) => r && r.isDraft) ? 70 : 50)
+  const _hasCallouts = typeof OL.fvCalloutsFor === 'function' && (resources || []).some((r) => { try { return OL.fvCalloutsFor(r).some((c) => c.source !== 'logic'); } catch (e) { return false; } });
+  const RES_HDR   = (PRINTING ? 30 + (_hasCallouts ? 26 : 0) : ((resources || []).some((r) => r && r.isDraft) ? 70 : 50))
     + (typeof OL.fvRefUsers === 'function' && (resources || []).some((r) => r && OL.fvRefUsers(r.id).length) ? 22 : 0);
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
@@ -2257,7 +2262,7 @@ export function _fvRenderSteps(resources) {
       stageLblEl.title = `${stage.name} (double-click to rename)`;
       stageLblEl.className = 'fv-rename-target';
       stageLblEl.dataset.fvRename = 'stage'; stageLblEl.dataset.id = stage.id;
-      frag.appendChild(stageLblEl);
+      if (SHOW_STAGE_LBL) frag.appendChild(stageLblEl);
     }
 
     const stageContentTop = stageTop + ZONE_PAD + (stage ? ZONE_HDR : 0);

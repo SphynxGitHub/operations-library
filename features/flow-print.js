@@ -312,6 +312,7 @@ export async function printFlowDiagram(deps, opts = {}) {
   popup.document.write('<p style="font-family:sans-serif;padding:24px;color:#475569;">Preparing the diagram&hellip;</p>');
   try {
     OL._fv.layout = 'steps';
+    OL._fv._printing = true;                                                       // the print drawing is a little tighter (see _fvRenderSteps)
     const fitCols = chooseCols(null, box.w / PRINT_TARGET_SCALE);                 // as many columns as fit the paper ...
     const capCols = typeof OL._fv.flowShape === 'number' ? OL._fv.flowShape : Infinity;   // ... but never more than the "Up to N columns" choice
     OL._fv._colsOverride = Math.min(fitCols, capCols);                            // re-arrange to fit the paper
@@ -350,6 +351,7 @@ export async function printFlowDiagram(deps, opts = {}) {
     win.alert(String((e && e.message) || e));
     return false;
   } finally {
+    OL._fv._printing = false;
     OL._fv.layout = prev.layout; OL._fv._colsOverride = prev.override;            // put the screen back
     OL.renderVisualizer();
     // the print render set how many columns fit the PAPER; if the screen is not in Steps view that value would linger
