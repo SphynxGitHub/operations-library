@@ -20,7 +20,7 @@
 // window, this returns no date at all — the caller's job is to then ask a
 // human to pick manually, never to silently overbook someone.
 import { taskAssignees, isGenericAssignee } from './task-assignees.js';
-import { DEFAULT_OL_SETTINGS } from './ol-settings.js';
+import { DEFAULT_OL_SETTINGS, getOlSettings } from './ol-settings.js';
 
 
 export const WORKDAY_HOURS = 8;
@@ -47,7 +47,9 @@ export function estimateHoursFromFee(fee, cfg = DEFAULT_OL_SETTINGS.scheduling) 
 }
 
 const isWeekend = (date) => { const d = date.getDay(); return d === 0 || d === 6; };
-const toDayKey = (date) => date.toISOString().slice(0, 10);
+// The calendar day in local time (an 8pm meeting is that day, not the next one in UTC).
+const toDayKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const fromDayKey = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 
 // Meeting hours for one assignee on one day, from synced calendar_events
 // (assignee / assignees, start / end — see features/business/calendar.js).
@@ -66,17 +68,51 @@ export function meetingHoursForDay(calendarEvents, assignee, dayKey) {
     }, 0);
 }
 
-// Queued task hours for one assignee on one day — every open task (not
-// this one being scheduled) already due that day.
-export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId) {
+// How a task's hours fall on days. A task estimated at or under the per-day cap is one chunk on its due date. A longer
+// one is spread over working days, cap hours each, ending on its due date: the days the auto-scheduler chose
+// (task.workSlots) when they still match the task, otherwise worked back from the due date.
+function maxPerDay(cfg) {
+    const m = Number((cfg || getOlSettings().scheduling)?.maxHoursPerDay);
+    return m > 0 ? m : Infinity;
+}
+
+export function spreadBackFrom(dueKey, hours, cap) {
+    const slots = [];
+    let remaining = hours;
+    let cursor = fromDayKey(dueKey);
+    while (isWeekend(cursor)) cursor.setDate(cursor.getDate() - 1);
+    for (let guard = 0; remaining > 0.001 && guard < 200; guard++) {
+        const put = Math.min(cap, remaining);
+        slots.unshift({ date: toDayKey(cursor), hours: Math.round(put * 100) / 100 });
+        remaining -= put;
+        do { cursor.setDate(cursor.getDate() - 1); } while (isWeekend(cursor));
+    }
+    return slots;
+}
+
+export function taskDaySlots(task, cfg) {
+    const due = String(task?.dueDate || '').slice(0, 10);
+    if (!due) return [];
+    const hours = taskEstimatedHours(task);
+    const cap = maxPerDay(cfg);
+    if (!(hours > cap)) return [{ date: due, hours }];
+    const saved = Array.isArray(task.workSlots) ? task.workSlots : [];
+    const total = saved.reduce((sum, x) => sum + (Number(x.hours) || 0), 0);
+    if (saved.length && saved[saved.length - 1].date === due && Math.abs(total - hours) < 0.01) return saved.map((x) => ({ date: String(x.date).slice(0, 10), hours: Number(x.hours) || 0 }));
+    return spreadBackFrom(due, hours, cap);
+}
+
+// Queued task hours for one assignee on one day — every open task (not this one being scheduled) with hours on that
+// day, counting only the part of a spread-out task that falls on it.
+export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cfg) {
     if (!assignee) return 0;
     return (tasks || []).reduce((sum, t) => {
         if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
-        if ((t.dueDate || '').slice(0, 10) !== dayKey) return sum;
         const closed = t.status === 'Done' || t.status === 'Completed' || t.completed;
         if (closed) return sum;
-        return sum + taskEstimatedHours(t);
+        const onDay = taskDaySlots(t, cfg).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
+        return sum + onDay;
     }, 0);
 }
 
@@ -114,14 +150,22 @@ export function reviewerFor(assignee, cfg = DEFAULT_OL_SETTINGS.scheduling) {
     return String(cfg.fallbackReviewer || '').trim();
 }
 
-// Finds the first working day, starting today (or startDate), within windowDays, whose booked hours put it at or
-// under the level this client's status may use — the same limit on every day checked. Closed days are never used.
-// Returns { date: 'YYYY-MM-DD', loadHours, tier } on success, or { date: null, reason: 'no_capacity_in_window',
-// reviewer } if nothing fit — the caller hands off to a human at that point, never overbooks silently.
+// Finds the working days, starting today (or startDate), within windowDays, for a task: each day used must have booked
+// hours at or under the level this client's status may use (the same limit on every day checked; Closed days are never
+// used). A task longer than maxHoursPerDay takes that many hours on each day it uses, skipping days that are too busy,
+// and is due on the last of them.
+// Returns { date: 'YYYY-MM-DD' (the day it finishes), slots: [{ date, hours }], loadHours, tier (of the first day) } on
+// success, or { date: null, reason: 'no_capacity_in_window', reviewer } if it does not all fit — the caller hands off
+// to a human at that point, never overbooks silently.
 export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estimatedHours, startDate, windowDays, excludeTaskId, clientStatus, config }) {
     const cfg = { ...DEFAULT_OL_SETTINGS.scheduling, ...(config || {}) };
     const span = Number.isFinite(windowDays) ? windowDays : (Number(cfg.windowDays) || 14);
     const limit = maxTierFor(clientStatus, cfg);
+    const cap = maxPerDay(cfg);
+    const hours = taskEstimatedHours({ estimatedHours });
+    let remaining = hours;
+    const slots = [];
+    let first = null;
     let cursor = startDate ? new Date(startDate) : new Date();
     cursor.setHours(0, 0, 0, 0);
 
@@ -131,11 +175,15 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
             const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
             const tier = loadTier(load, cfg);
             if (tier !== 'closed' && tierIndex(tier) <= tierIndex(limit)) {
-                return { date: dayKey, loadHours: load, tier };
+                const put = Math.min(cap, remaining);
+                if (!first) first = { loadHours: load, tier };
+                slots.push({ date: dayKey, hours: Math.round(put * 100) / 100 });
+                remaining -= put;
+                if (remaining <= 0.001) return { date: dayKey, slots, loadHours: first.loadHours, tier: first.tier };
             }
             checked++;
         }
-        cursor = new Date(cursor.getTime() + 86400000);
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
     }
     return { date: null, reason: 'no_capacity_in_window', reviewer: reviewerFor(assignee, cfg) };
 }

@@ -125,6 +125,7 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
             instructions: '', askKind: null,
             resourceId: res.id, resourceName: res.name,
             assignee, estimatedHours,
+            workSlots: slot.date ? slot.slots : null,
             dueDate: slot.date, dueDateReason: slot.date ? null : slot.reason, reviewer: slot.date ? '' : (slot.reviewer || ''),
             included: true,
         });
@@ -132,7 +133,7 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
         // one's hours already queued, rather than every row in the same
         // plan racing for the same first-available day.
         if (slot.date) {
-            existingTasks = [...existingTasks, { assignee, dueDate: slot.date, estimatedHours, status: 'Open' }];
+            existingTasks = [...existingTasks, { assignee, dueDate: slot.date, estimatedHours, workSlots: slot.slots, status: 'Open' }];
         }
     });
 
@@ -210,6 +211,7 @@ export function commitActivationPlan(plan, ctx) {
             instructions: row.instructions || '',
             assignee: row.assignee || null,
             estimatedHours: row.estimatedHours || null,
+            ...(row.workSlots && row.workSlots.length > 1 ? { workSlots: row.workSlots } : {}),
             dueDate: row.dueDate || '',
             links: [],
         };

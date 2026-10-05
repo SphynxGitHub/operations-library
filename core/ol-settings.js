@@ -67,6 +67,9 @@ export const DEFAULT_OL_SETTINGS = {
         maxTierDefault: 'green',
         // Estimated hours for a task = its fee / this number (the buffer is built in). 0 = fall back to 1h per task.
         feePerEstimatedHour: 200,
+        // The most hours of ONE task counted on a single day. A task estimated longer than this is spread over several
+        // working days, this many hours each (the last day gets what is left). 0 = never split.
+        maxHoursPerDay: 2,
         windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
         // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
         // assigned to (approving their own task); otherwise the fallback.

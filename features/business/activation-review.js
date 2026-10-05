@@ -15,7 +15,7 @@
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds, priceRequest, teamMultiplier } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
-import { findFirstAvailableDate, estimateHoursFromFee, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { findFirstAvailableDate, estimateHoursFromFee, taskDaySlots, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { getCurrentRound, isRoundApproved } from '../../core/requests.js';
 import { isMaintenanceSheet } from '../../core/maintenance.js';
@@ -147,21 +147,29 @@ OL.openNextQueuedActivation = function(clientId, justDoneItemId) {
     return true;
 };
 
-// How busy the assignee is on a row's due date, before this row: meetings + tasks already due that day, plus the
-// other included rows in this plan for the same person and day. The level (Green under 3h, Yellow 3h-3:59, Red 4h-4:59,
-// Closed 5h+ — cut-offs are settings) is the same one the auto-slotter uses, and `over` says whether it is past what
-// this client's status may use.
+// The days a row's task falls on: the days the scheduler chose, or, for a date picked by hand, worked back from it.
+const rowSlots = (row) => taskDaySlots({ dueDate: row.dueDate, estimatedHours: row.estimatedHours, workSlots: row.workSlots }, getOlSettings().scheduling);
+
+// How busy the assignee is on the days a row falls on, before this row: meetings + tasks already due, plus the other
+// included rows in this plan for the same person on those days. Reports the busiest of those days. The level (Green
+// under 3h, Yellow 3h-3:59, Red 4h-4:59, Closed 5h+ — cut-offs are settings) is the same one the auto-slotter uses, and
+// `over` says whether it is past what this client's status may use.
 function rowLoad(st, row) {
     if (!st || row.kind !== 'implementation' || !row.assignee || !row.dueDate) return null;
-    const day = String(row.dueDate).slice(0, 10);
-    const base = dailyLoadHours(st.calendarEvents, st.existingTasks, row.assignee, day);
-    const others = (st.plan || []).filter((r) => r !== row && r.included && r.kind === 'implementation' && r.assignee === row.assignee && String(r.dueDate || '').slice(0, 10) === day)
-        .reduce((sum, r) => sum + (Number(r.estimatedHours) || 0), 0);
-    const hours = base + others;
     const cfg = getOlSettings().scheduling;
-    const level = loadTier(hours, cfg);
     const limit = maxTierFor(state.clients?.[st.clientId]?.meta?.status, cfg);
-    return { hours, tier: dayLoadTier(hours, cfg), level, over: level === 'closed' || TIER_ORDER.indexOf(level) > TIER_ORDER.indexOf(limit), limit };
+    const slots = rowSlots(row);
+    const others = (st.plan || []).filter((r) => r !== row && r.included && r.kind === 'implementation' && r.assignee === row.assignee && r.dueDate);
+    let worst = null;
+    slots.forEach((slot) => {
+        const base = dailyLoadHours(st.calendarEvents, st.existingTasks, row.assignee, slot.date);
+        const extra = others.reduce((sum, r) => sum + rowSlots(r).filter((x) => x.date === slot.date).reduce((n, x) => n + x.hours, 0), 0);
+        const hours = base + extra;
+        const level = loadTier(hours, cfg);
+        if (!worst || TIER_ORDER.indexOf(level) > TIER_ORDER.indexOf(worst.level)) worst = { hours, level, day: slot.date };
+    });
+    if (!worst) return null;
+    return { ...worst, tier: dayLoadTier(worst.hours, cfg), over: worst.level === 'closed' || TIER_ORDER.indexOf(worst.level) > TIER_ORDER.indexOf(limit), limit, days: slots.length };
 }
 
 const LEVEL_STYLE = { green: ['#16a34a', 'Green'], yellow: ['#ca8a04', 'Yellow'], red: ['#ef4444', 'Red'], closed: ['#6b7280', 'Closed'] };
@@ -186,7 +194,8 @@ function rowHTML(st, row) {
                             <input type="number" min="0" step="0.25" class="tiny modal-input" value="${row.estimatedHours ?? ''}" placeholder="1"
                                    style="width:64px; padding:3px 6px;" onchange="OL.setActivationRowEstimate('${row.id}', this.value)"> h</label>
                     </div>
-                    ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked that day${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
+${(() => { const slots = rowSlots(row); if (slots.length < 2) return ''; return `<div class="tiny muted" style="margin-top:2px;">${Number(row.estimatedHours)}h spread over ${slots.length} working days (${esc(slots[0].date)} → ${esc(slots[slots.length - 1].date)}), up to ${getOlSettings().scheduling.maxHoursPerDay}h a day.</div>`; })()}
+                    ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked ${l.days > 1 ? `on ${esc(l.day)} (the busiest of its days)` : 'that day'}${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
                     ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next ${getOlSettings().scheduling.windowDays} working days — ${esc(row.reviewer || 'a person')} needs to pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}
@@ -249,6 +258,8 @@ OL.setActivationRowAssignee = function(rowId, value) {
     if (row.kind === 'implementation' && st) {
         const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: value, estimatedHours: row.estimatedHours, clientStatus: state.clients?.[st.clientId]?.meta?.status, config: getOlSettings().scheduling });
         row.dueDate = slot.date;
+        row.workSlots = slot.date ? slot.slots : null;
+        row.dueDateManual = false;
         row.dueDateReason = slot.date ? null : slot.reason;
         row.reviewer = slot.date ? '' : (slot.reviewer || '');
         OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
@@ -265,8 +276,11 @@ OL.setActivationRowEstimate = function(rowId, value) {
     if (row.kind === 'implementation' && row.assignee && !row.dueDateManual) {
         const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: row.assignee, estimatedHours: row.estimatedHours, clientStatus: state.clients?.[st.clientId]?.meta?.status, config: getOlSettings().scheduling });
         row.dueDate = slot.date;
+        row.workSlots = slot.date ? slot.slots : null;
         row.dueDateReason = slot.date ? null : slot.reason;
         row.reviewer = slot.date ? '' : (slot.reviewer || '');
+    } else if (row.dueDateManual) {
+        row.workSlots = null;   // a hand-picked date is the last day; the days before it are worked back from it
     }
     OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
 };
@@ -276,6 +290,7 @@ OL.setActivationRowDueDate = function(rowId, value) {
     const row = st?.plan.find((r) => r.id === rowId);
     if (!row) return;
     row.dueDate = value;
+    row.workSlots = null;   // a hand-picked date is the last day; the days before it are worked back from it
     row.dueDateManual = true;
     row.dueDateReason = null;   // a manually picked date isn't "no capacity found" anymore, whatever it was before
     OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());   // the day's load flag depends on the date
