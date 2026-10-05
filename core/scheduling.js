@@ -21,6 +21,7 @@
 // human to pick manually, never to silently overbook someone.
 import { taskAssignees, isGenericAssignee } from './task-assignees.js';
 import { DEFAULT_OL_SETTINGS, getOlSettings } from './ol-settings.js';
+import { state } from './data.js';
 
 
 export const WORKDAY_HOURS = 8;
@@ -122,6 +123,41 @@ export function dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeT
     return meetingHoursForDay(calendarEvents, assignee, dayKey) + queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId);
 }
 
+// ---- Per-person availability ----
+// Each team member can have a schedule on their profile card (Sphynx Team): member.schedule =
+//   { hours: { mon: 7, tue: 7, wed: 0, ... },   // hours available that weekday; blank = the standard day; 0 = does not work it
+//     offDates: [{ id, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', note }] }   // days off (a range, inclusive)
+// The standard day is the roll-over limit (7h). A person with fewer (or more) available hours has the Green / Yellow /
+// Red / Closed cut-offs scaled to match — 4h available makes Green "under 4/7 of 3h", and so on — and their roll-over
+// limit is their available hours. An off day (or a 0h weekday) is Closed and gets no tasks.
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+export const standardDayHours = (cfg) => (Number(cfg?.rollOverHours) > 0 ? Number(cfg.rollOverHours) : 7);
+
+export function memberSchedule(name, cfg) {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return null;
+    if (cfg?.memberSchedules) {
+        const k = Object.keys(cfg.memberSchedules).find((x) => x.trim().toLowerCase() === n);
+        return k ? cfg.memberSchedules[k] : null;
+    }
+    const m = (state?.master?.sphynxTeam || []).find((x) => String(x?.name || '').trim().toLowerCase() === n);
+    return m?.schedule || null;
+}
+
+export function isOffDate(schedule, dayKey) {
+    return (schedule?.offDates || []).some((o) => o && o.from && dayKey >= String(o.from).slice(0, 10) && dayKey <= String(o.to || o.from).slice(0, 10));
+}
+
+// Hours this person has available that day (0 = off).
+export function memberDayHours(name, dayKey, cfg = getOlSettings().scheduling) {
+    const sched = memberSchedule(name, cfg);
+    if (isOffDate(sched, dayKey)) return 0;
+    const h = sched?.hours?.[WEEKDAY_KEYS[fromDayKey(dayKey).getDay()]];
+    if (h === undefined || h === null || h === '') return standardDayHours(cfg);
+    const n = Number(h);
+    return Number.isFinite(n) && n >= 0 ? n : standardDayHours(cfg);
+}
+
 // ---- Priority levels (Green / Yellow / Red / Closed) ----
 // A day's booked hours (meetings + tasks already due) put it in a level. The cut-offs are settings
 // (core/ol-settings.js > scheduling), not constants:
@@ -135,6 +171,14 @@ export function loadTier(hours, cfg = DEFAULT_OL_SETTINGS.scheduling) {
     if (h < cfg.yellowUnderHours) return 'yellow';
     if (h < cfg.redUnderHours) return 'red';
     return 'closed';
+}
+
+// The level for one person's day: loadTier with the cut-offs scaled to their available hours that day; Closed if off.
+export function loadTierFor(hours, name, dayKey, cfg = getOlSettings().scheduling) {
+    const cap = memberDayHours(name, dayKey, cfg);
+    if (cap <= 0) return 'closed';
+    const f = cap / standardDayHours(cfg);
+    return loadTier(hours, { ...cfg, greenUnderHours: cfg.greenUnderHours * f, yellowUnderHours: cfg.yellowUnderHours * f, redUnderHours: cfg.redUnderHours * f });
 }
 
 // The fullest level a day may already be in for this client's status. The same limit applies on every day checked.
@@ -169,19 +213,23 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
     let cursor = startDate ? new Date(startDate) : new Date();
     cursor.setHours(0, 0, 0, 0);
 
-    for (let checked = 0; checked <= span; ) {
+    // Weekends, days off and 0h weekdays are skipped without using up the look-ahead; `steps` only stops a person who is
+    // never available from looping forever.
+    for (let checked = 0, steps = 0; checked <= span && steps < 400; steps++) {
         if (!isWeekend(cursor)) {
             const dayKey = toDayKey(cursor);
-            const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
-            const tier = loadTier(load, cfg);
-            if (tier !== 'closed' && tierIndex(tier) <= tierIndex(limit)) {
-                const put = Math.min(cap, remaining);
-                if (!first) first = { loadHours: load, tier };
-                slots.push({ date: dayKey, hours: Math.round(put * 100) / 100 });
-                remaining -= put;
-                if (remaining <= 0.001) return { date: dayKey, slots, loadHours: first.loadHours, tier: first.tier };
+            if (memberDayHours(assignee, dayKey, cfg) > 0) {
+                const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
+                const tier = loadTierFor(load, assignee, dayKey, cfg);
+                if (tier !== 'closed' && tierIndex(tier) <= tierIndex(limit)) {
+                    const put = Math.min(cap, remaining);
+                    if (!first) first = { loadHours: load, tier };
+                    slots.push({ date: dayKey, hours: Math.round(put * 100) / 100 });
+                    remaining -= put;
+                    if (remaining <= 0.001) return { date: dayKey, slots, loadHours: first.loadHours, tier: first.tier };
+                }
+                checked++;
             }
-            checked++;
         }
         cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
     }

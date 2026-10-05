@@ -15,7 +15,7 @@
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds, priceRequest, teamMultiplier } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
-import { findFirstAvailableDate, estimateHoursFromFee, taskDaySlots, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { findFirstAvailableDate, estimateHoursFromFee, taskDaySlots, loadTierFor, memberDayHours, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { getCurrentRound, isRoundApproved } from '../../core/requests.js';
 import { isMaintenanceSheet } from '../../core/maintenance.js';
@@ -165,8 +165,8 @@ function rowLoad(st, row) {
         const base = dailyLoadHours(st.calendarEvents, st.existingTasks, row.assignee, slot.date);
         const extra = others.reduce((sum, r) => sum + rowSlots(r).filter((x) => x.date === slot.date).reduce((n, x) => n + x.hours, 0), 0);
         const hours = base + extra;
-        const level = loadTier(hours, cfg);
-        if (!worst || TIER_ORDER.indexOf(level) > TIER_ORDER.indexOf(worst.level)) worst = { hours, level, day: slot.date };
+        const level = loadTierFor(hours, row.assignee, slot.date, cfg);
+        if (!worst || TIER_ORDER.indexOf(level) > TIER_ORDER.indexOf(worst.level)) worst = { hours, level, day: slot.date, off: memberDayHours(row.assignee, slot.date, cfg) <= 0 };
     });
     if (!worst) return null;
     return { ...worst, tier: dayLoadTier(worst.hours, cfg), over: worst.level === 'closed' || TIER_ORDER.indexOf(worst.level) > TIER_ORDER.indexOf(limit), limit, days: slots.length };
@@ -195,7 +195,7 @@ function rowHTML(st, row) {
                                    style="width:64px; padding:3px 6px;" onchange="OL.setActivationRowEstimate('${row.id}', this.value)"> h</label>
                     </div>
 ${(() => { const slots = rowSlots(row); if (slots.length < 2) return ''; return `<div class="tiny muted" style="margin-top:2px;">${Number(row.estimatedHours)}h spread over ${slots.length} working days (${esc(slots[0].date)} → ${esc(slots[slots.length - 1].date)}), up to ${getOlSettings().scheduling.maxHoursPerDay}h a day.</div>`; })()}
-                    ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked ${l.days > 1 ? `on ${esc(l.day)} (the busiest of its days)` : 'that day'}${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
+                    ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; if (l.off) return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>Off</b>: ${esc(row.assignee)} is not available ${l.days > 1 ? `on ${esc(l.day)}` : 'that day'}.</div>`; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked ${l.days > 1 ? `on ${esc(l.day)} (the busiest of its days)` : 'that day'}${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
                     ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next ${getOlSettings().scheduling.windowDays} working days — ${esc(row.reviewer || 'a person')} needs to pick a date manually.</div>` : ''}
                 ` : ''}
                 ${isAsk && !row.templateId ? `<div class="tiny" style="color:#f0ad4e; margin-top:2px;">Not on the SOP — will be logged for review.</div>` : ''}

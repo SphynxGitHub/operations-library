@@ -1,5 +1,6 @@
 //======================= CORE / REBALANCE (ROLL-OVER) =======================//
-// Once a person's total for a day (meetings + the hours of tasks on it) reaches the roll-over limit (a setting, 7h),
+// Once a person's total for a day (meetings + the hours of tasks on it) reaches their available hours (7h unless their
+// profile sets otherwise; a day off is 0h, so its tasks all move),
 // tasks on that day are moved later until it drops back under — meetings are never moved. Pure: it plans on copies and
 // returns what to change; the caller writes it.
 //
@@ -10,7 +11,7 @@
 // per-day cap), so it is "the next day" unless that day is too busy for that client. A task spread over several days
 // only has the days from the full one onward re-planned; the days before it stay put.
 import { taskAssignees, isGenericAssignee } from './task-assignees.js';
-import { dailyLoadHours, taskDaySlots, findFirstAvailableDate } from './scheduling.js';
+import { dailyLoadHours, taskDaySlots, findFirstAvailableDate, memberDayHours } from './scheduling.js';
 
 const localDate = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 
@@ -46,7 +47,10 @@ export function planRollovers({ events = [], entries = [], cfg, todayKey, maxMov
         for (const day of days) {
             for (let guard = 0; guard < 50; guard++) {
                 const total = Math.round(dailyLoadHours(events, tasks, person, day) * 100) / 100;
-                if (total < threshold) break;
+                // The limit is this person's available hours that day (the standard 7h unless their profile says otherwise);
+                // on a day off it is 0, so every task that can move does.
+                const limit = memberDayHours(person, day, cfg);
+                if (limit > 0 && total < limit) break;
 
                 const candidates = work
                     .filter((w) => !stuck.has(String(w.task.id)) && isMovable(w.task, todayKey) && taskAssignees(w.task)[0] === person

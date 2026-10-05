@@ -1,5 +1,5 @@
 import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients, getBusinessScopedClients, getBusinessScopeClientIds } from '../../core/data.js';
-import { meetingHoursForDay, queuedTaskHoursForDay, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { meetingHoursForDay, queuedTaskHoursForDay, loadTierFor, memberDayHours, standardDayHours, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { isGenericAssignee } from '../../core/task-assignees.js';
 import { loadWorkload, loadAllMeetings, loadAllTasks } from '../../core/workload.js';
 import { planRollovers } from '../../core/rebalance.js';
@@ -662,6 +662,25 @@ const LEVEL_STYLE = {
     closed: { color: '#6b7280', label: 'Closed' }
 };
 
+// Who is shown on the Availability view is a per-person (per-browser) choice. Hidden people are left out of the
+// rows AND out of the "can a project be given this day" check, so a tick never depends on someone you cannot see.
+const AVAIL_HIDDEN_KEY = 'availability_hidden_members';
+const availHidden = () => { try { return new Set(JSON.parse(localStorage.getItem(AVAIL_HIDDEN_KEY) || '[]')); } catch (e) { return new Set(); } };
+const memberKey = (m) => String(m.id || m.name);
+
+OL.toggleAvailabilityMember = function(key) {
+    const hidden = availHidden();
+    if (hidden.has(key)) hidden.delete(key); else hidden.add(key);
+    try { localStorage.setItem(AVAIL_HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* storage blocked: the choice just won't stick */ }
+    OL.renderBusinessCalendar();
+};
+
+OL.setAvailabilityMembersVisible = function(showAll) {
+    const team = (state.master?.sphynxTeam || []).filter(m => m?.name && !isGenericAssignee(m.name));
+    try { localStorage.setItem(AVAIL_HIDDEN_KEY, JSON.stringify(showAll ? [] : team.map(memberKey))); } catch (e) { /* ignore */ }
+    OL.renderBusinessCalendar();
+};
+
 const availMonday = (d) => {
     const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
@@ -749,7 +768,10 @@ OL.renderCalendarAvailability = function() {
     const start = OL.calendarState.availStart ? new Date(OL.calendarState.availStart) : availMonday(new Date());
     const todayKey = availKey(new Date());
 
-    const people = (state.master?.sphynxTeam || []).map(m => String(m.name || '').trim()).filter(n => n && !isGenericAssignee(n));
+    const roster = (state.master?.sphynxTeam || []).filter(m => String(m?.name || '').trim() && !isGenericAssignee(m.name));
+    const hidden = availHidden();
+    const people = roster.filter(m => !hidden.has(memberKey(m))).map(m => String(m.name).trim());
+    const std = standardDayHours(cfg);
     const events = OL._availabilityEvents || [];
     const tasks = OL._availabilityTasks || [];
 
@@ -791,8 +813,9 @@ OL.renderCalendarAvailability = function() {
             const meet = meetingHoursForDay(events, name, key);
             const queued = queuedTaskHoursForDay(tasks, name, key);
             const hours = meet + queued;
-            const tier = loadTier(hours, cfg);
-            return { name, hours, meet, queued, tier };
+            const cap = memberDayHours(name, key, cfg);
+            const tier = loadTierFor(hours, name, key, cfg);
+            return { name, hours, meet, queued, tier, cap, off: cap <= 0 };
         });
         const open = buckets.map(b => ({ label: b.label, ok: rows.some(r => r.tier !== 'closed' && idx(r.tier) <= idx(b.limit)) }));
         const best = rows.length ? rows.reduce((a, r) => (idx(r.tier) < idx(a) ? r.tier : a), 'closed') : 'closed';
@@ -802,10 +825,10 @@ OL.renderCalendarAvailability = function() {
                 <div class="tiny bold" style="margin-bottom:5px; ${isToday ? 'color:var(--accent);' : ''}">${d.toLocaleDateString([], { weekday: 'short' })} ${d.getDate()}</div>
                 <div style="display:grid; gap:2px; margin-bottom:6px;">
                     ${rows.map(r => `
-                        <div class="tiny" title="${esc(r.name)}: ${r.meet.toFixed(1)}h meetings + ${r.queued.toFixed(1)}h tasks = ${r.hours.toFixed(1)}h (${LEVEL_STYLE[r.tier].label})" style="display:flex; align-items:center; gap:5px; min-width:0;">
+                        <div class="tiny" title="${esc(r.name)}: ${r.off ? 'off' : `${r.meet.toFixed(1)}h meetings + ${r.queued.toFixed(1)}h tasks = ${r.hours.toFixed(1)}h of ${r.cap}h available (${LEVEL_STYLE[r.tier].label})`}" style="display:flex; align-items:center; gap:5px; min-width:0;">
                             <span style="width:9px; height:9px; border-radius:50%; flex:none; background:${LEVEL_STYLE[r.tier].color};"></span>
                             <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${esc(r.name.split(' ')[0])}</span>
-                            <span class="muted">${r.hours.toFixed(1)}h</span>
+                            <span class="muted">${r.off ? 'Off' : `${r.hours.toFixed(1)}h${Math.abs(r.cap - std) > 0.001 ? `/${r.cap}` : ''}`}</span>
                         </div>`).join('') || '<div class="tiny muted">No team members</div>'}
                 </div>
                 ${past ? '' : `
@@ -827,8 +850,13 @@ OL.renderCalendarAvailability = function() {
                 <button class="btn tiny soft" onclick="OL.shiftAvailability(1)">Next <i data-lucide="chevron-right"></i></button>
             </div>
         </div>
+        <div class="tiny" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+            <span class="muted">Show:</span>
+            ${roster.map(m => { const on = !hidden.has(memberKey(m)); return `<button class="btn tiny ${on ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px; ${on ? '' : 'opacity:0.6; text-decoration:line-through;'}" onclick="OL.toggleAvailabilityMember('${esc(memberKey(m)).replace(/'/g, '&#39;')}')">${esc(m.name)}</button>`; }).join('') || '<span class="muted">No team members</span>'}
+            ${roster.length > 1 ? `<button class="btn tiny soft" style="padding:2px 8px; font-size:11px;" onclick="OL.setAvailabilityMembersVisible(true)">All</button><button class="btn tiny soft" style="padding:2px 8px; font-size:11px;" onclick="OL.setAvailabilityMembersVisible(false)">None</button>` : ''}
+        </div>
         <div class="tiny" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px;">${legend}</div>
-        <div class="tiny muted" style="margin-bottom:12px;">A project can be given a day when at least one person on it is at or under the level its status allows — ${rules}. Hours are meetings plus tasks already due, across all projects. Cut-offs and limits are set in Automations → Templates &amp; settings.</div>
+        <div class="tiny muted" style="margin-bottom:12px;">A project can be given a day when at least one person on it is at or under the level its status allows — ${rules}. Hours are meetings plus tasks already due, across all projects. A person with fewer or more available hours on their team profile has the cut-offs scaled to match, and a day off is gray. Hidden people are not counted. Cut-offs and limits are set in Automations → Templates &amp; settings.</div>
         <div style="display:grid; gap:10px;">
             ${weeks.map(days => `
                 <div style="display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">

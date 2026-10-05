@@ -1,4 +1,6 @@
 import { esc, uid, state, db, updateAndSync } from '../../core/data.js';
+import { getOlSettings } from '../../core/ol-settings.js';
+import { standardDayHours } from '../../core/scheduling.js';
 
 // ================= 🛡️ SPHYNX TEAM MANAGER (CARD LAYOUT) ================= //
 
@@ -60,7 +62,11 @@ OL.renderSphynxTeamPage = function() {
                                 <i data-lucide="pen-tool" style="width:14px;height:14px;color:var(--accent); flex-shrink:0; margin-top:2px;"></i>
                                 <div>
                                     <strong class="tiny uppercase bold" style="display:block; font-size:9px; color:var(--muted);">Email Signature</strong>
-                                    <span style="font-size:11px;" class="ol-richtext-view">${OL.signatureHtmlFor(m)}</span>                                 </div>                             </div>                         </div>                     </div>                      <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
+                                    <span style="font-size:11px;" class="ol-richtext-view">${OL.signatureHtmlFor(m)}</span>                                 </div>                             </div>                         </div>                     </div>                      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px;" class="muted">
+                        <span style="display:flex; align-items:center; gap:6px; min-width:0;"><i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(OL.memberScheduleSummary(m))}</span></span>
+                        <button class="btn tiny soft" style="flex-shrink:0; font-size:10px; padding:3px 8px;" onclick="OL.openMemberAvailability('${m.id}')" title="Available hours per weekday and days off. Used by scheduling and the Calendar Availability view.">Availability</button>
+                    </div>
+                    <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
                         </span>
                         
                         <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
@@ -304,3 +310,109 @@ OL.linkMyAdminLoginToTeamMember = async function(memberId) {
 };
 
 window.OL.renderSphynxTeamPage = OL.renderSphynxTeamPage;
+
+// ================= AVAILABLE HOURS & DAYS OFF ================= //
+// member.schedule = { hours: { mon, tue, wed, thu, fri }, offDates: [{ id, from, to, note }] }
+// Blank hours = the standard day (the roll-over limit, 7h); 0 = does not work that weekday. Read by core/scheduling.js,
+// so auto-scheduling, the roll-over and the Calendar Availability view all follow it. Saved straight away (no Save button).
+const SCHED_DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri']];
+const fmtDay = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' }); };
+const fmtRange = (o) => (!o.to || o.to === o.from) ? fmtDay(o.from) : `${fmtDay(o.from)} – ${fmtDay(o.to)}`;
+const localKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+OL.memberScheduleSummary = function(m) {
+    const sched = m?.schedule || {};
+    const custom = SCHED_DAYS.some(([k]) => sched.hours && sched.hours[k] !== undefined && sched.hours[k] !== null && sched.hours[k] !== '');
+    const today = localKey(new Date());
+    const upcoming = (sched.offDates || []).filter(o => o && o.from && String(o.to || o.from) >= today).sort((a, b) => String(a.from).localeCompare(String(b.from)));
+    const parts = [custom ? 'Custom hours' : 'Standard hours'];
+    if (upcoming.length) parts.push(`Off ${fmtRange(upcoming[0])}${upcoming.length > 1 ? ` +${upcoming.length - 1} more` : ''}`);
+    return parts.join(' · ');
+};
+
+OL.openMemberAvailability = function(memberId) {
+    const m = state.master?.sphynxTeam?.find(x => x.id === memberId);
+    if (!m) return;
+    const sched = m.schedule || {};
+    const today = localKey(new Date());
+    const off = (sched.offDates || []).slice().sort((a, b) => String(a.from).localeCompare(String(b.from)));
+    const std = standardDayHours(getOlSettings().scheduling);
+
+    OL.showOverlayModal(`
+        <div style="padding:24px; max-width:480px; width:100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="calendar-clock" style="width:20px;height:20px;color:var(--accent);"></i>Availability — ${esc(m.name)}</h3>
+                <button class="btn tiny soft" onclick="OL.closeModal(); OL.renderSphynxTeamPage();">✕</button>
+            </div>
+
+            <div class="bold tiny uppercase muted" style="margin-bottom:6px;">Available hours per day</div>
+            <div class="tiny muted" style="margin-bottom:8px;">Leave blank for the standard ${std}h day. Use 0 for a day ${esc(m.name.split(' ')[0])} doesn't work. Fewer hours make a day fill up sooner: the Green / Yellow / Red cut-offs and the daily roll-over limit scale to match.</div>
+            <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; margin-bottom:18px;">
+                ${SCHED_DAYS.map(([k, label]) => `
+                    <label class="tiny muted" style="display:grid; gap:3px; text-align:center;">${label}
+                        <input type="number" min="0" max="24" step="0.5" class="modal-input tiny" style="width:100%; padding:4px 6px; text-align:center;" placeholder="${std}"
+                               value="${sched.hours && sched.hours[k] !== undefined && sched.hours[k] !== null ? esc(String(sched.hours[k])) : ''}"
+                               onchange="OL.setMemberWeekdayHours('${m.id}', '${k}', this.value)">
+                    </label>`).join('')}
+            </div>
+
+            <div class="bold tiny uppercase muted" style="margin-bottom:6px;">Days off</div>
+            <div class="tiny muted" style="margin-bottom:8px;">Nothing is scheduled on these days, and tasks already due then move to the next day that fits.</div>
+            <div style="display:grid; gap:6px; margin-bottom:10px;">
+                ${off.map(o => `
+                    <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; ${String(o.to || o.from) < today ? 'opacity:0.5;' : ''}">
+                        <span style="flex:1; font-size:12px;">${esc(fmtRange(o))}${o.note ? ` <span class="tiny muted">· ${esc(o.note)}</span>` : ''}</span>
+                        <button class="btn tiny soft danger icon-only" style="padding:2px 6px;" title="Remove" onclick="OL.removeMemberOffDates('${m.id}', '${esc(o.id)}')">✕</button>
+                    </div>`).join('') || '<div class="tiny muted">No days off set.</div>'}
+            </div>
+            <div style="display:flex; gap:6px; align-items:flex-end; flex-wrap:wrap; padding-top:10px; border-top:1px solid var(--line);">
+                <label class="tiny muted" style="display:grid; gap:3px;">From<input type="date" id="off-from" class="modal-input tiny" style="padding:4px 6px;"></label>
+                <label class="tiny muted" style="display:grid; gap:3px;">To (optional)<input type="date" id="off-to" class="modal-input tiny" style="padding:4px 6px;"></label>
+                <label class="tiny muted" style="display:grid; gap:3px; flex:1; min-width:100px;">Note<input type="text" id="off-note" class="modal-input tiny" placeholder="Vacation" style="padding:4px 6px;"></label>
+                <button class="btn tiny primary" onclick="OL.addMemberOffDates('${m.id}')">Add</button>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                <button class="btn tiny soft" onclick="OL.closeModal(); OL.renderSphynxTeamPage();">Done</button>
+            </div>
+        </div>
+    `);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.setMemberWeekdayHours = function(memberId, dayKey, value) {
+    updateAndSync(() => {
+        const m = state.master?.sphynxTeam?.find(x => x.id === memberId);
+        if (!m) return;
+        if (!m.schedule) m.schedule = {};
+        if (!m.schedule.hours) m.schedule.hours = {};
+        const raw = String(value ?? '').trim();
+        const n = parseFloat(raw);
+        if (raw === '' || !Number.isFinite(n)) delete m.schedule.hours[dayKey];          // blank = the standard day
+        else m.schedule.hours[dayKey] = Math.min(24, Math.max(0, n));
+    });
+};
+
+OL.addMemberOffDates = function(memberId) {
+    const from = document.getElementById('off-from')?.value || '';
+    let to = document.getElementById('off-to')?.value || '';
+    const note = (document.getElementById('off-note')?.value || '').trim();
+    if (!from) { alert('Pick the first day off.'); return; }
+    if (!to || to < from) to = from;
+    updateAndSync(() => {
+        const m = state.master?.sphynxTeam?.find(x => x.id === memberId);
+        if (!m) return;
+        if (!m.schedule) m.schedule = {};
+        m.schedule.offDates = [...(m.schedule.offDates || []), { id: uid(), from, to, note }];
+    }).then(() => {
+        OL.openMemberAvailability(memberId);
+        // Tasks already due on those days move on right away (needs the Calendar module; harmless if it is not loaded).
+        if (typeof OL.rollOverFullDays === 'function') OL.rollOverFullDays();
+    });
+};
+
+OL.removeMemberOffDates = function(memberId, offId) {
+    updateAndSync(() => {
+        const m = state.master?.sphynxTeam?.find(x => x.id === memberId);
+        if (m?.schedule?.offDates) m.schedule.offDates = m.schedule.offDates.filter(o => String(o.id) !== String(offId));
+    }).then(() => OL.openMemberAvailability(memberId));
+};
