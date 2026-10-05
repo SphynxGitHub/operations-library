@@ -1403,6 +1403,7 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
             },
             sharedMasterIds: []
         };
+        if (typeof OL !== 'undefined' && typeof OL.applyNewProjectRoles === 'function') OL.applyNewProjectRoles(state.clients[targetClientId]);   // default people per role
         newProjectCreated = true;
     } else {
         // 2. Attach to existing project

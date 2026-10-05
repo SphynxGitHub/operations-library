@@ -7,6 +7,7 @@
 
 import { state, esc, uid, db, getActiveClient, persist, updateAndSync, switchClient, loadFullClient } from '../core/data.js';
 import { recordStatusChange, computeStatusKpis } from '../core/status-kpis.js';
+import { applyNewProjectRoles } from '../core/default-roles.js';
 
 //======================= CLIENT DASHBOARD SECTION =======================//
 
@@ -424,6 +425,8 @@ export async function createNewClient({ name, contact = '', email = '', status =
     },
     sharedMasterIds: [],
   };
+
+  applyNewProjectRoles(newClientObj);   // the default person for each role (Templates & settings)
 
   // 1. Assign to local state & provision templates
   state.clients[clientId] = newClientObj;

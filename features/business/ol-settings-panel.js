@@ -5,6 +5,7 @@
 
 import { esc, state, updateAndSync } from '../../core/data.js';
 import { getOlSettings, DEFAULT_OL_SETTINGS } from '../../core/ol-settings.js';
+import { roleList } from '../../core/default-roles.js';
 
 const TIER_OPTIONS = [['green', 'Green'], ['yellow', 'Yellow'], ['red', 'Red']];
 
@@ -109,6 +110,9 @@ OL.renderOlSettingsPanel = function() {
                 field('If nothing fits, ask', personSelect('os-sc-reviewer', sc.reviewer, 'The person the task is assigned to'), 'They pick the date by hand.') +
                 field('…or, if it has no named person', personSelect('os-sc-fallback', resolveMember(sc.fallbackReviewer), 'No one'), 'Used when the task is assigned to "Sphynx Task" or no one.') + `</div>`)}
 
+        ${section('Default people for new projects', 'Who a new project starts with for each role (its Role Defaults). Existing projects are not changed, and a project can still be changed after it is made.',
+            `<div class="os-row">${roleList().map((r, i) => field(esc(r.name), personSelect('os-nr-' + i, resolveMember((getOlSettings().newProjectRoles || {})[r.name]), 'No one'))).join('')}</div>`)}
+
         ${section('Email links from the Master Library', 'Which Master Library sections can be linked when writing an email ("From Master Library" in the compose window). Only resources in the ticked sections are offered.',
             librarySections().length
                 ? `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:6px;">${librarySections().map((name) => `<label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" class="os-link-type" data-type="${esc(name)}" ${linkable.has(name) ? 'checked' : ''}> ${esc(name)}</label>`).join('')}</div>`
@@ -145,6 +149,7 @@ OL.saveOlSettings = function() {
         integrations: { autoPull: on('os-ig-enabled'), everyHours: Math.max(1, Math.round(num('os-ig-hours', d.integrations.everyHours))) },
         zapRepull: { enabled: on('os-zr-enabled'), taskTitle: v('os-zr-title'), taskDescription: v('os-zr-desc'), dueInDays: Math.round(num('os-zr-due', d.zapRepull.dueInDays)), assignee: v('os-zr-assignee') },
         introCall: { enabled: on('os-ic-enabled'), titleKeywords: v('os-ic-words'), daysBefore: num('os-ic-days', d.introCall.daysBefore), taskTitle: v('os-ic-title'), assignee: v('os-ic-assignee') },
+        newProjectRoles: Object.fromEntries(roleList().map((r, i) => [r.name, v('os-nr-' + i)])),
         scheduling: {
             greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,
             maxTierByStatus: { ...(cur.scheduling.maxTierByStatus || {}), 'Ongoing Maintenance': v('os-sc-om'), 'White Glove': v('os-sc-wg') },

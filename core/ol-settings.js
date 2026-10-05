@@ -55,6 +55,15 @@ export const DEFAULT_OL_SETTINGS = {
         taskTitle: 'Review Intro Call Questionnaire and Notes',
         assignee: 'Anthony',
     },
+    // Who a NEW project starts with for each role (its Role Defaults), by role name. A full name, or a first name that only
+    // one team member has. Blank = nobody. Existing projects are not touched (see one-time-set-default-roles.js).
+    newProjectRoles: {
+        Sales: 'Arielle Minicozzi',
+        Scoping: 'Arielle Minicozzi',
+        Implementation: 'Arielle Minicozzi',
+        Testing: 'Anthony',
+        Communication: 'Anthony',
+    },
     scheduling: {
         // A day's booked hours (meetings + tasks already due) put it in a level:
         //   Green = under 3h   Yellow = 3h to 3:59   Red = 4h to 4:59   Closed (gray) = 5h or more

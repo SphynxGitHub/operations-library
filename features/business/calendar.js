@@ -3,6 +3,7 @@ import { meetingHoursForDay, queuedTaskHoursForDay, loadTierFor, memberDayHours,
 import { isGenericAssignee } from '../../core/task-assignees.js';
 import { loadWorkload, loadAllMeetings, loadAllTasks } from '../../core/workload.js';
 import { planRollovers } from '../../core/rebalance.js';
+import { applyNewProjectRoles } from '../../core/default-roles.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
@@ -1620,6 +1621,7 @@ OL.autoAssignEventFromAttendees = async function(id) {
                 scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
             }
         };
+        applyNewProjectRoles(state.clients[newClientId]);
         OL.markClientDirty(newClientId);
     }
 
