@@ -37,6 +37,15 @@ export function taskEstimatedHours(task) {
     return Number.isFinite(v) && v >= 0 ? v : DEFAULT_TASK_ESTIMATE_HOURS;
 }
 
+// Estimated hours from a fee: fee / feePerEstimatedHour (default $200 — sits under the billing rate, so it is a buffer).
+// No fee (or the setting at 0) gives the default 1h.
+export function estimateHoursFromFee(fee, cfg = DEFAULT_OL_SETTINGS.scheduling) {
+    const per = Number(cfg?.feePerEstimatedHour);
+    const f = Number(fee);
+    if (!(per > 0) || !(f > 0)) return DEFAULT_TASK_ESTIMATE_HOURS;
+    return Math.round((f / per) * 100) / 100;
+}
+
 const isWeekend = (date) => { const d = date.getDay(); return d === 0 || d === 6; };
 const toDayKey = (date) => date.toISOString().slice(0, 10);
 

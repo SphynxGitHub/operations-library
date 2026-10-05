@@ -13,12 +13,13 @@
 // in memory, so backing out of the modal with no changes made is a no-op.
 
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
-import { requestResourceIds } from '../../core/request-pricing.js';
+import { requestResourceIds, priceRequest, teamMultiplier } from '../../core/request-pricing.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
-import { findFirstAvailableDate, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { findFirstAvailableDate, estimateHoursFromFee, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { getCurrentRound, isRoundApproved } from '../../core/requests.js';
 import { isMaintenanceSheet } from '../../core/maintenance.js';
+import { loadWorkload } from '../../core/workload.js';
 
 const resourceLookup = (client) => (id) =>
     (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
@@ -37,11 +38,30 @@ OL.openActivationReview = async function(clientId, itemId) {
     const resources = requestResourceIds(item).map((id) => lookup(id)).filter(Boolean);
     const requestType = item.requestType || 'build';
     const askTemplates = (state.master.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
-    // Scoped to this client — calendar events are already client-linked
-    // (features/business/calendar.js), and a task's own project is the
-    // only pool that matters for its queued-hours load.
-    const calendarEvents = (state.master?.googleCalendarEvents || []).filter((e) => e.linked_client_id === clientId);
-    const existingTasks = client.projectData?.clientTasks || [];
+    // How busy someone is counts EVERY project's tasks and every meeting (linked to a project or not) — not just this
+    // project's — otherwise a day that is full across the business would look open here. Covers today plus the
+    // scheduler's look-ahead window (calendar days, padded for weekends).
+    const lookAheadDays = Math.ceil(((Number(getOlSettings().scheduling.windowDays) || 14) + 1) * 7 / 5) + 2;
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    const to = new Date(from); to.setDate(to.getDate() + lookAheadDays);
+    let calendarEvents = [], existingTasks = client.projectData?.clientTasks || [];
+    try {
+        const load = await loadWorkload(from, to);
+        calendarEvents = load.events;
+        existingTasks = load.tasks;
+    } catch (e) {
+        console.error('Could not load all projects\' workload for scheduling:', e);   // falls back to this project's tasks only
+    }
+
+    // Each task's estimate comes from its fee (see estimateHoursFromFee): priced the same way as the scoping sheet.
+    const rates = state.master?.rates || {};
+    const breakdown = priceRequest(item, resources, {
+        vars: rates.variables || {},
+        baseRate: client.projectData?.customBaseRate || rates.baseHourlyRate || 300,
+        multiplier: teamMultiplier(item, { rate: rates.teamMultiplier, teamCount: (client.projectData?.teamMembers || []).length || 1 }),
+    });
+    const feeByResourceId = {};
+    breakdown.lines.forEach((l) => { feeByResourceId[String(l.resourceId)] = l.fee; });
 
     const plan = buildActivationPlan({
         item, resources, requestType,
@@ -50,6 +70,7 @@ OL.openActivationReview = async function(clientId, itemId) {
         client, roles: state.master.roles || [],
         assigneeByType: state.master.assigneeByType || {},   // assignee_by_type.sql — suggestAssignee falls back to role-matching when empty
         uid, calendarEvents, existingTasks,
+        feeByResourceId, requestFee: breakdown.gross,
     });
 
     OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan, calendarEvents, existingTasks };
@@ -161,7 +182,9 @@ function rowHTML(st, row) {
                         <input type="date" class="tiny modal-input" value="${esc(row.dueDate || '')}"
                                style="width:150px; padding:3px 6px;"
                                onchange="OL.setActivationRowDueDate('${row.id}', this.value)">
-                        <span class="tiny" style="color:${row.estimatedHours ? 'var(--text-muted, #94a3b8)' : 'inherit'};">${row.estimatedHours ? `est. ${row.estimatedHours}h` : ''}</span>
+                        <label class="tiny muted" style="display:inline-flex; align-items:center; gap:4px;" title="How long this task will take. Counts toward the day's load (Green / Yellow / Red / Closed).">Est.
+                            <input type="number" min="0" step="0.25" class="tiny modal-input" value="${row.estimatedHours ?? ''}" placeholder="1"
+                                   style="width:64px; padding:3px 6px;" onchange="OL.setActivationRowEstimate('${row.id}', this.value)"> h</label>
                     </div>
                     ${(() => { const l = rowLoad(st, row); if (!l || l.level === 'green') return ''; const [c, name] = LEVEL_STYLE[l.level]; return `<div class="tiny" style="color:${c}; margin-top:2px;"><b>${name}</b>: ${l.hours.toFixed(1)}h already booked that day${l.over ? ` — past what ${esc(state.clients?.[st.clientId]?.meta?.status || 'this client')} clients can be given (${LEVEL_STYLE[l.limit][1]} at most)` : ''}.</div>`; })()}
                     ${!row.dueDate && row.dueDateReason === 'no_capacity_in_window' ? `<div class="tiny" style="color:#ef4444; margin-top:2px;">No open slot found in the next ${getOlSettings().scheduling.windowDays} working days — ${esc(row.reviewer || 'a person')} needs to pick a date manually.</div>` : ''}
@@ -232,11 +255,28 @@ OL.setActivationRowAssignee = function(rowId, value) {
     }
 };
 
+OL.setActivationRowEstimate = function(rowId, value) {
+    const st = OL._activationReviewState;
+    const row = st?.plan.find((r) => r.id === rowId);
+    if (!row) return;
+    const n = parseFloat(value);
+    row.estimatedHours = Number.isFinite(n) && n >= 0 ? n : estimateHoursFromFee(0);
+    // A longer task can need a different day: re-pick the date unless one was chosen by hand.
+    if (row.kind === 'implementation' && row.assignee && !row.dueDateManual) {
+        const slot = findFirstAvailableDate({ calendarEvents: st.calendarEvents, tasks: st.existingTasks, assignee: row.assignee, estimatedHours: row.estimatedHours, clientStatus: state.clients?.[st.clientId]?.meta?.status, config: getOlSettings().scheduling });
+        row.dueDate = slot.date;
+        row.dueDateReason = slot.date ? null : slot.reason;
+        row.reviewer = slot.date ? '' : (slot.reviewer || '');
+    }
+    OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
+};
+
 OL.setActivationRowDueDate = function(rowId, value) {
     const st = OL._activationReviewState;
     const row = st?.plan.find((r) => r.id === rowId);
     if (!row) return;
     row.dueDate = value;
+    row.dueDateManual = true;
     row.dueDateReason = null;   // a manually picked date isn't "no capacity found" anymore, whatever it was before
     OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());   // the day's load flag depends on the date
 };

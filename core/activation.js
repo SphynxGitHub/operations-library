@@ -24,7 +24,7 @@
 
 import { addLink } from './task-links.js';
 import { assigneeForRole } from './testing.js';
-import { findFirstAvailableDate, DEFAULT_TASK_ESTIMATE_HOURS } from './scheduling.js';
+import { findFirstAvailableDate, estimateHoursFromFee } from './scheduling.js';
 import { getOlSettings } from './ol-settings.js';
 
 const lc = (v) => String(v ?? '').toLowerCase();
@@ -99,7 +99,7 @@ export function previewClientAsks({ item, resources, requestType, resourceType, 
 //   resourceId, resourceName, assignee, included }. "included" is what the review screen's checkboxes bind
 // to — everything starts true (the SOP loads as-is), a human toggles what they don't want, or adds a row
 // with templateId: null for something the SOP didn't call for.
-export function buildActivationPlan({ item, resources, requestType, resourceType, askTemplates, client, roles, assigneeByType, uid, calendarEvents = [], existingTasks = [] }) {
+export function buildActivationPlan({ item, resources, requestType, resourceType, askTemplates, client, roles, assigneeByType, uid, calendarEvents = [], existingTasks = [], feeByResourceId = {}, requestFee = 0 }) {
     const title = item?.name || resources?.[0]?.name || 'Request';
     const plan = [];
 
@@ -113,7 +113,8 @@ export function buildActivationPlan({ item, resources, requestType, resourceType
         const implRole = (roles || []).find((r) => /implement/i.test(String(r?.name || '')));
         const requestImpl = implRole && item?.roleAssignments ? String(item.roleAssignments[implRole.id] || '').trim() : '';
         const assignee = requestImpl || suggestAssignee(client, roles, requestType, assigneeByType);
-        const estimatedHours = DEFAULT_TASK_ESTIMATE_HOURS;
+        // Estimated hours = the fee / 200 (a setting): that resource's fee, or the whole request's when it has no resources.
+        const estimatedHours = estimateHoursFromFee(res.id ? feeByResourceId[String(res.id)] : requestFee, getOlSettings().scheduling);
         // Auto-slotted against the same growing task list each row adds to
         // (see below), so two implementation rows in one plan for the same
         // assignee don't both get suggested the same already-full day.

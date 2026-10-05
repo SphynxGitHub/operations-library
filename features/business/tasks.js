@@ -1496,6 +1496,16 @@ OL.applyBulkTaskEdit = function() {
     OL.refreshTaskView();
 };
 
+OL.setTaskEstimate = function(clientId, taskId, value) {
+    updateAndSync(() => {
+        const client = state.clients?.[clientId];
+        const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId));
+        if (!task) return;
+        const n = parseFloat(value);
+        task.estimatedHours = Number.isFinite(n) && n >= 0 ? n : null;   // blank = back to the 1h default
+    }, clientId);
+};
+
 OL.closePopoverDropdown = function(e) {
     const existing = document.getElementById('task-popover-dropdown');
     if (!existing) return;
@@ -2337,6 +2347,10 @@ OL.renderInContextTaskModal = function(client, task) {
                                 ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<option value="custom" selected>${esc(OL.describeRecurrence(task.recurrence))}</option>` : ''}
                             </select>
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
+                        </div>
+                        <div title="How long this task will take. Counts toward the day's load in scheduling and the Calendar Availability view. Blank counts as 1h.">
+                            <strong class="muted">Est. hours:</strong>
+                            <input type="number" min="0" step="0.25" class="modal-input tiny" style="width:70px; display:inline-block; padding:2px 6px;" value="${task.estimatedHours ?? ''}" placeholder="1" onchange="OL.setTaskEstimate('${client?.id}', '${task.id}', this.value)">
                         </div>
                         <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(2)}h</span></div>
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>

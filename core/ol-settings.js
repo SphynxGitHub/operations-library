@@ -65,6 +65,8 @@ export const DEFAULT_OL_SETTINGS = {
         // EVERY day the automation checks (today and any later day). Closed is never allowed.
         maxTierByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
         maxTierDefault: 'green',
+        // Estimated hours for a task = its fee / this number (the buffer is built in). 0 = fall back to 1h per task.
+        feePerEstimatedHour: 200,
         windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
         // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
         // assigned to (approving their own task); otherwise the fallback.

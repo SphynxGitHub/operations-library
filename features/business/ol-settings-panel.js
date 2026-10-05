@@ -102,6 +102,7 @@ OL.renderOlSettingsPanel = function() {
                 field('Everyone else', tierSelect('os-sc-other', sc.maxTierDefault)) +
             `</div>` +
             `<div class="os-row">${field('Look ahead (working days)', numIn('os-sc-window', sc.windowDays), 'Starts today, then each next day.')}` +
+                field('Fee per estimated hour ($)', numIn('os-sc-feehr', sc.feePerEstimatedHour), 'A task\'s estimated hours = its fee ÷ this. Set 200 against a higher billing rate for a buffer.') +
                 field('If nothing fits, ask', personSelect('os-sc-reviewer', sc.reviewer, 'The person the task is assigned to'), 'They pick the date by hand.') +
                 field('…or, if it has no named person', personSelect('os-sc-fallback', resolveMember(sc.fallbackReviewer), 'No one'), 'Used when the task is assigned to "Sphynx Task" or no one.') + `</div>`)}
 
@@ -145,6 +146,7 @@ OL.saveOlSettings = function() {
             greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,
             maxTierByStatus: { ...(cur.scheduling.maxTierByStatus || {}), 'Ongoing Maintenance': v('os-sc-om'), 'White Glove': v('os-sc-wg') },
             maxTierDefault: v('os-sc-other'),
+            feePerEstimatedHour: Math.max(0, num('os-sc-feehr', d.scheduling.feePerEstimatedHour)),
             windowDays: Math.max(1, Math.round(num('os-sc-window', d.scheduling.windowDays))), reviewer: v('os-sc-reviewer'), fallbackReviewer: v('os-sc-fallback'),
         },
         emailLinkableResourceTypes: [...document.querySelectorAll('.os-link-type:checked')].map((el) => el.dataset.type),

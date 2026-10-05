@@ -1,4 +1,7 @@
 import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
+import { meetingHoursForDay, queuedTaskHoursForDay, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { isGenericAssignee } from '../../core/task-assignees.js';
+import { loadWorkload } from '../../core/workload.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { MEETING_CATEGORIES, eventBillableFromRules, syncEventBillableFromRules } from '../../core/billable.js';
 
@@ -67,7 +70,7 @@ OL.renderBusinessCalendar = function() {
         
         // Always load list events AND grid month events if initialized directly into Calendar view
         const loadPromise = (OL.calendarState.view === 'calendar')
-            ? Promise.all([OL.loadCalendarEvents(), OL.loadCalendarGridMonth()])
+            ? Promise.all([OL.loadCalendarEvents(), OL.calendarState.calendarSubView === 'availability' ? OL.loadAvailabilityEvents() : OL.loadCalendarGridMonth()])
             : OL.loadCalendarEvents();
 
         loadPromise.then(() => OL.renderBusinessCalendar());
@@ -157,6 +160,7 @@ OL.renderBusinessCalendar = function() {
                                 <button class="btn tiny ${OL.calendarState.calendarSubView === 'month' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('month')">Month</button>
                                 <button class="btn tiny ${OL.calendarState.calendarSubView === 'week' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('week')">Week</button>
                                 <button class="btn tiny ${OL.calendarState.calendarSubView === 'day' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('day')">Day</button>
+                                <button class="btn tiny ${OL.calendarState.calendarSubView === 'availability' ? 'primary' : 'ghost'}" style="padding:2px 8px; font-size:11px;" onclick="OL.setCalendarSubView('availability')" title="Which days can take a new project, by how booked each person is">Availability</button>
                             </div>
                         ` : ''}
                     </div>
@@ -179,7 +183,9 @@ OL.renderBusinessCalendar = function() {
 
                 ${OL.calendarState.view === 'list' 
                     ? OL.renderCalendarList(OL.applyCalendarFilters(events)) 
-                    : (OL.calendarState.calendarSubView === 'week' 
+                    : (OL.calendarState.calendarSubView === 'availability'
+                        ? OL.renderCalendarAvailability()
+                    : OL.calendarState.calendarSubView === 'week' 
                         ? OL.renderCalendarWeek() 
                         : OL.calendarState.calendarSubView === 'day' 
                             ? OL.renderCalendarDay() 
@@ -468,7 +474,7 @@ OL.setCalendarView = function(view) {
     localStorage.setItem('calendar_view', view);
 
     if (view === 'calendar') {
-        OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
+        (OL.calendarState.calendarSubView === 'availability' ? OL.loadAvailabilityEvents() : OL.loadCalendarGridMonth()).then(() => OL.renderBusinessCalendar());
     } else {
         OL.renderBusinessCalendar();
     }
@@ -493,6 +499,11 @@ OL.setCalendarSubView = function(subView) {
         OL.calendarState.gridMonth = d;
     }
 
+    if (subView === 'availability') {
+        OL.calendarState.availStart = null;   // back to this week
+        OL.loadAvailabilityEvents().then(() => OL.renderBusinessCalendar());
+        return;
+    }
     OL.loadCalendarGridMonth().then(() => OL.renderBusinessCalendar());
 };
 
@@ -632,6 +643,141 @@ OL.loadCalendarEvents = async function() {
     await OL.applyEventTimeRecalculation(state.master.googleCalendarEvents);
     // Events nobody toggled by hand follow the Billable Rules.
     await syncEventBillableFromRules(state.master.googleCalendarEvents);
+};
+
+
+// -------------------------------------------------------------
+// AVAILABILITY VIEW — which days can take a new project
+// -------------------------------------------------------------
+// Uses the SAME numbers and cut-offs as the activation auto-scheduler (core/scheduling.js + Templates & settings):
+// a person's day = meetings + tasks already due that day (all projects), put into Green / Yellow / Red / Closed (gray).
+// A day is "open" for a project status when at least one named person is at or under the level that status may use
+// (Ongoing Maintenance up to Red, White Glove up to Yellow, everyone else Green by default).
+const AVAIL_WEEKS = 4;
+const LEVEL_STYLE = {
+    green:  { color: '#16a34a', label: 'Green' },
+    yellow: { color: '#ca8a04', label: 'Yellow' },
+    red:    { color: '#ef4444', label: 'Red' },
+    closed: { color: '#6b7280', label: 'Closed' }
+};
+
+const availMonday = (d) => {
+    const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+    return m;
+};
+const availKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+OL.loadAvailabilityEvents = async function() {
+    const start = OL.calendarState.availStart ? new Date(OL.calendarState.availStart) : availMonday(new Date());
+    const end = new Date(start); end.setDate(end.getDate() + AVAIL_WEEKS * 7);
+    // Every meeting in the window and every project's tasks (opening projects that were not loaded yet).
+    const load = await loadWorkload(start, end);
+    OL._availabilityEvents = load.events;
+    OL._availabilityTasks = load.tasks;
+};
+
+OL.shiftAvailability = function(deltaWeeks) {
+    const cur = OL.calendarState.availStart ? new Date(OL.calendarState.availStart) : availMonday(new Date());
+    cur.setDate(cur.getDate() + deltaWeeks * 7);
+    OL.calendarState.availStart = cur;
+    OL.loadAvailabilityEvents().then(() => OL.renderBusinessCalendar());
+};
+
+OL.availabilityToday = function() {
+    OL.calendarState.availStart = null;
+    OL.loadAvailabilityEvents().then(() => OL.renderBusinessCalendar());
+};
+
+OL.renderCalendarAvailability = function() {
+    const cfg = getOlSettings().scheduling;
+    const start = OL.calendarState.availStart ? new Date(OL.calendarState.availStart) : availMonday(new Date());
+    const todayKey = availKey(new Date());
+
+    const people = (state.master?.sphynxTeam || []).map(m => String(m.name || '').trim()).filter(n => n && !isGenericAssignee(n));
+    const events = OL._availabilityEvents || [];
+    const tasks = OL._availabilityTasks || [];
+
+    // The statuses that have their own limit, then everyone else.
+    const buckets = [
+        ...Object.keys(cfg.maxTierByStatus || {}).map(st => ({ label: st, limit: maxTierFor(st, cfg) })),
+        { label: 'Everyone else', limit: maxTierFor('', cfg) }
+    ];
+    const limitName = (t) => LEVEL_STYLE[t]?.label || t;
+    const idx = (t) => TIER_ORDER.indexOf(t);
+
+    const rangeLabel = (() => {
+        const end = new Date(start); end.setDate(end.getDate() + AVAIL_WEEKS * 7 - 3);
+        return `${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    })();
+
+    const legend = ['green', 'yellow', 'red', 'closed'].map(t => {
+        const range = t === 'green' ? `under ${cfg.greenUnderHours}h`
+            : t === 'yellow' ? `${cfg.greenUnderHours}h–${cfg.yellowUnderHours}h`
+            : t === 'red' ? `${cfg.yellowUnderHours}h–${cfg.redUnderHours}h`
+            : `${cfg.redUnderHours}h+`;
+        return `<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:10px; height:10px; border-radius:50%; background:${LEVEL_STYLE[t].color};"></span>${LEVEL_STYLE[t].label} <span class="muted">${range}</span></span>`;
+    }).join('');
+
+    const rules = buckets.map(b => `<span><b>${esc(b.label)}</b>: up to ${limitName(b.limit)}</span>`).join(' &nbsp;·&nbsp; ');
+
+    const weeks = [];
+    for (let w = 0; w < AVAIL_WEEKS; w++) {
+        const days = [];
+        for (let i = 0; i < 5; i++) { const d = new Date(start); d.setDate(d.getDate() + w * 7 + i); days.push(d); }
+        weeks.push(days);
+    }
+
+    const cell = (d) => {
+        const key = availKey(d);
+        const past = key < todayKey;
+        const isToday = key === todayKey;
+        const rows = people.map(name => {
+            const meet = meetingHoursForDay(events, name, key);
+            const queued = queuedTaskHoursForDay(tasks, name, key);
+            const hours = meet + queued;
+            const tier = loadTier(hours, cfg);
+            return { name, hours, meet, queued, tier };
+        });
+        const open = buckets.map(b => ({ label: b.label, ok: rows.some(r => r.tier !== 'closed' && idx(r.tier) <= idx(b.limit)) }));
+        const best = rows.length ? rows.reduce((a, r) => (idx(r.tier) < idx(a) ? r.tier : a), 'closed') : 'closed';
+        const edge = LEVEL_STYLE[best].color;
+        return `
+            <div style="min-width:0; padding:6px; background:var(--panel-soft, rgba(255,255,255,0.02)); border-top:3px solid ${past ? 'var(--line)' : edge}; opacity:${past ? 0.5 : 1};">
+                <div class="tiny bold" style="margin-bottom:5px; ${isToday ? 'color:var(--accent);' : ''}">${d.toLocaleDateString([], { weekday: 'short' })} ${d.getDate()}</div>
+                <div style="display:grid; gap:2px; margin-bottom:6px;">
+                    ${rows.map(r => `
+                        <div class="tiny" title="${esc(r.name)}: ${r.meet.toFixed(1)}h meetings + ${r.queued.toFixed(1)}h tasks = ${r.hours.toFixed(1)}h (${LEVEL_STYLE[r.tier].label})" style="display:flex; align-items:center; gap:5px; min-width:0;">
+                            <span style="width:9px; height:9px; border-radius:50%; flex:none; background:${LEVEL_STYLE[r.tier].color};"></span>
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${esc(r.name.split(' ')[0])}</span>
+                            <span class="muted">${r.hours.toFixed(1)}h</span>
+                        </div>`).join('') || '<div class="tiny muted">No team members</div>'}
+                </div>
+                ${past ? '' : `
+                <div class="tiny" style="border-top:1px solid var(--line); padding-top:4px; display:grid; gap:1px;">
+                    ${open.map(o => `<div style="color:${o.ok ? '#16a34a' : '#6b7280'};">${o.ok ? '✓' : '✕'} ${esc(o.label)}</div>`).join('')}
+                </div>`}
+            </div>`;
+    };
+
+    return `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; gap:6px;">
+                <button class="btn tiny soft" onclick="OL.shiftAvailability(-1)"><i data-lucide="chevron-left"></i> Prev</button>
+                <button class="btn tiny soft" onclick="OL.availabilityToday()">This week</button>
+            </div>
+            <strong style="font-size:14px;">Availability for new projects · ${rangeLabel}</strong>
+            <button class="btn tiny soft" onclick="OL.shiftAvailability(1)">Next <i data-lucide="chevron-right"></i></button>
+        </div>
+        <div class="tiny" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px;">${legend}</div>
+        <div class="tiny muted" style="margin-bottom:12px;">A project can be given a day when at least one person on it is at or under the level its status allows — ${rules}. Hours are meetings plus tasks already due, across all projects. Cut-offs and limits are set in Automations → Templates &amp; settings.</div>
+        <div style="display:grid; gap:10px;">
+            ${weeks.map(days => `
+                <div style="display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+                    ${days.map(cell).join('')}
+                </div>`).join('')}
+        </div>
+    `;
 };
 
 // -------------------------------------------------------------
