@@ -11,7 +11,7 @@
 // per-day cap), so it is "the next day" unless that day is too busy for that client. A task spread over several days
 // only has the days from the full one onward re-planned; the days before it stay put.
 import { taskAssignees, isGenericAssignee } from './task-assignees.js';
-import { dailyLoadHours, taskDaySlots, findFirstAvailableDate, memberDayHours } from './scheduling.js';
+import { dailyLoadHours, taskDaySlots, findFirstAvailableDate, memberLimitHours } from './scheduling.js';
 
 const localDate = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 
@@ -49,7 +49,7 @@ export function planRollovers({ events = [], entries = [], cfg, todayKey, maxMov
                 const total = Math.round(dailyLoadHours(events, tasks, person, day) * 100) / 100;
                 // The limit is this person's available hours that day (the standard 7h unless their profile says otherwise);
                 // on a day off it is 0, so every task that can move does.
-                const limit = memberDayHours(person, day, cfg);
+                const limit = memberLimitHours(person, day, cfg);
                 if (limit > 0 && total < limit) break;
 
                 const candidates = work

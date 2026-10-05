@@ -66,10 +66,9 @@ OL.renderSphynxTeamPage = function() {
                         <span style="display:flex; align-items:center; gap:6px; min-width:0;"><i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--accent); flex-shrink:0;"></i><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(OL.memberScheduleSummary(m))}</span></span>
                         <button class="btn tiny soft" style="flex-shrink:0; font-size:10px; padding:3px 8px;" onclick="OL.openMemberAvailability('${m.id}')" title="Available hours per weekday and days off. Used by scheduling and the Calendar Availability view.">Availability</button>
                     </div>
-                    <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         <span class="pill tiny soft monospace" style="font-size:11px; flex-shrink:0; font-weight:bold;">                             $${m.rate || 150}/hr
-                        </span>
+                    <!-- Footer: Rate & Clean Horizontal Action Controls -->                     <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; gap:8px; flex-wrap:nowrap; overflow-x:auto;">                         
                         
-                        <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                        <div style="display:flex; gap:6px; align-items:center; flex-shrink:0; margin-left:auto;">
                             ${window.FORCE_ADMIN && m.authUserId === state.currentUser?.id ? `
                                 <span class="tiny bold" style="color:#48bb78; white-space:nowrap;" title="Your admin login is linked to this card">This is you</span>
                             ` : window.FORCE_ADMIN ? `
@@ -315,7 +314,8 @@ window.OL.renderSphynxTeamPage = OL.renderSphynxTeamPage;
 // member.schedule = { hours: { mon, tue, wed, thu, fri }, offDates: [{ id, from, to, note }] }
 // Blank hours = the standard day (the roll-over limit, 7h); 0 = does not work that weekday. Read by core/scheduling.js,
 // so auto-scheduling, the roll-over and the Calendar Availability view all follow it. Saved straight away (no Save button).
-const SCHED_DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri']];
+const SCHED_DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
+const isWeekendDay = (k) => k === 'sat' || k === 'sun';
 const fmtDay = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' }); };
 const fmtRange = (o) => (!o.to || o.to === o.from) ? fmtDay(o.from) : `${fmtDay(o.from)} – ${fmtDay(o.to)}`;
 const localKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -339,18 +339,18 @@ OL.openMemberAvailability = function(memberId) {
     const std = standardDayHours(getOlSettings().scheduling);
 
     OL.showOverlayModal(`
-        <div style="padding:24px; max-width:480px; width:100%;" onclick="event.stopPropagation()">
+        <div style="padding:8px 12px; width:100%; box-sizing:border-box;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:16px;">
                 <h3 style="margin:0; display:flex; align-items:center; gap:8px;"><i data-lucide="calendar-clock" style="width:20px;height:20px;color:var(--accent);"></i>Availability — ${esc(m.name)}</h3>
                 <button class="btn tiny soft" onclick="OL.closeModal(); OL.renderSphynxTeamPage();">✕</button>
             </div>
 
             <div class="bold tiny uppercase muted" style="margin-bottom:6px;">Available hours per day</div>
-            <div class="tiny muted" style="margin-bottom:8px;">Leave blank for the standard ${std}h day. Use 0 for a day ${esc(m.name.split(' ')[0])} doesn't work. Fewer hours make a day fill up sooner: the Green / Yellow / Red cut-offs and the daily roll-over limit scale to match.</div>
-            <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; margin-bottom:18px;">
+            <div class="tiny muted" style="margin-bottom:8px;">Weekdays: leave blank for the standard ${std}h day, or use 0 for a day ${esc(m.name.split(' ')[0])} doesn't work. Weekends: blank means not working; enter hours to schedule on them. Fewer hours make a day fill up sooner: the Green / Yellow / Red cut-offs and the daily roll-over limit scale to match.</div>
+            <div style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:8px; margin-bottom:18px;">
                 ${SCHED_DAYS.map(([k, label]) => `
                     <label class="tiny muted" style="display:grid; gap:3px; text-align:center;">${label}
-                        <input type="number" min="0" max="24" step="0.5" class="modal-input tiny" style="width:100%; padding:4px 6px; text-align:center;" placeholder="${std}"
+                        <input type="number" min="0" max="24" step="0.5" class="modal-input tiny" style="width:100%; padding:4px 6px; text-align:center;" placeholder="${isWeekendDay(k) ? 'off' : std}"
                                value="${sched.hours && sched.hours[k] !== undefined && sched.hours[k] !== null ? esc(String(sched.hours[k])) : ''}"
                                onchange="OL.setMemberWeekdayHours('${m.id}', '${k}', this.value)">
                     </label>`).join('')}

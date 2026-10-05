@@ -772,6 +772,9 @@ OL.renderCalendarAvailability = function() {
     const hidden = availHidden();
     const people = roster.filter(m => !hidden.has(memberKey(m))).map(m => String(m.name).trim());
     const std = standardDayHours(cfg);
+    // Saturday and Sunday columns appear only when someone shown works weekends (hours set on their profile).
+    const worksWeekends = roster.some(m => !hidden.has(memberKey(m)) && ['sat', 'sun'].some(k => Number(m.schedule?.hours?.[k]) > 0));
+    const dayCount = worksWeekends ? 7 : 5;
     const events = OL._availabilityEvents || [];
     const tasks = OL._availabilityTasks || [];
 
@@ -784,7 +787,7 @@ OL.renderCalendarAvailability = function() {
     const idx = (t) => TIER_ORDER.indexOf(t);
 
     const rangeLabel = (() => {
-        const end = new Date(start); end.setDate(end.getDate() + AVAIL_WEEKS * 7 - 3);
+        const end = new Date(start); end.setDate(end.getDate() + (AVAIL_WEEKS - 1) * 7 + dayCount - 1);
         return `${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
     })();
 
@@ -801,7 +804,7 @@ OL.renderCalendarAvailability = function() {
     const weeks = [];
     for (let w = 0; w < AVAIL_WEEKS; w++) {
         const days = [];
-        for (let i = 0; i < 5; i++) { const d = new Date(start); d.setDate(d.getDate() + w * 7 + i); days.push(d); }
+        for (let i = 0; i < dayCount; i++) { const d = new Date(start); d.setDate(d.getDate() + w * 7 + i); days.push(d); }
         weeks.push(days);
     }
 
@@ -859,7 +862,7 @@ OL.renderCalendarAvailability = function() {
         <div class="tiny muted" style="margin-bottom:12px;">A project can be given a day when at least one person on it is at or under the level its status allows — ${rules}. Hours are meetings plus tasks already due, across all projects. A person with fewer or more available hours on their team profile has the cut-offs scaled to match, and a day off is gray. Hidden people are not counted. Cut-offs and limits are set in Automations → Templates &amp; settings.</div>
         <div style="display:grid; gap:10px;">
             ${weeks.map(days => `
-                <div style="display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+                <div style="display:grid; grid-template-columns: repeat(${dayCount}, minmax(0, 1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
                     ${days.map(cell).join('')}
                 </div>`).join('')}
         </div>

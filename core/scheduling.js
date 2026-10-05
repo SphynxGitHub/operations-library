@@ -77,16 +77,26 @@ function maxPerDay(cfg) {
     return m > 0 ? m : Infinity;
 }
 
-export function spreadBackFrom(dueKey, hours, cap) {
+export function spreadBackFrom(dueKey, hours, cap, isWorkday) {
+    // The days a task is worked back over: the person's working days (weekends only if they work them), else Mon-Fri.
+    const work = (d) => (typeof isWorkday === 'function' ? isWorkday(toDayKey(d)) : !isWeekend(d));
+    const stepBack = (cursor) => {
+        for (let i = 0; i < 400; i++) { cursor.setDate(cursor.getDate() - 1); if (work(cursor)) return; }
+        // a person with no working days at all: fall back to plain weekdays so this still ends
+        do { cursor.setDate(cursor.getDate() - 1); } while (isWeekend(cursor));
+    };
     const slots = [];
     let remaining = hours;
     let cursor = fromDayKey(dueKey);
-    while (isWeekend(cursor)) cursor.setDate(cursor.getDate() - 1);
+    if (!work(cursor)) {
+        // a due date that is not a working day: start from the working day before it
+        stepBack(cursor);
+    }
     for (let guard = 0; remaining > 0.001 && guard < 200; guard++) {
         const put = Math.min(cap, remaining);
         slots.unshift({ date: toDayKey(cursor), hours: Math.round(put * 100) / 100 });
         remaining -= put;
-        do { cursor.setDate(cursor.getDate() - 1); } while (isWeekend(cursor));
+        stepBack(cursor);
     }
     return slots;
 }
@@ -100,7 +110,8 @@ export function taskDaySlots(task, cfg) {
     const saved = Array.isArray(task.workSlots) ? task.workSlots : [];
     const total = saved.reduce((sum, x) => sum + (Number(x.hours) || 0), 0);
     if (saved.length && saved[saved.length - 1].date === due && Math.abs(total - hours) < 0.01) return saved.map((x) => ({ date: String(x.date).slice(0, 10), hours: Number(x.hours) || 0 }));
-    return spreadBackFrom(due, hours, cap);
+    const who = taskAssignees(task)[0];
+    return spreadBackFrom(due, hours, cap, who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : null);
 }
 
 // Queued task hours for one assignee on one day — every open task (not this one being scheduled) with hours on that
@@ -148,8 +159,23 @@ export function isOffDate(schedule, dayKey) {
     return (schedule?.offDates || []).some((o) => o && o.from && dayKey >= String(o.from).slice(0, 10) && dayKey <= String(o.to || o.from).slice(0, 10));
 }
 
-// Hours this person has available that day (0 = off).
+const isWeekendKey = (dayKey) => { const d = fromDayKey(dayKey).getDay(); return d === 0 || d === 6; };
+
+// Hours this person has available that day (0 = off). Weekdays default to the standard day; Saturday and Sunday are
+// off unless the profile gives them hours.
 export function memberDayHours(name, dayKey, cfg = getOlSettings().scheduling) {
+    const sched = memberSchedule(name, cfg);
+    if (isOffDate(sched, dayKey)) return 0;
+    const h = sched?.hours?.[WEEKDAY_KEYS[fromDayKey(dayKey).getDay()]];
+    if (h === undefined || h === null || h === '') return isWeekendKey(dayKey) ? 0 : standardDayHours(cfg);
+    const n = Number(h);
+    return Number.isFinite(n) && n >= 0 ? n : (isWeekendKey(dayKey) ? 0 : standardDayHours(cfg));
+}
+
+// The most a person's day may hold before the roll-over moves tasks off it. Unlike memberDayHours, a weekend with no hours
+// set is NOT treated as off here (a task someone dated on a Saturday by hand is left alone): only a day off or an explicit
+// 0 is 0.
+export function memberLimitHours(name, dayKey, cfg = getOlSettings().scheduling) {
     const sched = memberSchedule(name, cfg);
     if (isOffDate(sched, dayKey)) return 0;
     const h = sched?.hours?.[WEEKDAY_KEYS[fromDayKey(dayKey).getDay()]];
@@ -213,10 +239,10 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
     let cursor = startDate ? new Date(startDate) : new Date();
     cursor.setHours(0, 0, 0, 0);
 
-    // Weekends, days off and 0h weekdays are skipped without using up the look-ahead; `steps` only stops a person who is
+    // Days off, 0h days and weekends (unless that person works them) are skipped without using up the look-ahead; `steps` only stops a person who is
     // never available from looping forever.
     for (let checked = 0, steps = 0; checked <= span && steps < 400; steps++) {
-        if (!isWeekend(cursor)) {
+        {
             const dayKey = toDayKey(cursor);
             if (memberDayHours(assignee, dayKey, cfg) > 0) {
                 const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
