@@ -65,6 +65,9 @@ export const DEFAULT_OL_SETTINGS = {
         // EVERY day the automation checks (today and any later day). Closed is never allowed.
         maxTierByStatus: { 'Ongoing Maintenance': 'red', 'White Glove': 'yellow' },
         maxTierDefault: 'green',
+        // Follow-up tasks (the drafting follow-up, review check-ins, status notes, anything titled "Follow up…") count this many
+        // hours when they have no estimate of their own; every other task without one counts 1h.
+        followUpEstimateHours: 0.25,
         // Estimated hours for a task = its fee / this number (the buffer is built in). 0 = fall back to 1h per task.
         feePerEstimatedHour: 200,
         // The most hours of ONE task counted on a single day. A task estimated longer than this is spread over several

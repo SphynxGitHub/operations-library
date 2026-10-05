@@ -1,4 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
+import { taskEstimatedHours } from '../../core/scheduling.js';
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -1502,7 +1503,7 @@ OL.setTaskEstimate = function(clientId, taskId, value) {
         const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId));
         if (!task) return;
         const n = parseFloat(value);
-        task.estimatedHours = Number.isFinite(n) && n >= 0 ? n : null;   // blank = back to the 1h default
+        task.estimatedHours = Number.isFinite(n) && n >= 0 ? n : null;   // blank = back to the default (0.25h follow-up, 1h otherwise)
     }, clientId);
 };
 
@@ -2349,9 +2350,9 @@ OL.renderInContextTaskModal = function(client, task) {
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
                         ${task.autoRolls?.length ? (() => { const r = task.autoRolls[task.autoRolls.length - 1]; return `<div class="tiny muted" style="grid-column:1 / -1;">Moved automatically from ${esc(String(r.from || '').slice(0, 10))} to ${esc(String(r.to || '').slice(0, 10))}: that day reached the daily limit.</div>`; })() : ''}
-                        <div title="How long this task will take. Counts toward the day's load in scheduling and the Calendar Availability view. Blank counts as 1h.">
+                        <div title="How long this task will take. Counts toward the day's load in scheduling and the Calendar Availability view. Blank counts as the default: 0.25h for a follow-up task, 1h for anything else.">
                             <strong class="muted">Est. hours:</strong>
-                            <input type="number" min="0" step="0.25" class="modal-input tiny" style="width:70px; display:inline-block; padding:2px 6px;" value="${task.estimatedHours ?? ''}" placeholder="1" onchange="OL.setTaskEstimate('${client?.id}', '${task.id}', this.value)">
+                            <input type="number" min="0" step="0.25" class="modal-input tiny" style="width:70px; display:inline-block; padding:2px 6px;" value="${task.estimatedHours ?? ''}" placeholder="${taskEstimatedHours({ ...task, estimatedHours: null })}" onchange="OL.setTaskEstimate('${client?.id}', '${task.id}', this.value)">
                         </div>
                         <div><strong class="muted">Total Logged Time:</strong> <span style="color:var(--accent); font-weight:bold;">${Number(task.loggedHours || 0).toFixed(2)}h</span></div>
                         <div><strong class="muted">Deliverable Category:</strong> ${esc(task.category || 'General')}</div>

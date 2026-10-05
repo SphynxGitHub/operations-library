@@ -33,9 +33,25 @@ export const MAX_DAILY_HOURS = WORKDAY_HOURS * CAPACITY_RATIO;   // 6.4 — no l
 // Anything without one counts as this, rather than as zero load.
 export const DEFAULT_TASK_ESTIMATE_HOURS = 1;
 
-export function taskEstimatedHours(task) {
+// A follow-up task: the automatic ones (drafting follow-up, review check-ins, status notes) by how they were made, and
+// anything else titled "Follow up…" / "Follow-up…".
+const FOLLOW_UP_CREATORS = ['followup', 'drafting-followup'];
+export function isFollowUpTask(task) {
+    if (!task) return false;
+    if (task.draftingFollowUpKey || task.reviewFollowUpKey) return true;
+    if (FOLLOW_UP_CREATORS.includes(String(task.createdBy || '').toLowerCase())) return true;
+    return /follow[\s-]?up/i.test(`${task.title || ''} ${task.name || ''}`);
+}
+
+// The task's own estimate if it has one; otherwise 0.25h for a follow-up (a setting) and 1h for anything else.
+export function taskEstimatedHours(task, cfg) {
     const v = parseFloat(task?.estimatedHours);
-    return Number.isFinite(v) && v >= 0 ? v : DEFAULT_TASK_ESTIMATE_HOURS;
+    if (Number.isFinite(v) && v >= 0) return v;
+    if (isFollowUpTask(task)) {
+        const f = Number((cfg || getOlSettings().scheduling)?.followUpEstimateHours);
+        return Number.isFinite(f) && f >= 0 ? f : 0.25;
+    }
+    return DEFAULT_TASK_ESTIMATE_HOURS;
 }
 
 // Estimated hours from a fee: fee / feePerEstimatedHour (default $200 — sits under the billing rate, so it is a buffer).
@@ -104,7 +120,7 @@ export function spreadBackFrom(dueKey, hours, cap, isWorkday) {
 export function taskDaySlots(task, cfg) {
     const due = String(task?.dueDate || '').slice(0, 10);
     if (!due) return [];
-    const hours = taskEstimatedHours(task);
+    const hours = taskEstimatedHours(task, cfg);
     const cap = maxPerDay(cfg);
     if (!(hours > cap)) return [{ date: due, hours }];
     const saved = Array.isArray(task.workSlots) ? task.workSlots : [];
