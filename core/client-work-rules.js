@@ -32,7 +32,7 @@
 // now (ISO), uid, followUpEveryDays, staleDays, isOngoing(client) }.
 
 import { linksForTask, addLink } from './task-links.js';
-import { isTaskClosed, isClientWaitingStatus, isThirdPartyWaitingStatus } from './work-status.js';
+import { isTaskClosed, isClientWaitingStatus, isThirdPartyWaitingStatus, isDeveloperWaitingStatus, isOffsiteWaitingStatus } from './work-status.js';
 import { isClientFacing } from './request-tasks.js';
 import { isRoundApproved, isActiveItem, getCurrentRound, roundStatusOf } from './requests.js';
 import { isOngoing, hasTimeLogTab } from './maintenance.js';
@@ -163,21 +163,26 @@ export function reconcileBlockedTasks(client, ctx) {
     all.forEach((t) => {
         if (!t || !isSphynxWork(t, ctx)) return;
         const depTasks = dependencyClientTasks(client, t, ctx);
-        const waiting = isClientWaitingStatus(t.status);
+        const clientWaiting = isClientWaitingStatus(t.status);
+        // Pending Developer Update / Pending Third Party Support park the task too: the date is logged and removed the
+        // same way, and comes back when the status is changed (there are no client tasks to wait for).
+        const waiting = clientWaiting || isOffsiteWaitingStatus(t.status);
+        const who = clientWaiting ? 'the client' : (isDeveloperWaitingStatus(t.status) ? 'a developer' : 'a third party');
 
         if (waiting && !t.blockedOn) {
             // Just set to a client-waiting status (by hand or via a Dependency): log the due date, remove it,
             // note what it is waiting for.
-            const related = [...new Set([...relatedClientTasks(client, t, ctx).map((x) => x.id), ...depTasks.map((x) => x.id)])];
-            t.blockedOn = { since: ctx.now, status: t.status, dueDate: day(t.dueDate), taskIds: related, completed: {} };
+            const related = clientWaiting ? [...new Set([...relatedClientTasks(client, t, ctx).map((x) => x.id), ...depTasks.map((x) => x.id)])] : [];
+            t.blockedOn = { since: ctx.now, status: t.status, dueDate: day(t.dueDate), taskIds: clientWaiting ? related : [], completed: {} };
             (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'removed', dueDate: day(t.dueDate), status: t.status });
-            if (!isBlank(t.dueDate)) addComment(t, `Due date ${day(t.dueDate)} removed while waiting on the client (${t.status}). It comes back when the related client tasks are complete.`, ctx);
+            if (!isBlank(t.dueDate)) addComment(t, `Due date ${day(t.dueDate)} removed while waiting on ${who} (${t.status}). ${clientWaiting ? 'It comes back when the related client tasks are complete.' : 'It comes back when the status is changed.'}`, ctx);
             t.dueDate = '';
             out.blocked.push(t.id);
         } else if (waiting && t.blockedOn) {
             // Keep the list current: client tasks added after the flip, by request/resource or by Dependency,
             // are part of what it is waiting for.
             const b = t.blockedOn;
+            if (!clientWaiting) b.taskIds = [];   // now parked on a developer / third party: no client tasks to wait for
             // Moved to a different waiting status (e.g. Pending Client Review -> Pending Client Feedback) with a date
             // put back in the meantime: take it off again.
             if (b.status !== t.status) {
@@ -185,17 +190,17 @@ export function reconcileBlockedTasks(client, ctx) {
                 if (!isBlank(t.dueDate)) {
                     if (isBlank(b.dueDate)) b.dueDate = day(t.dueDate);
                     (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'removed', dueDate: day(t.dueDate), status: t.status });
-                    addComment(t, `Due date ${day(t.dueDate)} removed while waiting on the client (${t.status}).`, ctx);
+                    addComment(t, `Due date ${day(t.dueDate)} removed while waiting on ${who} (${t.status}).`, ctx);
                     t.dueDate = '';
                 }
             }
-            [...relatedClientTasks(client, t, ctx), ...depTasks].forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
+            if (clientWaiting) [...relatedClientTasks(client, t, ctx), ...depTasks].forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
             // Note when each one was completed, for the restored date.
             b.taskIds.forEach((id) => {
                 const c = all.find((x) => x.id === id);
                 if (c && !isOpen(c, ctx) && !b.completed[id]) b.completed[id] = day(c.completedAt || ctx.now);
             });
-            const done = b.taskIds.length > 0 && b.taskIds.every((id) => { const c = all.find((x) => x.id === id); return !c || !isOpen(c, ctx); });
+            const done = clientWaiting && b.taskIds.length > 0 && b.taskIds.every((id) => { const c = all.find((x) => x.id === id); return !c || !isOpen(c, ctx); });
             if (done) {
                 const latest = Object.values(b.completed).sort().pop() || '';
                 t.status = OPEN_STATUS;
@@ -268,8 +273,9 @@ export function openClientItems(client, ctx) {
 
 function staleTasks(client, ctx) {
     const days = ctx.staleDays || DEFAULT_STALE_DAYS;
-    return (client?.projectData?.clientTasks || []).filter((t) => t && isImplementationTask(t, ctx) && isOpen(t, ctx)
-        && !isClientWaitingStatus(t.status) && t.statusChangedAt && daysBetween(day(t.statusChangedAt), ctx.today) >= days);
+    return (client?.projectData?.clientTasks || []).filter((t) => t && isOpen(t, ctx) && !isClientWaitingStatus(t.status)
+        && (isImplementationTask(t, ctx) || (isOffsiteWaitingStatus(t.status) && isSphynxWork(t, ctx)))
+        && t.statusChangedAt && daysBetween(day(t.statusChangedAt), ctx.today) >= days);
 }
 
 function lastCommentText(task) {
@@ -318,14 +324,15 @@ export function reconcileClientFollowUp(client, ctx) {
         const existing = pd.clientTasks.find((p) => p && p.statusNoteFor === t.id && isOpen(p, ctx));
         if (existing) return;
         if (t.statusNoteAt && daysBetween(day(t.statusNoteAt), ctx.today) < (ctx.staleDays || DEFAULT_STALE_DAYS)) return;   // already asked recently
-        // Stalled waiting on a third party: the status-note prompt goes to whoever handles third-party
-        // follow-up (Anthony), not the task's own assignee — they're often waiting on a vendor, not sitting on
-        // it themselves. Stalled on Sphynx's own side still prompts the task's assignee, as before.
+        // Parked on a developer or third party (Pending Developer Update / Pending Third Party Support): the progress
+        // update is asked of the project's Communications assignee, who is the one talking to the client, not of the
+        // task's own assignee (often the developer or vendor). Stale work on Sphynx's own side still prompts its assignee.
         const thirdParty = isThirdPartyWaitingStatus(t.status);
-        const promptAssignee = thirdParty ? (ctx.thirdPartyStatusNoteAssignee || 'Anthony') : (t.assignee || null);
+        const offsite = isOffsiteWaitingStatus(t.status);
+        const promptAssignee = offsite ? communicationAssignee(client, ctx) : (t.assignee || null);
         const p = {
             id: ctx.uid(), title: `Status note: ${t.title || t.name}`, name: `Status note: ${t.title || t.name}`,
-            description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days${thirdParty ? ' — it\'s waiting on a third party' : ''}. Add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
+            description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days${offsite ? ` — it's waiting on ${thirdParty ? 'a third party' : 'a developer'}` : ''}. Get a progress update${offsite ? ' from them' : ''}, add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
             status: OPEN_STATUS, assignee: promptAssignee, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
             createdBy: 'followup', createdAt: ctx.now, statusNoteFor: t.id, links: [],
         };
@@ -887,11 +894,13 @@ function labelFor(client, task) {
 //                           (or on "Pending Client Review"), plus implementation tasks on "Pending Client Review".
 //                           {id, label, note} — label is what the email shows (the task's name for a client ask;
 //                           the resource/request name for an implementation task); note is only sidebar context.
-//   3. sphynxStalled      — implementation tasks stale 10+ days, still Sphynx's to do. {id, label, note} — note
-//                           is the implementer's status-note comment (see the stale-task prompt, above).
+//   3. sphynxStalled      — work parked on a developer (Pending Developer Update), plus stale implementation tasks that have
+//                           a written status note. {id, label, note, noNote?} — note is the latest written update (a status-note
+//                           comment or the note written when the task was parked); noNote marks a parked task with none yet.
 //   4. thirdPartyStalled  — the same, for tasks on a "Pending Third Party ..." status.
-// "Stalled" here always means a written status note exists — an implementer's comment on the prompt task this
-// module already creates — not just "old and Pending Sphynx Action", so nothing is shown without an actual note.
+// Everything parked on a developer / third party is listed (so the follow-up shows what is out of Sphynx's hands), but
+// only the ones with a written note start checked for the email. A parked task untouched for 10+ days also gets a
+// progress-update task for the project's Communications assignee (see reconcileClientFollowUp).
 // The email itself lists task NAMES only (sections 1 and 2 never include descriptions) — see sectionsText in
 // features/business/client-followup.js.
 export function followUpEmailData(client, ctx) {
@@ -935,25 +944,37 @@ export function followUpEmailData(client, ctx) {
 
     const sphynxStalled = [];
     const thirdPartyStalled = [];
+    const stamp = (v) => { const t = Date.parse(v || ''); return Number.isNaN(t) ? 0 : t; };
+    // The latest written status note per task: the status-note prompt's last comment, or the note written when the task
+    // was parked (features/business/waiting-prompt.js) — whichever is newer.
+    const noteFor = (target) => {
+        let best = { text: '', at: -1 };
+        all.filter((p) => p && p.statusNoteFor === target.id).forEach((p) => {
+            const c = (p.comments || []).filter((x) => x && !isBlank(x.text)).slice(-1)[0];
+            if (c && stamp(c.date) >= best.at) best = { text: String(c.text).trim(), at: stamp(c.date) };
+        });
+        if (!isBlank(target.waitingNote) && stamp(target.waitingNoteAt) >= best.at) best = { text: String(target.waitingNote).trim(), at: stamp(target.waitingNoteAt) };
+        return best.text;
+    };
+    const listed = new Set();
+    const addRow = (target, note, noNote) => {
+        const row = { id: target.id, label: labelFor(client, target), note, ...(noNote ? { noNote: true } : {}) };
+        (isThirdPartyWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);
+        listed.add(String(target.id));
+    };
+
+    // Everything parked on a developer or third party is on the follow-up, with its note when there is one (the
+    // sidebar flags the ones with none so a progress update can be asked for).
+    all.filter((w) => w && !w.askKind && !w.consolidatedFollowUp && !w.statusNoteFor && isOpen(w, ctx) && !isClientFacing(w, ctx) && isOffsiteWaitingStatus(w.status))
+        .forEach((w) => { const note = noteFor(w); addRow(w, note, !note); });
+
+    // Other stale Sphynx work with a written status note (no note yet means nothing to report).
     all.filter((p) => p && p.statusNoteFor).forEach((p) => {
         const target = all.find((x) => x.id === p.statusNoteFor);
-        if (!target || !isOpen(target, ctx)) return;
-        const text = (p.comments || []).filter((c) => c && !isBlank(c.text)).slice(-1)[0]?.text;
-        if (!text) return;   // no note written yet — nothing to report
-        const row = { id: target.id, label: labelFor(client, target), note: String(text).trim() };
-        (isThirdPartyWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);
+        if (!target || !isOpen(target, ctx) || listed.has(String(target.id))) return;
+        const note = noteFor(target);
+        if (note) addRow(target, note, false);
     });
-
-    // Work parked on Pending Developer Update / Pending Third Party Support with a note written when it was flipped
-    // (features/business/waiting-prompt.js). The note is the status line of the item, like a status-note comment; a
-    // task that already has one from the stale-work prompt above keeps that one.
-    const listed = new Set([...sphynxStalled, ...thirdPartyStalled].map((r) => String(r.id)));
-    all.filter((w) => w && !w.askKind && !w.consolidatedFollowUp && !isClientFacing(w, ctx) && isOpen(w, ctx) && !isBlank(w.waitingNote) && !listed.has(String(w.id)))
-        .forEach((w) => {
-            const row = { id: w.id, label: labelFor(client, w), note: String(w.waitingNote).trim() };
-            if (isThirdPartyWaitingStatus(w.status)) thirdPartyStalled.push(row);
-            else if (/^pending developer\b/i.test(String(w.status || '').trim())) sphynxStalled.push(row);
-        });
 
     return { clientAsks, pendingReview, sphynxStalled, thirdPartyStalled };
 }

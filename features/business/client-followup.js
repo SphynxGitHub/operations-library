@@ -89,6 +89,7 @@ function checklistSectionHtml(key, items, checked, clientName) {
                         <span style="flex:1; min-width:0;">
                             <span style="cursor:pointer;" onclick="event.preventDefault(); OL.openTaskInContext('${esc(OL._cfState.clientId)}', '${esc(String(it.id))}')">${esc(it.title || it.label || '')}</span>
                             ${(it.description || it.note) ? `<span class="muted"> — ${esc((it.description || it.note).slice(0, 90))}${(it.description || it.note).length > 90 ? '…' : ''}</span>` : ''}
+                            ${it.noNote ? '<span style="color:#f59e0b;"> — no progress update yet</span>' : ''}
                             ${(it.waitNotes || []).map((n) => `<div class="tiny" style="margin-top:3px; padding-left:8px; border-left:2px solid var(--line); color:var(--muted); white-space:pre-wrap;">${n.label ? `<strong>${esc(n.label)}:</strong> ` : '<strong>Note:</strong> '}${esc(n.text)}</div>`).join('')}
                         </span>
                     </label>
@@ -125,7 +126,8 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
     const data = typeof OL.followUpEmailDataForId === 'function' ? OL.followUpEmailDataForId(clientId) : { clientAsks: [], pendingReview: [], sphynxStalled: [], thirdPartyStalled: [] };
     const contact = OL.greetingContact(client);
     const checked = {};
-    SECTION_ORDER.forEach((key) => { checked[key] = new Set((data[key] || []).map((it) => it.id)); });   // everything starts checked
+    // Everything starts checked, except parked developer / third-party items that have no progress update yet.
+    SECTION_ORDER.forEach((key) => { checked[key] = new Set((data[key] || []).filter((it) => !it.noNote).map((it) => it.id)); });
 
     const mine = new Set(OL.senderEmails().map((e) => e.toLowerCase()));
     OL._cfState = { clientId, taskId, client, task, data, checked, clientName: client.meta?.name || 'the project' };
