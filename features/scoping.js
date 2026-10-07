@@ -65,6 +65,10 @@ export function getScopingWorkflowContext() {
 // their activation plan reviewed yet (core/requests.js listNewActivations,
 // via OL.pendingRequestActivations). Admin-only — this is where
 // OL.openActivationReview gets its entry point; see BUILD_NOTES.
+// Sphynx staff (admins AND team members/employees) can add requests and set the sheet's round status. Pricing
+// adjustments, removing/moving requests and activation review stay admin-only (state.adminMode).
+const isStaffUser = () => !window.IS_GUEST && (state.adminMode === true || state.teamMemberMode === true || window.FORCE_ADMIN === true);
+
 function renderPendingActivationsBanner(client) {
     if (state.adminMode !== true) return '';
     if (typeof OL.pendingRequestActivations !== 'function') return '';
@@ -127,7 +131,7 @@ function renderBacklogSection(client, sheet) {
                             </div>
                             <div style="display:flex; gap:6px; flex-shrink:0;">
                                 <button class="btn tiny soft" title="Link existing tasks (including client tasks) to this request" onclick="OL.openLinkTasksModal('${esc(item.id)}')">Link tasks${tasksLinked(client, item) ? ` (${tasksLinked(client, item)})` : ''}</button>
-                                ${isAdmin ? `<button class="btn tiny primary" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
+                                ${isStaffUser() ? `<button class="btn tiny primary" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
                             </div>
                         </div>
                     `;
@@ -316,7 +320,7 @@ export function renderScopingSheet() {
                 ${showUnits ? "Hide Units" : "Show Units"}
             </button>
             
-            ${state.adminMode === true ? `
+            ${isStaffUser() ? `
                 <button class="btn primary" onclick="OL.openRequestLineModal()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="plus" style="width:14px; height:14px;"></i> Add Request
                 </button>
@@ -477,7 +481,7 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
     const rows = collapsed ? '' : items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
     const roundApprovalStatus = sheet.roundApprovals?.[String(roundNum)]?.status || sheet.status || '';
-    const roundIsAdmin = state.adminMode === true;
+    const roundIsAdmin = isStaffUser();
 
     return `
         <div class="round-outer">

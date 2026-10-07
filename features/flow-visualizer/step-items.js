@@ -98,13 +98,49 @@ function save(resId, stepId, fn) {
 }
 const today = () => new Date().toISOString().slice(0, 10);
 
+// ---- @tagging: type "@" in the box to pick a Sphynx team member (same roster and storage shape as task comments:
+// mentions = [{id, name}], see OL.extractMentions in features/business/tasks.js). Tagged people get a notification.
+const mentionsIn = (text) => (OL().extractMentions ? OL().extractMentions(String(text || '')) : []);
+function mentionRoster() { return OL().getMentionRoster ? OL().getMentionRoster() : []; }
+export function mentionInput(input) {
+  const box = document.getElementById('fv-items-mention'); if (!box || !input) return;
+  const q = OL()._findMentionQuery ? OL()._findMentionQuery(input.value, input.selectionStart || 0) : null;
+  const list = q ? mentionRoster().filter((m) => m.name.toLowerCase().includes(q.query)) : [];
+  if (!list.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = list.slice(0, 6).map((m, i) => `<div class="fv-mention-opt${i === 0 ? ' on' : ''}" data-name="${esc(m.name)}" data-start="${q.start}" onmousedown="event.preventDefault();OL.fvItemMentionPick(this)">${esc(m.name)}</div>`).join('');
+}
+export function mentionPick(el) {
+  const input = document.getElementById('fv-items-text'); const box = document.getElementById('fv-items-mention');
+  if (!input || !el) return;
+  const start = Number(el.dataset.start); const caret = input.selectionStart || input.value.length;
+  input.value = `${input.value.slice(0, start)}@${el.dataset.name} ${input.value.slice(caret)}`;
+  const pos = start + el.dataset.name.length + 2; input.focus(); input.setSelectionRange(pos, pos);
+  if (box) { box.innerHTML = ''; box.style.display = 'none'; }
+}
+// Returns true when the key was used by the open dropdown (so Enter picks the name instead of adding the item).
+export function mentionKey(ev) {
+  const box = document.getElementById('fv-items-mention'); if (!box || box.style.display === 'none' || !box.innerHTML.trim()) return false;
+  if (ev.key === 'Escape') { box.innerHTML = ''; box.style.display = 'none'; return true; }
+  if (ev.key === 'Enter' || ev.key === 'Tab') { const first = box.querySelector('.fv-mention-opt'); if (first) { mentionPick(first); return true; } }
+  return false;
+}
+function notifyTagged(res, step, it) {
+  if (!it.mentions || !it.mentions.length || !OL().notifyEvent) return;
+  const by = it.author || 'Someone';
+  it.mentions.forEach((m) => OL().notifyEvent('newComment', m.name, { subject: `${by} mentioned you on "${step.name || 'a step'}" in ${res.name || 'the flow map'}`, body: it.text }));
+}
+
 export function addItem(resId, stepId, { kind = 'question', text = '', owner = '', who = '', due = '' } = {}) {
   const t = String(text).trim(); if (!t) return null;
   return save(resId, stepId, (step) => {
     if (!Array.isArray(step.items)) step.items = [];
     const it = { id: uid(), kind: KIND[kind] ? kind : 'note', text: t, done: false, createdAt: today() };
+    const tagged = mentionsIn(t); if (tagged.length) it.mentions = tagged;
+    const by = OL().getCurrentUserName ? OL().getCurrentUserName() : ''; if (by) it.author = by;
     if (it.kind === 'action') { if (owner) it.owner = owner; if (String(who).trim()) it.who = String(who).trim(); if (due) it.due = due; }
     step.items.push(it);
+    notifyTagged(res, step, it);
     return it;
   });
 }
@@ -118,7 +154,7 @@ export function updateItem(resId, stepId, itemId, patch) {
     }
     const it = (step.items || []).find((i) => i.id === itemId); if (!it) return;
     Object.keys(patch).forEach((k) => {
-      if (k === 'text') { const v = String(patch.text).trim(); if (v) it.text = v; }
+      if (k === 'text') { const v = String(patch.text).trim(); if (v) { it.text = v; const m = mentionsIn(v); if (m.length) it.mentions = m; else delete it.mentions; } }
       else if (k === 'done') { it.done = !!patch.done; if (it.done) it.doneAt = today(); else delete it.doneAt; }
       else if (patch[k] === '' || patch[k] == null) delete it[k];
       else it[k] = patch[k];
@@ -206,10 +242,11 @@ const ownerSelect = (cur, cls = '', id = '') => `<select ${id ? `id="${id}"` : '
 function itemRowHtml(resId, stepId, i) {
   const k = KIND[i.kind] || KIND.note;
   const meta = i.kind === 'action' ? `<div class="fv-item-meta">${i.owner ? `<span class="fv-item-owner" style="--c:${OWNERS[i.owner]?.color || '#9fb0c4'}">${esc(OWNERS[i.owner]?.label || i.owner)}</span>` : ''}${i.who ? `<span>${esc(i.who)}</span>` : ''}${i.due ? `<span>Due ${esc(i.due)}</span>` : ''}${i.taskId ? '<span class="fv-item-task">Task created</span>' : `<button type="button" class="fv-item-link" onclick="OL.fvItemMakeTask('${esc(resId)}','${esc(stepId)}','${esc(i.id)}')">Create task</button>`}</div>` : '';
+  const tags = (i.mentions && i.mentions.length) ? `<div class="fv-item-meta">${i.mentions.map((m) => `<span class="fv-item-tag">@${esc(m.name)}</span>`).join('')}</div>` : '';
   return `<div class="fv-item ${i.done ? 'is-done' : ''}" data-item="${esc(i.id)}">
     <input type="checkbox" ${i.done ? 'checked' : ''} aria-label="Done" onchange="OL.fvItemSet('${esc(resId)}','${esc(stepId)}','${esc(i.id)}','done',this.checked)">
     <div class="fv-item-body"><span class="fv-item-kind" style="--c:${k.color}">${esc(k.label)}</span>
-      <div class="fv-item-text" contenteditable="plaintext-only" spellcheck="true" onblur="OL.fvItemSet('${esc(resId)}','${esc(stepId)}','${esc(i.id)}','text',this.textContent)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(i.text)}</div>${meta}</div>
+      <div class="fv-item-text" contenteditable="plaintext-only" spellcheck="true" onblur="OL.fvItemSet('${esc(resId)}','${esc(stepId)}','${esc(i.id)}','text',this.textContent)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(i.text)}</div>${tags}${meta}</div>
     <button type="button" class="fv-item-x" title="Delete" aria-label="Delete" onclick="OL.fvItemRemove('${esc(resId)}','${esc(stepId)}','${esc(i.id)}')">&#10005;</button></div>`;
 }
 
@@ -221,7 +258,7 @@ function popHtml(res, step) {
   return `<div class="fv-items-head"><div><div class="fv-items-title">${esc(step.name || 'Step')}</div><div class="fv-items-sub">${esc(res.name)}</div></div><button type="button" class="fv-item-x" aria-label="Close" onclick="OL.fvCloseStepItems()">&#10005;</button></div>
     <div class="fv-items-list">${items.length ? items.map((i) => itemRowHtml(res.id, step.id, i)).join('') : '<div class="fv-items-empty">Nothing yet. Add a question to ask, an action to assign, or a note.</div>'}</div>
     <div class="fv-items-add"><div class="fv-items-pills">${kindPills}</div>${starters}
-      <div class="fv-items-row"><input id="fv-items-text" class="fv-items-in grow" type="text" autocomplete="off" placeholder="${popState.kind === 'question' ? 'Ask it the way you would in the session' : popState.kind === 'action' ? 'What needs to happen' : 'Jot a note'}" onkeydown="if(event.key==='Enter'){event.preventDefault();OL.fvItemAdd('${esc(res.id)}','${esc(step.id)}')}"><button type="button" class="fv-items-go" onclick="OL.fvItemAdd('${esc(res.id)}','${esc(step.id)}')">Add</button></div>${actionRow}</div>`;
+      <div class="fv-items-row" style="position:relative;"><div id="fv-items-mention" class="fv-mention-list" style="display:none;"></div><input id="fv-items-text" class="fv-items-in grow" type="text" autocomplete="off" placeholder="${popState.kind === 'question' ? 'Ask it the way you would in the session' : popState.kind === 'action' ? 'What needs to happen' : 'Jot a note'} (@ to tag someone)" oninput="OL.fvItemMentionInput(this)" onkeydown="if(OL.fvItemMentionKey(event)){event.preventDefault();return;} if(event.key==='Enter'){event.preventDefault();OL.fvItemAdd('${esc(res.id)}','${esc(step.id)}')}"><button type="button" class="fv-items-go" onclick="OL.fvItemAdd('${esc(res.id)}','${esc(step.id)}')">Add</button></div>${actionRow}</div>`;
 }
 
 export function openStepItems(resId, stepId, ev) {
@@ -378,7 +415,7 @@ function toast(t) { if (typeof OL().showToast === 'function') OL().showToast(t);
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvFlagHtml: flagHtml, fvItemsOf: itemsOf, fvCollectItems: collectItems, fvNumberItems: numberItems, fvItemsAppendixHtml: itemsAppendixHtml, fvItemsText: itemsText,
-  fvOpenStepItems: openStepItems, fvCloseStepItems: closeStepItems, fvItemKind: itemKind, fvItemStarter: itemStarter, fvItemAdd: itemAdd, fvItemSet: itemSet,
+  fvOpenStepItems: openStepItems, fvCloseStepItems: closeStepItems, fvItemKind: itemKind, fvItemStarter: itemStarter, fvItemAdd: itemAdd, fvItemMentionInput: mentionInput, fvItemMentionPick: mentionPick, fvItemMentionKey: mentionKey, fvItemSet: itemSet,
   fvItemRemove: itemRemove, fvItemMakeTask: itemMakeTask, fvToggleItemsDrawer: toggleDrawer, fvCloseItemsDrawer: closeDrawer, fvItemsFilter: itemsFilter,
   fvCopyItems: copyItems, fvAddWhoQuestions: addWhoQuestions, fvMakeAllTasks: makeAllTasks, fvItemsOpenCount: openCount, fvRefreshItemFlags: updateToolbarCount, fvPositionItemsDrawer: positionDrawer,
 });

@@ -131,7 +131,7 @@ export function renderTeamManager() {
                             ${m.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
                         </div>
                         <div style="min-width:0;">
-                            <div class="card-title tm-card-title-${m.id}" style="font-weight:bold; font-size:14px;">${esc(m.name)}</div>
+                            <div class="card-title tm-card-title-${m.id}" style="font-weight:bold; font-size:14px;">${esc(m.name)}${m.isFollowUpContact ? ' <span class="pill tiny soft" style="font-size:8px; color:#22c55e;" title="Client follow-ups are addressed to this person">★ Follow-up contact</span>' : ''}</div>
                             <div class="pills-row" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top:2px;">
                                 ${rolesHtml}
                             </div>
@@ -192,7 +192,7 @@ export function renderTeamManager() {
                             ${m.name.split(' ').map(n=>n[0]).join('').toUpperCase().substring(0,2)}
                         </div>
                         <div style="flex:1; min-width:0;">
-                            <span style="font-weight:600;font-size:13px;display:block;">${esc(m.name)}</span>
+                            <span style="font-weight:600;font-size:13px;display:block;">${esc(m.name)}${m.isFollowUpContact ? ' <span class="pill tiny soft" style="font-size:8px; color:#22c55e;">★ Follow-up contact</span>' : ''}</span>
                             <span class="tiny muted">${esc(m.email || 'No email')} ${m.phone ? `• ${esc(m.phone)}` : ''}</span>
                         </div>
                         <div class="pills-row" style="margin:0;gap:4px;">
@@ -281,6 +281,19 @@ export function updateTeamMember(memberId, field, value) {
     }
 }
 
+// Marks ONE team member as the person client follow-ups are addressed to (greetingContact in
+// features/business/compose-shared.js). Exclusive within the project; unticking leaves nobody flagged, and the
+// follow-up falls back to the project's primary contact, then the first member with an email.
+export function setFollowUpContact(memberId, on) {
+    const client = getActiveClient();
+    const members = client?.projectData?.teamMembers || [];
+    if (!members.some((m) => m.id === memberId)) return;
+    members.forEach((m) => { if (m.id === memberId) m.isFollowUpContact = !!on; else if (on) delete m.isFollowUpContact; });
+    if (!on) delete members.find((m) => m.id === memberId).isFollowUpContact;
+    persist();
+    renderTeamManager();
+}
+
 export function removeTeamMember(memberId) {
     const client = getActiveClient();
     const hasLogin = !!loginFor(client?.id, memberId)?.auth_user_id;
@@ -354,6 +367,15 @@ export function openTeamMemberModal(memberId, draftObj = null) {
                     </div>
                 </div>
             </div>
+
+            <!-- PRIMARY POINT OF CONTACT FOR FOLLOW-UPS -->
+            ${member.isDraft ? '' : `
+            <div class="card-section" style="margin-bottom: 20px; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
+                <label class="tiny" style="display:flex !important; align-items:center; gap:8px; cursor:pointer; margin:0 !important;">
+                    <input type="checkbox" style="width:auto !important; display:inline-block !important;" ${member.isFollowUpContact ? 'checked' : ''} onchange="OL.setFollowUpContact('${member.id}', this.checked)">
+                    <span><strong>Primary point of contact for follow-ups</strong><br><span class="muted">Client follow-up emails are addressed to this person. Only one person per project; ticking this clears it from anyone else.</span></span>
+                </label>
+            </div>`}
 
             <!-- ASSIGNED ROLES SECTION -->
             <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
@@ -581,7 +603,7 @@ Object.assign(window.OL, {
     renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
     openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
     removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap,
-    copyMemberSetupLink, removeMemberLogin
+    copyMemberSetupLink, removeMemberLogin, setFollowUpContact
 });
 
 window.renderTeamManager = renderTeamManager;

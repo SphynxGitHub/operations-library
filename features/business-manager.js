@@ -1065,7 +1065,7 @@ OL.createGlobalQuickTask = function() {
             status: status,
             assignee: assignee,
             dueDate: dueDate,
-            isClientTask: (assignee !== 'Sphynx Task'),
+            isClientTask: OL.computeIsClientTask ? OL.computeIsClientTask(assignee) : (assignee !== 'Sphynx Task'),
             loggedHours: 0,
             createdAt: new Date().toISOString()
         };
@@ -1101,7 +1101,7 @@ OL.updateGlobalTaskAssignee = function(clientId, taskId, newAssignee) {
         const task = client.projectData.clientTasks.find(t => t.id === taskId);
         if (task) {
             task.assignee = newAssignee;
-            task.isClientTask = (newAssignee !== 'Sphynx Task');
+            task.isClientTask = OL.computeIsClientTask ? OL.computeIsClientTask(Array.isArray(newAssignee) ? newAssignee[0] : newAssignee) : (newAssignee !== 'Sphynx Task');
             console.log(`✅ Updated Task Assignee [${taskId}]: ${newAssignee}`);
         }
     });

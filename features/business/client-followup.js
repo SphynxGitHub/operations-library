@@ -19,6 +19,9 @@
 import { state, esc, uid, updateAndSync } from '../../core/data.js';
 import { getOlSettings, fillTemplate } from '../../core/ol-settings.js';
 import { fillClosing } from './compose-shared.js';
+import { addDays } from '../../core/client-work-rules.js';
+
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const SECTION_LABELS = {
     clientAsks: (clientName) => `Waiting on ${clientName}`,
@@ -170,16 +173,58 @@ OL.openClientFollowUpEmail = async function(clientId, taskId) {
             </div>`,
         closingHtml: esc(closing).replace(/\n/g, '<br>'),
         sidebarHtml, sidebarWidth: 340,
-        footerLeftHtml: alreadyClosed ? '' : `
-            <label class="tiny" style="display:flex !important; align-items:center; gap:6px; cursor:pointer; margin:0 !important;" title="Closes this follow-up. It comes back on its own if the client still has items open when the next one is due.">
-                <input type="checkbox" id="cf-mark-done" checked style="width:auto !important; display:inline-block !important;"> Mark followed up after sending (next in ${everyDays} days)
-            </label>`,
+        footerLeftHtml: `
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                ${alreadyClosed ? '' : `<label class="tiny" style="display:flex !important; align-items:center; gap:6px; cursor:pointer; margin:0 !important;" title="Closes this follow-up. It comes back on its own if the client still has items open when the next one is due.">
+                    <input type="checkbox" id="cf-mark-done" checked style="width:auto !important; display:inline-block !important;"> Mark followed up after sending
+                </label>`}
+                <div class="tiny" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;" title="When the next follow-up comes back. Set either the number of days or a specific date.">
+                    Next follow-up in
+                    <input type="number" id="cf-next-days" min="1" max="365" value="${everyDays}" style="width:56px !important; display:inline-block !important;" class="modal-input tiny" oninput="OL.cfNextFromDays()">
+                    days, or on
+                    <input type="date" id="cf-next-date" min="${localToday()}" value="${addDays(localToday(), everyDays)}" style="width:140px !important; display:inline-block !important;" class="modal-input tiny" onchange="OL.cfNextFromDate()">
+                    ${alreadyClosed ? '<button type="button" class="btn tiny soft" onclick="OL.cfSaveNextDate()">Save date</button>' : ''}
+                </div>
+            </div>`,
         footerButtonsHtml: alreadyClosed ? '' : `<button class="btn soft" onclick="OL.cfMarkFollowedUp()" title="Close this follow-up without sending an email (you called, for instance)">Mark followed up</button>`,
         sendAction: 'OL.cfSend()',
     });
     openModal(html);
     OL.renderAllRecipients('cf');
     renderSidebar();
+};
+
+// The two "next follow-up" inputs stay in step: days -> date, date -> days.
+OL.cfNextFromDays = function() {
+    const n = Math.max(1, Math.min(365, parseInt(document.getElementById('cf-next-days')?.value, 10) || 0));
+    const dateEl = document.getElementById('cf-next-date');
+    if (n && dateEl) dateEl.value = addDays(localToday(), n);
+};
+OL.cfNextFromDate = function() {
+    const v = document.getElementById('cf-next-date')?.value || '';
+    const daysEl = document.getElementById('cf-next-days');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !daysEl) return;
+    const diff = Math.round((new Date(`${v}T00:00:00Z`) - new Date(`${localToday()}T00:00:00Z`)) / 86400000);
+    daysEl.value = Math.max(1, diff);
+};
+// The chosen next follow-up date (never in the past), or '' when the inputs aren't there.
+function chosenNextDue() {
+    const v = document.getElementById('cf-next-date')?.value || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+    return v < localToday() ? addDays(localToday(), 1) : v;
+}
+// On an already-followed-up task: just change when it comes back.
+OL.cfSaveNextDate = async function() {
+    const st = OL._cfState; const due = chosenNextDue();
+    if (!st || !due) { alert('Pick a date for the next follow-up.'); return; }
+    await updateAndSync(() => {
+        const t = st.client.projectData.clientTasks.find((x) => x.id === st.taskId);
+        if (!t) return;
+        t.nextFollowUpDue = due;
+        (t.followUpLog = t.followUpLog || []).push({ at: new Date().toISOString(), event: 'next date set', note: `Next follow-up ${due}.` });
+    }, st.clientId);
+    OL.closeModal();
+    if (typeof OL.refreshTaskView === 'function') OL.refreshTaskView();
 };
 
 OL.cfToggle = function(key, id, checked) {
@@ -251,13 +296,19 @@ OL.cfSend = async function() {
     }, st.clientId);
 
     const markDone = document.getElementById('cf-mark-done')?.checked;
+    const nextDue = chosenNextDue();
     OL.closeModal();
-    if (markDone) OL._cfCloseFollowUp(st.clientId, st.taskId);
+    if (markDone) OL._cfCloseFollowUp(st.clientId, st.taskId, nextDue);
 };
 
 // Closes the follow-up task through the same path as the status menu (so completion steps run). The save that
 // follows parks it until the next follow-up is due.
-OL._cfCloseFollowUp = function(clientId, taskId) {
+OL._cfCloseFollowUp = function(clientId, taskId, nextDue = '') {
+    // Pre-set the wait on the task: the rules only fill nextFollowUpDue in when it is blank, so a chosen date survives.
+    if (nextDue) {
+        const t = state.clients?.[clientId]?.projectData?.clientTasks?.find((x) => x && x.id === taskId);
+        if (t) t.nextFollowUpDue = nextDue;
+    }
     const closedName = ((typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).find((s) => s.isClosed) || {}).name || 'Done';
     OL.updateGlobalTaskStatus(clientId, taskId, closedName);
 };
@@ -265,8 +316,9 @@ OL._cfCloseFollowUp = function(clientId, taskId) {
 OL.cfMarkFollowedUp = function() {
     const st = OL._cfState;
     if (!st) return;
+    const nextDue = chosenNextDue();
     OL.closeModal();
-    OL._cfCloseFollowUp(st.clientId, st.taskId);
+    OL._cfCloseFollowUp(st.clientId, st.taskId, nextDue);
 };
 
-Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend, cfMarkFollowedUp: OL.cfMarkFollowedUp });
+Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend, cfMarkFollowedUp: OL.cfMarkFollowedUp, cfNextFromDays: OL.cfNextFromDays, cfNextFromDate: OL.cfNextFromDate, cfSaveNextDate: OL.cfSaveNextDate });

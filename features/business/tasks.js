@@ -1161,7 +1161,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     // extra click to see). For the one consolidated follow-up task, only ones on a request that's active right
     // now (Do Now, current, approved round), so it doesn't repeat the whole backlog.
     let openItemsHTML = '';
-    if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask && !t.askKind) {
+    if (typeof OL.openClientTasksForId === 'function' && !(OL.taskIsClientOwned ? OL.taskIsClientOwned(t, state.clients?.[t.clientId]) : t.isClientTask) && !t.askKind) {
         if (t.consolidatedFollowUp) {
             const all = OL.openClientTasksForId(t.clientId, t.id);
             const active = all.filter((x) => typeof OL.isActiveRequestTask !== 'function' || OL.isActiveRequestTask(state.clients?.[t.clientId], x));
@@ -1176,7 +1176,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     let blockedByHTML = '';
     if (typeof OL.renderBlockedByList === 'function' && (t.blockedBy || []).length) {
         let alreadyListed = [];
-        if (typeof OL.openClientTasksForId === 'function' && !t.isClientTask && !t.askKind) {
+        if (typeof OL.openClientTasksForId === 'function' && !(OL.taskIsClientOwned ? OL.taskIsClientOwned(t, state.clients?.[t.clientId]) : t.isClientTask) && !t.askKind) {
             try { alreadyListed = OL.openClientTasksForId(t.clientId, t.id).map((x) => x.id); } catch (e) { /* the list is only a de-dupe */ }
         }
         blockedByHTML = OL.renderBlockedByList(t.clientId, t, { indent: t.parentTaskId ? 48 : 20, skipIds: alreadyListed });

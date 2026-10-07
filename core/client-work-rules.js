@@ -88,7 +88,9 @@ const resourceName = (client, id) => {
 
 // Implementation work = Sphynx's own steps: not something asked of the client / a third party, and not a
 // housekeeping task the rules themselves create.
-const isImplementationTask = (t, ctx) => !!t && !t.isClientTask && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
+// (Judged by assignee/ask kind via isClientFacing, NOT the stored isClientTask flag: that flag was set true for any
+// assignee other than 'Sphynx Task', so it is stuck on tasks later given to a named Sphynx team member.)
+const isImplementationTask = (t, ctx) => !!t && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
     && !t.recurrenceTag && !t.testRunId && !t.reviewNotifyKey && !t.reviewFollowUpKey && linksForTask(t).length > 0
     && !isClientFacing(t, ctx);
 
@@ -152,7 +154,7 @@ const addComment = (task, text, ctx) => {
 
 // Sphynx's own work for the purpose of waiting on the client: like an implementation task, but it does not have to be
 // linked to a request (a task made by hand still loses its due date while it waits).
-const isSphynxWork = (t, ctx) => !!t && !t.isClientTask && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
+const isSphynxWork = (t, ctx) => !!t && !t.askKind && !t.consolidatedFollowUp && !t.statusNoteFor
     && !t.recurrenceTag && !t.testRunId && !t.reviewNotifyKey && !t.reviewFollowUpKey && !isClientFacing(t, ctx);
 
 export function reconcileBlockedTasks(client, ctx) {
@@ -176,6 +178,17 @@ export function reconcileBlockedTasks(client, ctx) {
             // Keep the list current: client tasks added after the flip, by request/resource or by Dependency,
             // are part of what it is waiting for.
             const b = t.blockedOn;
+            // Moved to a different waiting status (e.g. Pending Client Review -> Pending Client Feedback) with a date
+            // put back in the meantime: take it off again.
+            if (b.status !== t.status) {
+                b.status = t.status;
+                if (!isBlank(t.dueDate)) {
+                    if (isBlank(b.dueDate)) b.dueDate = day(t.dueDate);
+                    (t.dueDateLog = t.dueDateLog || []).push({ at: ctx.now, event: 'removed', dueDate: day(t.dueDate), status: t.status });
+                    addComment(t, `Due date ${day(t.dueDate)} removed while waiting on the client (${t.status}).`, ctx);
+                    t.dueDate = '';
+                }
+            }
             [...relatedClientTasks(client, t, ctx), ...depTasks].forEach((x) => { if (!b.taskIds.includes(x.id)) b.taskIds.push(x.id); });
             // Note when each one was completed, for the restored date.
             b.taskIds.forEach((id) => {
@@ -214,6 +227,8 @@ export function reconcileBlockedTasks(client, ctx) {
 export function stampStatusChanges(client, ctx) {
     (client?.projectData?.clientTasks || []).forEach((t) => {
         if (!t) return;
+        // Heal the stale flag: a Sphynx-owned task must not keep isClientTask=true (it hides it from the rules above).
+        if (t.isClientTask && !t.askKind && !t.consolidatedFollowUp && !isClientFacing(t, ctx)) t.isClientTask = false;
         if (t.statusSeen === undefined) { t.statusSeen = t.status || ''; if (!t.statusChangedAt) t.statusChangedAt = ctx.now; return; }
         if (t.statusSeen !== (t.status || '')) { t.statusSeen = t.status || ''; t.statusChangedAt = ctx.now; }
     });
@@ -760,7 +775,7 @@ function contextNow(extra = {}) {
     const closed = statuses.filter((s) => s.isClosed).map((s) => s.name);
     return {
         roles: state.master?.roles || [], closedNames: closed.length ? closed : ['Done'],
-        sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).filter(Boolean),
+        sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).filter(Boolean).concat(window.OL?.thirdPartyAssignees || []),
         today: localToday(), now: new Date().toISOString(), uid,
         followUpEveryDays: Number(state.master?.followUpEveryDays) || DEFAULT_FOLLOW_UP_EVERY_DAYS,
         staleDays: Number(state.master?.staleDays) || DEFAULT_STALE_DAYS,
@@ -890,7 +905,7 @@ export function followUpEmailData(client, ctx) {
     // A client ask that is really "please review / confirm this" belongs with the pending-review work, not with the
     // documents and feedback the client owes us.
     const isReviewAsk = (t) => t.askKind === 'review' || t.status === 'Pending Client Review';
-    const openClientAsks = all.filter((t) => t && !t.consolidatedFollowUp && (t.askKind || t.isClientTask)
+    const openClientAsks = all.filter((t) => t && !t.consolidatedFollowUp && isClientFacing(t, ctx)
         && t.askKind !== 'follow_up' && isOpen(t, ctx) && clientAskEligible(t));
     const taskName = (t) => t.title || t.name || 'Task';
 
@@ -898,7 +913,7 @@ export function followUpEmailData(client, ctx) {
     // work that is parked on a Pending Client status. Each shows in the sidebar under the client ask(s) the task is
     // waiting on. Sidebar context only: bulletFor() never puts a note in the email.
     const notesByAsk = new Map();
-    all.filter((w) => w && !w.isClientTask && !w.askKind && !w.consolidatedFollowUp && isClientWaitingStatus(w.status) && !isBlank(w.waitingNote))
+    all.filter((w) => w && !w.askKind && !w.consolidatedFollowUp && !isClientFacing(w, ctx) && isClientWaitingStatus(w.status) && !isBlank(w.waitingNote))
         .forEach((w) => {
             openClientTasksFor(client, w, ctx).forEach((a) => {
                 if (!notesByAsk.has(a.id)) notesByAsk.set(a.id, []);
@@ -933,7 +948,7 @@ export function followUpEmailData(client, ctx) {
     // (features/business/waiting-prompt.js). The note is the status line of the item, like a status-note comment; a
     // task that already has one from the stale-work prompt above keeps that one.
     const listed = new Set([...sphynxStalled, ...thirdPartyStalled].map((r) => String(r.id)));
-    all.filter((w) => w && !w.isClientTask && !w.askKind && !w.consolidatedFollowUp && isOpen(w, ctx) && !isBlank(w.waitingNote) && !listed.has(String(w.id)))
+    all.filter((w) => w && !w.askKind && !w.consolidatedFollowUp && !isClientFacing(w, ctx) && isOpen(w, ctx) && !isBlank(w.waitingNote) && !listed.has(String(w.id)))
         .forEach((w) => {
             const row = { id: w.id, label: labelFor(client, w), note: String(w.waitingNote).trim() };
             if (isThirdPartyWaitingStatus(w.status)) thirdPartyStalled.push(row);

@@ -145,6 +145,24 @@ export function getMyNotifications() {
         });
     });
 
+    // Tags on flow-map step items (questions / actions / notes) — features/flow-visualizer/step-items.js
+    Object.values(state.clients || {}).forEach(client => {
+        (client.projectData?.localResources || client.projectData?.resources || []).forEach(res => {
+            (res?.steps || []).forEach(step => {
+                (step?.items || []).forEach(it => {
+                    if (!(it?.mentions || []).some(m => (m.name || '').toLowerCase() === myName)) return;
+                    const id = `step:${client.id}:${res.id}:${step.id}:${it.id}`;
+                    items.push({
+                        id, type: 'newComment', date: it.createdAt,
+                        text: `${it.author || 'Someone'} tagged you on "${step.name || 'a step'}" in ${res.name || 'the flow map'}`,
+                        clientId: client.id, resId: res.id, stepId: step.id,
+                        read: readIds.has(id)
+                    });
+                });
+            });
+        });
+    });
+
     return items.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
 
@@ -198,7 +216,7 @@ export function renderNotificationsModalBody() {
             </div>
         ` : ''}
         ${filtered.length ? filtered.map(n => `
-            <div onclick="OL.markNotificationRead('${n.id}'); OL.closeModal(); if (typeof OL.openTaskInContext === 'function') OL.openTaskInContext('${n.clientId}', '${n.taskId}');"
+            <div onclick="OL.markNotificationRead('${n.id}'); OL.closeModal(); ${n.resId ? `if (typeof OL.fvOpenStepItems === 'function') OL.fvOpenStepItems('${n.resId}', '${n.stepId}');` : `if (typeof OL.openTaskInContext === 'function') OL.openTaskInContext('${n.clientId}', '${n.taskId}');`}"
                  style="padding:10px; border-radius:8px; margin-bottom:6px; cursor:pointer; background:${n.read ? 'transparent' : 'rgba(var(--accent-rgb),0.08)'}; border:1px solid var(--panel-border);">
                 <div class="tiny" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="${n.type === 'newComment' ? 'at-sign' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>

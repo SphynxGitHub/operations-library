@@ -182,10 +182,10 @@ export function personDirectory(client, extraGroups = []) {
     return list;
 }
 
-// Who a project's email is addressed to: the primary contact, else the first team member with an email.
+// Who a project's email is addressed to: the follow-up contact (team member card), else the primary contact, else the first team member with an email.
 export function greetingContact(client) {
     const team = client?.projectData?.teamMembers || [];
-    return team.find((m) => m.isPrimaryContact && m.email) || team.find((m) => m.email) || null;
+    return team.find((m) => m.isFollowUpContact && m.email) || team.find((m) => m.isPrimaryContact && m.email) || team.find((m) => m.email) || null;
 }
 
 // opts: { to: [], cc: [], bcc: [], directory: [], onChange: fn(prefix) } — call before the window's HTML is shown or
