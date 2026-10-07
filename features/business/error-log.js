@@ -58,6 +58,7 @@ OL.errorLogState = {
     query: '',
     groupBy: 'none',        // 'none' | 'message' | 'service' | 'client' | 'date' | 'resource'
     rows: [],
+    selected: new Set(),    // ids ticked for bulk update
     services: [],
     resources: [],
     loading: false,
@@ -130,7 +131,7 @@ OL._renderErrorLogShell = function(title, subtitle) {
     const locked = !!OL.errorLogState.lockedClientId;
     const clients = getBusinessScopedClients();
     const rows = OL.errorLogState.rows;
-    const renderRows = (rowList) => `<div style="display:grid; gap:10px;">${rowList.map(r => OL.renderErrorLogRow(r, locked)).join('')}</div>`;
+    const renderRows = (rowList) => `<div style="display:grid; gap:10px; grid-template-columns:minmax(0,1fr);">${rowList.map(r => OL.renderErrorLogRow(r, locked)).join('')}</div>`;
 
     main.innerHTML = `
         <div id="error-log-shell">
@@ -186,6 +187,8 @@ OL._renderErrorLogShell = function(title, subtitle) {
                 <input type="text" class="modal-input tiny" style="flex:1; min-width:180px;" placeholder="Search title/message..." value="${esc(OL.errorLogState.query)}" oninput="OL.setErrorLogFilter('query', this.value)">
             </div>
 
+            ${rows.length ? OL.errorBulkBarHtml(rows) : ''}
+
             ${OL.errorLogState.loading ? `<div class="tiny muted" style="text-align:center; padding:30px;">Loading...</div>` : ''}
 
             ${(!OL.errorLogState.loading && rows.length === 0) ? `
@@ -195,10 +198,10 @@ OL._renderErrorLogShell = function(title, subtitle) {
                 </div>
             ` : (OL.errorLogState.groupBy === 'none' ? renderRows(rows) : `
                 <div style="display:grid; gap:20px;">
-                    ${OL.groupErrorRows(rows, OL.errorLogState.groupBy).map(g => `
+                    ${OL.groupErrorRows(rows, OL.errorLogState.groupBy).map((g, gi) => `
                         <div>
                             <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(g.label)}</span>
+                                <label style="display:flex !important; align-items:center; gap:6px; margin:0 !important; min-width:0; cursor:pointer;"><input type="checkbox" style="width:auto !important; display:inline-block !important;" ${g.rows.every(r => OL.errorLogState.selected.has(String(r.id))) ? 'checked' : ''} onchange="OL.toggleErrorGroupSelected(${gi}, this.checked)" title="Select this group"><span style="min-width:0; white-space:normal; overflow-wrap:anywhere;">${esc(g.label)}</span></label>
                                 <span class="pill tiny soft" style="flex-shrink:0;">${g.rows.length}</span>
                             </div>
                             ${renderRows(g.rows)}
@@ -264,9 +267,9 @@ OL.renderErrorLogRow = function(r, locked) {
     const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
 
     return `
-        <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); border-left:3px solid ${accentColor}; border-radius:0 8px 8px 0; cursor:pointer;" onclick="OL.openErrorDetailModal('${r.id}')">
+        <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); border-left:3px solid ${accentColor}; border-radius:0 8px 8px 0; cursor:pointer; min-width:0; overflow-wrap:anywhere;" onclick="OL.openErrorDetailModal('${r.id}')">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
-                <strong style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title || 'Untitled Error')}</strong>
+                <label style="display:flex !important; align-items:flex-start; gap:8px; margin:0 !important; min-width:0; flex:1;" onclick="event.stopPropagation();"><input type="checkbox" style="width:auto !important; display:inline-block !important; margin-top:3px; flex-shrink:0;" ${OL.errorLogState.selected.has(String(r.id)) ? 'checked' : ''} onchange="OL.toggleErrorSelected('${r.id}', this.checked)" title="Select for bulk update"><strong style="font-size:14px; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.35;">${esc(r.title || 'Untitled Error')}</strong></label>
                 <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" onclick="event.stopPropagation();">
                     ${OL.renderErrorTaskButton(r)}
                     <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.onErrorStatusSelect(this, '${r.id}')">
@@ -286,13 +289,13 @@ OL.renderErrorLogRow = function(r, locked) {
                 ${r.occurrence_count && r.occurrence_count > 1 ? `<span class="pill tiny soft">×${r.occurrence_count}</span>` : ''}
             </div>
 
-            <div class="tiny muted" style="margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            <div class="tiny muted" style="margin-bottom:8px; white-space:normal; overflow-wrap:anywhere; word-break:break-word; line-height:1.5;">
                 ${esc(snippet)}
             </div>
 
             <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
-                <div class="tiny ${r.cause ? '' : 'muted'}">${ic('wrench')}${r.cause ? 'Cause: ' + esc(r.cause) : 'Cause not yet noted'}</div>
-                <div class="tiny ${r.resolution ? '' : 'muted'}">${ic('check')}${r.resolution ? 'Resolution: ' + esc(r.resolution) : 'Resolution not yet noted'}</div>
+                <div class="tiny ${r.cause ? '' : 'muted'}" style="white-space:pre-wrap; overflow-wrap:anywhere;">${ic('wrench')}${r.cause ? 'Cause: ' + esc(r.cause) : 'Cause not yet noted'}</div>
+                <div class="tiny ${r.resolution ? '' : 'muted'}" style="white-space:pre-wrap; overflow-wrap:anywhere;">${ic('check')}${r.resolution ? 'Resolution: ' + esc(r.resolution) : 'Resolution not yet noted'}</div>
                 <div class="tiny ${resolvedDate ? '' : 'muted'}">${ic('calendar-check')}${resolvedDate ? 'Resolved: ' + esc(resolvedDate) : 'Not yet resolved'}</div>
             </div>
         </div>
@@ -352,6 +355,9 @@ OL.loadErrorLog = async function() {
 
     if (error) { console.error('Failed to load error log:', error.message); OL.errorLogState.rows = []; return; }
     OL.errorLogState.rows = (data || []).filter(r => lockedId || isInBusinessScope(r.client_id));
+    // Keep only ticked errors that are still in the list.
+    const present = new Set(OL.errorLogState.rows.map(r => String(r.id)));
+    OL.errorLogState.selected = new Set([...OL.errorLogState.selected].filter(id => present.has(id)));
 
     // Populate the service filter dropdown from whatever's actually in the table
     const { data: serviceRows } = await scopeErrors(db.from('error_log').select('service').not('service', 'is', null));
@@ -1388,6 +1394,149 @@ OL.submitErrorCompleteForm = async function() {
     if (typeof ctx.opts.onDone === 'function') ctx.opts.onDone(true);
 };
 
+
+// =============================================================
+// BULK UPDATE — tick errors (each card, a whole group, or "select all shown") and change them together:
+// status, project, cause, resolution, notes. Fields left blank / "No change" are not touched. Completing needs a
+// cause and resolution on EVERY selected error (from the form, or already on the error), same rule as one at a time.
+// =============================================================
+OL.errorBulkBarHtml = function(rows) {
+    const sel = OL.errorLogState.selected;
+    const shown = rows.filter(r => sel.has(String(r.id))).length;
+    const all = shown === rows.length;
+    return `
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; padding:8px 12px; border:1px solid ${sel.size ? 'var(--accent)' : 'var(--line)'}; border-radius:8px; background:${sel.size ? 'rgba(var(--accent-rgb),0.06)' : 'transparent'};">
+            <label class="tiny" style="display:flex !important; align-items:center; gap:6px; margin:0 !important; cursor:pointer;">
+                <input type="checkbox" style="width:auto !important; display:inline-block !important;" ${all ? 'checked' : ''} onchange="OL.toggleErrorSelectAll(this.checked)"> Select all shown (${rows.length})
+            </label>
+            ${sel.size ? `
+                <span class="tiny bold">${sel.size} selected</span>
+                <button class="btn tiny primary" onclick="OL.openBulkErrorModal()">Bulk update…</button>
+                <button class="btn tiny soft" onclick="OL.clearErrorSelection()">Clear</button>
+            ` : '<span class="tiny muted">Tick errors to update several at once.</span>'}
+        </div>`;
+};
+
+OL.toggleErrorSelected = function(id, on) {
+    const sel = OL.errorLogState.selected;
+    if (on) sel.add(String(id)); else sel.delete(String(id));
+    OL._rerenderErrorLog();
+};
+OL.toggleErrorSelectAll = function(on) {
+    const sel = OL.errorLogState.selected;
+    OL.errorLogState.rows.forEach(r => { if (on) sel.add(String(r.id)); else sel.delete(String(r.id)); });
+    OL._rerenderErrorLog();
+};
+OL.toggleErrorGroupSelected = function(index, on) {
+    const g = OL.groupErrorRows(OL.errorLogState.rows, OL.errorLogState.groupBy)[index];
+    if (!g) return;
+    g.rows.forEach(r => { if (on) OL.errorLogState.selected.add(String(r.id)); else OL.errorLogState.selected.delete(String(r.id)); });
+    OL._rerenderErrorLog();
+};
+OL.clearErrorSelection = function() { OL.errorLogState.selected.clear(); OL._rerenderErrorLog(); };
+
+OL.openBulkErrorModal = function() {
+    const ids = [...OL.errorLogState.selected];
+    if (!ids.length) return;
+    const locked = !!OL.errorLogState.lockedClientId;
+    const clients = getBusinessScopedClients();
+    const F = 'display:block; width:100%; box-sizing:border-box; text-align:left; font-size:13px; padding:8px 10px; border-radius:8px; font-family:inherit; line-height:1.45;';
+    const tpl = (target, list) => `<select class="tiny" style="border:none; background:transparent; color:var(--accent); cursor:pointer;" onchange="(function(s){var t=document.getElementById('${target}'); if(s.value){ t.value = t.value.trim() ? t.value + '\\n' + s.value : s.value; } s.selectedIndex=0;})(this)"><option value="">+ Insert template...</option>${list.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>`;
+    openModal(`
+        <div class="modal-head"><div class="modal-title-text">Bulk update ${ids.length} error${ids.length === 1 ? '' : 's'}</div><div class="spacer"></div><button class="btn small soft" onclick="OL.closeModal()">Cancel</button></div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:14px; max-width:100%;">
+            <div class="tiny muted">Only the fields you fill in are changed. Everything else on each error stays as it is.</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div><label class="tiny muted bold" style="display:block; margin-bottom:4px;">Status</label>
+                    <select id="bulk-err-status" class="modal-input tiny" style="width:100%;"><option value="">No change</option><option value="open">Open</option><option value="resolved">Complete</option></select></div>
+                ${locked ? '' : `<div><label class="tiny muted bold" style="display:block; margin-bottom:4px;">Project</label>
+                    <select id="bulk-err-client" class="modal-input tiny" style="width:100%;"><option value="__keep">No change</option><option value="">Unassigned</option>${clients.map(c => `<option value="${esc(c.id)}">${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}</select>
+                    <div class="tiny muted" style="margin-top:3px;">Changing the project clears each error's resource.</div></div>`}
+            </div>
+            <div><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><label class="tiny muted bold">Cause</label>${tpl('bulk-err-cause', CAUSE_TEMPLATES)}</div>
+                <textarea id="bulk-err-cause" class="modal-input" rows="2" style="${F} resize:vertical;" placeholder="Leave blank to keep each error's own cause"></textarea></div>
+            <div><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><label class="tiny muted bold">Resolution</label>${tpl('bulk-err-resolution', RESOLUTION_TEMPLATES)}</div>
+                <textarea id="bulk-err-resolution" class="modal-input" rows="2" style="${F} resize:vertical;" placeholder="Leave blank to keep each error's own resolution"></textarea></div>
+            <div><label class="tiny muted bold" style="display:block; margin-bottom:4px;">Add to notes <span style="font-weight:normal;">(added as a new line after any existing notes)</span></label>
+                <textarea id="bulk-err-notes" class="modal-input" rows="2" style="${F} resize:vertical;"></textarea></div>
+            <div id="bulk-err-msg" class="tiny" style="color:#ef4444; display:none;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;"><button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+                <button id="bulk-err-go" class="btn small primary" style="font-weight:bold;" onclick="OL.applyBulkErrorUpdate()">Update ${ids.length}</button></div>
+        </div>`);
+};
+
+OL.applyBulkErrorUpdate = async function() {
+    const ids = [...OL.errorLogState.selected];
+    const val = (id) => (document.getElementById(id)?.value || '').trim();
+    const status = val('bulk-err-status');
+    const clientEl = document.getElementById('bulk-err-client');
+    const clientVal = clientEl ? clientEl.value : '__keep';
+    const cause = val('bulk-err-cause'), resolution = val('bulk-err-resolution'), noteAdd = val('bulk-err-notes');
+    const msg = document.getElementById('bulk-err-msg');
+    const fail = (t) => { if (msg) { msg.textContent = t; msg.style.display = 'block'; } };
+
+    if (!status && clientVal === '__keep' && !cause && !resolution && !noteAdd) { fail('Nothing to change — fill in at least one field.'); return; }
+
+    // Rows to work on: the ticked ones we have loaded (selection is pruned to the loaded list).
+    const rows = OL.errorLogState.rows.filter(r => ids.includes(String(r.id)));
+    if (!rows.length) { fail('The selected errors are no longer in the list.'); return; }
+
+    if (status === 'resolved') {
+        const lacking = rows.filter(r => !(cause || (r.cause || '').trim()) || !(resolution || (r.resolution || '').trim()));
+        if (lacking.length) { fail(`${lacking.length} of the ${rows.length} selected error${rows.length === 1 ? '' : 's'} would have no cause or resolution. Fill in Cause and Resolution above (they apply to all selected), or deselect those.`); return; }
+    }
+
+    const btn = document.getElementById('bulk-err-go');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    const common = {};
+    if (status) common.status = status;
+    if (status === 'open') common.resolution_date = null;
+    if (clientVal !== '__keep') { common.client_id = clientVal || null; common.resource_id = null; common.resource_name = null; }
+    if (cause) common.cause = cause;
+    if (resolution) common.resolution = resolution;
+    const failures = [];
+    const chunk = (arr, n) => arr.reduce((a, _, i) => (i % n ? a : [...a, arr.slice(i, i + n)]), []);
+
+    // 1. everything that is the same for every row, in one call per batch
+    if (Object.keys(common).length) {
+        for (const part of chunk(rows.map(r => r.id), 100)) {
+            const { error } = await db.from('error_log').update(common).in('id', part);
+            if (error) failures.push(error.message);
+        }
+    }
+    // 2. resolution date: stamped now, but never over one that is already set
+    if (!failures.length && status === 'resolved') {
+        const stamp = new Date().toISOString();
+        const noDate = rows.filter(r => !r.resolution_date).map(r => r.id);
+        for (const part of chunk(noDate, 100)) {
+            const { error } = await db.from('error_log').update({ resolution_date: stamp }).in('id', part);
+            if (error) failures.push(error.message);
+        }
+    }
+    // 3. notes differ per row (each gets the new line after its own), so one call each
+    if (!failures.length && noteAdd) {
+        await Promise.all(rows.map(async (r) => {
+            const cur = (r.notes || '').trim();
+            const next = cur ? `${cur}\n${noteAdd}` : noteAdd;
+            const { error } = await db.from('error_log').update({ notes: next, notes_mentions: OL.extractMentions ? OL.extractMentions(next) : [] }).eq('id', r.id);
+            if (error) failures.push(error.message);
+        }));
+    }
+
+    if (failures.length) {
+        if (btn) { btn.disabled = false; btn.textContent = `Update ${ids.length}`; }
+        fail(`Some changes didn't save: ${[...new Set(failures)].join('; ')}. Nothing was cleared, so you can try again.`);
+        await OL.loadErrorLog();
+        return;
+    }
+
+    OL.errorLogState.selected.clear();
+    OL.closeModal();
+    await OL.loadErrorLog();
+    OL._rerenderErrorLog();
+};
+window.OL.openBulkErrorModal = OL.openBulkErrorModal;
 
 window.OL.renderBusinessErrorLog = OL.renderBusinessErrorLog;
 window.OL.renderClientErrorLog = OL.renderClientErrorLog;
