@@ -184,7 +184,7 @@ OL._renderErrorLogShell = function(title, subtitle) {
                     ${!locked ? `<option value="client" ${OL.errorLogState.groupBy === 'client' ? 'selected' : ''}>Group: Project</option>` : ''}
                     <option value="date" ${OL.errorLogState.groupBy === 'date' ? 'selected' : ''}>Group: Date</option>
                 </select>
-                <input type="text" class="modal-input tiny" style="flex:1; min-width:180px;" placeholder="Search title/message..." value="${esc(OL.errorLogState.query)}" oninput="OL.setErrorLogFilter('query', this.value)">
+                <input type="text" id="error-log-search" class="modal-input tiny" style="flex:1; min-width:180px;" placeholder="Search title/message..." value="${esc(OL.errorLogState.query)}" oninput="OL.onErrorSearchInput(this)">
             </div>
 
             ${rows.length ? OL.errorBulkBarHtml(rows) : ''}
@@ -306,6 +306,28 @@ OL.setErrorLogFilter = function(key, value) {
     OL.errorLogState[key] = value;
     if (key === 'groupBy') { OL._rerenderErrorLog(); return; } // pure client-side reorganization, no reload needed
     OL.loadErrorLog().then(() => OL._rerenderErrorLog());
+};
+
+// Typing in the search box: wait for a short pause, reload, redraw, then put the cursor back. The whole page shell is
+// rebuilt on every redraw, which used to drop the focus after each letter.
+OL.onErrorSearchInput = function(el) {
+    OL.errorLogState.query = el.value;
+    clearTimeout(OL._errSearchTimer);
+    const seq = OL._errSearchSeq = (OL._errSearchSeq || 0) + 1;
+    OL._errSearchTimer = setTimeout(async () => {
+        await OL.loadErrorLog();
+        if (seq !== OL._errSearchSeq) return;   // a newer search replaced this one
+        const live = document.getElementById('error-log-search');
+        const start = live && document.activeElement === live ? live.selectionStart : null;
+        const hadFocus = !live || document.activeElement === live || document.activeElement === document.body;
+        OL._rerenderErrorLog();
+        const next = document.getElementById('error-log-search');
+        if (next && hadFocus) {
+            next.focus();
+            const pos = start !== null ? start : next.value.length;
+            try { next.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
+        }
+    }, 300);
 };
 
 OL.setErrorLogClientFilter = function(clientId) {
