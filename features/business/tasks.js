@@ -378,6 +378,9 @@ OL.classifyTask = function(task, client) {
         return { key: 'partner', label: OL.getPartnerTaskLabel(partner), partnerId: partner.id };
     }
     if (OL.getSphynxNames().some(n => lc(n) === al)) return SPHYNX;   // (guess used only before the database list exists)
+    // A first name only one team member has ("Anthony" for "Anthony Schorling") is that Sphynx team member.
+    const team = (state.master?.sphynxTeam || []).filter(m => m?.name);
+    if (team.filter(m => lc(String(m.name).trim().split(/\s+/)[0]) === al).length === 1) return SPHYNX;
     return CLIENT;   // any other named person on a project is the client's
 };
 
@@ -1679,9 +1682,19 @@ OL._taskAssigneePopoverHTML = function(clientId, taskId) {
                 <i data-lucide="${picked ? 'check' : icon}" style="width:12px;height:12px;${picked ? '' : `color:${color};`}"></i> ${esc(name)}
             </button>`;
     };
+    // Names already on this task that match nobody in the lists below (a typo, a person removed from a team, an old
+    // import). They stay shown, checked, so they can be clicked off the task: otherwise there is nothing to remove.
+    const known = new Set(['sphynx task', 'client task',
+        ...(state.master?.sphynxTeam || []).map(m => String(m.name || '').trim().toLowerCase()),
+        ...teamOptions.map(m => String(m.name || '').trim().toLowerCase()),
+        ...(OL.thirdPartyAssignees || []).map(x => String(x).trim().toLowerCase())]);
+    const strays = taskAssignees(task).filter(a => !known.has(String(a).trim().toLowerCase()));
     return `
         <div class="tiny bold uppercase muted" style="padding:2px 4px;">Assign Task</div>
         <div class="tiny muted" style="margin-bottom:6px; padding:0 4px;">Pick more than one to share it.</div>
+        ${strays.length ? `
+            <div class="tiny" style="color:#f59e0b; padding:2px 4px;">Not on any team: click to remove</div>
+            <div style="display:grid; gap:4px; margin-bottom:6px;">${strays.map(n => btn(n, 'triangle-alert', '#f59e0b')).join('')}</div>` : ''}
         <div style="display:grid; gap:4px; max-height:260px; overflow-y:auto;">
             ${btn('Sphynx Task', 'zap', 'var(--accent)')}
             ${btn('Client Task', 'user', '#ec4899')}
