@@ -1,6 +1,6 @@
 import { esc, uid, state, updateAndSync, getActiveClient } from '../core/data.js';
 import { taskAssignees } from '../core/task-assignees.js';
-import { requestIdsForTask } from '../core/task-links.js';
+import { requestIdsForTask, addLink } from '../core/task-links.js';
 
 //============= CLIENT WORKSPACE TASK MANAGER ===============//
 
@@ -66,6 +66,18 @@ export function renderClientTaskManager() {
             <form onsubmit="event.preventDefault(); OL.createClientQuickTask('${client.id}');" class="quick-task-form">
                 
                 <input type="text" id="client-quick-task-title" class="modal-input tiny qtf-field" style="flex:2 1 260px; min-width:220px;" placeholder="New task title or deliverable description..." required>
+
+                <div class="qtf-field" style="flex:0 1 220px; min-width:180px; position:relative; display:flex; align-items:center;">
+                    <i data-lucide="layers" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                    <select id="client-quick-task-request" class="modal-input tiny" style="padding-left:26px; width:100%;" title="Link this task to a request (optional)">
+                        ${(() => {
+                            const reqs = (OL.listProjectRequests ? OL.listProjectRequests(client) : []).filter(r => !['Done', "Don't Do"].includes(String(r.status || '')))
+                                .map(r => ({ id: r.id, title: OL.requestItemTitle(client, r), status: r.status || '' })).sort((a, b) => a.title.localeCompare(b.title));
+                            return `<option value="">${reqs.length ? 'Request (optional)' : 'No open requests'}</option>`
+                                + reqs.map(r => `<option value="${esc(String(r.id))}">${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ''}</option>`).join('');
+                        })()}
+                    </select>
+                </div>
 
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
                     <i data-lucide="user" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
@@ -319,6 +331,7 @@ OL.createClientQuickTask = function(clientId) {
     const status = document.getElementById('client-quick-task-status')?.value || 'Pending Sphynx Action';
     // Client tasks have no due date of their own.
     const dueDate = OL.computeIsClientTask(assignee) ? '' : (document.getElementById('client-quick-task-duedate')?.value || '');
+    const requestId = document.getElementById('client-quick-task-request')?.value || '';
 
     if (!title) return;
 
@@ -328,7 +341,7 @@ OL.createClientQuickTask = function(clientId) {
         if (!client.projectData) client.projectData = {};
         if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
 
-        client.projectData.clientTasks.unshift({
+        const newTask = {
             id: uid(),
             title: title,
             name: title,
@@ -338,7 +351,9 @@ OL.createClientQuickTask = function(clientId) {
             isClientTask: (assignee !== 'Sphynx Task' && !(OL.thirdPartyAssignees || []).includes(assignee)),
             loggedHours: 0,
             createdAt: new Date().toISOString()
-        });
+        };
+        if (requestId) addLink(newTask, requestId, []);   // request-level link, same as ticking it in the task's Requests list
+        client.projectData.clientTasks.unshift(newTask);
     });
 
     renderClientTaskManager();
