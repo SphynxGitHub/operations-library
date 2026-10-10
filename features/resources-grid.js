@@ -186,6 +186,29 @@ function _renderResourceManagerImpl() {
                 </div>
 
                 <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="clock" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Updated:</span>
+                    <select id="lib-filter-updated" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
+                        <option value="">Any time</option>
+                        <option value="1">Today</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="older90">Older than 90 days</option>
+                        <option value="none">No edit date yet</option>
+                    </select>
+                    <input type="date" id="lib-filter-updated-since" class="modal-input tiny" style="width:auto;" title="Only resources updated on or after this date" onchange="OL.syncResourceLibraryFilters()">
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="arrow-down-up" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Sort:</span>
+                    <select id="lib-sort" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceSort(this.value)">
+                        ${RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px; align-items: center;">
                     <i data-lucide="layers" style="width:14px;height:14px;color:var(--muted);"></i>
                     <span class="tiny muted bold uppercase">Group by:</span>
                     <select id="lib-group-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceGroupBy(this.value)">
@@ -243,6 +266,9 @@ function _syncResourceLibraryFiltersImpl() {
     const logicF = document.getElementById('lib-filter-logic')?.value || "";
     const scopeStatusF = document.getElementById('lib-filter-scoping-status')?.value || "";
     const partyF = document.getElementById('lib-filter-party')?.value || "";
+    const updatedF = document.getElementById('lib-filter-updated')?.value || "";
+    const sinceRaw = document.getElementById('lib-filter-updated-since')?.value || "";
+    const sinceMs = sinceRaw ? new Date(`${sinceRaw}T00:00:00`).getTime() : 0;
 
     const client = getActiveClient();
     const isVault = window.location.hash.includes('vault');
@@ -275,7 +301,16 @@ function _syncResourceLibraryFiltersImpl() {
         const matchesScopeStatus = !scopeStatusF || (scopeData && scopeData.status === scopeStatusF);
         const matchesParty = !partyF || (scopeData && scopeData.responsibleParty === partyF);
 
-        return matchesQuery && matchesType && matchesApp && matchesDataTag && matchesAssignee && matchesStatus && matchesLogic && matchesScopeStatus && matchesParty;
+        // Last-updated filter (resource date, which also moves when one of its steps is edited)
+        const upd = updatedMs(res);
+        const age = upd ? (Date.now() - upd) / 86400000 : null;
+        let matchesUpdated = true;
+        if (updatedF === 'none') matchesUpdated = !upd;
+        else if (updatedF === 'older90') matchesUpdated = age !== null && age >= 90;
+        else if (updatedF) matchesUpdated = age !== null && age <= Number(updatedF);
+        if (sinceMs) matchesUpdated = matchesUpdated && !!upd && upd >= sinceMs;
+
+        return matchesQuery && matchesType && matchesApp && matchesDataTag && matchesAssignee && matchesStatus && matchesLogic && matchesScopeStatus && matchesParty && matchesUpdated;
     });
 
     // 🔍 DIAGNOSTIC: if filters have wiped out an otherwise non-empty
@@ -284,7 +319,7 @@ function _syncResourceLibraryFiltersImpl() {
     // this reproducible/debuggable from the console instead of guesswork.
     if (source.length > 0 && filtered.length === 0) {
         console.warn('🔍 Resource library filtered to zero results. Active filters:', {
-            query, typeF, appF, dataTagF, assigneeF, statusF, logicF, scopeStatusF, partyF,
+            query, typeF, appF, dataTagF, assigneeF, statusF, logicF, scopeStatusF, partyF, updatedF, sinceRaw,
             sourceCount: source.length,
             showArchived: state.showArchivedResources
         });
@@ -448,9 +483,40 @@ export const RESOURCE_GROUP_MODES = [
     { key: 'app', label: 'App' },
     { key: 'scope', label: 'Scoping status' },
     { key: 'party', label: 'Responsible party' },
+    { key: 'updated', label: 'Last updated' },
     { key: 'none', label: 'No grouping' },
 ];
 const GROUP_BY_KEY = 'ol_resource_group_by';
+
+// ── SORT + LAST-UPDATED HELPERS ──────────────────────────────────────────────────────────────────────────────────
+export const RESOURCE_SORTS = [
+    { key: 'name', label: 'Name A-Z' },
+    { key: 'recent', label: 'Recently updated' },
+    { key: 'oldest', label: 'Least recently updated' },
+];
+const SORT_KEY = 'ol_resource_sort';
+export function getResourceSort() {
+    let v = '';
+    try { v = localStorage.getItem(SORT_KEY) || ''; } catch (e) { /* storage blocked: fall back to name */ }
+    return RESOURCE_SORTS.some(m => m.key === v) ? v : 'name';
+}
+export function setResourceSort(value) {
+    try { localStorage.setItem(SORT_KEY, value); } catch (e) { /* not remembered, still applies now */ }
+    OL.syncResourceLibraryFilters();
+}
+const updatedMs = (res) => { const t = Date.parse(res?.updatedAt || ''); return Number.isNaN(t) ? 0 : t; };
+// Age buckets for the "Last updated" grouping, newest first. Resources never edited since stamping began go last.
+const UPDATED_BUCKETS = [
+    { label: 'Today', max: 1 }, { label: 'Yesterday', max: 2 }, { label: 'Earlier this week', max: 7 },
+    { label: 'Last 30 days', max: 30 }, { label: '1 to 3 months ago', max: 90 }, { label: 'More than 3 months ago', max: Infinity },
+];
+function updatedBucket(res) {
+    const t = updatedMs(res);
+    if (!t) return null;
+    const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+    const days = Math.floor((startToday.getTime() - new Date(t).setHours(0, 0, 0, 0)) / 86400000) + 1;   // today = 1
+    return UPDATED_BUCKETS.findIndex(b => days <= b.max);
+}
 export function getResourceGroupBy() {
     let v = '';
     try { v = localStorage.getItem(GROUP_BY_KEY) || ''; } catch (e) { /* storage blocked: fall back to Type */ }
@@ -466,7 +532,10 @@ function buildResourceGroups(items, mode) {
     const data = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null) || {};
     const stages = data.stages || [];
     const all = data.resources || items;
-    const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
+    const sortMode = mode === 'updated' && getResourceSort() === 'name' ? 'recent' : getResourceSort();
+    const byName = sortMode === 'recent' ? (a, b) => (updatedMs(b) - updatedMs(a)) || String(a.name || '').localeCompare(String(b.name || ''))
+        : sortMode === 'oldest' ? (a, b) => ((updatedMs(a) || Infinity) - (updatedMs(b) || Infinity)) || String(a.name || '').localeCompare(String(b.name || ''))
+        : (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
     const buckets = new Map();   // label -> { icon, items, order, last, typeKey }
     const put = (label, item, extra = {}) => {
         if (!buckets.has(label)) buckets.set(label, { label, icon: 'folder', items: [], order: 0, last: false, ...extra });
@@ -476,6 +545,10 @@ function buildResourceGroups(items, mode) {
     items.forEach(res => {
         const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
         if (mode === 'none') put('All resources', res, { icon: 'layers' });
+        else if (mode === 'updated') {
+            const bi = updatedBucket(res);
+            bi === null ? put('No edit date yet', res, { icon: 'circle-dashed', last: true }) : put(UPDATED_BUCKETS[bi].label, res, { icon: 'clock', order: bi });
+        }
         else if (mode === 'folder') {
             const f = String(res.folder || '').trim();
             f ? put(f, res, { icon: 'folder' }) : put('No folder', res, { icon: 'folder-x', last: true });
@@ -501,7 +574,7 @@ function buildResourceGroups(items, mode) {
     const list = [...buckets.values()];
     list.forEach(g => g.items.sort(byName));
     // Stages follow their order on the process map; everything else is A-Z.
-    return list.sort((a, b) => (a.last - b.last) || (mode === 'stage' ? a.order - b.order : 0) || a.label.localeCompare(b.label));
+    return list.sort((a, b) => (a.last - b.last) || ((mode === 'stage' || mode === 'updated') ? a.order - b.order : 0) || a.label.localeCompare(b.label));
 }
 
 export function renderResourceGroups(container, items) {
@@ -654,7 +727,7 @@ export function clearResourceFilters() {
     const filterIds = [
         'lib-filter-input', 'lib-filter-type', 'lib-filter-app', 'lib-filter-data-tag',
         'lib-filter-assignee', 'lib-filter-scoped', 'lib-filter-party',
-        'lib-filter-logic', 'lib-filter-scoping-status'
+        'lib-filter-logic', 'lib-filter-scoping-status', 'lib-filter-updated', 'lib-filter-updated-since'
     ];
     filterIds.forEach(id => {
         const el = document.getElementById(id);
@@ -1549,7 +1622,7 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     syncResourceLibraryFilters, renderResourceGroups, _renderResourceListRow,
-    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy,
+    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSort, setResourceSort,
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
