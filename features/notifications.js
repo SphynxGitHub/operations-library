@@ -78,7 +78,13 @@ export function openNotificationSettingsModal() {
             <p class="tiny muted" style="margin-bottom:6px;">Choose how you want to hear about activity that involves you, ${esc(member.name)}.</p>
             ${row('New tagged comment (@mention)', 'newComment')}
             ${row('New task assigned to you', 'newAssignment')}
-            <p class="tiny muted" style="margin-top:14px;">Email delivery isn't wired to a mail sender yet — enabling it queues the message so it's ready once one is connected.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--panel-border);">
+                <span class="tiny">Daily digest email<br><span class="muted">Weekdays at 7am, only when something new happened for you: the previous workday 7am to 5pm (4pm Fridays), and everything since then. After 4pm Friday rolls into Monday's.</span></span>
+                <label class="tiny muted" style="display:flex; align-items:center; gap:6px; cursor:pointer; flex-shrink:0;">
+                    <input type="checkbox" ${prefs.email.dailyDigest !== false ? 'checked' : ''} onchange="OL.toggleNotificationPref('email', 'dailyDigest', this.checked)"> On
+                </label>
+            </div>
+            <p class="tiny muted" style="margin-top:14px;">The Email boxes above only queue messages for now; only the daily digest is actually emailed.</p>
             ${permission === 'unsupported' ? `
                 <p class="tiny muted" style="margin-top:6px;">This browser doesn't support desktop notifications.</p>
             ` : permission === 'denied' ? `
