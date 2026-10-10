@@ -78,8 +78,10 @@ export const isDigestHour = (now: Date, tz = DIGEST_TZ) => zonedParts(now, tz).h
 // ---------------------------------------------------------------------------------------------------------------------
 // activity
 // ---------------------------------------------------------------------------------------------------------------------
-export type DigestItem = { at: string; kind: "tag" | "assigned"; text: string; project: string };
-export type Unchecked = { text: string; project: string; at: string };
+export type DigestItem = { at: string; kind: "tag" | "sent" | "assigned"; text: string; project: string; quote?: string };
+export type Unchecked = { text: string; project: string; at: string; quote?: string };
+
+const snip = (v: unknown, n = 280) => { const t = String(v ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 
 const lc = (v: unknown) => String(v ?? "").trim().toLowerCase();
 const inWindow = (iso: unknown, w: { from: Date; to: Date }) => {
@@ -105,8 +107,13 @@ export function activityFor(memberName: string, clients: DigestClient[], window:
       if (!task) return;
       const title = task.title || task.name || "a task";
       (task.comments || []).forEach((c: any) => {
-        if (lc(c?.author) === me || !isMentioned(c, me) || !inWindow(c.date, window)) return;
-        out.push({ at: c.date, kind: "tag", text: `${c.author || "Someone"} tagged you on "${title}"`, project });
+        if (!inWindow(c?.date, window)) return;
+        if (lc(c?.author) !== me && isMentioned(c, me)) {
+          out.push({ at: c.date, kind: "tag", text: `${c.author || "Someone"} tagged you on "${title}"`, project, quote: snip(c.text) });
+        } else if (lc(c?.author) === me) {
+          const who = (c.mentions || []).map((m: any) => m?.name).filter((n: any) => n && lc(n) !== me);
+          if (who.length) out.push({ at: c.date, kind: "sent", text: `You tagged ${who.join(", ")} on "${title}"`, project, quote: snip(c.text) });
+        }
       });
       if (assignedTo(task, me) && inWindow(task.createdAt, window) && !closed.has(task.status || "")) {
         out.push({ at: task.createdAt, kind: "assigned", text: `You were assigned "${title}"`, project });
@@ -116,8 +123,14 @@ export function activityFor(memberName: string, clients: DigestClient[], window:
     (pd.localResources || pd.resources || []).forEach((res: any) => {
       (res?.steps || []).forEach((step: any) => {
         (step?.items || []).forEach((it: any) => {
-          if (lc(it?.author) === me || !(it?.mentions || []).some((m: any) => lc(m?.name) === me) || !inWindow(it.createdAt, window)) return;
-          out.push({ at: it.createdAt, kind: "tag", text: `${it.author || "Someone"} tagged you on "${step.name || "a step"}" in ${res.name || "the flow map"}`, project });
+          if (!inWindow(it?.createdAt, window)) return;
+          const where = `"${step.name || "a step"}" in ${res.name || "the flow map"}`;
+          if (lc(it?.author) !== me && (it?.mentions || []).some((m: any) => lc(m?.name) === me)) {
+            out.push({ at: it.createdAt, kind: "tag", text: `${it.author || "Someone"} tagged you on ${where}`, project, quote: snip(it.text) });
+          } else if (lc(it?.author) === me) {
+            const who = (it.mentions || []).map((m: any) => m?.name).filter((n: any) => n && lc(n) !== me);
+            if (who.length) out.push({ at: it.createdAt, kind: "sent", text: `You tagged ${who.join(", ")} on ${where}`, project, quote: snip(it.text) });
+          }
         });
       });
     });
@@ -137,11 +150,11 @@ export function uncheckedFor(memberName: string, clients: DigestClient[], closed
       const title = task.title || task.name || "a task";
       (task.comments || []).forEach((c: any) => {
         if (lc(c?.author) !== me && isMentioned(c, me) && !viewedBy(c, me)) {
-          mine.push({ text: `${c.author || "Someone"} tagged you on "${title}"`, project, at: c.date });
+          mine.push({ text: `${c.author || "Someone"} tagged you on "${title}"`, project, at: c.date, quote: snip(c.text) });
         }
         if (lc(c?.author) === me) {
           const pending = (c.mentions || []).map((m: any) => m?.name).filter((n: any) => n && lc(n) !== me && !viewedBy(c, lc(n)));
-          if (pending.length) sent.push({ text: `You tagged ${pending.join(", ")} on "${title}"`, project, at: c.date });
+          if (pending.length) sent.push({ text: `You tagged ${pending.join(", ")} on "${title}"`, project, at: c.date, quote: snip(c.text) });
         }
       });
     });
@@ -154,6 +167,7 @@ export function uncheckedFor(memberName: string, clients: DigestClient[], closed
 // the message
 // ---------------------------------------------------------------------------------------------------------------------
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+const quoteHtml = (q?: string) => q ? `<div style="margin:3px 0 0;padding:4px 10px;border-left:3px solid #ccc;color:#444;font-size:13px;">${esc(q)}</div>` : "";
 const clock = (iso: string, tz = DIGEST_TZ) =>
   new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
 const dayClock = (iso: string, tz = DIGEST_TZ) =>
@@ -178,7 +192,7 @@ export function buildDigest(
   const weekend = w.endHour === FRIDAY_END;
   const sections: { title: string; sub: string; items: DigestItem[]; stamp: (iso: string) => string }[] = [
     { title: `${w.prevLabel}, 7am to ${endLabel}`, sub: "Previous workday", items: workday, stamp: clock },
-    { title: `${endLabel} to 6:59am`, sub: weekend ? `After ${endLabel} Friday, through the weekend` : `Overnight, since ${endLabel} ${w.prevLabel.split(" ")[0]}`, items: overnight, stamp: dayClock },
+    { title: `${endLabel} to 6:59am`, sub: weekend ? `After ${endLabel} Friday, through the weekend` : `Overnight, since ${endLabel} ${w.prevLabel.split(",")[0]}`, items: overnight, stamp: dayClock },
   ];
 
   const text: string[] = [`Hi ${first},`, ""];
@@ -191,12 +205,21 @@ export function buildDigest(
       html.push(`<p style="color:#888;margin:0;">Nothing new.</p>`);
       return;
     }
-    html.push("<ul style=\"padding-left:18px;margin:0;\">");
-    s.items.forEach((i) => {
-      text.push(`  - ${s.stamp(i.at)}  ${i.text} (${i.project})`);
-      html.push(`<li style="margin-bottom:4px;"><span style="color:#888;">${esc(s.stamp(i.at))}</span> ${esc(i.text)} <span style="color:#888;">(${esc(i.project)})</span></li>`);
+    const groups: { label: string; list: DigestItem[] }[] = [
+      { label: "Assigned tasks", list: s.items.filter((i) => i.kind === "assigned") },
+      { label: "Comments", list: s.items.filter((i) => i.kind !== "assigned") },
+    ];
+    groups.forEach((g) => {
+      if (!g.list.length) return;
+      text.push(`  ${g.label.toUpperCase()}`);
+      html.push(`<div style="font-weight:600;font-size:13px;margin:10px 0 3px;">${esc(g.label)}</div><ul style="padding-left:18px;margin:0;">`);
+      g.list.forEach((i) => {
+        text.push(`  - ${s.stamp(i.at)}  ${i.text} (${i.project})`);
+        if (i.quote) text.push(`      "${i.quote}"`);
+        html.push(`<li style="margin-bottom:8px;"><span style="color:#888;">${esc(s.stamp(i.at))}</span> ${esc(i.text)} <span style="color:#888;">(${esc(i.project)})</span>${quoteHtml(i.quote)}</li>`);
+      });
+      html.push("</ul>");
     });
-    html.push("</ul>");
     text.push("");
   });
 
@@ -206,7 +229,8 @@ export function buildDigest(
     html.push(`<h3 style="margin:18px 0 4px;">${esc(title)}</h3><ul style="padding-left:18px;margin:0;">`);
     list.forEach((u) => {
       text.push(`  - ${u.text} (${u.project})`);
-      html.push(`<li style="margin-bottom:4px;">${esc(u.text)} <span style="color:#888;">(${esc(u.project)})</span></li>`);
+      if (u.quote) text.push(`      "${u.quote}"`);
+      html.push(`<li style="margin-bottom:8px;">${esc(u.text)} <span style="color:#888;">(${esc(u.project)})</span>${quoteHtml(u.quote)}</li>`);
     });
     html.push("</ul>");
     text.push("");
