@@ -255,12 +255,16 @@ export function openClientItems(client, ctx) {
         }
         addToRequestGroups(client, groups, t, links);
     });
-    // Sphynx's own work parked on a "Pending Client ..." status (Review, Feedback, Document, Action) is waiting on the
-    // client too, even when no separate client task was ever created for it. Without this a project whose only open
-    // items are "Pending Client Review" got no follow-up task at all.
+    // Sphynx's own work parked on a "Pending Client ...", "Pending Developer ..." or "Pending Third Party ..." status is
+    // waiting on someone too, even when no separate client task was ever created for it. Without this a project whose only
+    // open items were parked got no follow-up task at all.
     (client?.projectData?.clientTasks || []).forEach((t) => {
-        if (!t || !isOpen(t, ctx) || t.consolidatedFollowUp || !isClientWaitingStatus(t.status) || !isSphynxWork(t, ctx)) return;
-        if (openClientTasksFor(client, t, ctx).length) return;   // its own client asks already put it on the follow-up
+        if (!t || !isOpen(t, ctx) || t.consolidatedFollowUp) return;
+        // Parked on the client, a developer or a third party: any of the three needs a follow-up. (A task asked of a third
+        // party, askKind 'third_party', counts too.)
+        const parked = isClientWaitingStatus(t.status) || isOffsiteWaitingStatus(t.status);
+        if (!((parked && isSphynxWork(t, ctx)) || t.askKind === 'third_party')) return;
+        if (isClientWaitingStatus(t.status) && openClientTasksFor(client, t, ctx).length) return;   // its own client asks already put it on the follow-up
         const links = linksForTask(t);
         if (!links.length) {
             if (!groups.has('_unlinked')) groups.set('_unlinked', { title: 'Other client tasks', resources: new Map() });
@@ -306,12 +310,12 @@ function lastCommentText(task) {
 }
 
 function followUpDescription(client, groups, notes) {
-    const lines = ['Waiting on the client:'];
+    const lines = ['Waiting on the client or others:'];
     groups.forEach((g) => {
         lines.push('', `${g.title}`);
         g.resources.forEach((r) => {
             if (r.name) lines.push(`  ${r.name}`);
-            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}${isClientWaitingStatus(t.status) ? ` (${t.status})` : ''}`));   // client tasks have no due dates of their own
+            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}${isClientWaitingStatus(t.status) || isOffsiteWaitingStatus(t.status) ? ` (${t.status})` : ''}`));   // client tasks have no due dates of their own
         });
     });
     if (notes.length) {
