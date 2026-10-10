@@ -43,8 +43,8 @@ const WINDOW = {
     feedback:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
     document:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
     review:      { head: 'Waiting on the client', placeholder: 'What is the client reviewing, and anything they should know?', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
-    developer:   { head: 'Waiting on a developer', placeholder: 'What the developer is working on or has been asked, and what is expected back.', hint: 'Shown as this item\'s status under "Waiting on Sphynx" in the client follow-up. It is included in the email unless you uncheck the item there.' },
-    third_party: { head: 'Waiting on a third party', placeholder: 'Who it is with, what they were asked for, and any reference or ticket number.', hint: 'Shown as this item\'s status under "Waiting on Other" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+    developer:   { head: 'Waiting on a developer', placeholder: 'What the developer is working on or has been asked, and what is expected back.', hint: 'Shown as this item\'s status under "Pending Developer / Third Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+    third_party: { head: 'Waiting on a third party', placeholder: 'Who it is with, what they were asked for, and any reference or ticket number.', hint: 'Shown as this item\'s status under "Pending Developer / Third Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
 };
 
 const OVERLAY_ID = 'waiting-prompt';

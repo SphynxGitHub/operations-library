@@ -1043,7 +1043,7 @@ export function followUpEmailData(client, ctx) {
     const listed = new Set();
     const addRow = (target, note, noNote) => {
         const row = { id: target.id, label: labelFor(client, target), note, ...(noNote ? { noNote: true } : {}) };
-        (isThirdPartyWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);
+        (isOffsiteWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);   // developer and third party share one section
         listed.add(String(target.id));
     };
 

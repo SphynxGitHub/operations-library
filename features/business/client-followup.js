@@ -27,7 +27,7 @@ const SECTION_LABELS = {
     clientAsks: (clientName) => `Waiting on ${clientName}`,
     pendingReview: () => 'Pending Review/Confirmation',
     sphynxStalled: () => 'Waiting on Sphynx',
-    thirdPartyStalled: () => 'Waiting on Other',
+    thirdPartyStalled: () => 'Pending Developer / Third Party',
 };
 const SECTION_ORDER = ['clientAsks', 'pendingReview', 'sphynxStalled', 'thirdPartyStalled'];
 
