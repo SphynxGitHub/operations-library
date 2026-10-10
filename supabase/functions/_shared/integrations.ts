@@ -99,14 +99,14 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
     case "mailerlite":
       return await getJson(f, "https://connect.mailerlite.com/api/automations", { Authorization: `Bearer ${key}` }, key);
     case "keap": {
-      // Keap (Infusionsoft) REST v1 with a Service Account Key. Campaigns come back a page at a time with the
+      // Keap (Infusionsoft) REST v1 with a Service Account Key sent as a Bearer token (developer.keap.com/pat-and-sak). Campaigns come back a page at a time with the
       // names of their sequences; the steps inside a sequence are not available through the API.
       const KEAP = "https://api.infusionsoft.com/crm/rest/v1";
       let campaigns: any[] = [];
       let next: string | null = `${KEAP}/campaigns?limit=200&optional_properties=sequences`;
       let pages = 0;
       while (next && pages < 10) {
-        const data: any = await getJson(f, next, { "X-Keap-API-Key": key }, key);
+        const data: any = await getJson(f, next, { Authorization: `Bearer ${key}` }, key);
         campaigns = campaigns.concat(data.campaigns || []);
         pages++;
         next = null;
