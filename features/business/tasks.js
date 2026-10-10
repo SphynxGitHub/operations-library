@@ -2813,6 +2813,16 @@ OL._teardownMentionDropdownReposition = function(taskId) {
 };
 
 OL.handleCommentMentionKeydown = function(event, taskId) {
+    // Ctrl+Enter (Cmd+Enter on a Mac) posts the comment, the same as clicking Post. Works in task and event comment boxes.
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        let box = event.target;
+        while (box && box !== document.body) {
+            const post = box.querySelector && box.querySelector('button[onclick*="addTaskComment("], button[onclick*="addEventComment("]');
+            if (post) { event.preventDefault(); post.click(); return; }
+            box = box.parentElement;
+        }
+        return;
+    }
     const dropdown = document.getElementById(`comment-mention-dropdown-${taskId}`);
     if (!dropdown || !dropdown.innerHTML.trim()) return;
 
