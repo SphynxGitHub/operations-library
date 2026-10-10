@@ -129,6 +129,7 @@ export function renderResourceCard(res, opts = {}) {
                 ${numberingHtml}
                 ${OL.renderResourceStatusPill(res)}
                 ${typeof OL.resourceTagsHtml === 'function' ? OL.resourceTagsHtml(res) : ''}
+                ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(res, { showUnknown: false, withName: true }) : ''}
                 <span class="vault-tag" style="${tagStyle} padding: 1px 5px; font-size: 7.5px; border-radius: 3px; font-weight: bold;">
                     ${isMaster ? 'MASTER' : 'LOCAL'}
                 </span>

@@ -2388,7 +2388,7 @@ export function _fvRenderSteps(resources) {
                                  align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
                     <div style="min-width:0;flex:1;">
                       <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
-                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}
+                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}
                     </div>
                   </div>
                   ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'card') : ''}
@@ -3890,7 +3890,7 @@ export function _fvOpenStepsList(resId) {
             </div>
             <div style="flex:1;min-width:0;cursor:pointer;"
                  onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}')">
-              <div class="fvi-step-name">${esc(s.name||'Unnamed Step')}</div>
+              <div class="fvi-step-name">${esc(s.name||'Unnamed Step')} ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(s) : ''}</div>
               ${hasBadges ? `
                 <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">
                   ${appBadge}${assigneeBadges}${logicIcon}
@@ -4565,7 +4565,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
           
           <div style="display:flex; flex-direction:column; gap:1px; flex:1; min-width:0;">
               <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600; font-size:13px; color:var(--text-main);">${esc(step.name || 'Unnamed Step')}</span>
-              
+              ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step, { withName: true }) : ''}
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
               ${typeof OL.fvRefChip === 'function' && step.refResId ? `<div style="margin-top:3px;">${OL.fvRefChip(step, res)}</div>` : ''}
               ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'row') : ''}

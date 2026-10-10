@@ -65,12 +65,13 @@ export function updatedInfo(item, staleDays = 90) {
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// A small neutral "Updated 3d ago" pill. Resources and steps never edited since stamping began show a muted "No edit date yet" only when asked (showUnknown).
+// A small "Updated 3d ago" pill; amber once it has gone 90+ days without a change. Resources and steps never edited since
+// stamping began show a muted "No edit date yet" only when asked (showUnknown).
 export function updatedPillHtml(item, { staleDays = 90, showUnknown = false, withName = false } = {}) {
     const info = updatedInfo(item, staleDays);
     if (!info) return showUnknown ? `<span class="pill tiny" style="font-size:8px;padding:1px 5px;opacity:.45;white-space:nowrap;" title="No edit date recorded yet. It fills in the next time this is changed.">No edit date yet</span>` : '';
-    const c = '#94a3b8';
-    return `<span class="pill tiny" style="font-size:8px;font-weight:600;padding:1px 5px;white-space:nowrap;background:${c}22;color:${c};border:1px solid ${c}44;" title="${esc(info.title)}">Updated ${esc(info.when)}${withName && info.by ? ` · ${esc(info.by.split(' ')[0])}` : ''}</span>`;
+    const c = info.stale ? '#f59e0b' : '#94a3b8';
+    return `<span class="pill tiny" style="font-size:8px;font-weight:600;padding:1px 5px;white-space:nowrap;background:${c}22;color:${c};border:1px solid ${c}44;" title="${esc(info.title)}${info.stale ? ' (not touched in 90+ days)' : ''}">${info.stale ? '⚠ ' : ''}Updated ${esc(info.when)}${withName && info.by ? ` · ${esc(info.by.split(' ')[0])}` : ''}</span>`;
 }
 
 if (typeof OL !== 'undefined') {

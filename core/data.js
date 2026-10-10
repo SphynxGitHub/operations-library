@@ -4,6 +4,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { mirrorClientRequests } from './requests.js';
 import { isMaintenanceSheet } from './maintenance.js';
 import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } from './preview.js';
+import { stampChangedResources } from './change-stamps.js';
 
 // ---- small value helpers used throughout the data layer ----
 export const val = (v) => (v === undefined || v === null) ? "" : v;
@@ -125,6 +126,8 @@ export function persist() {
     // edits), so IS_GUEST can no longer be used as a blanket "read-only"
     // gate here. Per-tab write access is enforced separately via
     // checkPermission(); this function just performs the save.
+    // Stamp resources/steps whose content changed (updatedAt / updatedBy) before the save is queued. See core/change-stamps.js.
+    stampChangedResources();
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
     window.lastSyncHash = null;
     // Redraw the current page so the change shows everywhere right away
