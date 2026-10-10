@@ -101,6 +101,8 @@ export function renderResourceCard(res, opts = {}) {
             
             <!-- Header: Text-wrapping Title & Actions -->
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+                ${opts.selectable ? `<input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="margin-top:2px; flex-shrink:0;"
+                       onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">` : ''}
                 <div class="card-title" style="flex:1; font-weight:600; font-size: 12px; line-height: 1.35; word-break: break-word; white-space: normal;">
                     ${esc(res.name || "Unnamed")}
                 </div>
@@ -126,6 +128,7 @@ export function renderResourceCard(res, opts = {}) {
             <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top: 2px;">
                 ${numberingHtml}
                 ${OL.renderResourceStatusPill(res)}
+                ${typeof OL.resourceTagsHtml === 'function' ? OL.resourceTagsHtml(res) : ''}
                 <span class="vault-tag" style="${tagStyle} padding: 1px 5px; font-size: 7.5px; border-radius: 3px; font-weight: bold;">
                     ${isMaster ? 'MASTER' : 'LOCAL'}
                 </span>

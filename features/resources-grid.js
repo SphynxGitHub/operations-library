@@ -7,6 +7,7 @@
 // and rely on the window bridge to resolve that, same as other modules.
 
 import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
+import { RESOURCE_STATUSES } from '../core/resource-status.js';
 
 export function renderResourceManager() {
   try {
@@ -292,12 +293,156 @@ function _syncResourceLibraryFiltersImpl() {
     OL.renderResourceGroups(container, filtered);
 };
 
+
+// Sub-groups inside a folder: items without one come first (unlabelled), then each sub-group A-Z.
+function splitSubGroups(items) {
+    const map = new Map();
+    items.forEach(r => { const k = String(r.subGroup || '').trim(); if (!map.has(k)) map.set(k, []); map.get(k).push(r); });
+    return [...map.entries()].sort(([a], [b]) => (!!b - !!a) || a.localeCompare(b)).map(([label, list]) => ({ label, items: list }));
+}
+
+// ── TAGS: process stage, folder and sub-group shown as small pills on cards and list rows ────────────────────────
+OL.resourceTagsHtml = function(res) {
+    const data = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null) || {};
+    const stage = res.stageId ? (data.stages || []).find(s => String(s.id) === String(res.stageId)) : null;
+    const pill = (icon, text, color) => `<span class="pill tiny" style="display:inline-flex;align-items:center;gap:3px;background:${color}1a;color:${color};border:1px solid ${color}44;font-size:8px;padding:1px 5px;white-space:nowrap;"><i data-lucide="${icon}" style="width:8px;height:8px;"></i>${esc(text)}</span>`;
+    return [
+        stage ? pill('milestone', stage.name, '#a78bfa') : '',
+        res.folder ? pill('folder', res.subGroup ? `${res.folder} / ${res.subGroup}` : res.folder, '#64c6a2') : '',
+    ].join('');
+};
+
+// ── BULK UPDATE ───────────────────────────────────────────────────────────────────────────────────────────────────
+// Tick resources (cards, list rows, or a whole group) and a bar appears with Type, Status, Process stage, Folder,
+// Sub-group and Archive, the same idea as the task bar. Nothing is written until "Apply to Selected".
+OL.bulkResourceSelection = OL.bulkResourceSelection || {};
+
+const libraryResources = () => (window.location.hash.includes('vault') ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []));
+const distinct = (key) => [...new Set(libraryResources().map(r => String(r[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+OL.toggleResourceSelect = function(id, on) {
+    if (on) OL.bulkResourceSelection[id] = true; else delete OL.bulkResourceSelection[id];
+    OL.refreshBulkResourceBar();
+};
+OL.toggleResourceGroupSelect = function(idsCsv, on) {
+    String(idsCsv || '').split(',').filter(Boolean).forEach(id => { if (on) OL.bulkResourceSelection[id] = true; else delete OL.bulkResourceSelection[id]; });
+    document.querySelectorAll('input[data-res-sel]').forEach(cb => { cb.checked = !!OL.bulkResourceSelection[cb.getAttribute('data-res-sel')]; });
+    OL.refreshBulkResourceBar();
+};
+OL.clearResourceSelection = function() {
+    OL.bulkResourceSelection = {};
+    document.querySelectorAll('input[data-res-sel], input[data-res-group]').forEach(cb => { cb.checked = false; });
+    OL.refreshBulkResourceBar();
+};
+OL.selectAllShownResources = function() {
+    document.querySelectorAll('input[data-res-sel]').forEach(cb => { cb.checked = true; OL.bulkResourceSelection[cb.getAttribute('data-res-sel')] = true; });
+    OL.refreshBulkResourceBar();
+};
+
+// "+ New folder…" in the bulk bar's Folder / Sub-group lists asks for a name and adds it as the chosen option.
+OL.bulkResourceNewOption = function(sel) {
+    if (sel.value !== '__new__') return;
+    const label = sel.id === 'bulk-res-folder' ? 'Folder name' : 'Sub-group name';
+    const name = (prompt(`${label}:`) || '').trim();
+    if (!name) { sel.value = ''; return; }
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
+    sel.value = name;
+};
+
+OL.refreshBulkResourceBar = function() {
+    let bar = document.getElementById('bulk-resource-bar');
+    const ids = Object.keys(OL.bulkResourceSelection);
+    // Only on the library screen, and only while something is ticked.
+    if (!ids.length || !document.getElementById('resource-library-results')) { if (bar) bar.remove(); return; }
+    const keepState = bar ? ['bulk-res-type', 'bulk-res-status', 'bulk-res-stage', 'bulk-res-folder', 'bulk-res-subgroup'].map(id => [id, document.getElementById(id)?.value || '']) : [];
+    if (!bar) { bar = document.createElement('div'); bar.id = 'bulk-resource-bar'; document.body.appendChild(bar); }
+    bar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:500; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center; border:1px solid var(--accent); background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:94vw;';
+
+    const types = [...new Set([...(state.master.resourceTypes || []).map(t => t.type), 'General'])].filter(Boolean);
+    const data = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null) || {};
+    const stages = data.stages || [];
+    const folders = distinct('folder'), subGroups = distinct('subGroup');
+    const opts = (list) => list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    const sel = (id, first, body, w = 'auto') => `<select id="${id}" class="modal-input tiny" style="width:${w};">${`<option value="">${first}</option>`}${body}</select>`;
+
+    bar.innerHTML = `
+        <strong class="tiny" style="white-space:nowrap;">${ids.length} resource${ids.length === 1 ? '' : 's'} selected</strong>
+        ${sel('bulk-res-type', 'Set Type...', opts(types))}
+        ${sel('bulk-res-status', 'Set Status...', opts(RESOURCE_STATUSES))}
+        ${sel('bulk-res-stage', 'Set Process Stage...', `<option value="__none__">— No stage —</option>${stages.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}`)}
+        <select id="bulk-res-folder" class="modal-input tiny" style="width:auto;" onchange="OL.bulkResourceNewOption(this)"><option value="">Set Folder...</option><option value="__none__">— No folder —</option>${opts(folders)}<option value="__new__">+ New folder…</option></select>
+        <select id="bulk-res-subgroup" class="modal-input tiny" style="width:auto;" onchange="OL.bulkResourceNewOption(this)"><option value="">Set Sub-group...</option><option value="__none__">— No sub-group —</option>${opts(subGroups)}<option value="__new__">+ New sub-group…</option></select>
+        <button class="btn tiny primary" onclick="OL.applyBulkResourceEdit()">Apply to Selected</button>
+        <button class="btn tiny soft" onclick="OL.bulkArchiveResources(true)" style="display:flex; align-items:center; gap:4px;"><i data-lucide="archive" style="width:12px;height:12px;"></i> Archive</button>
+        <button class="btn tiny soft" onclick="OL.bulkArchiveResources(false)" style="display:flex; align-items:center; gap:4px;"><i data-lucide="archive-restore" style="width:12px;height:12px;"></i> Unarchive</button>
+        <button class="btn tiny soft" onclick="OL.selectAllShownResources()">Select all shown</button>
+        <button class="btn tiny soft" onclick="OL.clearResourceSelection()">Clear</button>`;
+    // Keep what was picked while ticking more boxes (the bar is redrawn on every tick).
+    keepState.forEach(([id, v]) => {
+        const el = document.getElementById(id);
+        if (!el || !v) return;
+        if (![...el.options].some(o => o.value === v)) { const o = document.createElement('option'); o.value = v; o.textContent = v; el.insertBefore(o, el.querySelector('option[value="__new__"]')); }
+        el.value = v;
+    });
+    if (window.lucide) window.lucide.createIcons();
+};
+window.addEventListener('hashchange', () => { if (!document.getElementById('resource-library-results')) document.getElementById('bulk-resource-bar')?.remove(); });
+
+const selectedResources = () => {
+    const ids = new Set(Object.keys(OL.bulkResourceSelection));
+    return libraryResources().filter(r => ids.has(String(r.id)));
+};
+const afterBulkResourceChange = () => {
+    OL.persist();
+    OL.bulkResourceSelection = {};
+    document.getElementById('bulk-resource-bar')?.remove();
+    renderResourceManager();
+};
+
+OL.applyBulkResourceEdit = function() {
+    const v = (id) => document.getElementById(id)?.value || '';
+    const type = v('bulk-res-type'), status = v('bulk-res-status'), stage = v('bulk-res-stage'), folder = v('bulk-res-folder'), sub = v('bulk-res-subgroup');
+    if (!type && !status && !stage && !folder && !sub) { alert('Choose at least one thing to change (type, status, process stage, folder or sub-group), or use Archive.'); return; }
+    const list = selectedResources();
+    if (!list.length) { alert('None of the selected resources are in this library any more.'); return; }
+
+    list.forEach(res => {
+        if (type) {
+            res.type = type;
+            res.typeKey = type.toLowerCase().replace(/[^a-z0-9]+/g, '');
+            const entry = (state.master.resourceTypes || []).find(t => t.type === type);
+            if (entry) res.archetype = entry.archetype || 'Base';
+        }
+        if (status) res.status = status;
+        if (stage) res.stageId = stage === '__none__' ? '' : stage;
+        if (folder) {
+            res.folder = folder === '__none__' ? '' : folder;
+            if (folder === '__none__') res.subGroup = '';   // a sub-group lives inside a folder
+        }
+        if (sub) res.subGroup = sub === '__none__' ? '' : sub;
+    });
+    afterBulkResourceChange();
+    if (typeof OL.showToast === 'function') OL.showToast(`Updated ${list.length} resource${list.length === 1 ? '' : 's'}.`);
+};
+
+OL.bulkArchiveResources = function(archive) {
+    const list = selectedResources();
+    if (!list.length) return;
+    if (archive && list.length > 5 && !confirm(`Archive ${list.length} resources? They are hidden from the library (not deleted) and can be unarchived.`)) return;
+    list.forEach(res => { res.isArchived = !!archive; });
+    afterBulkResourceChange();
+    if (typeof OL.showToast === 'function') OL.showToast(`${archive ? 'Archived' : 'Unarchived'} ${list.length} resource${list.length === 1 ? '' : 's'}.`);
+};
+
 // ── GROUPING ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The Resources tab used to be one flat list of types. Now that the Swimlanes view is gone there was no way to see
 // resources by where they sit in the process, so the tab can group by Type (the default), Process stage, Parent
 // workflow, App, Scoping status or Responsible party. The choice is remembered on this device.
 export const RESOURCE_GROUP_MODES = [
     { key: 'type', label: 'Type' },
+    { key: 'folder', label: 'Folder / sub-group' },
     { key: 'stage', label: 'Process stage' },
     { key: 'workflow', label: 'Parent workflow' },
     { key: 'app', label: 'App' },
@@ -331,7 +476,10 @@ function buildResourceGroups(items, mode) {
     items.forEach(res => {
         const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
         if (mode === 'none') put('All resources', res, { icon: 'layers' });
-        else if (mode === 'stage') {
+        else if (mode === 'folder') {
+            const f = String(res.folder || '').trim();
+            f ? put(f, res, { icon: 'folder' }) : put('No folder', res, { icon: 'folder-x', last: true });
+        } else if (mode === 'stage') {
             const st = stages.find(s => String(s.id) === String(res.stageId));
             st ? put(st.name, res, { icon: 'milestone', order: stages.indexOf(st) }) : put('No stage', res, { icon: 'circle-dashed', last: true });
         } else if (mode === 'workflow') {
@@ -415,7 +563,7 @@ function _renderResourceGroupsImpl(container, items) {
                         ${references.map(res => OL._renderResourceListRow(res)).join('')}
                     </div>
                 ` : `
-                    <div class="cards-grid compact">${references.map(r => renderResourceCard(r, { compact: true })).join('')}</div>
+                    <div class="cards-grid compact">${references.map(r => renderResourceCard(r, { compact: true, selectable: true })).join('')}</div>
                 `}
             </div>` : ''}
 
@@ -429,27 +577,33 @@ function _renderResourceGroupsImpl(container, items) {
                 <details class="resource-group res-group" ${startOpen ? 'open' : ''} style="margin-bottom: 24px;">
                     <summary style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px; cursor:pointer; list-style:none;">
                         <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" data-res-group="${esc(g.items.map(r => r.id).join(','))}" title="Select every resource in this group"
+                                   onclick="event.stopPropagation()" onchange="OL.toggleResourceGroupSelect(this.getAttribute('data-res-group'), this.checked)">
                             <i data-lucide="${g.icon}" style="width:18px; height:18px; color: var(--accent);"></i>
                             <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">${esc(g.label)}</h3>
                             <span class="pill tiny soft">${g.items.length}</span>
                         </div>
                         ${mode === 'type' && g.typeKey ? `<button class="btn tiny soft" onclick="event.preventDefault(); event.stopPropagation(); OL.promptBulkReclassify('${esc(g.typeKey)}')">Bulk Move</button>` : ''}
                     </summary>
-                    ${listMode ? `
-                        <div style="display:flex;flex-direction:column;gap:2px;">
-                            ${g.items.map(res => OL._renderResourceListRow(res)).join('')}
-                        </div>
-                    ` : `
-                        <div class="cards-grid">
-                            ${g.items.map(r => renderResourceCard(r)).join('')}
-                        </div>
-                    `}
+                    ${(mode === 'folder' ? splitSubGroups(g.items) : [{ label: '', items: g.items }]).map(sg => `
+                        ${sg.label ? `<div class="tiny bold uppercase muted" style="margin:10px 0 6px 2px; display:flex; align-items:center; gap:6px;"><i data-lucide="corner-down-right" style="width:12px;height:12px;"></i>${esc(sg.label)} <span class="pill tiny soft">${sg.items.length}</span></div>` : ''}
+                        ${listMode ? `
+                            <div style="display:flex;flex-direction:column;gap:2px;">
+                                ${sg.items.map(res => OL._renderResourceListRow(res)).join('')}
+                            </div>
+                        ` : `
+                            <div class="cards-grid">
+                                ${sg.items.map(r => renderResourceCard(r, { selectable: true })).join('')}
+                            </div>
+                        `}
+                    `).join('')}
                 </details>
             `).join('')}
         </div>
     `;
 
     if (window.lucide) window.lucide.createIcons();
+    OL.refreshBulkResourceBar();
 };
 
 export function _renderResourceListRow(res) {
@@ -467,8 +621,11 @@ export function _renderResourceListRow(res) {
              onclick="OL.selectResourceCard('${res.id}')"
              onmouseover="this.style.borderColor='var(--accent)'"
              onmouseout="this.style.borderColor='var(--panel-border)'">
+            <input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="flex-shrink:0;"
+                   onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">
             <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
             <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
+            ${OL.resourceTagsHtml(res)}
             ${isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:var(--text-dim);border:1px solid #6b7280;font-size:8px;">Archived</span>` : ''}
             <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
             ${OL.renderResourceStatusPill(res)}
@@ -715,6 +872,18 @@ export function renderHierarchySelectors(res, isVault) {
 
     return `
         <div class="hierarchy-selectors">
+            <div class="form-group">
+                <label class="tiny-label">Folder ${String(res.type).toLowerCase() === 'zap' ? '(group your Zaps)' : ''}</label>
+                <input type="text" class="modal-input tiny" list="res-folder-list" placeholder="e.g. Onboarding Zaps" value="${esc(res.folder || '')}"
+                       onchange="OL.updateResourceMeta('${res.id}', 'folder', this.value.trim())">
+                <datalist id="res-folder-list">${[...new Set((data.resources || []).map(r => String(r.folder || '').trim()).filter(Boolean))].map(f => `<option value="${esc(f)}">`).join('')}</datalist>
+            </div>
+            <div class="form-group">
+                <label class="tiny-label">Sub-group</label>
+                <input type="text" class="modal-input tiny" list="res-subgroup-list" placeholder="e.g. Lead intake" value="${esc(res.subGroup || '')}"
+                       onchange="OL.updateResourceMeta('${res.id}', 'subGroup', this.value.trim())">
+                <datalist id="res-subgroup-list">${[...new Set((data.resources || []).filter(r => !res.folder || r.folder === res.folder).map(r => String(r.subGroup || '').trim()).filter(Boolean))].map(f => `<option value="${esc(f)}">`).join('')}</datalist>
+            </div>
             <div class="form-group">
                 <label class="tiny-label">Process Stage</label>
                 <select class="modal-input tiny" 
