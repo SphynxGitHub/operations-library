@@ -46,6 +46,7 @@ export function taskPhase(task, item) {
 // ctx: { sphynxNames: Set|Array of names that are Sphynx or third parties }
 export function isClientFacing(task, ctx = {}) {
     if (!task) return false;
+    if (task.statusNoteFor || task.consolidatedFollowUp) return false;   // Sphynx housekeeping, whoever it is assigned to
     if (CLIENT_ASK_KINDS.includes(task.askKind)) return true;
     if (task.askKind) return false;                       // third-party asks and Sphynx's own follow-ups
     const assignee = String(task.assignee || '').trim();

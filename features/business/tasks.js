@@ -359,6 +359,10 @@ OL.getPartnerTaskLabel = function(partner) {
 OL.classifyTask = function(task, client) {
     const SPHYNX = { key: 'sphynx', label: 'Sphynx Task' };
     const CLIENT = { key: 'client', label: 'Client Task' };
+    // Status notes and the client follow-up are Sphynx's own housekeeping whoever they are assigned to (often the
+    // project's Communications person, who may not be on the Sphynx team list). Never the client's: client-owned tasks
+    // have no due date and drop out of the due-date views.
+    if (task?.statusNoteFor || task?.consolidatedFollowUp || task?.askKind === 'follow_up') return SPHYNX;
     const a = String(task?.assignee || task?.responsibleParty || '').trim();
     const al = a.toLowerCase();
     if (!a) return task?.isClientTask === true ? CLIENT : SPHYNX;
@@ -380,6 +384,7 @@ OL.classifyTask = function(task, client) {
 // A task the CLIENT owns (nobody on it is Sphynx, a partner or a vendor). Those don't have due dates of their
 // own: the client follow-up chases them, so a date on one only creates noise (and false "overdue"s).
 OL.taskIsClientOwned = function(task, client) {
+    if (task?.statusNoteFor || task?.consolidatedFollowUp || task?.askKind === 'follow_up') return false;
     const people = taskAssignees(task);
     if (!people.length) return task?.isClientTask === true;
     return people.every(a => OL.classifyTask({ assignee: a, clientId: task?.clientId }, client || state.clients?.[task?.clientId]).key === 'client');
