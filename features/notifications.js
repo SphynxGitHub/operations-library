@@ -135,6 +135,22 @@ export function getMyNotifications() {
                     checked: (c.viewedBy || []).some(v => String(v.name || '').toLowerCase() === myName)
                 });
             });
+            // Comments I wrote that tag other people, for the Not Checked tab: who hasn't ticked the viewed box yet.
+            // Skipped once the task is closed so finished work doesn't pile up there.
+            (task.comments || []).forEach(c => {
+                if (String(c.author || '').toLowerCase() !== myName) return;
+                const pending = (c.mentions || []).map(m => m.name).filter(n => n && n.toLowerCase() !== myName
+                    && !(c.viewedBy || []).some(v => String(v.name || '').toLowerCase() === String(n).toLowerCase()));
+                if (!pending.length) return;
+                const closedNames = (typeof OL.getSystemStatuses === 'function' ? OL.getSystemStatuses() : []).filter(st => st.isClosed).map(st => st.name);
+                if (closedNames.includes(task.status || '')) return;
+                items.push({
+                    id: `sent:${client.id}:${task.id}:${c.id}`, type: 'sentTag', date: c.date,
+                    text: `You tagged ${pending.join(', ')} on "${task.title || task.name}"`,
+                    pending, clientId: client.id, taskId: task.id, commentId: c.id,
+                    read: true, checked: false   // read: it's never "new"; it only ever shows under Not Checked
+                });
+            });
             if ((task.assignee || '').toLowerCase() === myName) {
                 const id = `assign:${client.id}:${task.id}`;
                 items.push({
@@ -184,7 +200,7 @@ export function markNotificationRead(id) {
 export function markAllNotificationsRead() {
     const member = getMyTeamRecord();
     if (!member) return;
-    member.readNotificationIds = getMyNotifications().map(n => n.id);
+    member.readNotificationIds = getMyNotifications().filter(n => n.type !== 'sentTag').map(n => n.id);
     OL.persist();
     refreshNotificationBell();
     openNotificationsModal();
@@ -193,18 +209,19 @@ export function markAllNotificationsRead() {
 // ---- New / Previously Viewed tabs + type filter (mirrors the dashboard's
 // multi-select Types popover — OL.openDashboardTypesPopover in
 // features/business/dashboard.js) ----
-OL.notificationsPanelState = OL.notificationsPanelState || { tab: 'new', types: ['newComment', 'newAssignment'] };
+OL.notificationsPanelState = OL.notificationsPanelState || { tab: 'new', types: ['newComment', 'newAssignment', 'sentTag'] };
 // Comments I've opened (so they're no longer "New") but whose viewed box I haven't ticked yet.
-const isNotChecked = (n) => n.read && n.type === 'newComment' && n.checked === false;
-const NOTIF_TYPE_LABELS = { newComment: 'Comments (mentions)', newAssignment: 'Assignments' };
+const isNotChecked = (n) => n.checked === false && (n.type === 'sentTag' || (n.read && n.type === 'newComment'));
+const NOTIF_TYPE_LABELS = { newComment: 'Comments (mentions)', newAssignment: 'Assignments', sentTag: 'Comments I tagged others on' };
 
 export function renderNotificationsModalBody() {
     const all = getMyNotifications();
     const st = OL.notificationsPanelState;
-    const newCount = all.filter(n => !n.read).length;
-    const viewedCount = all.filter(n => n.read).length;
+    const mine = all.filter(n => n.type !== 'sentTag');   // tags I sent only ever appear under Not Checked
+    const newCount = mine.filter(n => !n.read).length;
+    const viewedCount = mine.filter(n => n.read).length;
     const uncheckedCount = all.filter(isNotChecked).length;
-    const inTab = (n) => st.tab === 'new' ? !n.read : st.tab === 'unchecked' ? isNotChecked(n) : n.read;
+    const inTab = (n) => st.tab === 'unchecked' ? isNotChecked(n) : (n.type !== 'sentTag' && (st.tab === 'new' ? !n.read : n.read));
     const filtered = all.filter(n => inTab(n) && st.types.includes(n.type));
 
     return `
@@ -226,12 +243,12 @@ export function renderNotificationsModalBody() {
             <div onclick="OL.markNotificationRead('${n.id}'); OL.closeModal(); ${n.resId ? `if (typeof OL.fvOpenStepItems === 'function') OL.fvOpenStepItems('${n.resId}', '${n.stepId}');` : `if (typeof OL.openTaskInContext === 'function') OL.openTaskInContext('${n.clientId}', '${n.taskId}');`}"
                  style="padding:10px; border-radius:8px; margin-bottom:6px; cursor:pointer; background:${n.read ? 'transparent' : 'rgba(var(--accent-rgb),0.08)'}; border:1px solid var(--panel-border);">
                 <div class="tiny" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="${n.type === 'newComment' ? 'at-sign' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <i data-lucide="${n.type === 'newComment' ? 'at-sign' : n.type === 'sentTag' ? 'send' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>
                     ${esc(n.text)}
                 </div>
                 <div class="tiny muted" style="margin-top:2px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
                     <span>${n.date ? esc(new Date(n.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
-                    ${st.tab === 'unchecked' ? `<label class="tiny" style="display:inline-flex; align-items:center; gap:4px; color:var(--accent); cursor:pointer;" onclick="event.stopPropagation();"><input type="checkbox" style="margin:0;" onclick="event.stopPropagation(); OL.checkNotificationComment('${n.clientId}', '${n.taskId}', '${n.commentId}')"> Mark checked</label>` : ''}
+                    ${st.tab === 'unchecked' && n.type !== 'sentTag' ? `<label class="tiny" style="display:inline-flex; align-items:center; gap:4px; color:var(--accent); cursor:pointer;" onclick="event.stopPropagation();"><input type="checkbox" style="margin:0;" onclick="event.stopPropagation(); OL.checkNotificationComment('${n.clientId}', '${n.taskId}', '${n.commentId}')"> Mark checked</label>` : ''}
                 </div>
             </div>
         `).join('') : `<p class="tiny muted">${st.tab === 'new' ? 'Nothing new right now.' : st.tab === 'unchecked' ? 'Every comment you have seen is checked off.' : 'Nothing viewed yet.'}</p>`}
