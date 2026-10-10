@@ -78,7 +78,7 @@ export const isDigestHour = (now: Date, tz = DIGEST_TZ) => zonedParts(now, tz).h
 // ---------------------------------------------------------------------------------------------------------------------
 // activity
 // ---------------------------------------------------------------------------------------------------------------------
-export type DigestItem = { at: string; kind: "tag" | "sent" | "assigned"; text: string; project: string; quote?: string };
+export type DigestItem = { at: string; kind: "tag" | "sent" | "assigned"; text: string; project: string; quote?: string; unviewed?: boolean };
 export type Unchecked = { text: string; project: string; at: string; quote?: string };
 
 const snip = (v: unknown, n = 280) => { const t = String(v ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
@@ -112,7 +112,8 @@ export function activityFor(memberName: string, clients: DigestClient[], window:
           out.push({ at: c.date, kind: "tag", text: `${c.author || "Someone"} tagged you on "${title}"`, project, quote: snip(c.text) });
         } else if (lc(c?.author) === me) {
           const who = (c.mentions || []).map((m: any) => m?.name).filter((n: any) => n && lc(n) !== me);
-          if (who.length) out.push({ at: c.date, kind: "sent", text: `You tagged ${who.join(", ")} on "${title}"`, project, quote: snip(c.text) });
+          const waiting = who.filter((n: any) => !viewedBy(c, lc(n)));
+          if (who.length) out.push({ at: c.date, kind: "sent", text: `You tagged ${who.join(", ")} on "${title}"`, project, quote: snip(c.text), unviewed: waiting.length > 0 });
         }
       });
       if (assignedTo(task, me) && inWindow(task.createdAt, window) && !closed.has(task.status || "")) {
@@ -129,7 +130,7 @@ export function activityFor(memberName: string, clients: DigestClient[], window:
             out.push({ at: it.createdAt, kind: "tag", text: `${it.author || "Someone"} tagged you on ${where}`, project, quote: snip(it.text) });
           } else if (lc(it?.author) === me) {
             const who = (it.mentions || []).map((m: any) => m?.name).filter((n: any) => n && lc(n) !== me);
-            if (who.length) out.push({ at: it.createdAt, kind: "sent", text: `You tagged ${who.join(", ")} on ${where}`, project, quote: snip(it.text) });
+            if (who.length) out.push({ at: it.createdAt, kind: "sent", text: `You tagged ${who.join(", ")} on ${where}`, project, quote: snip(it.text), unviewed: true });
           }
         });
       });
@@ -190,53 +191,59 @@ export function buildDigest(
 
   const endLabel = `${w.endHour > 12 ? w.endHour - 12 : w.endHour}pm`;
   const weekend = w.endHour === FRIDAY_END;
-  const sections: { title: string; sub: string; items: DigestItem[]; stamp: (iso: string) => string }[] = [
-    { title: `${w.prevLabel}, 7am to ${endLabel}`, sub: "Previous workday", items: workday, stamp: clock },
-    { title: `${endLabel} to 6:59am`, sub: weekend ? `After ${endLabel} Friday, through the weekend` : `Overnight, since ${endLabel} ${w.prevLabel.split(",")[0]}`, items: overnight, stamp: dayClock },
+  const sinceLabel = weekend ? `Since ${endLabel} Friday` : `Since ${endLabel}`;
+  const dateClock = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: DIGEST_TZ });
+  const since = overnight, yday = workday;
+  const ydayWord = weekend ? "Friday" : "Yesterday";
+  const earlier = (list: Unchecked[]) => list.filter((u) => Date.parse(u.at || "") < w.workday.from.getTime());
+  const asRow = (u: Unchecked): DigestItem => ({ at: u.at, kind: "tag", text: u.text, project: u.project, quote: u.quote });
+
+  type Group = { label: string; list: DigestItem[]; stamp: (iso: string) => string };
+  const sections: { title: string; color: string; groups: Group[] }[] = [
+    {
+      title: "Assigned tasks", color: "#2563eb",
+      groups: [
+        { label: `${sinceLabel}`, list: since.filter((i) => i.kind === "assigned"), stamp: dayClock },
+        { label: `${ydayWord} (${w.prevLabel})`, list: yday.filter((i) => i.kind === "assigned"), stamp: clock },
+      ],
+    },
+    {
+      title: "Comments that tag you", color: "#d97706",
+      groups: [
+        { label: `${sinceLabel}`, list: since.filter((i) => i.kind === "tag"), stamp: dayClock },
+        { label: `${ydayWord} (${w.prevLabel})`, list: yday.filter((i) => i.kind === "tag"), stamp: clock },
+        { label: "Not viewed from earlier days", list: earlier(unchecked.mine).map(asRow), stamp: dateClock },
+      ],
+    },
+    {
+      title: "Comments you tagged others on, not viewed yet", color: "#059669",
+      groups: [
+        { label: `${sinceLabel}`, list: since.filter((i) => i.kind === "sent" && i.unviewed), stamp: dayClock },
+        { label: `${ydayWord} (${w.prevLabel})`, list: yday.filter((i) => i.kind === "sent" && i.unviewed), stamp: clock },
+        { label: "Not viewed from earlier days", list: earlier(unchecked.sent).map(asRow), stamp: dateClock },
+      ],
+    },
   ];
 
   const text: string[] = [`Hi ${first},`, ""];
   const html: string[] = [`<p>Hi ${esc(first)},</p>`];
   sections.forEach((s) => {
-    text.push(`${s.sub.toUpperCase()}: ${s.title}`);
-    html.push(`<h3 style="margin:18px 0 4px;">${esc(s.sub)}</h3><div style="color:#666;font-size:12px;margin-bottom:6px;">${esc(s.title)}</div>`);
-    if (!s.items.length) {
-      text.push("  Nothing new.", "");
-      html.push(`<p style="color:#888;margin:0;">Nothing new.</p>`);
-      return;
-    }
-    const groups: { label: string; list: DigestItem[] }[] = [
-      { label: "Assigned tasks", list: s.items.filter((i) => i.kind === "assigned") },
-      { label: "Comments", list: s.items.filter((i) => i.kind !== "assigned") },
-    ];
+    const groups = s.groups.filter((g) => g.list.length);
+    if (!groups.length) return;
+    text.push(s.title.toUpperCase());
+    html.push(`<h3 style="margin:20px 0 4px;padding-left:8px;border-left:4px solid ${s.color};">${esc(s.title)}</h3>`);
     groups.forEach((g) => {
-      if (!g.list.length) return;
-      text.push(`  ${g.label.toUpperCase()}`);
-      html.push(`<div style="font-weight:600;font-size:13px;margin:10px 0 3px;">${esc(g.label)}</div><ul style="padding-left:18px;margin:0;">`);
+      text.push(`  ${g.label}`);
+      html.push(`<div style="font-weight:600;font-size:13px;margin:10px 0 4px;color:${s.color};">${esc(g.label)}</div><ul style="padding-left:18px;margin:0;">`);
       g.list.forEach((i) => {
-        text.push(`  - ${s.stamp(i.at)}  ${i.text} (${i.project})`);
+        text.push(`  - ${g.stamp(i.at)}  ${i.text} (${i.project})`);
         if (i.quote) text.push(`      "${i.quote}"`);
-        html.push(`<li style="margin-bottom:8px;"><span style="color:#888;">${esc(s.stamp(i.at))}</span> ${esc(i.text)} <span style="color:#888;">(${esc(i.project)})</span>${quoteHtml(i.quote)}</li>`);
+        html.push(`<li style="margin-bottom:8px;"><span style="color:#888;">${esc(g.stamp(i.at))}</span> ${esc(i.text)} <span style="color:#888;">(${esc(i.project)})</span>${quoteHtml(i.quote)}</li>`);
       });
       html.push("</ul>");
     });
     text.push("");
   });
-
-  const block = (title: string, list: Unchecked[]) => {
-    if (!list.length) return;
-    text.push(title.toUpperCase());
-    html.push(`<h3 style="margin:18px 0 4px;">${esc(title)}</h3><ul style="padding-left:18px;margin:0;">`);
-    list.forEach((u) => {
-      text.push(`  - ${u.text} (${u.project})`);
-      if (u.quote) text.push(`      "${u.quote}"`);
-      html.push(`<li style="margin-bottom:8px;">${esc(u.text)} <span style="color:#888;">(${esc(u.project)})</span>${quoteHtml(u.quote)}</li>`);
-    });
-    html.push("</ul>");
-    text.push("");
-  };
-  block("Still unchecked: tags for you", unchecked.mine);
-  block("Still unchecked: tags you sent", unchecked.sent);
 
   html.push(`<p style="color:#888;font-size:12px;margin-top:22px;">You can turn this digest off in Notification settings in the app.</p>`);
   text.push("You can turn this digest off in Notification settings in the app.");
