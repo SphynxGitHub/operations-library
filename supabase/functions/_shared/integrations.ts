@@ -102,18 +102,25 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       // Keap (Infusionsoft) REST v1 with a Service Account Key sent as a Bearer token (developer.keap.com/pat-and-sak). Campaigns come back a page at a time with the
       // names of their sequences; the steps inside a sequence are not available through the API.
       const KEAP = "https://api.infusionsoft.com/crm/rest/v1";
+      const auth = { Authorization: `Bearer ${key}` };
+      // Pages are asked for by offset (Keap's own "next" link is not followed: it has come back malformed). Sequence
+      // names are an optional extra; if Keap refuses that option the list is fetched without it.
+      let withSequences = true;
       let campaigns: any[] = [];
-      let next: string | null = `${KEAP}/campaigns?limit=200&optional_properties=sequences`;
-      let pages = 0;
-      while (next && pages < 10) {
-        const data: any = await getJson(f, next, { Authorization: `Bearer ${key}` }, key);
-        campaigns = campaigns.concat(data.campaigns || []);
-        pages++;
-        next = null;
-        if (typeof data.next === "string" && data.next && campaigns.length <= 1000) {
-          // only ever follow a "next page" link that stays on Keap
-          try { const u = new URL(data.next); if (u.protocol === "https:" && u.hostname === "api.infusionsoft.com") next = u.toString(); } catch { /* ignore */ }
+      for (let offset = 0, pages = 0; pages < 10; pages++, offset += 200) {
+        const q = `limit=200&offset=${offset}${withSequences ? "&optional_properties=sequences" : ""}`;
+        let data: any;
+        try {
+          data = await getJson(f, `${KEAP}/campaigns?${q}`, auth, key);
+        } catch (e) {
+          if (withSequences && e instanceof UpstreamError && e.status >= 400 && e.status !== 401 && e.status !== 403) {
+            withSequences = false; offset -= 200; pages--; continue;
+          }
+          throw e;
         }
+        const page: any[] = data.campaigns || [];
+        campaigns = campaigns.concat(page);
+        if (page.length < 200) break;
       }
       return { campaigns };
     }
