@@ -78,13 +78,30 @@ OL.taskHasMentionOfMe = function(task) {
     return OL.getTaskMentionComments(task).length > 0;
 };
 
+// "Checked" = the viewed box ("You were tagged — mark as viewed") ticked by me. Comments I've been tagged on but haven't
+// ticked are the ones the lists surface by default; ticking one takes it off the list (the 💬 count still shows all).
+OL.commentCheckedByMe = function(c) {
+    const me = OL.getMyMentionName();
+    return (c?.viewedBy || []).some(v => String(v.name || '').toLowerCase() === me);
+};
+OL.getTaskUncheckedMentionComments = function(task) {
+    return OL.getTaskMentionComments(task).filter(c => !OL.commentCheckedByMe(c));
+};
+
+// Ticking the box right on the list row (stopPropagation keeps the row's click from opening the task).
+OL.checkTaskCommentFromRow = async function(event, clientId, taskId, commentId) {
+    event?.stopPropagation();
+    await OL.markTaskCommentViewed(clientId, taskId, commentId);
+    OL.refreshTaskView();
+};
+
 // Stable sort: tasks with a mention of me first (most recent mention
 // first among those), everything else keeps its existing relative order.
 OL.sortTasksMentionsFirst = function(tasks) {
     const withMentions = [];
     const rest = [];
     tasks.forEach(t => {
-        const mentions = OL.getTaskMentionComments(t);
+        const mentions = OL.getTaskUncheckedMentionComments(t);
         if (mentions.length) withMentions.push({ t, latest: mentions.reduce((max, c) => Math.max(max, new Date(c.date || 0).getTime()), 0) });
         else rest.push(t);
     });
@@ -100,7 +117,8 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
     const rowHTML = OL.renderTaskRowHTML(t, todayStr, enableBulkSelect);   // includes the nested "waiting on" list
 
     const isExpanded = !!OL.expandedCommentCards[t.id];
-    const mentions = OL.showTaskComments ? OL.getTaskMentionComments(t) : [];
+    // By default only the comments that tag me and that I haven't checked off; the 💬 count opens the whole thread.
+    const mentions = OL.showTaskComments ? OL.getTaskUncheckedMentionComments(t) : [];
     const toShow = isExpanded ? (t.comments || []) : mentions;
     if (!toShow.length) return rowHTML;
 
@@ -114,6 +132,10 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
                     <strong style="flex-shrink:0; width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(c.author || 'Someone')}</strong>
                     <span class="muted" style="font-size:10px; flex-shrink:0; width:70px;">${c.date ? esc(new Date(c.date).toLocaleDateString([], { dateStyle: 'medium' })) : ''}</span>
                     <span style="flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; line-height:1.4;">${OL.renderCommentTextWithMentions ? OL.renderCommentTextWithMentions(c.text, c.html) : esc(c.text)}</span>
+                    ${(c.mentions || []).some(m => String(m.name || '').toLowerCase() === OL.getMyMentionName()) && !OL.commentCheckedByMe(c) ? `
+                        <label class="tiny" style="flex-shrink:0; display:inline-flex; align-items:center; gap:4px; color:var(--accent); cursor:pointer;" onclick="event.stopPropagation();" title="You were tagged — mark as viewed">
+                            <input type="checkbox" style="margin:0; cursor:pointer;" onclick="OL.checkTaskCommentFromRow(event, '${t.clientId}', '${t.id}', '${c.id}')"> Checked
+                        </label>` : ''}
                 </div>
             `).join('')}
         </div>
@@ -3938,7 +3960,7 @@ OL.addTaskComment = function(clientId, taskId) {
 OL.markTaskCommentViewed = function(clientId, taskId, commentId) {
     const currentUserName = OL.getCurrentUserName ? OL.getCurrentUserName() : 'Sphynx Team';
 
-    updateAndSync(() => {
+    const saved = updateAndSync(() => {
         const client = state.clients?.[clientId];
         const task = client?.projectData?.clientTasks?.find(t =>
             String(t.id) === String(taskId) || String(t.key) === String(taskId)
@@ -3959,6 +3981,7 @@ OL.markTaskCommentViewed = function(clientId, taskId, commentId) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
         if (window.lucide) lucide.createIcons();
     }
+    return saved;
 };
 
 OL._editingTaskCommentId = null;

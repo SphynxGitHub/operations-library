@@ -129,8 +129,10 @@ export function getMyNotifications() {
                 items.push({
                     id, type: 'newComment', date: c.date,
                     text: `${c.author || 'Someone'} mentioned you on "${task.title || task.name}"`,
-                    clientId: client.id, taskId: task.id,
-                    read: readIds.has(id)
+                    clientId: client.id, taskId: task.id, commentId: c.id,
+                    read: readIds.has(id),
+                    // Seen is not the same as checked: "checked" is the "mark as viewed" box on the comment itself.
+                    checked: (c.viewedBy || []).some(v => String(v.name || '').toLowerCase() === myName)
                 });
             });
             if ((task.assignee || '').toLowerCase() === myName) {
@@ -192,6 +194,8 @@ export function markAllNotificationsRead() {
 // multi-select Types popover — OL.openDashboardTypesPopover in
 // features/business/dashboard.js) ----
 OL.notificationsPanelState = OL.notificationsPanelState || { tab: 'new', types: ['newComment', 'newAssignment'] };
+// Comments I've opened (so they're no longer "New") but whose viewed box I haven't ticked yet.
+const isNotChecked = (n) => n.read && n.type === 'newComment' && n.checked === false;
 const NOTIF_TYPE_LABELS = { newComment: 'Comments (mentions)', newAssignment: 'Assignments' };
 
 export function renderNotificationsModalBody() {
@@ -199,11 +203,14 @@ export function renderNotificationsModalBody() {
     const st = OL.notificationsPanelState;
     const newCount = all.filter(n => !n.read).length;
     const viewedCount = all.filter(n => n.read).length;
-    const filtered = all.filter(n => (st.tab === 'new' ? !n.read : n.read) && st.types.includes(n.type));
+    const uncheckedCount = all.filter(isNotChecked).length;
+    const inTab = (n) => st.tab === 'new' ? !n.read : st.tab === 'unchecked' ? isNotChecked(n) : n.read;
+    const filtered = all.filter(n => inTab(n) && st.types.includes(n.type));
 
     return `
         <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; border-bottom:1px solid var(--panel-border); padding-bottom:8px;">
             <button class="btn tiny ${st.tab === 'new' ? 'primary' : 'soft'}" onclick="OL.setNotificationsPanelTab('new')">New${newCount ? ` (${newCount})` : ''}</button>
+            <button class="btn tiny ${st.tab === 'unchecked' ? 'primary' : 'soft'}" onclick="OL.setNotificationsPanelTab('unchecked')" title="Comments you've seen but haven't ticked as viewed">Not Checked${uncheckedCount ? ` (${uncheckedCount})` : ''}</button>
             <button class="btn tiny ${st.tab === 'viewed' ? 'primary' : 'soft'}" onclick="OL.setNotificationsPanelTab('viewed')">Previously Viewed${viewedCount ? ` (${viewedCount})` : ''}</button>
             <div class="spacer"></div>
             <button class="btn tiny soft" onclick="OL.openNotificationTypesPopover(event)">
@@ -222,9 +229,12 @@ export function renderNotificationsModalBody() {
                     <i data-lucide="${n.type === 'newComment' ? 'at-sign' : 'user-plus'}" style="width:12px;height:12px;color:var(--accent);"></i>
                     ${esc(n.text)}
                 </div>
-                <div class="tiny muted" style="margin-top:2px;">${n.date ? esc(new Date(n.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</div>
+                <div class="tiny muted" style="margin-top:2px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span>${n.date ? esc(new Date(n.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
+                    ${st.tab === 'unchecked' ? `<label class="tiny" style="display:inline-flex; align-items:center; gap:4px; color:var(--accent); cursor:pointer;" onclick="event.stopPropagation();"><input type="checkbox" style="margin:0;" onclick="event.stopPropagation(); OL.checkNotificationComment('${n.clientId}', '${n.taskId}', '${n.commentId}')"> Mark checked</label>` : ''}
+                </div>
             </div>
-        `).join('') : `<p class="tiny muted">${st.tab === 'new' ? 'Nothing new right now.' : 'Nothing viewed yet.'}</p>`}
+        `).join('') : `<p class="tiny muted">${st.tab === 'new' ? 'Nothing new right now.' : st.tab === 'unchecked' ? 'Every comment you have seen is checked off.' : 'Nothing viewed yet.'}</p>`}
     `;
 }
 
@@ -233,6 +243,12 @@ function refreshNotificationsModalBody() {
     if (!body) return;
     body.innerHTML = renderNotificationsModalBody();
     if (window.lucide) window.lucide.createIcons();
+}
+
+// Ticks the comment's own "viewed" box from the Not Checked tab, then redraws the list.
+export async function checkNotificationComment(clientId, taskId, commentId) {
+    if (typeof OL.markTaskCommentViewed === 'function') await OL.markTaskCommentViewed(clientId, taskId, commentId);
+    refreshNotificationsModalBody();
 }
 
 export function setNotificationsPanelTab(tab) {
@@ -417,6 +433,6 @@ Object.assign(window.OL, {
     openNotificationSettingsModal, requestDesktopNotificationPermission, toggleNotificationPref,
     getMyNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     openNotificationsModal, renderNotificationBell, refreshNotificationBell, notifyEvent,
-    startNotificationPolling, renderNotificationsModalBody, setNotificationsPanelTab,
+    startNotificationPolling, renderNotificationsModalBody, setNotificationsPanelTab, checkNotificationComment,
     openNotificationTypesPopover, toggleNotificationTypeFilter
 });
