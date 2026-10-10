@@ -488,6 +488,26 @@ export const RESOURCE_GROUP_MODES = [
 ];
 const GROUP_BY_KEY = 'ol_resource_group_by';
 
+// Which group sections are open survives re-renders (every save redraws the page) and reloads. Stored per grouping
+// mode + group name on this device; a section nobody has touched falls back to the "short list opens" default.
+const GROUP_OPEN_KEY = 'ol_resource_group_open';
+const readGroupOpen = () => { try { return JSON.parse(localStorage.getItem(GROUP_OPEN_KEY) || '{}') || {}; } catch (e) { return {}; } };
+const writeGroupOpen = (m) => { try { localStorage.setItem(GROUP_OPEN_KEY, JSON.stringify(m)); } catch (e) { /* not remembered */ } };
+export function rememberResourceGroup(summaryEl) {
+    // the click toggles <details> after this handler runs, so read the state on the next tick
+    setTimeout(() => {
+        const d = summaryEl?.closest?.('details.res-group');
+        const key = d?.getAttribute('data-group-key');
+        if (!key) return;
+        const m = readGroupOpen(); m[key] = d.open; writeGroupOpen(m);
+    }, 0);
+}
+export function setAllResourceGroups(open) {
+    const m = readGroupOpen();
+    document.querySelectorAll('details.res-group').forEach((d) => { d.open = open; const k = d.getAttribute('data-group-key'); if (k) m[k] = open; });
+    writeGroupOpen(m);
+}
+
 // ── SORT + LAST-UPDATED HELPERS ──────────────────────────────────────────────────────────────────────────────────
 export const RESOURCE_SORTS = [
     { key: 'name', label: 'Name A-Z' },
@@ -642,13 +662,17 @@ function _renderResourceGroupsImpl(container, items) {
 
             ${groups.length > 1 ? `
             <div style="display:flex; justify-content:flex-end; gap:6px; margin-bottom:8px;">
-                <button class="btn tiny soft" onclick="document.querySelectorAll('details.res-group').forEach(d => d.open = true)">Expand all</button>
-                <button class="btn tiny soft" onclick="document.querySelectorAll('details.res-group').forEach(d => d.open = false)">Collapse all</button>
+                <button class="btn tiny soft" onclick="OL.setAllResourceGroups(true)">Expand all</button>
+                <button class="btn tiny soft" onclick="OL.setAllResourceGroups(false)">Collapse all</button>
             </div>` : ''}
 
-            ${groups.map(g => `
-                <details class="resource-group res-group" ${startOpen ? 'open' : ''} style="margin-bottom: 24px;">
-                    <summary style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px; cursor:pointer; list-style:none;">
+            ${groups.map(g => {
+                const gKey = `${mode}|${g.label}`;
+                const saved = readGroupOpen()[gKey];
+                const isOpen = typeof saved === 'boolean' ? saved : startOpen;
+                return `
+                <details class="resource-group res-group" data-group-key="${esc(gKey)}" ${isOpen ? 'open' : ''} style="margin-bottom: 24px;">
+                    <summary onclick="OL.rememberResourceGroup(this)" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px; cursor:pointer; list-style:none;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <input type="checkbox" data-res-group="${esc(g.items.map(r => r.id).join(','))}" title="Select every resource in this group"
                                    onclick="event.stopPropagation()" onchange="OL.toggleResourceGroupSelect(this.getAttribute('data-res-group'), this.checked)">
@@ -671,7 +695,7 @@ function _renderResourceGroupsImpl(container, items) {
                         `}
                     `).join('')}
                 </details>
-            `).join('')}
+            `; }).join('')}
         </div>
     `;
 
@@ -1622,7 +1646,7 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     syncResourceLibraryFilters, renderResourceGroups, _renderResourceListRow,
-    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSort, setResourceSort,
+    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSort, setResourceSort, rememberResourceGroup, setAllResourceGroups,
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
