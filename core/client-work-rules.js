@@ -253,22 +253,44 @@ export function openClientItems(client, ctx) {
             g.resources.get('').tasks.push(t);
             return;
         }
-        links.forEach((l) => {
-            const item = l.requestId ? requestById(client, l.requestId) : null;
-            if (!item) return;
-            if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
-            if (!requestIsFollowUpEligible(client, item)) return;   // On Hold / Declined rounds don't chase the client
-            const reqKey = l.requestId;
-            if (!groups.has(reqKey)) groups.set(reqKey, { title: requestTitle(client, item), resources: new Map() });
-            const g = groups.get(reqKey);
-            const resKeys = (l.resourceIds && l.resourceIds.length) ? l.resourceIds : [''];
-            resKeys.forEach((rid) => {
-                if (!g.resources.has(rid)) g.resources.set(rid, { name: rid ? resourceName(client, rid) : '', tasks: [] });
-                g.resources.get(rid).tasks.push(t);
-            });
-        });
+        addToRequestGroups(client, groups, t, links);
+    });
+    // Sphynx's own work parked on a "Pending Client ..." status (Review, Feedback, Document, Action) is waiting on the
+    // client too, even when no separate client task was ever created for it. Without this a project whose only open
+    // items are "Pending Client Review" got no follow-up task at all.
+    (client?.projectData?.clientTasks || []).forEach((t) => {
+        if (!t || !isOpen(t, ctx) || t.consolidatedFollowUp || !isClientWaitingStatus(t.status) || !isSphynxWork(t, ctx)) return;
+        if (openClientTasksFor(client, t, ctx).length) return;   // its own client asks already put it on the follow-up
+        const links = linksForTask(t);
+        if (!links.length) {
+            if (!groups.has('_unlinked')) groups.set('_unlinked', { title: 'Other client tasks', resources: new Map() });
+            const g = groups.get('_unlinked');
+            if (!g.resources.has('')) g.resources.set('', { name: '', tasks: [] });
+            g.resources.get('').tasks.push(t);
+            return;
+        }
+        addToRequestGroups(client, groups, t, links);
     });
     return groups;
+}
+
+// Files a task under each request (and resource) it is linked to, skipping requests that aren't being worked.
+function addToRequestGroups(client, groups, t, links) {
+    links.forEach((l) => {
+        const item = l.requestId ? requestById(client, l.requestId) : null;
+        if (!item) return;
+        if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
+        if (!requestIsFollowUpEligible(client, item)) return;   // On Hold / Declined rounds don't chase the client
+        const reqKey = l.requestId;
+        if (!groups.has(reqKey)) groups.set(reqKey, { title: requestTitle(client, item), resources: new Map() });
+        const g = groups.get(reqKey);
+        const resKeys = (l.resourceIds && l.resourceIds.length) ? l.resourceIds : [''];
+        resKeys.forEach((rid) => {
+            if (!g.resources.has(rid)) g.resources.set(rid, { name: rid ? resourceName(client, rid) : '', tasks: [] });
+            const bucket = g.resources.get(rid).tasks;
+            if (!bucket.includes(t)) bucket.push(t);
+        });
+    });
 }
 
 function staleTasks(client, ctx) {
@@ -289,7 +311,7 @@ function followUpDescription(client, groups, notes) {
         lines.push('', `${g.title}`);
         g.resources.forEach((r) => {
             if (r.name) lines.push(`  ${r.name}`);
-            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}`));   // client tasks have no due dates of their own
+            r.tasks.forEach((t) => lines.push(`    - ${t.title || t.name}${isClientWaitingStatus(t.status) ? ` (${t.status})` : ''}`));   // client tasks have no due dates of their own
         });
     });
     if (notes.length) {

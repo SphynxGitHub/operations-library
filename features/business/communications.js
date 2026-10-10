@@ -1655,15 +1655,15 @@ OL.renderExcerptLinkPicker = function() {
                         ${(typeof getRequestTypes === 'function' ? getRequestTypes() : [{key:'build',label:'Build'},{key:'revision',label:'Revision'}]).map((t) => `<option value="${esc(t.key)}" ${st.newRequestType === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
                     </select>
                     ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a request.</div>` : ''}
-                    ${state.adminMode === true ? `
+                    ${(state.adminMode === true || state.teamMemberMode === true) ? `
                         <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; cursor:pointer;">
                             <input type="checkbox" ${st.activateNow ? 'checked' : ''} ${clientId ? '' : 'disabled'} onchange="OL._excerptLinkState.activateNow=this.checked; OL.renderExcerptLinkPicker();">
-                            <strong>Activate it now</strong> (set up its tasks without going to the Scoping sheet)
+                            <strong>Activate it now</strong> (opens the setup tasks right here: assignee, due date and estimate, so you don't have to go to the Scoping sheet)
                         </label>` : ''}
-                    <div class="tiny muted" style="margin-bottom:8px;">${state.adminMode === true && st.activateNow
+                    <div class="tiny muted" style="margin-bottom:8px;">${(state.adminMode === true || state.teamMemberMode === true) && st.activateNow
                         ? (clientId && isMaintenanceClient(state.clients?.[clientId])
                             ? 'Goes into the Maintenance queue as Do Now, and the activation review opens as soon as it is linked.'
-                            : 'Goes into the next open round as Do Now. It activates when that round is approved, and the review opens then.')
+                            : 'Goes into the next open round as Do Now, and the setup tasks open as soon as it is linked, without waiting for the round to be approved.')
                         : 'Created in the Backlog (round 0): it waits on the scoping sheet until someone gives it a round.'}</div>
                 </div>
             ` : `
@@ -1702,7 +1702,7 @@ OL.renderExcerptLinkPicker = function() {
                     <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateTask()">Create & link</button>
                 ` : st.creatingNewRequest ? `
                     <button class="btn tiny soft" onclick="OL._excerptLinkState.creatingNewRequest=false; OL.renderExcerptLinkPicker();">Back to search</button>
-                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">${state.adminMode === true && st.activateNow ? 'Create, link & activate' : 'Create & link'}</button>
+                    <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">${(state.adminMode === true || state.teamMemberMode === true) && st.activateNow ? 'Create, link & set up tasks' : 'Create & link'}</button>
                 ` : `
                     <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
                     <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
@@ -1795,7 +1795,7 @@ OL.confirmExcerptCreateRequest = async function() {
     const clientId = OL._gmailLinkState?.clientId;
     const title = (st.newRequestTitle || '').trim();
     if (!title || !clientId) return;
-    const activate = state.adminMode === true && st.activateNow === true;
+    const activate = (state.adminMode === true || state.teamMemberMode === true) && st.activateNow === true;
     const requestType = st.newRequestType || 'build';
 
     let newItemId;
@@ -1845,7 +1845,7 @@ OL.confirmExcerptCreateRequest = async function() {
             if (!entry || !entry.status) {
                 sheet.roundApprovals[String(target)] = { ...(entry || {}), status: 'Drafting', statusChangedAt: new Date().toISOString(), approvedAt: null, collapsed: false };
             }
-            activateMode = 'round'; roundForToast = target;
+            activateMode = 'review'; roundForToast = target;   // review opens now; the round is still Drafting, so it is not held for approval
         } else {
             // The Backlog is round 0: it waits on the scoping sheet until someone gives it a round (core/requests.js).
             Object.assign(item, { status: 'Backlog', round: null });

@@ -531,6 +531,14 @@ OL.renderBusinessTaskManager = function() {
                     </div>
                 </div>
         
+                <!-- REQUEST SELECTOR: links the new task to one of the picked project's requests (optional) -->
+                <div class="qtf-field" style="flex:0 1 220px; min-width:180px; position:relative; display:flex; align-items:center;">
+                    <i data-lucide="layers" style="position:absolute; left:8px; width:13px; height:13px; color:var(--muted); pointer-events:none;"></i>
+                    <select id="quick-task-request" class="modal-input tiny" style="padding-left:26px; width:100%;" disabled title="Pick a project to choose one of its requests">
+                        <option value="">Request (pick a project first)</option>
+                    </select>
+                </div>
+
                 <input type="text" id="quick-task-title" class="modal-input tiny qtf-field" style="flex:2 1 260px; min-width:220px; text-align: left;" placeholder="Task title or deliverable description..." required>
         
                 <div class="qtf-field" style="flex:1 1 170px; min-width:160px; position:relative; display:flex; align-items:center;">
@@ -717,6 +725,24 @@ OL.selectQuickTaskClient = function(clientId, clientName) {
     if (typeof OL.updateQuickTaskTeamDropdown === 'function') {
         OL.updateQuickTaskTeamDropdown(clientId);
     }
+    OL.updateQuickTaskRequestDropdown(clientId);
+};
+
+// The request choices for the picked project: every request still in play (not Done / Don't Do), in name order. The
+// General / Business project has no scoping sheet, so there the selector stays off.
+OL.updateQuickTaskRequestDropdown = function(clientId) {
+    const select = document.getElementById('quick-task-request');
+    if (!select) return;
+    const client = clientId ? state.clients?.[clientId] : null;
+    const requests = client
+        ? OL.listProjectRequests(client).filter(r => !['Done', "Don't Do"].includes(String(r.status || '')))
+            .map(r => ({ id: r.id, title: OL.requestItemTitle(client, r), status: r.status || '' }))
+            .sort((a, b) => a.title.localeCompare(b.title))
+        : [];
+    select.innerHTML = `<option value="">${requests.length ? 'Request (optional)' : (client ? 'No open requests' : 'Request (pick a project first)')}</option>`
+        + requests.map(r => `<option value="${esc(String(r.id))}">${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ''}</option>`).join('');
+    select.disabled = requests.length === 0;
+    select.title = client ? 'Link this task to a request (optional)' : 'Pick a project to choose one of its requests';
 };
 
 // Dismiss floating dropdown when clicking outside
@@ -4254,6 +4280,7 @@ OL.createGlobalQuickTask = function() {
     const status = document.getElementById('quick-task-status')?.value || 'Pending Sphynx Action';
     // Client tasks have no due date of their own.
     const dueDate = OL.computeIsClientTask(assignee) ? '' : (document.getElementById('quick-task-duedate')?.value || '');
+    const requestId = document.getElementById('quick-task-request')?.value || '';
 
     if (!title) {
         alert("Please provide a task title.");
@@ -4283,11 +4310,14 @@ OL.createGlobalQuickTask = function() {
             createdAt: new Date().toISOString()
         };
 
+        if (requestId) addLink(newTask, requestId, []);   // a request-level link, the same as ticking it in the task's Requests list
         client.projectData.clientTasks.unshift(newTask);
     }, clientId);
 
     const inputTitle = document.getElementById('quick-task-title');
     if (inputTitle) inputTitle.value = '';
+    const requestSel = document.getElementById('quick-task-request');
+    if (requestSel) requestSel.value = '';
 
     OL.renderBusinessTaskManager();
 };

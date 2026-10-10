@@ -216,6 +216,7 @@ export function isTaskBillable(task, client) {
     const c = client || state.clients?.[task.clientId];
     if (isClientTask(task, c)) return false;
     if (task.billable === true || task.billable === false) return task.billable;
+    if (task.statusNoteFor) return false;   // a status note is housekeeping for the follow-up, never billed (a manual $ toggle above still wins)
     const rule = matchingBillableRule(task, c);
     return rule ? rule.billable : false;
 }
@@ -270,6 +271,7 @@ export function billableReason(task, client) {
     const c = client || state.clients?.[task.clientId];
     if (isClientTask(task, c)) return 'Client task — never billable';
     if (task.billable === true || task.billable === false) return 'Set manually';
+    if (task.statusNoteFor) return 'Status note — never billable';
     const rule = matchingBillableRule(task, c);
     if (rule) return `Rule: ${describeRule(rule)}`;
     return 'No rule matched — non-billable';

@@ -184,6 +184,14 @@ function _renderResourceManagerImpl() {
                     </select>
                 </div>
 
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <i data-lucide="layers" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <span class="tiny muted bold uppercase">Group by:</span>
+                    <select id="lib-group-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceGroupBy(this.value)">
+                        ${RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
+                    </select>
+                </div>
+
                 <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
                     <i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear
                 </button>
@@ -284,6 +292,70 @@ function _syncResourceLibraryFiltersImpl() {
     OL.renderResourceGroups(container, filtered);
 };
 
+// ── GROUPING ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The Resources tab used to be one flat list of types. Now that the Swimlanes view is gone there was no way to see
+// resources by where they sit in the process, so the tab can group by Type (the default), Process stage, Parent
+// workflow, App, Scoping status or Responsible party. The choice is remembered on this device.
+export const RESOURCE_GROUP_MODES = [
+    { key: 'type', label: 'Type' },
+    { key: 'stage', label: 'Process stage' },
+    { key: 'workflow', label: 'Parent workflow' },
+    { key: 'app', label: 'App' },
+    { key: 'scope', label: 'Scoping status' },
+    { key: 'party', label: 'Responsible party' },
+    { key: 'none', label: 'No grouping' },
+];
+const GROUP_BY_KEY = 'ol_resource_group_by';
+export function getResourceGroupBy() {
+    let v = '';
+    try { v = localStorage.getItem(GROUP_BY_KEY) || ''; } catch (e) { /* storage blocked: fall back to Type */ }
+    return RESOURCE_GROUP_MODES.some(m => m.key === v) ? v : 'type';
+}
+export function setResourceGroupBy(value) {
+    try { localStorage.setItem(GROUP_BY_KEY, value); } catch (e) { /* not remembered, still applies now */ }
+    OL.syncResourceLibraryFilters();
+}
+
+// items -> [{ label, icon, items, typeKey? }]. Named groups run A-Z; the "none of these" group always runs last.
+function buildResourceGroups(items, mode) {
+    const data = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null) || {};
+    const stages = data.stages || [];
+    const all = data.resources || items;
+    const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
+    const buckets = new Map();   // label -> { icon, items, order, last, typeKey }
+    const put = (label, item, extra = {}) => {
+        if (!buckets.has(label)) buckets.set(label, { label, icon: 'folder', items: [], order: 0, last: false, ...extra });
+        buckets.get(label).items.push(item);
+    };
+
+    items.forEach(res => {
+        const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
+        if (mode === 'none') put('All resources', res, { icon: 'layers' });
+        else if (mode === 'stage') {
+            const st = stages.find(s => String(s.id) === String(res.stageId));
+            st ? put(st.name, res, { icon: 'milestone', order: stages.indexOf(st) }) : put('No stage', res, { icon: 'circle-dashed', last: true });
+        } else if (mode === 'workflow') {
+            const wf = res.parentId ? all.find(r => String(r.id) === String(res.parentId)) : null;
+            wf ? put(wf.name, res, { icon: 'workflow' }) : put('Not in a workflow', res, { icon: 'circle-dashed', last: true });
+        } else if (mode === 'app') {
+            const app = res.appName || (res.steps || []).map(s => s.appName).find(Boolean);
+            app ? put(app, res, { icon: 'grid-2x2' }) : put('No app', res, { icon: 'circle-dashed', last: true });
+        } else if (mode === 'scope') {
+            scope ? put(scope.status || 'Scoped', res, { icon: 'dollar-sign' }) : put('Not scoped', res, { icon: 'circle-dashed', last: true });
+        } else if (mode === 'party') {
+            scope && scope.responsibleParty ? put(scope.responsibleParty, res, { icon: 'users' }) : put('Not scoped', res, { icon: 'circle-dashed', last: true });
+        } else {
+            const type = res.type || 'General';
+            put(type, res, { icon: OL.getRegistryIcon(type), typeKey: type });
+        }
+    });
+
+    const list = [...buckets.values()];
+    list.forEach(g => g.items.sort(byName));
+    // Stages follow their order on the process map; everything else is A-Z.
+    return list.sort((a, b) => (a.last - b.last) || (mode === 'stage' ? a.order - b.order : 0) || a.label.localeCompare(b.label));
+}
+
 export function renderResourceGroups(container, items) {
   try {
     _renderResourceGroupsImpl(container, items);
@@ -323,14 +395,12 @@ function _renderResourceGroupsImpl(container, items) {
         (!!(b.systemPinned || b.adminPinned) - !!(a.systemPinned || a.adminPinned)) || (a.name || '').localeCompare(b.name || ''));
     const standardItems = items.filter(res => !isRef(res));
 
-    const grouped = standardItems.reduce((acc, res) => {
-        const type = res.type || "General";
-        if (!acc[type]) acc[type] = [];
-        acc[type].push(res);
-        return acc;
-    }, {});
-
-    const sortedTypes = Object.keys(grouped).sort();
+    const mode = OL.getResourceGroupBy();
+    const groups = buildResourceGroups(standardItems, mode);
+    const listMode = OL.getViewMode('resources') === 'list';
+    // Sections start open when the list is short or there is only one; otherwise a long library opens collapsed-by-choice
+    // from the "Expand all / Collapse all" buttons, and each section remembers nothing between renders on purpose.
+    const startOpen = groups.length <= 1 || standardItems.length <= 24;
 
     container.innerHTML = `
         <div class="resource-sections-wrapper">
@@ -340,7 +410,7 @@ function _renderResourceGroupsImpl(container, items) {
                     <i data-lucide="gem" style="width:16px; height:16px; color: var(--accent);"></i>
                     <h3 style="margin:0; font-size:12px; color: var(--accent); letter-spacing:0.05em;">REFERENCES</h3>
                 </div>
-                ${OL.getViewMode('resources') === 'list' ? `
+                ${listMode ? `
                     <div style="display:flex;flex-direction:column;gap:2px;">
                         ${references.map(res => OL._renderResourceListRow(res)).join('')}
                     </div>
@@ -349,27 +419,32 @@ function _renderResourceGroupsImpl(container, items) {
                 `}
             </div>` : ''}
 
-            ${sortedTypes.map(type => `
-                <div class="resource-group" style="margin-bottom: 40px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
+            ${groups.length > 1 ? `
+            <div style="display:flex; justify-content:flex-end; gap:6px; margin-bottom:8px;">
+                <button class="btn tiny soft" onclick="document.querySelectorAll('details.res-group').forEach(d => d.open = true)">Expand all</button>
+                <button class="btn tiny soft" onclick="document.querySelectorAll('details.res-group').forEach(d => d.open = false)">Collapse all</button>
+            </div>` : ''}
+
+            ${groups.map(g => `
+                <details class="resource-group res-group" ${startOpen ? 'open' : ''} style="margin-bottom: 24px;">
+                    <summary style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px; cursor:pointer; list-style:none;">
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <i data-lucide="${OL.getRegistryIcon(type)}" style="width:18px; height:18px; color: var(--accent);"></i>
-                            <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
-                                ${type}s
-                            </h3>
+                            <i data-lucide="${g.icon}" style="width:18px; height:18px; color: var(--accent);"></i>
+                            <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">${esc(g.label)}</h3>
+                            <span class="pill tiny soft">${g.items.length}</span>
                         </div>
-                        <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
-                    </div>
-                    ${OL.getViewMode('resources') === 'list' ? `
+                        ${mode === 'type' && g.typeKey ? `<button class="btn tiny soft" onclick="event.preventDefault(); event.stopPropagation(); OL.promptBulkReclassify('${esc(g.typeKey)}')">Bulk Move</button>` : ''}
+                    </summary>
+                    ${listMode ? `
                         <div style="display:flex;flex-direction:column;gap:2px;">
-                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(res => OL._renderResourceListRow(res)).join('')}
+                            ${g.items.map(res => OL._renderResourceListRow(res)).join('')}
                         </div>
                     ` : `
                         <div class="cards-grid">
-                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
+                            ${g.items.map(r => renderResourceCard(r)).join('')}
                         </div>
                     `}
-                </div>
+                </details>
             `).join('')}
         </div>
     `;
@@ -1304,7 +1379,7 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     syncResourceLibraryFilters, renderResourceGroups, _renderResourceListRow,
-    clearResourceFilters, universalCreate, promptBulkReclassify,
+    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy,
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
