@@ -22,6 +22,7 @@
 //                 { dryRun: true }       build every digest but send nothing; returns the previews
 //                 { force: true }        ignore the "is it 7am" check (for testing)
 //                 { email: "a@b.com" }   only that person
+//                 { date: "2026-10-12T11:00:00Z" }  pretend it is that moment (testing on a weekend)
 //
 // A person turns it off with the "Daily digest" box in Notification settings
 // (sphynx_team[i].notificationPrefs.email.dailyDigest = false). On by default for anyone with an email.
@@ -55,7 +56,9 @@ serve(async (req) => {
     }
 
     const opts = await req.json().catch(() => ({}));
-    const now = new Date();
+    // Testing: { date: "2026-10-09T15:00:00Z" } pretends it is that moment (use with force + dryRun or email).
+    const override = opts.date ? new Date(opts.date) : null;
+    const now = override && !isNaN(override.getTime()) ? override : new Date();
     if (!opts.force && !isDigestHour(now)) return json({ skipped: "not 7am in America/New_York" });
     const windows = digestWindows(now);
     if (!windows) return json({ skipped: "weekend" });
