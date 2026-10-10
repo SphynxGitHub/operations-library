@@ -16,6 +16,9 @@
 // New client tasks made here are linked to the same request(s)/resource(s) as the waiting task and added to its
 // Dependencies ("Waiting on"), so they feed the one consolidated client follow-up like any other client ask.
 //
+// Developer / third-party tasks also get "Also affects these projects": task.sharedWith (project ids) puts the item on each of
+// those projects' follow-ups as well (sharedParkedTasksFor in core/client-work-rules.js).
+//
 // Skipped for client asks and the follow-up task itself — it is for Sphynx's own work being parked.
 
 import { state, esc, uid, updateAndSync } from '../../core/data.js';
@@ -67,6 +70,30 @@ function linkableAsks(clientId, taskId) {
             && (t.isClientTask || ['review', 'document', 'feedback'].includes(t.askKind)) && !closed(t))
         .sort((a, b) => String(a.title || a.name || '').localeCompare(String(b.title || b.name || '')));
 }
+
+// Every project except this one (and the General / Business catch-all), A-Z.
+function otherProjects(clientId) {
+    return Object.values(state.clients || {})
+        .filter((c) => c && String(c.id) !== String(clientId) && c.id !== OL.GENERAL_PROJECT_ID && c.meta?.status !== 'Partner')
+        .sort((a, b) => String(a.meta?.name || a.id).localeCompare(String(b.meta?.name || b.id)));
+}
+
+OL.waitPromptFilterProjects = function(q) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    document.querySelectorAll('#wp-share-list .wp-share-row').forEach((row) => {
+        const name = row.getAttribute('data-name') || '';
+        row.style.display = words.every((w) => name.includes(w)) ? 'flex' : 'none';
+    });
+};
+
+// A small pill on a parked task's row to reopen this window (notes, and the projects it is shared with).
+OL.renderWaitingDetailsPill = function(t) {
+    if (!t || !waitingKindForStatus(t.status) || t.consolidatedFollowUp || t.askKind) return '';
+    const n = (t.sharedWith || []).length;
+    return `<span class="pill tiny soft" style="cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;"
+        onclick="event.stopPropagation(); OL.promptClientWaiting('${t.clientId}', '${t.id}', '${esc(t.status)}')" title="Waiting details: note${(waitingKindForStatus(t.status) === 'developer' || waitingKindForStatus(t.status) === 'third_party') ? ' and other projects it affects' : ''}">
+        <i data-lucide="${n ? 'share-2' : 'clock'}" style="width:10px;height:10px; pointer-events:none;"></i>${n ? ` +${n}` : ''}</span>`;
+};
 
 function listHtml(clientId, taskId) {
     const rows = dependentTasks(clientId, taskId);
@@ -135,6 +162,17 @@ OL.promptClientWaiting = function(clientId, taskId, status) {
                     </select>
                     <button type="button" class="btn tiny soft" onclick="OL.waitPromptAddNew()">+ Add</button>
                 </div>
+            </div>` : ''}
+
+            ${(kind === 'developer' || kind === 'third_party') ? `
+            <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Also affects these projects</div>
+            <div class="tiny muted" style="margin-bottom:6px;">Tick every other project this is holding up. It goes on each one's client follow-up too, and comes off all of them when this one is done.</div>
+            <input id="wp-share-filter" type="text" class="modal-input tiny" style="width:100%; margin-bottom:6px;" placeholder="Search projects…" oninput="OL.waitPromptFilterProjects(this.value)">
+            <div id="wp-share-list" style="max-height:160px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:4px 8px; margin-bottom:14px;">
+                ${otherProjects(clientId).map((c) => `
+                    <label class="tiny wp-share-row" data-name="${esc(String(c.meta?.name || c.id).toLowerCase())}" style="display:flex; align-items:center; gap:6px; padding:3px 0; cursor:pointer;">
+                        <input type="checkbox" class="wp-share-cb" value="${esc(String(c.id))}" ${(task.sharedWith || []).map(String).includes(String(c.id)) ? 'checked' : ''}> ${esc(c.meta?.name || c.id)}
+                    </label>`).join('') || '<div class="tiny muted">No other projects.</div>'}
             </div>` : ''}
 
             <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Notes</div>
@@ -213,9 +251,14 @@ OL.waitPromptSave = async function() {
     // Anything typed in the "new task" box but not added yet is added first, so it isn't lost.
     if ((document.getElementById('wp-new-title')?.value || '').trim()) await OL.waitPromptAddNew();
     const text = (document.getElementById('wp-note')?.value || '').trim();
+    const shareBoxes = document.querySelectorAll('#wp-share-list .wp-share-cb');
+    const sharedWith = [...shareBoxes].filter((cb) => cb.checked).map((cb) => cb.value);
     await updateAndSync(() => {
         const t = findTask(st.clientId, st.taskId);
         if (!t) return;
+        if (shareBoxes.length) {   // only the developer / third-party window has the list
+            if (sharedWith.length) t.sharedWith = sharedWith; else delete t.sharedWith;
+        }
         if (text) {
             if (t.waitingNote !== text) {
                 t.waitingNote = text;
@@ -233,4 +276,5 @@ OL.waitPromptSave = async function() {
 Object.assign(window.OL, {
     promptClientWaiting: OL.promptClientWaiting, waitPromptClose: OL.waitPromptClose, waitPromptAddNew: OL.waitPromptAddNew,
     waitPromptLinkExisting: OL.waitPromptLinkExisting, waitPromptSave: OL.waitPromptSave, waitingKindForStatus,
+    waitPromptFilterProjects: OL.waitPromptFilterProjects, renderWaitingDetailsPill: OL.renderWaitingDetailsPill,
 });

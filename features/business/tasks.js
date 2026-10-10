@@ -1274,6 +1274,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     </span>
                 ` : ''}
                 ${OL.renderFollowUpDonePill(t)}
+                ${typeof OL.renderWaitingDetailsPill === 'function' ? OL.renderWaitingDetailsPill(t) : ''}
             </div>
 
             <!-- Workspace Tag -->

@@ -256,35 +256,58 @@ export function openClientItems(client, ctx) {
         addToRequestGroups(client, groups, t, links);
     });
     // Sphynx's own work parked on a "Pending Client ...", "Pending Developer ..." or "Pending Third Party ..." status is
-    // waiting on someone too, even when no separate client task was ever created for it. Without this a project whose only
-    // open items were parked got no follow-up task at all.
+    // waiting on someone too, even when no separate client task was ever created for it, and whether or not it is tied to
+    // a request. Its due date was removed when it was parked, so it must always reach the follow-up: no request checks apply.
     (client?.projectData?.clientTasks || []).forEach((t) => {
         if (!t || !isOpen(t, ctx) || t.consolidatedFollowUp) return;
-        // Parked on the client, a developer or a third party: any of the three needs a follow-up. (A task asked of a third
-        // party, askKind 'third_party', counts too.)
         const parked = isClientWaitingStatus(t.status) || isOffsiteWaitingStatus(t.status);
         if (!((parked && isSphynxWork(t, ctx)) || t.askKind === 'third_party')) return;
         if (isClientWaitingStatus(t.status) && openClientTasksFor(client, t, ctx).length) return;   // its own client asks already put it on the follow-up
-        const links = linksForTask(t);
-        if (!links.length) {
+        const placed = addToRequestGroups(client, groups, t, linksForTask(t), true);
+        if (!placed) {
             if (!groups.has('_unlinked')) groups.set('_unlinked', { title: 'Other client tasks', resources: new Map() });
             const g = groups.get('_unlinked');
             if (!g.resources.has('')) g.resources.set('', { name: '', tasks: [] });
-            g.resources.get('').tasks.push(t);
-            return;
+            if (!g.resources.get('').tasks.includes(t)) g.resources.get('').tasks.push(t);
         }
-        addToRequestGroups(client, groups, t, links);
+    });
+    // Tasks from other projects that are shared with this one (a developer ticket that affects several projects).
+    sharedParkedTasksFor(client, ctx).forEach((t) => {
+        if (!groups.has('_shared')) groups.set('_shared', { title: 'Shared with other projects', resources: new Map() });
+        const g = groups.get('_shared');
+        if (!g.resources.has('')) g.resources.set('', { name: '', tasks: [] });
+        g.resources.get('').tasks.push({ ...t, title: `${t.title || t.name} (${t._homeName})` });
     });
     return groups;
 }
 
+// A task parked on a client, developer or third party in ANOTHER project that lists this project in task.sharedWith.
+// Returned with _homeId / _homeName so the follow-up can say where it lives.
+export function sharedParkedTasksFor(client, ctx) {
+    const out = [];
+    if (!client?.id) return out;
+    Object.values(state.clients || {}).forEach((other) => {
+        if (!other || other.id === client.id || other._metaOnly || !other.projectData) return;
+        (other.projectData.clientTasks || []).forEach((t) => {
+            if (!t || !(t.sharedWith || []).some((id) => String(id) === String(client.id)) || !isOpen(t, ctx)) return;
+            if (!(isClientWaitingStatus(t.status) || isOffsiteWaitingStatus(t.status))) return;
+            out.push({ ...t, _homeId: other.id, _homeName: other.meta?.name || 'another project' });
+        });
+    });
+    return out;
+}
+
 // Files a task under each request (and resource) it is linked to, skipping requests that aren't being worked.
-function addToRequestGroups(client, groups, t, links) {
+function addToRequestGroups(client, groups, t, links, force = false) {
+    let placed = 0;
     links.forEach((l) => {
         const item = l.requestId ? requestById(client, l.requestId) : null;
         if (!item) return;
-        if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
-        if (!requestIsFollowUpEligible(client, item)) return;   // On Hold / Declined rounds don't chase the client
+        if (!force) {
+            if (['Done', "Don't Do", 'Backlog'].includes(String(item.status || ''))) return;
+            if (!requestIsFollowUpEligible(client, item)) return;   // On Hold / Declined rounds don't chase the client
+        }
+        placed++;
         const reqKey = l.requestId;
         if (!groups.has(reqKey)) groups.set(reqKey, { title: requestTitle(client, item), resources: new Map() });
         const g = groups.get(reqKey);
@@ -295,6 +318,7 @@ function addToRequestGroups(client, groups, t, links) {
             if (!bucket.includes(t)) bucket.push(t);
         });
     });
+    return placed;
 }
 
 function staleTasks(client, ctx) {
@@ -777,12 +801,36 @@ function reconcileDraftingRounds(client, ctx) {
 // ------------------------------------------------------------------------------------------
 // the pass
 // ------------------------------------------------------------------------------------------
+// A task shared with other projects (task.sharedWith = [clientId, ...]) is on those projects' follow-ups too, so when
+// this project's tasks change, their follow-ups are brought up to date and saved. task.sharedSynced remembers who was
+// last updated so that removing a project from the list updates it once more.
+function syncSharedProjects(client, ctx) {
+    const targets = new Set();
+    (client.projectData.clientTasks || []).forEach((t) => {
+        if (!t) return;
+        const now = (t.sharedWith || []).map(String), was = (t.sharedSynced || []).map(String);
+        [...now, ...was].forEach((id) => { if (id !== String(client.id)) targets.add(id); });
+        if (now.join('|') !== was.join('|')) { if (now.length) t.sharedSynced = now; else delete t.sharedSynced; }
+    });
+    let changed = false;
+    targets.forEach((id) => {
+        const other = state.clients?.[id];
+        if (!other || other._metaOnly || !other.projectData) return;   // not loaded: the periodic sweep brings it up to date
+        const before = JSON.stringify(other.projectData.clientTasks);
+        try { reconcileClientFollowUp(other, ctx); } catch (e) { console.warn('Shared follow-up update failed for', id, e); return; }
+        if (JSON.stringify(other.projectData.clientTasks) !== before && window.OL?.markClientDirty) { window.OL.markClientDirty(id); changed = true; }
+    });
+    // The persist that is running claimed its list of projects already; save the others in a pass of their own.
+    if (changed && window.OL?.persist) setTimeout(() => { window.OL.persist(); }, 0);
+}
+
 export function runClientWorkRules(client, ctx) {
     if (!client?.projectData) return null;
     if (!Array.isArray(client.projectData.clientTasks)) client.projectData.clientTasks = [];
     stampStatusChanges(client, ctx);
     const blocked = reconcileBlockedTasks(client, ctx);
     const followUp = reconcileClientFollowUp(client, ctx);
+    syncSharedProjects(client, ctx);
     reconcileQuarterlyCheckIns(client, ctx);
     const maintenance = reconcileMaintenance(client, ctx);
     const drafting = reconcileDraftingRounds(client, ctx);
@@ -931,6 +979,7 @@ function labelFor(client, task) {
 // features/business/client-followup.js.
 export function followUpEmailData(client, ctx) {
     const all = client?.projectData?.clientTasks || [];
+    const shared = sharedParkedTasksFor(client, ctx);   // parked tasks from other projects that are shared with this one
 
     const clientAskEligible = (t) => {
         const links = linksForTask(t);
@@ -959,10 +1008,19 @@ export function followUpEmailData(client, ctx) {
     const clientAsks = openClientAsks.filter((t) => !isReviewAsk(t))
         .map((t) => ({ id: t.id, title: taskName(t), description: (t.description || '').replace(/^For:\s*/, '').trim(), waitNotes: notesByAsk.get(t.id) || [] }));
 
+    // Sphynx work parked on Pending Client Action / Feedback / Document with no client ask of its own: listed here so the
+    // client hears about it. (When it has asks, those asks are the list entries.)
+    all.filter((t) => t && isSphynxWork(t, ctx) && isOpen(t, ctx) && isClientWaitingStatus(t.status) && t.status !== 'Pending Client Review'
+        && !openClientTasksFor(client, t, ctx).length)
+        .concat(shared.filter((t) => isClientWaitingStatus(t.status) && t.status !== 'Pending Client Review').map((t) => ({ ...t, title: `${t.title || t.name} (${t._homeName})`, links: [] })))
+        .forEach((t) => clientAsks.push({ id: t.id, title: t._homeName ? (t.title || t.name) : labelFor(client, t), description: '', waitNotes: isBlank(t.waitingNote) ? [] : [{ label: '', text: String(t.waitingNote).trim() }] }));
+
     const reviewAsks = openClientAsks.filter(isReviewAsk)
         .map((t) => ({ id: t.id, label: taskName(t), note: (t.description || '').replace(/^For:\s*/, '').trim(), waitNotes: notesByAsk.get(t.id) || [] }));
     // Work parked on Pending Client Review: its own written note (when there is one) is what the sidebar shows.
-    const reviewWork = all.filter((t) => t && isImplementationTask(t, ctx) && t.status === 'Pending Client Review')
+    // Parked on Pending Client Review: any Sphynx work, whether or not it is tied to a request.
+    const reviewWork = [...all.filter((t) => t && isSphynxWork(t, ctx) && isOpen(t, ctx) && t.status === 'Pending Client Review'),
+        ...shared.filter((t) => t.status === 'Pending Client Review').map((t) => ({ ...t, title: `${t.title || t.name} (${t._homeName})`, links: [] }))]
         .map((t) => (isBlank(t.waitingNote)
             ? { id: t.id, label: labelFor(client, t), note: (t.description || t.title || t.name || '').trim(), waitNotes: [] }
             : { id: t.id, label: labelFor(client, t), note: '', waitNotes: [{ label: '', text: String(t.waitingNote).trim() }] }));
@@ -993,6 +1051,11 @@ export function followUpEmailData(client, ctx) {
     // sidebar flags the ones with none so a progress update can be asked for).
     all.filter((w) => w && !w.askKind && !w.consolidatedFollowUp && !w.statusNoteFor && isOpen(w, ctx) && !isClientFacing(w, ctx) && isOffsiteWaitingStatus(w.status))
         .forEach((w) => { const note = noteFor(w); addRow(w, note, !note); });
+    // The same for developer / third-party items living in other projects but shared with this one.
+    shared.filter((w) => isOffsiteWaitingStatus(w.status)).forEach((w) => {
+        const note = isBlank(w.waitingNote) ? '' : String(w.waitingNote).trim();
+        addRow({ ...w, title: `${w.title || w.name} (${w._homeName})`, links: [] }, note, !note);
+    });
 
     // Other stale Sphynx work with a written status note (no note yet means nothing to report).
     all.filter((p) => p && p.statusNoteFor).forEach((p) => {
