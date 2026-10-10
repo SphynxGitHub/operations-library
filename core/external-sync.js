@@ -22,6 +22,7 @@ export const EXTERNAL_SOURCES = {
   jotform:        { label: 'Jotform',        idPrefix: 'jf',   legacyPrefixes: ['jf-'],             stepName: 'User Submits Form',   global: true },
   activecampaign: { label: 'ActiveCampaign', idPrefix: 'ac',   legacyPrefixes: ['ac-'],             stepName: 'Automation Flow',     global: true },
   mailerlite:     { label: 'MailerLite',     idPrefix: 'ml',   legacyPrefixes: [],                  stepName: 'Automation Flow',     global: true },
+  keap:           { label: 'Keap',           idPrefix: 'kp',   legacyPrefixes: [],                  stepName: 'Campaign Sequence',   global: true },
   processstreet:  { label: 'Process Street', idPrefix: 'ps',   legacyPrefixes: ['ps-'],             stepName: 'Checklist Template',  global: false },
 };
 
@@ -142,11 +143,11 @@ export function logExternalPull(pd, summary, now = new Date().toISOString()) {
 
 const APP_SOURCE = [
   [/jotform/i, 'jotform'], [/calendly/i, 'calendly'], [/wealthbox/i, 'wealthbox'], [/redtail/i, 'redtail'],
-  [/active\s*campaign/i, 'activecampaign'], [/mailerlite/i, 'mailerlite'], [/youcanbook|ycbm/i, 'ycbm'], [/process\s*street/i, 'processstreet'],
+  [/active\s*campaign/i, 'activecampaign'], [/mailerlite/i, 'mailerlite'], [/keap|infusionsoft/i, 'keap'], [/youcanbook|ycbm/i, 'ycbm'], [/process\s*street/i, 'processstreet'],
 ];
 const URL_SOURCE = [
   [/jotform\.com/i, 'jotform'], [/calendly\.com/i, 'calendly'], [/youcanbook\.me/i, 'ycbm'],
-  [/activehosted\.com|activecampaign\.com/i, 'activecampaign'], [/processstreet\.com/i, 'processstreet'],
+  [/activehosted\.com|activecampaign\.com/i, 'activecampaign'], [/keap\.app|infusionsoft\.com|keap\.com/i, 'keap'], [/processstreet\.com/i, 'processstreet'],
   [/wealthbox\.com/i, 'wealthbox'], [/redtail(technology|crm)?\.com/i, 'redtail'],
 ];
 // Field names that name a form, template, workflow, event type, automation... (not "email", "name of the contact", "note")

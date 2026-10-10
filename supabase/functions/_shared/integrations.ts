@@ -7,7 +7,7 @@
 //   - errors are trimmed and have the key removed before they are sent back.
 // Pure code apart from the fetch function that is passed in, so it can be tested on its own.
 
-export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "ycbm", "redtail", "processstreet"] as const;
+export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "keap", "ycbm", "redtail", "processstreet"] as const;
 export type Service = typeof SERVICES[number];
 
 export class UpstreamError extends Error {
@@ -98,6 +98,25 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
     }
     case "mailerlite":
       return await getJson(f, "https://connect.mailerlite.com/api/automations", { Authorization: `Bearer ${key}` }, key);
+    case "keap": {
+      // Keap (Infusionsoft) REST v1 with a Service Account Key. Campaigns come back a page at a time with the
+      // names of their sequences; the steps inside a sequence are not available through the API.
+      const KEAP = "https://api.infusionsoft.com/crm/rest/v1";
+      let campaigns: any[] = [];
+      let next: string | null = `${KEAP}/campaigns?limit=200&optional_properties=sequences`;
+      let pages = 0;
+      while (next && pages < 10) {
+        const data: any = await getJson(f, next, { "X-Keap-API-Key": key }, key);
+        campaigns = campaigns.concat(data.campaigns || []);
+        pages++;
+        next = null;
+        if (typeof data.next === "string" && data.next && campaigns.length <= 1000) {
+          // only ever follow a "next page" link that stays on Keap
+          try { const u = new URL(data.next); if (u.protocol === "https:" && u.hostname === "api.infusionsoft.com") next = u.toString(); } catch { /* ignore */ }
+        }
+      }
+      return { campaigns };
+    }
     case "ycbm": {
       // A raw key (starts with ak_) is combined with the account email into the Basic login; a key that
       // is already the encoded login is used as it is. This used to happen in the browser.

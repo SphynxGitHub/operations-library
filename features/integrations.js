@@ -729,6 +729,7 @@ const HUB_GROUPS = [
     { title: 'Email automation', items: [
         { key: 'activecampaign', name: 'ActiveCampaign', desc: 'Automations', icon: 'mail', creds: 'activecampaign' },
         { key: 'mailerlite', name: 'MailerLite', desc: 'Sequences', icon: 'send', creds: 'mailerlite' },
+        { key: 'keap', name: 'Keap', desc: 'Campaigns and sequences', icon: 'megaphone', creds: 'keap' },
     ] },
     { title: 'Checklists and tasks', items: [
         { key: 'processstreet', name: 'Process Street', desc: 'Checklists', icon: 'list-checks', creds: 'processstreet' },
@@ -751,7 +752,7 @@ function timeAgo(iso) {
 const SYNC_FN = {
     wealthbox: (c, o) => syncWealthbox(c, o), redtail: (c, o) => syncRedtail(c, o), jotform: (c, o) => importJotform(c, o),
     calendly: (c, o) => importCalendly(c, o), ycbm: (c, o) => importYCBM(c, o), activecampaign: (c, o) => importActiveCampaign(c, o),
-    mailerlite: (c, o) => importMailerLite(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
+    mailerlite: (c, o) => importMailerLite(c, o), keap: (c, o) => importKeap(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
 };
 const emptySummary = (key) => ({ source: key, total: 0, added: [], renamed: [], changed: [], missing: [], restored: [], emptyPull: false });
 const changeCount = (s) => (s ? s.added.length + s.renamed.length + s.changed.length + s.missing.length + s.restored.length : 0);
@@ -1034,6 +1035,33 @@ export async function importMailerLite(client, opts = {}) {
     return commitPull(client, 'mailerlite', items);
 };
 
+// Keap: campaigns and the sequences inside them. Keap's API does not give the campaign canvas or email text, so each
+// campaign becomes an Email Campaign card with a start step and one step per sequence, plus whether it is published.
+export async function importKeap(client, opts = {}) {
+    const creds = OL.getCredsForApp(client, 'keap');
+    if (!hasKey(creds)) throw new Error("Keap Service Account Key missing in Credentials.");
+    await secureEntry(client, creds);
+
+    const data = await importFrom('keap', client.id, creds.id);
+    const campaigns = data.campaigns || [];
+
+    const items = campaigns.map((c) => {
+        const seqs = Array.isArray(c.sequences) ? c.sequences : [];
+        const published = c.published_status === true || c.active === true || /publish/i.test(String(c.published_status || ''));
+        return {
+            externalId: c.id, name: c.name || `Campaign ${c.id}`, type: 'Email Campaign', archetype: 'Multi-Level',
+            description: `Keap campaign${published ? ' (published)' : ' (not published)'}${c.date_created ? `, created ${String(c.date_created).slice(0, 10)}` : ''}.`,
+            steps: [
+                { id: `kp-${c.id}-s0`, name: 'Campaign starts', appName: 'Keap' },
+                ...(seqs.length
+                    ? seqs.map((s, i) => ({ id: `kp-${c.id}-s${i + 1}`, name: `Sequence: ${s.name || s.id || i + 1}`, appName: 'Keap' }))
+                    : [{ id: `kp-${c.id}-s1`, name: 'Campaign Sequence', appName: 'Keap' }]),
+            ],
+        };
+    });
+    return commitPull(client, 'keap', items);
+};
+
 export async function importJotform(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'jotform');
     if (!hasKey(creds)) throw new Error("Jotform API Key missing.");
@@ -1109,7 +1137,7 @@ export async function syncRedtail(client, opts = {}) {
 // Which access entry holds the key for an outside system: the entry whose app name matches, preferring
 // one that actually has a key (stored securely, or still in plain text from before secure storage).
 const APP_NAME_HINTS = {
-    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'],
+    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'], keap: ['keap', 'infusionsoft'],
     jotform: ['jotform'], activecampaign: ['activecampaign', 'active campaign'],
     youcanbookme: ['youcanbook', 'ycbm'], ycbm: ['youcanbook', 'ycbm'],
     processstreet: ['processstreet', 'process street']
@@ -1636,7 +1664,7 @@ Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
-    importYCBM, importActiveCampaign, importMailerLite, importJotform,
+    importYCBM, importActiveCampaign, importMailerLite, importKeap, importJotform,
     syncProcessStreet, syncRedtail, syncAllIntegrations, autoPullIntegrations, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
     openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,

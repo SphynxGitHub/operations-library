@@ -463,7 +463,7 @@ OL._fvTypes = {
   'Process':        { color: '#e8a83a', abbr: 'PR' },
   'General':        { color: '#6b7280', abbr: '•' },
 };
-OL._fvSourceLabels = { zapier: 'Zapier', wealthbox: 'Wealthbox', redtail: 'Redtail', jotform: 'Jotform', calendly: 'Calendly', ycbm: 'YouCanBook.me', activecampaign: 'ActiveCampaign', mailerlite: 'MailerLite', processstreet: 'Process Street' };
+OL._fvSourceLabels = { zapier: 'Zapier', wealthbox: 'Wealthbox', redtail: 'Redtail', jotform: 'Jotform', calendly: 'Calendly', ycbm: 'YouCanBook.me', activecampaign: 'ActiveCampaign', mailerlite: 'MailerLite', keap: 'Keap', processstreet: 'Process Street' };
 OL._fvGetType = t => OL._fvTypes[t] || { color: '#6b7280', abbr: (t||'?').substring(0,2).toUpperCase() };
 
 export function _fvNormalizeStepCoords() {

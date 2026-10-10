@@ -43,6 +43,7 @@ const SYNC_SYSTEMS = [
     { id: 'jotform', name: 'Jotform', hints: ['jotform'], pulls: 'your forms' },
     { id: 'activecampaign', name: 'ActiveCampaign', hints: ['activecampaign', 'active campaign'], pulls: 'your automations', extra: { label: 'ActiveCampaign API URL', placeholder: 'https://youraccount.api-us1.com' } },
     { id: 'mailerlite', name: 'MailerLite', hints: ['mailerlite'], pulls: 'your automations' },
+    { id: 'keap', name: 'Keap', hints: ['keap', 'infusionsoft'], pulls: 'your campaigns and sequences' },
     { id: 'ycbm', name: 'YouCanBook.me', hints: ['youcanbook', 'ycbm'], pulls: 'your booking pages', extra: { label: 'YouCanBook.me account email', placeholder: 'you@firm.com' } },
     { id: 'processstreet', name: 'Process Street', hints: ['processstreet', 'process street'], pulls: 'your workflows and their tasks' },
 ];
