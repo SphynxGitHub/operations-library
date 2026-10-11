@@ -389,6 +389,35 @@ export async function autoAlignNodes() {
      if (OL.drawConnections) OL.drawConnections();
 };
 
+// Splits a "resourceId-stepId" reference at the hyphen that really separates the two. Ids can contain hyphens
+// themselves (resource "kp-268", step "kp-268-s1" -> "kp-268-kp-268-s1"), so splitting at the LAST hyphen picked the wrong
+// resource, and syncLogicPorts then dropped the link as "resource deleted". This checks the real resources
+// and steps. Returns the index of that hyphen, or the last hyphen when nothing matches (the old behaviour).
+let _refCache = { arr: null, len: -1, map: null };
+export function _refSplitIdx(ref) {
+    const s = String(ref ?? '');
+    const fallback = s.lastIndexOf('-');
+    if (fallback === -1) return -1;
+    try {
+        const arr = OL.getCurrentProjectData()?.resources || [];
+        if (_refCache.arr !== arr || _refCache.len !== arr.length) {
+            const map = new Map();
+            arr.forEach(r => map.set(String(r.id), r));
+            _refCache = { arr, len: arr.length, map };
+        }
+        let legacy = -1;
+        for (let i = fallback; i > 0; i = s.lastIndexOf('-', i - 1)) {
+            const res = _refCache.map.get(s.slice(0, i));
+            if (!res) continue;
+            const rest = s.slice(i + 1);
+            if ((res.steps || []).some(st => String(st.id) === rest)) return i;
+            if (legacy === -1 && /^\d+$/.test(rest)) legacy = i;   // old index-based step refs
+        }
+        if (legacy !== -1) return legacy;
+    } catch (e) { /* fall back below */ }
+    return fallback;
+}
+
 export function getCurrentProjectData() {
     const hash = window.location.hash || "#/";
     const isVault = hash.startsWith('#/vault');
@@ -504,7 +533,7 @@ export function _fvLayoutResource(res) {
     steps.forEach(step => {
         (step.logic?.out || []).forEach(link => {
             if (!link.targetId) return;
-            const lastH  = link.targetId.lastIndexOf('-');
+            const lastH  = OL._refSplitIdx(link.targetId);
             const tResId = link.targetId.substring(0, lastH);
             if (String(tResId) !== String(res.id)) return;
             const tStepId = link.targetId.substring(lastH + 1);
@@ -1048,7 +1077,7 @@ export function _fvBuildFlowchartShell(stages, resources) {
       const referenced = stageRes.some(r =>
         (r.steps||[]).some(step =>
           (step.logic?.out||[]).some(out => {
-            const lastH = String(out.targetId||'').lastIndexOf('-');
+            const lastH = OL._refSplitIdx(String(out.targetId||''));
             return lastH !== -1 && out.targetId.substring(0, lastH) === String(gr.id);
           })
         )
@@ -1249,7 +1278,7 @@ export function _fvBuildFlowchartShell(stages, resources) {
         wfRes.some(r =>
           (r.steps||[]).some(step =>
             (step.logic?.out||[]).some(out => {
-              const lastH = String(out.targetId||'').lastIndexOf('-');
+              const lastH = OL._refSplitIdx(String(out.targetId||''));
               return lastH !== -1 && out.targetId.substring(0, lastH) === String(gr.id);
             })
           )
@@ -1662,7 +1691,7 @@ export function _fvComputeLayout(resources, stageFilter) {
     const fromId = `${res.id}-${step.id}`;
     OL._fvGetEffectiveOut(step, res).forEach(out => {
       if (!out.targetId) return;
-      const lastH = String(out.targetId).lastIndexOf('-');
+      const lastH = OL._refSplitIdx(String(out.targetId));
       if (lastH === -1) return;
       const tResId  = out.targetId.substring(0, lastH);
       const tStepId = out.targetId.substring(lastH + 1);
@@ -2718,7 +2747,7 @@ export function _fvDrawStepConnections(resources) {
         // Skip implicit synthetic fallbacks — real links drawn below
         if (outRule._implicit) return;
 
-        const lastH = String(outRule.targetId).lastIndexOf('-');
+        const lastH = OL._refSplitIdx(String(outRule.targetId));
         if (lastH === -1) return;
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
@@ -3097,7 +3126,7 @@ export function _fvDrawConnections(resources) {
       (step.logic?.out || []).forEach(outRule => {
         if (!outRule.targetId) return;
 
-        const lastH = String(outRule.targetId).lastIndexOf('-');
+        const lastH = OL._refSplitIdx(String(outRule.targetId));
         if (lastH === -1) return;
         const targetResId = outRule.targetId.substring(0, lastH);
         if (targetResId === String(sourceRes.id)) return; // skip same-card
@@ -4222,7 +4251,7 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
         const fromPos = posMap[String(s.id)];
         if (!fromPos) return;
         (s.logic?.out || []).filter(l => l.targetId).forEach(rule => {
-            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const lastH   = OL._refSplitIdx(String(rule.targetId));
             const tResId  = rule.targetId.substring(0, lastH);
             const tStepId = rule.targetId.substring(lastH + 1);
             const toPos   = posMap[tStepId];
@@ -4290,14 +4319,14 @@ export function _fvOpenStepCanvas(resId, breadcrumb) {
 
         const outRules   = (s.logic?.out || []).filter(l => l.targetId);
         const crossLinks = outRules.filter(rule => {
-            const lastH  = String(rule.targetId).lastIndexOf('-');
+            const lastH  = OL._refSplitIdx(String(rule.targetId));
             const tResId = rule.targetId.substring(0, lastH);
             return String(tResId) !== String(resId);
         });
 
         // Ghost cards for cross-resource connections
         const ghostsHtml = crossLinks.map(rule => {
-            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const lastH   = OL._refSplitIdx(String(rule.targetId));
             const tResId  = rule.targetId.substring(0, lastH);
             const tStepId = rule.targetId.substring(lastH + 1);
             const tRes    = resources.find(r => String(r.id) === tResId);
@@ -4477,7 +4506,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
         if (OL._fv.showArchived) return true;
-        const lastH  = String(l.targetId).lastIndexOf('-');
+        const lastH  = OL._refSplitIdx(String(l.targetId));
         const tResId = l.targetId.substring(0, lastH);
         const tRes   = allResources.find(r => String(r.id) === String(tResId));
         return !tRes?.isArchived;
@@ -4502,7 +4531,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
     const isIndentedChild = depth > 0;
 
     outRules.forEach(rule => {
-        const lastH   = String(rule.targetId).lastIndexOf('-');
+        const lastH   = OL._refSplitIdx(String(rule.targetId));
         const tResId  = rule.targetId.substring(0, lastH);
         const tStepId = rule.targetId.substring(lastH + 1);
         const tRes    = allResources.find(r => String(r.id) === String(tResId));
@@ -6899,7 +6928,7 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     const targetId = l.targetId || '';
                     let targetLabel = '— Select target —';
                     if (targetId) {
-                      const lastH  = targetId.lastIndexOf('-');
+                      const lastH  = OL._refSplitIdx(targetId);
                       const tResId = targetId.substring(0, lastH);
                       const tStepId = targetId.substring(lastH + 1);
                       const tRes  = (OL.getCurrentProjectData().resources||[]).find(r => String(r.id) === tResId);
@@ -8224,7 +8253,7 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
         } else {
             // 🚀 THE FIX: Robust Parsing for IDs with multiple hyphens
             // This finds the LAST hyphen to separate Resource ID from Step ID
-            const lastHyphenIdx = String(targetId).lastIndexOf('-');
+            const lastHyphenIdx = OL._refSplitIdx(String(targetId));
             const tResId = targetId.substring(0, lastHyphenIdx);
             const tStepId = targetId.substring(lastHyphenIdx + 1);
             
@@ -8278,7 +8307,7 @@ export function renderLogicBlock(resId, stepId, dir, i, logic, allOptions) {
 
             <div style="background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line);">
                 <span style="font-size: 10px; color: var(--text-main);">${esc(displayLabel)}</span>
-                ${targetId ? `<button class="logic-jump-btn" onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')" title="Jump to Card"><i data-lucide="target" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></button>` : ''}
+                ${targetId ? `<button class="logic-jump-btn" onclick="OL.centerCanvasNode('${String(targetId).substring(0, OL._refSplitIdx(targetId))}')" title="Jump to Card"><i data-lucide="target" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i></button>` : ''}
             </div>
 
             <input class="modal-input tiny" value="${esc(logic.rule || '')}" 
@@ -8481,7 +8510,7 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     const partnerFullId = direction === 'out' ? itemToRemove.targetId : itemToRemove.sourceId;
 
     if (partnerFullId) {
-        const lastHyphen = String(partnerFullId).lastIndexOf('-');
+        const lastHyphen = OL._refSplitIdx(String(partnerFullId));
         const pResId = partnerFullId.substring(0, lastHyphen);
         const pStepId = partnerFullId.substring(lastHyphen + 1);
         
@@ -8581,7 +8610,7 @@ export function syncLogicPorts() {
                 if (!outRule.targetId) return true; // Keep empty rules for editing
 
                 // 🚀 ROBUST PARSING (Matches renderLogicBlock)
-                const lastHyphenIdx = String(outRule.targetId).lastIndexOf('-');
+                const lastHyphenIdx = OL._refSplitIdx(String(outRule.targetId));
                 if (lastHyphenIdx === -1) return false; // Invalid format
 
                 const tResId = outRule.targetId.substring(0, lastHyphenIdx);
@@ -8763,7 +8792,7 @@ export function drawConnections() {
 
                 // 🚀 ROBUST PARSER (Correctly handles multiple hyphens)
                 const targetFullId = String(outLogic.targetId);
-                const lastHyphen = targetFullId.lastIndexOf('-');
+                const lastHyphen = OL._refSplitIdx(targetFullId);
                 if (lastHyphen === -1) return; // Malformed ID
 
                 const targetResId = targetFullId.substring(0, lastHyphen);
@@ -9173,7 +9202,7 @@ Object.assign(window.OL, {
     getAllStepOptions, addStepLogic, updateStepLogic, removeStepLogic,
     updateStepTarget, syncLogicPorts, updateStepLink, createMirrorLink,
     clearMirrorLink, getCardConnectionPoint, drawConnections, drawLogicIcon,
-    zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement
+    zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement, _refSplitIdx
 });
 // Called bare from app.js's router — bridge onto window directly.
 window.renderVisualizer = renderVisualizer;
