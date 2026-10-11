@@ -2201,9 +2201,10 @@ export function _fvRenderSteps(resources) {
       const wfRes = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
         .filter(r => r && !r.isGlobal && (r.steps || []).length > 0);
-      if (wfRes.length > 0) wfGroups.push({ workflow: wf, resources: wfRes });
+      // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
+      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: wfRes });
     });
-    if (wfGroups.length > 0) stageGroups.push({ stage, wfGroups });
+    if (wfGroups.length > 0 || !(OL._fv && OL._fv._printing)) stageGroups.push({ stage, wfGroups });
   });
 
   OL._fvAutoLinkSteps(resources);
@@ -4202,6 +4203,12 @@ export function _fvOpenStepsList(resId) {
                     }).join('')}
                 `;
             }).join('')}
+            ${(function() {
+                const ids = new Set(stages.map(x => String(x.id)));
+                const orphans = (OL.getWorkflows()||[]).filter(w => !ids.has(String(w.stageId)));
+                return orphans.length ? `<option disabled>— Workflows without a stage —</option>` + orphans.map(wf =>
+                    `<option value="wf:${wf.id}:" ${String(res.workflowId) === String(wf.id) ? 'selected' : ''}>&nbsp;&nbsp;↳ ${esc(wf.name)}</option>`).join('') : '';
+            })()}
         </select>
     </div>
 
@@ -7371,6 +7378,17 @@ if (mode === 'cards' && resId) {
                             const currentStages = projectData.stages || [];
                             const currentWorkflows = projectData.workflows || [];
                             
+                            const stageIds = new Set(currentStages.map(x => String(x.id)));
+                            const orphanWfs = currentWorkflows.filter(w => !stageIds.has(String(w.stageId)));
+                            const orphanHtml = orphanWfs.length ? `
+                                <div class="fv-custom-option" style="padding: 8px 12px; font-size: 11px; font-weight: 700; color:var(--text-main); background:var(--panel-dark); border-bottom: 1px solid #f3f4f6;">WORKFLOWS WITHOUT A STAGE</div>
+                                ${orphanWfs.map(wf => `
+                                    <div class="fv-custom-option workflow-item-row"
+                                         style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color:var(--text-main); cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px;"
+                                         onclick="OL.setResourcePlacement('${res.id}', '', '${wf.id}'); OL._fvOpenStepsList('${res.id}'); this.parentElement.style.display = 'none';"
+                                         onmouseover="this.style.background='rgba(61,217,197,0.08)';" onmouseout="this.style.background='transparent';">
+                                         <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i><span>${esc(wf.name)}</span>
+                                    </div>`).join('')}` : '';
                             return currentStages.map(s => {
                                 const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
                                 
@@ -7403,7 +7421,7 @@ if (mode === 'cards' && resId) {
                                         </div>
                                     `).join('')}
                                 `;
-                            }).join('');
+                            }).join('') + orphanHtml;
                         })()}
                     </div>
                 </div>
