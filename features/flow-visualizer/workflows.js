@@ -8,6 +8,16 @@ import { state, getActiveClient, persist } from '../../core/data.js';
 
 // ---- workflow CRUD ----
 
+// The open inspector's Stage & Workflow list is built when it opens, so it goes stale after a workflow is added,
+// renamed or deleted. Rebuild it if it is showing.
+function refreshOpenInspector() {
+    const panel = document.getElementById('v2-inspector-panel');
+    const id = OL._fv && OL._fv._lastInspectorResId;
+    if (panel && panel.classList.contains('open') && id && typeof OL._fvOpenStepsList === 'function') {
+        try { OL._fvOpenStepsList(String(id)); } catch (e) { console.warn('Inspector refresh failed', e); }
+    }
+}
+
 // Saves are debounced (about 1.5s). Reloading or closing the tab inside that window used to silently lose the change
 // (a new workflow, say), so the browser now asks first while a save is still waiting.
 if (!window._olUnsavedGuard) {
@@ -55,6 +65,7 @@ export function renameWorkflow(wfId, name) {
     if (!wf) return;
     wf.name = name.trim();
     persist();
+    refreshOpenInspector();
 }
 
 export function deleteWorkflow(wfId) {
@@ -67,6 +78,7 @@ export function deleteWorkflow(wfId) {
     data.workflows = (data.workflows || []).filter(w => w.id !== wfId);
     persist();
     OL.renderVisualizer();
+    refreshOpenInspector();
 }
 
 export function addResourceToWorkflow(wfId, resId) {
@@ -129,6 +141,7 @@ export function _fvCreateWorkflow(stageId) {
 
     createWorkflow(name.trim(), stageId);
     OL.renderVisualizer();
+    refreshOpenInspector();
 }
 
 export function _fvAddResourceToWorkflow(wfId) {
