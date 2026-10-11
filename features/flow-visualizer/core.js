@@ -8467,6 +8467,19 @@ export function addStepLogic(resId, stepId, direction) {
     OL._fvRefreshInspector(resId, stepId);
 };
 
+// The resources-grid "inline step editor" drawer draws its own copy of a step's logic rows (with their indexes).
+// The handlers below only redrew the inspector panel, so after removing or retargeting a row the drawer kept showing
+// the OLD rows and indexes: a later pick then pointed at a row that no longer existed. Redraw the drawer if it is open.
+function refreshInlineStepEditor(resId, stepId) {
+    try {
+        const drawer = document.getElementById(`fvi-inline-step-editor-${stepId}`);
+        if (drawer && drawer.style.display === 'block' && typeof OL.toggleInlineStepEditor === 'function') {
+            OL.toggleInlineStepEditor(resId, stepId);   // closes it
+            OL.toggleInlineStepEditor(resId, stepId);   // and reopens it with the current rows
+        }
+    } catch (e) { console.warn('Could not refresh the step editor:', e); }
+}
+
 // 💾 Update Logic Value (Rule or Target)
 export async function updateStepLogic(resId, stepTarget, direction, logicIdx, field, value) {
     const data = OL.getCurrentProjectData();
@@ -8486,6 +8499,7 @@ export async function updateStepLogic(resId, stepTarget, direction, logicIdx, fi
         requestAnimationFrame(() => {
             if (typeof OL.drawConnections === 'function') OL.drawConnections();
         });
+        if (field === 'type') refreshInlineStepEditor(resId, step.id);
         await saving;
     }
 };
@@ -8502,7 +8516,8 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     if (!step || !step.logic) return;
 
     // 1. 🔍 IDENTIFY THE PARTNER before deleting
-    const itemToRemove = step.logic[direction][logicIdx];
+    const itemToRemove = (step.logic[direction] || [])[logicIdx];
+    if (!itemToRemove) { refreshInlineStepEditor(resId, step.id); return; }   // already gone; just show what is really there
     const myFullId = `${resId}-${step.id}`;
     
     // If we're deleting an Output, the partner is the TargetId. 
@@ -8540,6 +8555,7 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     
     // Refresh the inspector to show the rule is gone
     OL.openInspector(resId, step.id); 
+    refreshInlineStepEditor(resId, step.id);
     console.log(`🧹 Ghost link removed from ${partnerFullId}`);
     await saving;
 };
@@ -8557,7 +8573,15 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
         return;
     }
 
-    const item = step.logic[direction][parseInt(logicIdx)];
+    if (!Array.isArray(step.logic[direction])) step.logic[direction] = [];
+    let item = step.logic[direction][parseInt(logicIdx)];
+    if (!item) {
+        // The row this pick was made against is gone (the list changed since it was drawn). Don't throw and lose
+        // the pick: add the link as a new row, then redraw so the screen shows what is really saved.
+        item = { type: 'next', targetId: null, rule: '' };
+        step.logic[direction].push(item);
+        console.warn(`Logic row ${logicIdx} no longer existed on step ${stepId}; added it as a new row.`);
+    }
     const myFullId = `${res.id}-${stepId}`;
 
     console.log(`🔗 Saving Logic: [${direction}] at index ${logicIdx} set to target ${newPartnerFullId}`);
@@ -8582,6 +8606,7 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
     // 🔄 4. REFRESH
     // Pass the unique stepId back to the inspector
     OL.openInspector(resId, stepId, 'steps');
+    refreshInlineStepEditor(resId, stepId);
     
     if (window.location.hash.includes('visualizer')) {
         OL.drawConnections();
