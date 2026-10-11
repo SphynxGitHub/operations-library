@@ -3678,8 +3678,18 @@ export function setResourcePlacement(resId, stageId, workflowId) {
     if (!res) return;
 
     if (!res.isGlobal) {
-        OL.handleResourceSave(resId, 'stageId', stageId || '');
-        OL.handleResourceSave(resId, 'workflowId', workflowId || '');
+        // A normal resource lives in exactly one place. The flow map reads workflow.resourceIds, so take it out of every
+        // workflow first (this used to leave it in the old one, so it showed in both), then put it in the new one.
+        const wfs = data.workflows || [];
+        wfs.forEach(w => { w.resourceIds = (w.resourceIds || []).filter(x => String(x) !== String(resId)); });
+        const target = workflowId ? wfs.find(w => String(w.id) === String(workflowId)) : null;
+        const newStage = stageId || (target && target.stageId) || '';
+        OL.logResourceEdit(resId, 'stageId', res.stageId, newStage);
+        res.stageId = newStage;
+        res.workflowId = target ? target.id : '';
+        if (target) target.resourceIds.push(String(resId));
+        OL.persist();
+        if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
         return;
     }
 
@@ -4303,9 +4313,11 @@ export function _fvAssignStageAndWorkflow(resId, value) {
     if (!res) return;
 
     console.group(`🎯 Re-assigning Lane Context for: ${res.name}`);
+    const wasGlobal = !!res.isGlobal;
 
     if (!value) {
         // Option selected is Unassigned
+        if (!wasGlobal) (data.workflows || []).forEach(w => { w.resourceIds = (w.resourceIds || []).filter(x => String(x) !== String(resId)); });
         res.stageId = null;
         res.workflowId = null;
         res.isGlobal = true;
@@ -4314,6 +4326,7 @@ export function _fvAssignStageAndWorkflow(resId, value) {
     else if (value.startsWith('stage:')) {
         // Raw Stage lane selected (not assigned to a specific workflow process track)
         const targetStageId = value.replace('stage:', '');
+        if (!wasGlobal) (data.workflows || []).forEach(w => { w.resourceIds = (w.resourceIds || []).filter(x => String(x) !== String(resId)); });
         res.stageId = targetStageId;
         res.workflowId = null;
         res.isGlobal = false;
@@ -4321,7 +4334,8 @@ export function _fvAssignStageAndWorkflow(resId, value) {
     else if (value.startsWith('wf:')) {
         // Nested Workflow Process track selected
         const [, wfId, targetStageId] = value.split(':');
-        res.stageId = targetStageId;
+        if (!wasGlobal) (data.workflows || []).forEach(w => { w.resourceIds = (w.resourceIds || []).filter(x => String(x) !== String(resId)); });
+        res.stageId = targetStageId || ((data.workflows || []).find(w => String(w.id) === String(wfId)) || {}).stageId || '';
         res.workflowId = wfId;
         res.isGlobal = false;
         
