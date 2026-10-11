@@ -8431,11 +8431,11 @@ export function addStepLogic(resId, stepId, direction) {
         action: "Go to Step"
     });
 
-    // 3. CRITICAL: Persist the change and then re-open the inspector to show it
-    OL.persist().then(() => {
-        OL.openInspector(resId, stepId, 'steps');
-        console.log(`✅ Logic added to ${direction} for step ${stepId}`);
-    });
+    // 3. Save in the background and redraw RIGHT AWAY. persist() waits ~1.5s before it writes and only
+    // resolves after the database write, so redrawing inside .then() made the new output appear to do nothing
+    // (and a reload in that window lost it).
+    OL.persist();
+    OL._fvRefreshInspector(resId, stepId);
 };
 
 // 💾 Update Logic Value (Rule or Target)
@@ -8451,12 +8451,13 @@ export async function updateStepLogic(resId, stepTarget, direction, logicIdx, fi
         step.logic[direction][parseInt(logicIdx)][field] = value;
 
         OL.syncLogicPorts();
-        await OL.persist(); 
+        const saving = OL.persist(); 
         
         // Use requestAnimationFrame for smooth line updates
         requestAnimationFrame(() => {
             if (typeof OL.drawConnections === 'function') OL.drawConnections();
         });
+        await saving;
     }
 };
 
@@ -8502,8 +8503,8 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     // 2. 🔥 DELETE THE LOCAL RULE
     step.logic[direction].splice(logicIdx, 1);
     
-    // 3. 💾 PERSIST & REFRESH
-    await OL.persist(); 
+    // 3. 💾 PERSIST (background) & REFRESH right away
+    const saving = OL.persist(); 
     
     // Draw connections to clear the lines from the map
     if (typeof OL.drawConnections === 'function') OL.drawConnections();
@@ -8511,6 +8512,7 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     // Refresh the inspector to show the rule is gone
     OL.openInspector(resId, step.id); 
     console.log(`🧹 Ghost link removed from ${partnerFullId}`);
+    await saving;
 };
 
 export async function updateStepTarget(resId, stepId, direction, logicIdx, newPartnerFullId) {
@@ -8539,9 +8541,9 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
         item.sourceId = String(newPartnerFullId);
     }
 
-    // 💾 2. PERSIST
+    // 💾 2. PERSIST (in the background; the screen below updates immediately)
     OL.syncLogicPorts(); 
-    await OL.persist();
+    const saving = OL.persist();
     
     // 🧹 3. UI CLEANUP
     // Close the specific search overlay
@@ -8555,6 +8557,7 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
     if (window.location.hash.includes('visualizer')) {
         OL.drawConnections();
     }
+    await saving;
 };
 
 export function syncLogicPorts() {
