@@ -66,16 +66,33 @@ function libraryChoices() {
 const openSet = () => { OL()._fv = OL()._fv || {}; return (OL()._fv._openStepCallouts = OL()._fv._openStepCallouts || new Set()); };
 const keyOf = (resId, stepId) => `${resId}|${stepId}`;
 
+// a read-only preview of the linked library item (email body in a sandboxed frame; other kinds show their details)
+function previewHtml(c, h = 240) {
+  const lib = c.libId ? resById(c.libId) : null; if (!lib) return '';
+  if (c.kind === 'email' || lib.emailBody != null) {
+    const body = String(lib.emailBody || '').trim();
+    const doc = `<!doctype html><meta charset="utf-8"><base target="_blank"><style>body{margin:0;padding:10px;font:13px/1.5 Helvetica,Arial,sans-serif;color:#222;background:#fff;word-wrap:break-word}img,table{max-width:100%;height:auto}</style>${body || '<p style="color:#999">No body yet.</p>'}`;
+    return `<div class="fv-callout-preview" style="margin:6px 0;border:1px solid var(--line,#444);border-radius:6px;overflow:hidden;background:#fff;">
+      ${lib.emailSubject ? `<div style="padding:5px 10px;font-size:11px;color:#555;background:#f4f4f4;border-bottom:1px solid #e3e3e3;"><b>Subject:</b> ${esc(lib.emailSubject)}</div>` : ''}
+      <iframe sandbox="" referrerpolicy="no-referrer" style="display:block;width:100%;height:${h}px;border:0;background:#fff;" srcdoc="${esc(doc)}"></iframe></div>`;
+  }
+  const bits = [lib.type && `Type: ${lib.type}`, lib.description || lib.notes].filter(Boolean).map((t) => `<div class="fv-callout-meta">${esc(clip(t, 300))}</div>`).join('');
+  return bits;
+}
+
 function panelHtml(resId, stepId, c) {
   const k = KIND[c.kind] || KIND.other; const r = esc(resId), s = esc(stepId);
-  return `<div class="fv-callout-panel" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+  const wide = c.kind === 'email' && c.libId && !c.missing;
+  return `<div class="fv-callout-panel" ${wide ? 'style="width:420px;max-width:80vw;"' : ''} onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
     <div class="fv-callout-panel-head"><span class="fv-callout-kind">${icon(k.icon, 11)} ${esc(k.label)}</span>
       <button type="button" class="fv-callout-x" title="Close" onclick="event.stopPropagation(); OL.fvToggleStepCallout('${r}','${s}','${esc(c.id)}')">${icon('x', 11)}</button></div>
     <div class="fv-callout-title">${esc(c.name)}</div>
     ${c.note ? `<div class="fv-callout-note">${esc(clip(c.note, 400))}</div>` : ''}
+    ${c.missing ? '' : previewHtml(c)}
     ${c.missing ? '<div class="fv-callout-meta">The linked library item is no longer there.</div>' : (!c.url ? '<div class="fv-callout-meta">No link yet. Use Edit to add one.</div>' : '')}
     <div class="fv-callout-actions">
       ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open ${icon('external-link', 11)}</a>` : ''}
+      ${c.kind === 'email' && c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.previewEmailTemplate('${esc(c.libId)}')">Full preview</button>` : ''}
       ${c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.libId)}', null, 'cards')">In library</button>` : ''}
       <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">Edit</button>
       <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvRemoveStepCallout('${r}','${s}','${esc(c.id)}')">Remove</button>
@@ -209,6 +226,9 @@ function renderPickStatus() {
   const locked = !!lib;
   ['fvsc-name', 'fvsc-url'].forEach((id) => { const e = elv(id); if (e) { e.readOnly = locked; e.style.opacity = locked ? '.65' : ''; } });
   const kindEl = elv('fvsc-kind'); if (kindEl) { kindEl.disabled = locked; kindEl.style.opacity = locked ? '.65' : ''; }
+  const fieldsEl = document.getElementById('fvsc-fields'); if (fieldsEl) fieldsEl.style.display = lib ? 'none' : '';
+  const prevEl = document.getElementById('fvsc-preview');
+  if (prevEl) prevEl.innerHTML = lib ? (previewHtml({ kind: kindForType(lib.type) || 'other', libId: lib.id }, 480) || '<div class="tiny muted">Nothing to preview for this item yet.</div>') : '';
   const box = 'padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.4;border:1px solid var(--panel-border);';
   if (lib) {
     st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('link', 12)} Linked to the library item <strong>${esc(lib.name || 'Untitled')}</strong>. Its name and link stay in step with the library.
@@ -243,11 +263,13 @@ function edit(resId, stepId, calloutId) {
             <input id="fvsc-search" class="modal-input" type="text" autocomplete="off" placeholder="Search forms, email templates, sheets, documents..." style="flex:1;min-width:0;margin:0;" oninput="OL.fvStepCalloutFilter()">
             <select id="fvsc-filter" class="modal-input" style="width:auto;margin:0;" onchange="OL.fvStepCalloutFilter()"><option value="">All types</option>${kindOpts}</select>
           </div>
-          <div id="fvsc-list" style="margin-top:8px;max-height:360px;overflow-y:auto;border:1px solid var(--panel-border);border-radius:8px;"></div>
+          <div id="fvsc-list" style="margin-top:8px;height:min(520px,52vh);overflow-y:auto;border:1px solid var(--panel-border);border-radius:8px;"></div>
           <button type="button" class="btn small primary" style="margin-top:10px;" onclick="OL.fvStepCalloutCreateNew()">${icon('plus', 12)} Create new</button>
         </div>
         <div>
           <div id="fvsc-status"></div>
+          <div id="fvsc-preview"></div>
+          <div id="fvsc-fields">
           <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;">
             <div><label ${lbl}>Type</label>
               <select id="fvsc-kind" class="modal-input" onchange="OL.fvStepCalloutKindChanged()">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
@@ -257,7 +279,8 @@ function edit(resId, stepId, calloutId) {
           <label ${lbl}>Link (optional)</label>
           <input id="fvsc-url" class="modal-input" type="text" value="${esc(cur ? cur.url || '' : '')}" placeholder="https://">
           <label ${lbl}>Note (optional)</label>
-          <textarea id="fvsc-note" class="modal-input" rows="4" placeholder="When it is used, who sends it, anything to watch for">${esc(cur ? cur.note || '' : '')}</textarea>
+          <textarea id="fvsc-note" class="modal-input" rows="8" placeholder="When it is used, who sends it, anything to watch for" style="min-height:200px;resize:vertical;">${esc(cur ? cur.note || '' : '')}</textarea>
+          </div>
         </div>
       </div>
       <div id="fvsc-err" class="tiny" style="color:#dc2626;min-height:16px;margin-top:10px;"></div>
