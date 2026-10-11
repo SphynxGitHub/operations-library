@@ -1216,9 +1216,9 @@ export function toggleInlineStepEditor(resId, stepId) {
                     <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px;
                                 background:rgba(255,255,255,0.04); border:1px solid var(--line); border-radius:6px;">
                         <span style="font-size:12px;">
-                            <i data-lucide="${a.type === 'person' ? 'user' : a.type === 'app' ? 'smartphone' : 'users'}" 
+                            <i data-lucide="smartphone"
                            style="width:10px; height:10px;"></i>
-                        ${esc(a.name)}</span>
+                        ${esc(step.appName || 'App')}</span>
                         <i data-lucide="x" class="is-clickable" style="width:12px; height:12px; opacity:0.4;"
                            onclick="event.stopPropagation(); OL.updateAppMetadataInline('${resId}', '${stepId}', null, null)"></i>
                     </div>
