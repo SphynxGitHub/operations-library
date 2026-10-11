@@ -2361,15 +2361,32 @@ export function _fvRenderSteps(resources) {
         pointer-events:none;`;
       frag.appendChild(stageBgEl);
 
+      const stageLbl = document.createElement('div');
+      stageLbl.style.cssText = `font-size:10px;font-weight:800;letter-spacing:0.11em;text-transform:uppercase;
+        color:var(--text-muted);opacity:0.8;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;max-width:260px;cursor:text;`;
+      stageLbl.textContent = stage.name;
+      stageLbl.title = `${stage.name} (double-click to rename)`;
+      stageLbl.className = 'fv-rename-target';
+      stageLbl.dataset.fvRename = 'stage'; stageLbl.dataset.id = stage.id;
+      // wrapper holds the name plus add / rename / delete buttons (not in print)
       stageLblEl = document.createElement('div');
-      stageLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${stageTop + 10}px;
-        font-size:8px;font-weight:800;letter-spacing:0.11em;text-transform:uppercase;
-        color:var(--text-muted);opacity:0.4;white-space:nowrap;overflow:hidden;
-        text-overflow:ellipsis;max-width:260px;cursor:default;`;
-      stageLblEl.textContent = stage.name;
-      stageLblEl.title = `${stage.name} (double-click to rename)`;
-      stageLblEl.className = 'fv-rename-target';
-      stageLblEl.dataset.fvRename = 'stage'; stageLblEl.dataset.id = stage.id;
+      stageLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${stageTop + 10}px;display:flex;align-items:center;gap:6px;z-index:5;`;
+      stageLblEl.addEventListener('mousedown', (e) => e.stopPropagation());
+      stageLblEl.appendChild(stageLbl);
+      if (!PRINTING) {
+        const sid = String(stage.id).replace(/'/g, "\\'");
+        const idxOf = () => ((OL.getCurrentProjectData() || {}).stages || []).findIndex(x => String(x.id) === String(stage.id));
+        const mk = (label, title, fn, danger) => {
+          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; bt.textContent = label;
+          bt.style.cssText = `padding:1px 6px;font-size:10px;line-height:14px;border-radius:5px;cursor:pointer;background:var(--panel-soft);border:0.5px solid var(--panel-border);color:${danger ? '#ef4444' : 'var(--text-dim)'};`;
+          bt.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+          stageLblEl.appendChild(bt);
+        };
+        mk('+', 'Add a stage after this one', () => OL.addStageBetween(idxOf() + 1));
+        mk('Rename', 'Rename stage', () => { stageLbl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+        mk('Delete', 'Delete stage', () => OL._fvDeleteStage(stage.id), true);
+      }
       if (SHOW_STAGE_LBL) frag.appendChild(stageLblEl);
     }
 
