@@ -2419,15 +2419,29 @@ export function _fvRenderSteps(resources) {
         pointer-events:none;`;
       frag.appendChild(wfBgEl);
 
+      const wfName = document.createElement('div');
+      wfName.style.cssText = `font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
+        color:var(--accent);opacity:0.85;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;max-width:${Math.max(wfWidth - 10, 80)}px;cursor:text;`;
+      wfName.textContent = workflow.name;
+      wfName.title = `${workflow.name} (double-click to rename)`;
+      wfName.className = 'fv-rename-target';
+      wfName.dataset.fvRename = 'workflow'; wfName.dataset.id = workflow.id;
       const wfLblEl = document.createElement('div');
-      wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;
-        font-size:9px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
-        color:var(--accent);opacity:0.55;white-space:nowrap;overflow:hidden;
-        text-overflow:ellipsis;max-width:${wfWidth - 10}px;cursor:default;`;
-      wfLblEl.textContent = workflow.name;
-      wfLblEl.title = `${workflow.name} (double-click to rename)`;
-      wfLblEl.className = 'fv-rename-target';
-      wfLblEl.dataset.fvRename = 'workflow'; wfLblEl.dataset.id = workflow.id;
+      wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;display:flex;align-items:center;gap:6px;z-index:5;`;
+      wfLblEl.addEventListener('mousedown', (e) => e.stopPropagation());
+      wfLblEl.appendChild(wfName);
+      if (!PRINTING && ((OL.getCurrentProjectData() || {}).workflows || []).some(w => String(w.id) === String(workflow.id))) {
+        const mk = (label, title, fn, danger) => {
+          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; bt.textContent = label;
+          bt.style.cssText = `padding:1px 6px;font-size:10px;line-height:14px;border-radius:5px;cursor:pointer;background:var(--panel-soft);border:0.5px solid var(--panel-border);color:${danger ? '#ef4444' : 'var(--text-dim)'};`;
+          bt.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+          wfLblEl.appendChild(bt);
+        };
+        if (stage) mk('+', 'Add another workflow to this stage', () => OL._fvCreateWorkflow(stage.id));
+        mk('Rename', 'Rename workflow', () => { wfName.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+        mk('Delete', 'Delete workflow', () => OL.deleteWorkflow(workflow.id), true);
+      }
       frag.appendChild(wfLblEl);
 
       const wfContentTop = wfY + WF_PAD + WF_HDR;
