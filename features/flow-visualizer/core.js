@@ -529,6 +529,18 @@ export function _fvLayoutResource(res) {
     if (isDraftLayoutResource(res)) return layoutDraft(res.steps, { maxCols: OL._fv._laneCols });
     const steps = res.steps || [];
 
+    // A step "continues the flow" when something leaves it for a LATER step (or another resource): it has an in line
+    // and an out line, so it belongs below its parent. Only a dead end (nothing leaves it, or it only loops back)
+    // is worth moving off to the side.
+    const stepIdx = new Map(steps.map((s, i) => [String(s.id), i]));
+    const continuesFlow = (step) => _fvGetEffectiveOut(step, res).some(l => {
+        if (!l.targetId) return false;
+        const k = OL._refSplitIdx(l.targetId);
+        if (String(l.targetId.substring(0, k)) !== String(res.id)) return true;   // leaves this resource
+        const ti = stepIdx.get(String(l.targetId.substring(k + 1)));
+        return ti !== undefined && ti > stepIdx.get(String(step.id));
+    });
+
     // Find which steps are branch targets and who their parent is
     const branchOf = {}; // stepId → parentStepId
     steps.forEach(step => {
@@ -540,6 +552,8 @@ export function _fvLayoutResource(res) {
             const tStepId = link.targetId.substring(lastH + 1);
             const types   = link.types || [link.type || 'next'];
             if (types.some(t => ['condition', 'loop', 'delay'].includes(t)) && !branchOf[tStepId]) {
+                const target = steps[stepIdx.get(String(tStepId))];
+                if (target && continuesFlow(target)) return;   // it carries on to a later step: keep it in the main column, below its parent
                 branchOf[tStepId] = step.id;
             }
         });
