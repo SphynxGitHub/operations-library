@@ -15,7 +15,7 @@
 // SAME LOOK AS:   the card-level callouts (features/flow-visualizer/callouts.js); the chip and panel styles are shared.
 // ================================================================================================
 
-import { esc, uid, getActiveClient, persist, markClientDirty } from '../../core/data.js';
+import { esc, uid, getActiveClient, persist, markClientDirty, state } from '../../core/data.js';
 import { CALLOUT_KINDS, calloutKindForType, calloutsFor } from './callouts.js';
 import { orderedResources } from './step-items.js';
 
@@ -151,49 +151,165 @@ function afterChange(resId, stepId) {
   } else refresh(resId, stepId);
 }
 
+// The library type a new item of each kind is filed under (an existing type of that kind is preferred).
+const KIND_TYPE = { email: 'Email Template', form: 'Form Template', spreadsheet: 'Spreadsheet', document: 'Document', folder: 'Folder', other: 'Reference' };
+function typeNameForKind(kind) {
+  const types = ((state.master && state.master.resourceTypes) || []).map((t) => t.type).filter(Boolean);
+  const want = String(KIND_TYPE[kind] || 'Reference').toLowerCase();
+  return types.find((t) => t.toLowerCase() === want) || types.find((t) => kindForType(t) === kind) || KIND_TYPE[kind] || 'Reference';
+}
+
+// "Create new": adds the item to the library right here, so nobody has to leave the flow map to make it first.
+function createLibraryItem({ kind, name, url, note }) {
+  const pd = project();
+  const list = pd.localResources || pd.resources;
+  if (!Array.isArray(list)) return null;
+  const isVault = (window.location.hash || '').startsWith('#/vault');
+  const type = typeNameForKind(kind);
+  const info = ((state.master && state.master.resourceTypes) || []).find((t) => t.type === type);
+  const res = {
+    id: `${isVault ? 'res-vlt' : 'local-prj'}-${Date.now()}`, name, type, archetype: (info && info.archetype) || 'Base',
+    steps: [], triggers: [], data: {}, description: note || '', createdDate: new Date().toISOString(),
+  };
+  if (url) res.externalUrl = url;
+  list.push(res);
+  return res;
+}
+
+const elv = (id) => document.getElementById(id);
+const fieldValue = (id) => ((elv(id) && elv(id).value) || '').trim();
+
+// the searchable library list on the left of the dialog
+function renderPickList() {
+  const box = elv('fvsc-list'); if (!box) return;
+  const q = fieldValue('fvsc-search').toLowerCase();
+  const kindFilter = (elv('fvsc-filter') && elv('fvsc-filter').value) || '';
+  const picked = (elv('fvsc-lib') && elv('fvsc-lib').value) || '';
+  const rows = libraryChoices().filter(({ r, kind }) => (!kindFilter || kind === kindFilter) && (!q || String(r.name || '').toLowerCase().includes(q)));
+  const exact = rows.some(({ r }) => String(r.name || '').trim().toLowerCase() === q);
+  const rowCss = 'display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--panel-border);';
+  const createRow = q && !exact
+    ? `<div onclick="OL.fvStepCalloutCreateNew()" style="${rowCss}color:var(--accent);font-weight:600;">${icon('plus', 13)}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Create new &ldquo;${esc(fieldValue('fvsc-search'))}&rdquo;</span></div>` : '';
+  box.innerHTML = createRow + (rows.length ? rows.map(({ r, kind }) => {
+    const k = KIND[kind] || KIND.other; const on = String(picked) === String(r.id);
+    return `<div data-id="${esc(r.id)}" onclick="OL.fvStepCalloutPick('${esc(r.id)}')" style="${rowCss}${on ? 'background:var(--accent-glow);' : ''}">
+      <span style="color:var(--accent);">${icon(k.icon, 13)}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${on ? 700 : 500};" title="${esc(r.name || 'Untitled')}">${esc(r.name || 'Untitled')}</span>
+      <span class="tiny muted" style="white-space:nowrap;">${esc(k.label)}</span></div>`;
+  }).join('') : `<div class="tiny muted" style="padding:14px;">Nothing in the library matches${q ? ` &ldquo;${esc(fieldValue('fvsc-search'))}&rdquo;` : ''}. Use Create new to add it.</div>`);
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// what the right-hand side will do when saved, and whether the name / link / type are locked to a library item
+function renderPickStatus() {
+  const st = elv('fvsc-status'); if (!st) return;
+  const libId = (elv('fvsc-lib') && elv('fvsc-lib').value) || '';
+  const isNew = ((elv('fvsc-new') && elv('fvsc-new').value) || '') === '1';
+  const lib = libId ? resById(libId) : null;
+  const locked = !!lib;
+  ['fvsc-name', 'fvsc-url'].forEach((id) => { const e = elv(id); if (e) { e.readOnly = locked; e.style.opacity = locked ? '.65' : ''; } });
+  const kindEl = elv('fvsc-kind'); if (kindEl) { kindEl.disabled = locked; kindEl.style.opacity = locked ? '.65' : ''; }
+  const box = 'padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.4;border:1px solid var(--panel-border);';
+  if (lib) {
+    st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('link', 12)} Linked to the library item <strong>${esc(lib.name || 'Untitled')}</strong>. Its name and link stay in step with the library.
+      <button type="button" class="btn tiny soft" style="margin-left:6px;" onclick="OL.fvStepCalloutUnlink()">Unlink</button></div>`;
+  } else if (isNew) {
+    const k = KIND[(kindEl && kindEl.value) || 'other'] || KIND.other;
+    st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('plus', 12)} Saving will add this to the library as a new <strong>${esc(k.label)}</strong> and link it to this step.
+      <button type="button" class="btn tiny soft" style="margin-left:6px;" onclick="OL.fvStepCalloutUnlink()">Cancel</button></div>`;
+  } else {
+    st.innerHTML = `<div style="${box}">Not in the library: just a name and a link. Pick an item on the left, or <a href="#" onclick="OL.fvStepCalloutCreateNew(); return false;">create a new one</a>.</div>`;
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
 function edit(resId, stepId, calloutId) {
   const res = resById(resId); const step = stepOf(res, stepId); if (!step) return;
   const cur = calloutId ? (step.callouts || []).find((c) => c.id === calloutId) : null;
-  const choices = libraryChoices();
-  const libOpts = choices.map(({ r, kind }) => `<option value="${esc(r.id)}" data-kind="${kind}" ${cur && String(cur.libId) === String(r.id) ? 'selected' : ''}>${esc((KIND[kind] || KIND.other).label)}: ${esc(r.name || 'Untitled')}</option>`).join('');
-  const lbl = 'class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;"';
+  const curLib = cur && cur.libId ? resById(cur.libId) : null;
+  const lbl = 'class="tiny muted" style="display:block;font-weight:600;margin:12px 0 4px;"';
+  const kindOpts = CALLOUT_KINDS.map((k) => `<option value="${k.key}">${esc(k.label)}</option>`).join('');
+  // The dialog box is already wide (90% of the window, up to 900px); the form used to be squeezed into 460px of it.
   window.openModal(`
-    <div class="modal-head"><div class="modal-title-text">${cur ? 'Edit collateral' : 'Add collateral'}</div><button class="btn small soft" onclick="OL.closeModal()">Close</button></div>
-    <div class="modal-body" style="max-width:460px;">
-      <p class="tiny muted" style="margin-top:0;">Something someone uses to complete <strong>${esc(step.name || 'this step')}</strong>: a form, an email template, a sheet, a document.</p>
-      ${choices.length ? `<label ${lbl}>From the library</label>
-      <select id="fvsc-lib" class="modal-input" onchange="OL.fvStepCalloutPick()"><option value="">Not from the library (enter it below)</option>${libOpts}</select>` : ''}
-      <label ${lbl}>Type</label>
-      <select id="fvsc-kind" class="modal-input">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select>
-      <label ${lbl}>Name</label>
-      <input id="fvsc-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email, Onboarding questionnaire">
-      <label ${lbl}>Link (optional)</label>
-      <input id="fvsc-url" class="modal-input" type="text" value="${esc(cur ? cur.url || '' : '')}" placeholder="https://">
-      <label ${lbl}>Note (optional)</label>
-      <textarea id="fvsc-note" class="modal-input" rows="3" placeholder="When it is used, who sends it, anything to watch for">${esc(cur ? cur.note || '' : '')}</textarea>
-      <div id="fvsc-err" class="tiny" style="color:#dc2626;min-height:16px;margin-top:6px;"></div>
+    <div class="modal-head"><div class="modal-title-text">${cur ? 'Edit collateral' : 'Add collateral'}</div><button class="btn small soft" style="margin-left:auto;" onclick="OL.closeModal()">Close</button></div>
+    <div class="modal-body" style="width:100%;box-sizing:border-box;">
+      <p class="tiny muted" style="margin-top:0;">Something someone uses to complete <strong>${esc(step.name || 'this step')}</strong>: a form, an email template, a sheet, a document. Pick it from the library, or create it here without leaving the map.</p>
+      <input type="hidden" id="fvsc-lib" value="${curLib ? esc(cur.libId) : ''}">
+      <input type="hidden" id="fvsc-new" value="">
+      <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:start;">
+        <div>
+          <label class="tiny muted" style="display:block;font-weight:600;margin:0 0 4px;">Find in the library</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="fvsc-search" class="modal-input" type="text" autocomplete="off" placeholder="Search forms, email templates, sheets, documents..." style="flex:1;min-width:0;margin:0;" oninput="OL.fvStepCalloutFilter()">
+            <select id="fvsc-filter" class="modal-input" style="width:auto;margin:0;" onchange="OL.fvStepCalloutFilter()"><option value="">All types</option>${kindOpts}</select>
+          </div>
+          <div id="fvsc-list" style="margin-top:8px;max-height:360px;overflow-y:auto;border:1px solid var(--panel-border);border-radius:8px;"></div>
+          <button type="button" class="btn small primary" style="margin-top:10px;" onclick="OL.fvStepCalloutCreateNew()">${icon('plus', 12)} Create new</button>
+        </div>
+        <div>
+          <div id="fvsc-status"></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;">
+            <div><label ${lbl}>Type</label>
+              <select id="fvsc-kind" class="modal-input" onchange="OL.fvStepCalloutKindChanged()">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
+            <div><label ${lbl}>Name</label>
+              <input id="fvsc-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email, Onboarding questionnaire"></div>
+          </div>
+          <label ${lbl}>Link (optional)</label>
+          <input id="fvsc-url" class="modal-input" type="text" value="${esc(cur ? cur.url || '' : '')}" placeholder="https://">
+          <label ${lbl}>Note (optional)</label>
+          <textarea id="fvsc-note" class="modal-input" rows="4" placeholder="When it is used, who sends it, anything to watch for">${esc(cur ? cur.note || '' : '')}</textarea>
+        </div>
+      </div>
+      <div id="fvsc-err" class="tiny" style="color:#dc2626;min-height:16px;margin-top:10px;"></div>
       <div style="display:flex;gap:8px;margin-top:6px;"><button class="btn primary" onclick="OL.fvSaveStepCallout('${esc(resId)}','${esc(stepId)}','${esc(calloutId || '')}')">Save</button></div>
     </div>`);
+  renderPickList(); renderPickStatus();
+  const on = document.querySelector('#fvsc-list [data-id][style*="accent-glow"]');
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
 }
 
-// choosing a library item fills in its type and name; the link and note come from the library item itself
-function pick() {
-  const sel = document.getElementById('fvsc-lib'); if (!sel) return;
-  const opt = sel.selectedOptions[0]; const lib = sel.value ? resById(sel.value) : null;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  if (lib) {
-    set('fvsc-kind', opt.dataset.kind || 'other'); set('fvsc-name', lib.name || '');
-    set('fvsc-url', safeUrl(lib.externalUrl || lib.url));
-  }
+// choosing a library item fills in its type, name and link; they then stay in step with the library item itself
+function pick(id) {
+  const lib = id ? resById(id) : null; if (!lib) return;
+  const set = (eid, v) => { const el = elv(eid); if (el) el.value = v; };
+  set('fvsc-lib', String(lib.id)); set('fvsc-new', '');
+  set('fvsc-kind', kindForType(lib.type) || 'other'); set('fvsc-name', lib.name || '');
+  set('fvsc-url', safeUrl(lib.externalUrl || lib.url));
+  renderPickList(); renderPickStatus();
+}
+
+// "Create new": the typed search words become the name; saving adds it to the library and links it
+function createNew() {
+  const set = (eid, v) => { const el = elv(eid); if (el) el.value = v; };
+  if (fieldValue('fvsc-lib')) { set('fvsc-name', ''); set('fvsc-url', ''); }   // don't carry a picked item's name / link into a new one
+  set('fvsc-lib', ''); set('fvsc-new', '1');
+  const typed = fieldValue('fvsc-search');
+  if (typed && !fieldValue('fvsc-name')) set('fvsc-name', typed);
+  const f = elv('fvsc-filter'); const k = elv('fvsc-kind');
+  if (f && f.value && k) k.value = f.value;
+  renderPickList(); renderPickStatus();
+  const nm = elv('fvsc-name'); if (nm) nm.focus();
+}
+
+function unlink() {
+  const set = (eid, v) => { const el = elv(eid); if (el) el.value = v; };
+  set('fvsc-lib', ''); set('fvsc-new', '');
+  renderPickList(); renderPickStatus();
 }
 
 function save(resId, stepId, calloutId) {
   const res = resById(resId); const step = stepOf(res, stepId); if (!step) return;
   const v = (id) => (document.getElementById(id)?.value || '').trim();
   const err = document.getElementById('fvsc-err');
-  const libId = v('fvsc-lib'); const name = v('fvsc-name'); const url = v('fvsc-url');
+  let libId = v('fvsc-lib'); const name = v('fvsc-name'); const url = v('fvsc-url');
   if (!name) { if (err) err.textContent = 'Give it a name.'; return; }
   if (url && !safeUrl(url)) { if (err) err.textContent = 'The link needs to start with http:// or https://'; return; }
+  if (!libId && v('fvsc-new') === '1') {
+    // "Create new": make the library item here, then link the step to it
+    const made = createLibraryItem({ kind: v('fvsc-kind') || 'other', name, url, note: v('fvsc-note') });
+    if (!made) { if (err) err.textContent = 'Could not add it to the library here.'; return; }
+    libId = made.id;
+  }
   const entry = { id: calloutId || `sco-${uid()}`, kind: v('fvsc-kind') || 'other', name, url, note: v('fvsc-note') };
   if (libId) entry.libId = libId;
   const next = (step.callouts || []).map((c) => ({ ...c }));
@@ -282,4 +398,5 @@ Object.assign(window.OL, {
   fvCollectCollateral: collectCollateral, fvCollateralNumbers: collateralNumbers, fvAnnotateCollateral: annotateCollateral, fvCollateralAppendixHtml: collateralAppendixHtml,
   fvStepCalloutStrip: stepCalloutStrip, fvStepCalloutInspector: stepCalloutInspector, fvStepCalloutsOf: calloutsOf,
   fvToggleStepCallout: toggle, fvEditStepCallout: edit, fvStepCalloutPick: pick, fvSaveStepCallout: save, fvRemoveStepCallout: remove,
+  fvStepCalloutFilter: renderPickList, fvStepCalloutCreateNew: createNew, fvStepCalloutUnlink: unlink, fvStepCalloutKindChanged: renderPickStatus,
 });

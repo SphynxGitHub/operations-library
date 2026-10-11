@@ -150,12 +150,14 @@ function editCallout(resId, calloutId) {
   const html = `
     <div class="modal-head"><div class="modal-title-text">${cur ? 'Edit callout' : 'Add a callout'}</div>
       <button class="btn small soft" onclick="OL.closeModal()">Close</button></div>
-    <div class="modal-body" style="max-width:460px;">
+    <div class="modal-body" style="width:100%;box-sizing:border-box;">
       <p class="tiny muted" style="margin-top:0;">A reference that sits on <strong>${esc(res.name)}</strong> but is not a step in the flow. Outside forms and sheets only need a name and a link.</p>
-      <label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Type</label>
-      <select id="fvco-kind" class="modal-input">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select>
-      <label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Name</label>
-      <input id="fvco-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email template">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;">
+        <div><label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Type</label>
+          <select id="fvco-kind" class="modal-input">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
+        <div><label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Name</label>
+          <input id="fvco-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email template"></div>
+      </div>
       <label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Link (optional)</label>
       <input id="fvco-url" class="modal-input" type="text" value="${esc(cur ? cur.url || '' : '')}" placeholder="https://">
       <label class="tiny muted" style="display:block;font-weight:600;margin:10px 0 3px;">Note (optional)</label>
