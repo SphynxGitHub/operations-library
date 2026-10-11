@@ -7462,6 +7462,11 @@ if (mode === 'cards' && resId) {
                             <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
                             ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
                         </select>
+                        <button onclick="event.preventDefault(); event.stopPropagation(); OL.duplicateResourceV2('${res.id}');"
+                                title="Duplicate this resource (all its steps) into the same workflow"
+                                style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel-soft);color:var(--text-dim);">
+                            Duplicate
+                        </button>
                         <button onclick="event.preventDefault(); event.stopPropagation(); 
                                          OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
                                          renderResourceManager();"
