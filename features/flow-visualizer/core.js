@@ -4130,6 +4130,8 @@ export function _fvOpenStepsList(resId) {
               <i data-lucide="chevron-right"
                  style="width:11px;height:11px;color:var(--line);cursor:pointer;"
                  onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}')"></i>
+              <button onclick="event.stopPropagation(); OL.duplicateStep('${res.id}','${s.id}')" title="Duplicate step"
+                      style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;padding:0 2px;">⧉</button>
               <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${s.id}')"
                       style="width:16px;height:16px;border:none;background:none;cursor:pointer;
                              color:var(--line);display:flex;align-items:center;justify-content:center;
@@ -6876,6 +6878,10 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                       value="${esc(step.name)}" 
                       onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
                       placeholder="Step Name">
+                <button onclick="OL.duplicateStep('${resId}','${step.id}')" title="Insert a copy of this step right below it"
+                        style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel-soft);color:var(--text-dim);">Duplicate</button>
+                <button onclick="OL.openCopyStepsDialog('${resId}','${step.id}')" title="Copy this step (and others) into another resource"
+                        style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel-soft);color:var(--text-dim);">Copy to…</button>
                 <button onclick="OL.deleteStep('${resId}','${step.id}')"
                         style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;
                                border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);
@@ -9330,7 +9336,10 @@ export async function duplicateResourceV2(resourceId) {
         // Wipe instance-specific flags
         delete clone.masterRefId; 
         
+        // The copy's own links point at the copy (not back into the original), and it sits in the same workflow.
+        if (typeof OL.fvRewriteResourceRefs === 'function') OL.fvRewriteResourceRefs(clone, original.id);
         source.push(clone);
+        if (!isVault && typeof OL.fvPlaceLikeOriginal === 'function') OL.fvPlaceLikeOriginal(clone, original.id);
         console.log("✅ Duplicated to:", clone.id);
     });
 
