@@ -1185,6 +1185,8 @@ export function toggleInlineStepEditor(resId, stepId) {
     if (!step) return;
 
     if (!step.logic) step.logic = { in: [], out: [] };
+    if (!Array.isArray(step.logic.in)) step.logic.in = [];
+    if (!Array.isArray(step.logic.out)) step.logic.out = [];
     if (!step.assignees) step.assignees = [];
 
     drawer.innerHTML = `
@@ -1351,6 +1353,8 @@ export function addInlineStepLogic(resId, stepId, direction) {
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
     if (!step.logic) step.logic = { in: [], out: [] };
+    if (!Array.isArray(step.logic.in)) step.logic.in = [];
+    if (!Array.isArray(step.logic.out)) step.logic.out = [];
     step.logic[direction].push({ type: 'next', targetId: null, rule: '' });
     OL.persist();
     OL.toggleInlineStepEditor(resId, stepId);
@@ -1650,7 +1654,7 @@ Object.assign(window.OL, {
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
-    addInlineStepLogic, deleteStep, addStepLogic, goToStepFromLibrary,
+    addInlineStepLogic, deleteStep, goToStepFromLibrary,
     bulkMarkUnscopedResourcesDone,
     addNewResourceTypeFlat, renameResourceTypeFlat, updateResourceTypeProp,
     removeRegistryTypeByKey, closeResourceTypeManager
