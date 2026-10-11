@@ -662,10 +662,70 @@ if (!OL._fv._resizeBound) {
 }
 
 // ── MAIN ENTRY ────────────────────────────────────────────
+// ── REMEMBERED SCROLL POSITION ───────────────────────────────────────────────
+// The flow map's scroll area is rebuilt on every render (a reload, a layout switch, and now every edit made in the
+// inspector), which dropped you back at the top. The position is saved per project and per view (Steps / List) and put
+// back after each render. Saved in this browser only.
+const FV_SCROLL_HOSTS = { canvas: 'fv-canvas-wrap', list: 'fv-list-wrap' };
+const fvScrollKey = () => `fv_scroll:${getActiveClient()?.id || 'workspace'}`;
+function fvReadScrollStore() { try { return JSON.parse(localStorage.getItem(fvScrollKey()) || '{}') || {}; } catch (e) { return {}; } }
+function fvWriteScroll(layout, which, top, left) {
+    try {
+        const all = fvReadScrollStore();
+        all[`${layout}:${which}`] = { top: Math.round(top), left: Math.round(left) };
+        localStorage.setItem(fvScrollKey(), JSON.stringify(all));
+    } catch (e) { /* storage blocked: the position just isn't remembered */ }
+}
+// Called right before the page is rebuilt: write down where each scroll area is now.
+function fvFlushScroll() {
+    Object.entries(FV_SCROLL_HOSTS).forEach(([which, id]) => {
+        const el = document.getElementById(id);
+        if (el && el._fvLayout && !el._fvRestoring) fvWriteScroll(el._fvLayout, which, el.scrollTop, el.scrollLeft);
+    });
+}
+// Called after a render: start saving this (new) scroll area's position as it moves.
+function fvWatchScroll() {
+    const layout = OL._fv.layout;
+    Object.entries(FV_SCROLL_HOSTS).forEach(([which, id]) => {
+        const el = document.getElementById(id);
+        if (!el || el._fvScrollWatched) return;
+        el._fvScrollWatched = true;
+        el._fvLayout = layout;
+        let t = null;
+        el.addEventListener('scroll', () => {
+            if (el._fvRestoring) return;   // the page is still putting the saved position back; don't overwrite it
+            clearTimeout(t);
+            t = setTimeout(() => fvWriteScroll(layout, which, el.scrollTop, el.scrollLeft), 120);
+        }, { passive: true });
+    });
+}
+// Called after a render: put the saved position back. The map's height is settled by a later measuring pass, so the
+// position is re-applied a few times; any scroll, click or key press by you stops that straight away.
+function fvRestoreScroll() {
+    const saved = fvReadScrollStore();
+    Object.entries(FV_SCROLL_HOSTS).forEach(([which, id]) => {
+        const el = document.getElementById(id);
+        const pos = el && saved[`${OL._fv.layout}:${which}`];
+        if (!pos) return;
+        el._fvRestoring = true;
+        let stopped = false;
+        const done = () => { el._fvRestoring = false; };
+        const stop = () => { stopped = true; done(); };
+        ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => el.addEventListener(ev, stop, { once: true, passive: true }));
+        const apply = () => { if (!stopped && document.body.contains(el)) { el.scrollTop = pos.top; el.scrollLeft = pos.left; } };
+        apply();
+        requestAnimationFrame(apply);
+        setTimeout(apply, 120);
+        setTimeout(apply, 400);
+        setTimeout(done, 650);
+    });
+}
+
 export function renderVisualizer() {
   const wasOpen = OL._fv._lastInspectorResId;
   const mainArea = document.getElementById('mainContent');
   if (!mainArea) return;
+  fvFlushScroll();   // remember where the map is scrolled to before it is rebuilt
 
   document.body.classList.add('is-visualizer');
   mainArea.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0;';
@@ -986,6 +1046,9 @@ export function renderVisualizer() {
         OL._fvOpenStepsList(wasOpen);
     });
   }
+
+  fvWatchScroll();
+  fvRestoreScroll();
 };
 
 export function _fvTogglePrintMenu() {
@@ -2650,9 +2713,25 @@ export function _fvRenderSteps(resources) {
                   if (!step.pinned) { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
                   rowH = Math.max(rowH, hOf(el));
                 });
-                ry = rowTop + rowH + STEP_GAP;
+                // Leave room under this row for the lines that run down to the next one: a plain arrow needs a little,
+                // a link with logic (the lambda badge) needs more so the badge and arrowhead aren't squeezed between cards.
+                let gapAfter = STEP_GAP;
+                rowCards.forEach(({ step }) => {
+                  _fvGetEffectiveOut(step, res).forEach(l => {
+                    if (!l.targetId) return;
+                    const k = OL._refSplitIdx(l.targetId);
+                    if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
+                    const tRow = lay && lay[l.targetId.substring(k + 1)] ? lay[l.targetId.substring(k + 1)].row : undefined;
+                    if (tRow === undefined || tRow <= key) return;   // sideways / upward links don't need vertical room
+                    const types = l.types || [l.type || 'next'];
+                    const hasLogic = types.some(t => ['condition', 'loop', 'delay'].includes(t))
+                        || (l.rule || '').toString().trim() || (l.loopLimit || '').toString().trim() || (l.delayValue || '').toString().trim();
+                    gapAfter = Math.max(gapAfter, hasLogic ? 64 : 40);
+                  });
+                });
+                ry = rowTop + rowH + gapAfter;
+                maxBottom = Math.max(maxBottom, rowTop + rowH);
               });
-              maxBottom = Math.max(maxBottom, ry - STEP_GAP);
             });
 
             y = maxBottom + STEP_GAP;
