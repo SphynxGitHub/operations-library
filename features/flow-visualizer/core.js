@@ -9348,8 +9348,9 @@ export async function duplicateResourceV2(resourceId) {
         console.log("✅ Duplicated to:", clone.id);
     });
 
-    // 4. Force UI to Draw
-    OL.renderVisualizer();
+    // 4. Force UI to Draw (the flow map, and the library list if that is what is showing)
+    if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+    if (document.getElementById('resource-library-results') && typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
 };
 
 export function toggleWorkbenchTray() {
