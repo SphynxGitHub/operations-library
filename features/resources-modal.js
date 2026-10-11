@@ -1067,10 +1067,12 @@ const dependencyHtml = `
                     </div>
 
                     <!-- Body preview + editor -->
-                    <div id="email-body-preview-${res.id}"
+                    <div id="email-body-preview-${res.id}" class="ol-email-body"
+                         title="Click to edit"
+                         onclick="if(!event.target.closest('a,.pill,button')) OL._geToggleEmailBody('${res.id}', 'rich');"
                          style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
                                 padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
-                                min-height:80px;">
+                                min-height:80px;width:100%;cursor:text;">
                         ${OL._geRenderEmailPreview(res.emailBody || '', [
                             ...(client?.projectData?.localDatapoints?.length 
                                 ? client.projectData.localDatapoints 
@@ -1080,8 +1082,8 @@ const dependencyHtml = `
                     </div>
                     <textarea id="email-body-edit-${res.id}"
                               class="modal-textarea"
-                              style="display:none;min-height:160px;"
-                              placeholder="Write email body...">${esc(res.emailBody || '')}</textarea>
+                              style="display:none;min-height:240px;width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;"
+                              placeholder="Paste or write the email HTML...">${esc(res.emailBody || '')}</textarea>
                     <button id="email-body-done-${res.id}"
                             style="display:none;margin-top:8px;"
                             class="btn tiny soft"
@@ -1656,8 +1658,22 @@ OL.saveResourceFieldValue = function(resId, fieldId, value) {
     OL.handleResourceSave(resId, 'fieldValues', res.fieldValues);
 };
 
+// Email HTML comes with its own fixed widths (a 600px table, a logo image wider than the dialog), which used to spill out of
+// the body box and over the rest of the dialog. Everything inside an email body box is held to the width of that box.
+if (typeof document !== 'undefined' && !document.getElementById('ol-email-body-css')) {
+    const st = document.createElement('style');
+    st.id = 'ol-email-body-css';
+    st.textContent = `
+      .ol-email-body { max-width:100%; box-sizing:border-box; overflow:auto; overflow-wrap:anywhere; contain:layout paint; }
+      .ol-email-body * { max-width:100% !important; box-sizing:border-box; }
+      .ol-email-body img { height:auto !important; }
+      .ol-email-body[contenteditable="true"] { cursor:text; }
+    `;
+    document.head.appendChild(st);
+}
+
 export function _geRenderEmailPreview(value, datapoints, client) {
-    if (!value) return '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
+    if (!value) return '<span style="opacity:0.45;font-style:italic;">No body yet. Click here to type or paste the email.</span>';
     
     const data = OL.getCurrentProjectData();
     const allResources = data.resources || [];
@@ -1716,7 +1732,8 @@ export function _geToggleEmailBody(resId, mode) {
             richEl = document.createElement('div');
             richEl.id = `email-body-rich-${resId}`;
             richEl.contentEditable = 'true';
-            richEl.style.cssText = 'min-height:160px;padding:12px;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.6;outline:none;background:rgba(0,0,0,0.1);';
+            richEl.className = 'ol-email-body';
+            richEl.style.cssText = 'min-height:240px;width:100%;padding:12px;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.6;outline:none;background:rgba(0,0,0,0.1);';
             richEl.innerHTML = editor.value || '';
             editor.parentNode.appendChild(richEl);
         }
@@ -2537,7 +2554,7 @@ export function previewEmailTemplate(resId) {
                 <div style="margin-bottom:5px;"><b style="color:#888;">To:</b> [${res.emailToType || 'Recipient'}]</div>
                 <div><b style="color:#888;">Subject:</b> ${esc(res.emailSubject || '(No Subject)')}</div>
             </div>
-            <div style="line-height: 1.6; font-size: 15px; color:#222;">${res.emailBody || '...'}</div>
+            <div class="ol-email-body" style="line-height: 1.6; font-size: 15px; color:#222;">${res.emailBody || '...'}</div>
             ${signatureContent}
             <div style="margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
                 <button class="btn small soft" style="color:black !important;" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
