@@ -114,6 +114,9 @@ export function renderResourceCard(res, opts = {}) {
                             <i data-lucide="send" style="width:11px;height:11px;"></i>
                         </button>
                     ` : ''}
+                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}');" title="Duplicate (with all its steps)" style="position:static; padding:2px;">
+                        <i data-lucide="copy" style="width:11px;height:11px;"></i>
+                    </button>
                     <button class="card-delete-btn" 
                             onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                             title="${res.isArchived ? 'Unarchive' : 'Archive'}"
