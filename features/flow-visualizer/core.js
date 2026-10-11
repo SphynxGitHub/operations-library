@@ -511,6 +511,7 @@ export function _fvNormalizeStepCoords() {
 export function _fvGetEffectiveOut(step, res) {
     const explicit = (step.logic?.out || []).filter(l => l.targetId);
     if (explicit.length > 0) return explicit;
+    if (step.noAutoNext) return [];   // outputs were removed on purpose; no implied "next step"
     const steps = res.steps || [];
     const idx = steps.indexOf(step);
     if (idx === -1 || idx >= steps.length - 1) return [];
@@ -592,6 +593,7 @@ export function _fvAutoLinkSteps(resources) {
             if (!step.logic) step.logic = { in: [], out: [] };
             if (!step.logic.out) step.logic.out = [];
             if (!step.logic.in)  step.logic.in  = [];
+            if (step.noAutoNext) return;   // someone edited this step's outputs by hand; don't put the default link back
             const hasOut = step.logic.out.some(l => l.targetId);
             if (hasOut) return;
             const nextStep = (res.steps || [])[idx + 1];
@@ -8463,8 +8465,10 @@ export function addStepLogic(resId, stepId, direction) {
     // 3. Save in the background and redraw RIGHT AWAY. persist() waits ~1.5s before it writes and only
     // resolves after the database write, so redrawing inside .then() made the new output appear to do nothing
     // (and a reload in that window lost it).
+    if (direction === 'out') step.noAutoNext = true;   // a hand-added output: don't also auto-add the default next link
     OL.persist();
     OL._fvRefreshInspector(resId, stepId);
+    refreshFlowMap(resId, stepId);
 };
 
 // The resources-grid "inline step editor" drawer draws its own copy of a step's logic rows (with their indexes).
@@ -8478,6 +8482,16 @@ function refreshInlineStepEditor(resId, stepId) {
             OL.toggleInlineStepEditor(resId, stepId);   // and reopens it with the current rows
         }
     } catch (e) { console.warn('Could not refresh the step editor:', e); }
+}
+
+// The flow map is deliberately left out of the automatic page redraw (core/live-refresh.js), so a change made in the
+// inspector has to ask for it. renderVisualizer reopens the resource's step LIST, so go back to the step afterwards.
+function refreshFlowMap(resId, stepId) {
+    if (!window.location.hash.includes('visualizer')) return;
+    try {
+        OL.renderVisualizer();
+        if (stepId) requestAnimationFrame(() => requestAnimationFrame(() => OL.openInspector(resId, stepId, 'steps')));
+    } catch (e) { console.warn('Could not redraw the flow map:', e); }
 }
 
 // 💾 Update Logic Value (Rule or Target)
@@ -8499,7 +8513,7 @@ export async function updateStepLogic(resId, stepTarget, direction, logicIdx, fi
         requestAnimationFrame(() => {
             if (typeof OL.drawConnections === 'function') OL.drawConnections();
         });
-        if (field === 'type') refreshInlineStepEditor(resId, step.id);
+        if (field === 'type') { refreshInlineStepEditor(resId, step.id); refreshFlowMap(resId, step.id); }
         await saving;
     }
 };
@@ -8546,6 +8560,7 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
 
     // 2. 🔥 DELETE THE LOCAL RULE
     step.logic[direction].splice(logicIdx, 1);
+    if (direction === 'out') step.noAutoNext = true;   // removed on purpose: the renderer must not re-add the default next link
     
     // 3. 💾 PERSIST (background) & REFRESH right away
     const saving = OL.persist(); 
@@ -8556,6 +8571,7 @@ export async function removeStepLogic(resId, stepTarget, direction, logicIdx) {
     // Refresh the inspector to show the rule is gone
     OL.openInspector(resId, step.id); 
     refreshInlineStepEditor(resId, step.id);
+    refreshFlowMap(resId, step.id);
     console.log(`🧹 Ghost link removed from ${partnerFullId}`);
     await saving;
 };
@@ -8583,6 +8599,7 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
         console.warn(`Logic row ${logicIdx} no longer existed on step ${stepId}; added it as a new row.`);
     }
     const myFullId = `${res.id}-${stepId}`;
+    if (direction === 'out') step.noAutoNext = true;   // outputs are being managed by hand
 
     console.log(`🔗 Saving Logic: [${direction}] at index ${logicIdx} set to target ${newPartnerFullId}`);
 
@@ -8607,10 +8624,7 @@ export async function updateStepTarget(resId, stepId, direction, logicIdx, newPa
     // Pass the unique stepId back to the inspector
     OL.openInspector(resId, stepId, 'steps');
     refreshInlineStepEditor(resId, stepId);
-    
-    if (window.location.hash.includes('visualizer')) {
-        OL.drawConnections();
-    }
+    refreshFlowMap(resId, stepId);
     await saving;
 };
 
