@@ -8,6 +8,15 @@ import { state, getActiveClient, persist } from '../../core/data.js';
 
 // ---- workflow CRUD ----
 
+// Saves are debounced (about 1.5s). Reloading or closing the tab inside that window used to silently lose the change
+// (a new workflow, say), so the browser now asks first while a save is still waiting.
+if (!window._olUnsavedGuard) {
+    window._olUnsavedGuard = true;
+    window.addEventListener('beforeunload', (e) => {
+        if (window.saveTimeout) { e.preventDefault(); e.returnValue = ''; }
+    });
+}
+
 export function getWorkflows() {
     const data = OL.getCurrentProjectData();
     const isVault = window.location.hash.includes('vault');
@@ -37,7 +46,7 @@ export function createWorkflow(name, stageId, color) {
         client.projectData.workflows.push(wf);
     }
 
-    persist();
+    persist().then(() => console.log(`💾 Workflow "${wf.name}" saved (${wf.id}, stage ${wf.stageId || 'none'})`));
     return wf;
 }
 
