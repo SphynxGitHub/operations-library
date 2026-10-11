@@ -797,6 +797,10 @@ export function renderVisualizer() {
             </button>
         </div>
 
+        <button class="fv-toggle-btn" onclick="OL.openStageManager()" title="Add, re-arrange, rename and delete stages and workflows">
+          <i data-lucide="layers" style="width:12px;height:12px;"></i> Stages &amp; workflows
+        </button>
+
         <div class="fv-divider"></div>
 
         <!-- Layout switcher -->
@@ -1325,13 +1329,7 @@ export function _fvBuildFlowchartShell(stages, resources) {
                   title="Add stage before">
             <i data-lucide="plus-circle" style="width:10px;height:10px;"></i>
           </button>
-          <button onclick="OL._fvEditStageName('${stage.id}')"
-                  style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
-                         border-radius:6px;border:0.5px solid var(--panel-border);background:var(--panel-soft);
-                         color:var(--text-dim);font-size:10px;cursor:pointer;"
-                  title="Rename stage">
-            <i data-lucide="pencil" style="width:10px;height:10px;"></i>
-          </button>
+
           <button onclick="OL._fvDeleteStage('${stage.id}')"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
                          border-radius:6px;border:0.5px solid rgba(239,68,68,0.3);
@@ -2379,14 +2377,13 @@ export function _fvRenderSteps(resources) {
         const sid = String(stage.id).replace(/'/g, "\\'");
         const idxOf = () => ((OL.getCurrentProjectData() || {}).stages || []).findIndex(x => String(x.id) === String(stage.id));
         const mk = (label, title, fn, danger) => {
-          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; bt.textContent = label;
+          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; if (label === 'trash') bt.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>'; else bt.textContent = label;
           bt.style.cssText = `padding:1px 6px;font-size:10px;line-height:14px;border-radius:5px;cursor:pointer;background:var(--panel-soft);border:0.5px solid var(--panel-border);color:${danger ? '#ef4444' : 'var(--text-dim)'};`;
           bt.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
           stageLblEl.appendChild(bt);
         };
         mk('+', 'Add a stage after this one', () => OL.addStageBetween(idxOf() + 1));
-        mk('Rename', 'Rename stage', () => { stageLbl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
-        mk('Delete', 'Delete stage', () => OL._fvDeleteStage(stage.id), true);
+        mk('trash', 'Delete stage', () => OL._fvDeleteStage(stage.id), true);
       }
       if (SHOW_STAGE_LBL) frag.appendChild(stageLblEl);
     }
@@ -2434,14 +2431,13 @@ export function _fvRenderSteps(resources) {
       wfLblEl.appendChild(wfName);
       if (!PRINTING && ((OL.getCurrentProjectData() || {}).workflows || []).some(w => String(w.id) === String(workflow.id))) {
         const mk = (label, title, fn, danger) => {
-          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; bt.textContent = label;
+          const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; if (label === 'trash') bt.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>'; else bt.textContent = label;
           bt.style.cssText = `padding:1px 6px;font-size:10px;line-height:14px;border-radius:5px;cursor:pointer;background:var(--panel-soft);border:0.5px solid var(--panel-border);color:${danger ? '#ef4444' : 'var(--text-dim)'};`;
           bt.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
           wfLblEl.appendChild(bt);
         };
         if (stage) mk('+', 'Add another workflow to this stage', () => OL._fvCreateWorkflow(stage.id));
-        mk('Rename', 'Rename workflow', () => { wfName.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
-        mk('Delete', 'Delete workflow', () => OL.deleteWorkflow(workflow.id), true);
+        mk('trash', 'Delete workflow', () => OL.deleteWorkflow(workflow.id), true);
       }
       frag.appendChild(wfLblEl);
 
