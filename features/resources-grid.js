@@ -1141,6 +1141,8 @@ export function renderSopStepList(res) {
                                 style="font-size:10px; padding:3px 8px; display:flex; align-items:center; gap:4px;">
                             <i data-lucide="sliders-horizontal" style="width:11px; height:11px; opacity:0.6;"></i> Configure
                         </button>
+                        <button class="btn tiny soft" onclick="event.stopPropagation(); OL.duplicateStep('${res.id}','${step.id}')" style="font-size:10px; padding:3px 8px;" title="Insert a copy right below">Duplicate</button>
+                        <button class="btn tiny soft" onclick="event.stopPropagation(); OL.openCopyStepsDialog('${res.id}','${step.id}')" style="font-size:10px; padding:3px 8px;" title="Copy into another resource">Copy to…</button>
                         <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${step.id}')"
                                 style="width:20px; height:20px; border:none; background:none; cursor:pointer;
                                        color:var(--text-muted); display:flex; align-items:center; justify-content:center;
