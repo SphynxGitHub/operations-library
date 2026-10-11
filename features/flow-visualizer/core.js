@@ -2614,11 +2614,29 @@ export function _fvRenderSteps(resources) {
                 return;
               }
               let ry = y;
-              cards.forEach(({ step, el }) => {
-                const constraint = minY.get(el);
-                if (constraint !== undefined && constraint > ry) ry = constraint;
-                if (!step.pinned) { el.style.top = ry + 'px'; step.coords.y = ry; }
-                ry += hOf(el) + STEP_GAP;
+              // A step and the branch steps that hang off it share a layout row (_fvLayoutResource) and sit SIDE BY SIDE,
+              // like the flowchart view already does. This used to stack every card one under the other in array order,
+              // so branch steps (which are already shifted to the right) stepped down diagonally and the lines crossed cards.
+              const rowsMap = new Map();
+              cards.forEach((c, i) => {
+                const lr = lay && lay[c.step.id] ? lay[c.step.id].row : undefined;
+                const key = lr === undefined ? 100000 + i : lr;   // a step with no layout entry keeps its own row
+                if (!rowsMap.has(key)) rowsMap.set(key, []);
+                rowsMap.get(key).push(c);
+              });
+              [...rowsMap.keys()].sort((a, b) => a - b).forEach(key => {
+                const rowCards = rowsMap.get(key);
+                let rowTop = ry;
+                rowCards.forEach(({ el }) => {
+                  const constraint = minY.get(el);
+                  if (constraint !== undefined && constraint > rowTop) rowTop = constraint;
+                });
+                let rowH = 0;
+                rowCards.forEach(({ step, el }) => {
+                  if (!step.pinned) { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
+                  rowH = Math.max(rowH, hOf(el));
+                });
+                ry = rowTop + rowH + STEP_GAP;
               });
               maxBottom = Math.max(maxBottom, ry - STEP_GAP);
             });
