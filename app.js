@@ -26,6 +26,7 @@ import * as OLFlowReferences from './features/flow-visualizer/references.js';
 import * as OLFlowStepItems from './features/flow-visualizer/step-items.js';
 import * as OLFlowStepCallouts from './features/flow-visualizer/step-callouts.js';
 import * as OLFlowDuplicate from './features/flow-visualizer/duplicate.js';
+import * as OLFlowStageManager from './features/flow-visualizer/stage-manager.js';
 import * as OLFlowRename from './features/flow-visualizer/rename.js';
 import * as OLJotformLogic from './features/jotform-logic.js';
 import * as OLFrameOut from './features/frameout.js';
