@@ -1356,6 +1356,7 @@ export function addInlineStepLogic(resId, stepId, direction) {
     if (!Array.isArray(step.logic.in)) step.logic.in = [];
     if (!Array.isArray(step.logic.out)) step.logic.out = [];
     step.logic[direction].push({ type: 'next', targetId: null, rule: '' });
+    if (direction === 'out') step.noAutoNext = true;   // hand-added: don't also auto-add the default next link
     OL.persist();
     OL.toggleInlineStepEditor(resId, stepId);
     OL.toggleInlineStepEditor(resId, stepId);
