@@ -76,6 +76,21 @@ function previewHtml(c, h = 240) {
       ${lib.emailSubject ? `<div style="padding:5px 10px;font-size:11px;color:#555;background:#f4f4f4;border-bottom:1px solid #e3e3e3;"><b>Subject:</b> ${esc(lib.emailSubject)}</div>` : ''}
       <iframe sandbox="" referrerpolicy="no-referrer" style="display:block;width:100%;height:${h}px;border:0;background:#fff;" srcdoc="${esc(doc)}"></iframe></div>`;
   }
+  // anything with a web link: try to show the live page. Forms from Jotform / Google Forms and Google Docs-type
+  // files can usually be framed; sites that forbid it show blank, so the Open button and a note sit above the frame.
+  const raw = safeUrl(lib.externalUrl || lib.url);
+  if (raw) {
+    let src = raw;
+    if (/docs\.google\.com\/forms\//.test(src)) src = src.replace(/\/(edit|viewform)?(\?.*)?$/, '/viewform?embedded=true');
+    else if (/docs\.google\.com\/(document|spreadsheets|presentation)\//.test(src)) src = src.replace(/\/(edit|view)(\?.*|#.*)?$/, '/preview');
+    const info = [lib.type, lib.description || lib.notes].filter(Boolean).map((t) => esc(clip(t, 160))).join(' \u2022 ');
+    return `<div class="fv-callout-preview" style="margin:6px 0;border:1px solid var(--line,#444);border-radius:6px;overflow:hidden;background:#fff;">
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:11px;color:#555;background:#f4f4f4;border-bottom:1px solid #e3e3e3;">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${info || esc(raw)}</span>
+        <a href="${esc(raw)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="white-space:nowrap;">Open in new tab</a></div>
+      <iframe src="${esc(src)}" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" style="display:block;width:100%;height:${h}px;border:0;background:#fff;"></iframe>
+      <div style="padding:4px 10px;font-size:10px;color:#777;background:#f4f4f4;border-top:1px solid #e3e3e3;">Blank? That site does not allow previews: use Open in new tab.</div></div>`;
+  }
   const bits = [lib.type && `Type: ${lib.type}`, lib.description || lib.notes].filter(Boolean).map((t) => `<div class="fv-callout-meta">${esc(clip(t, 300))}</div>`).join('');
   return bits;
 }
