@@ -1408,7 +1408,7 @@ export function _printCard(res, allResources) {
 
                             if (types.includes('condition')) {
                                 const rule = l.rule || l.label || '';
-                                const lastH = String(l.targetId || '').lastIndexOf('-');
+                                const lastH = OL._refSplitIdx(String(l.targetId || ''));
                                 let targetLabel = '';
                                 if (lastH !== -1) {
                                     const tRes  = (allResources || []).find(r => String(r.id) === l.targetId.substring(0, lastH));
@@ -1466,7 +1466,7 @@ export function _printListHtml(stages, resources, workflows) {
         </div>`;
 
         conditions.forEach(cond => {
-            const lastH = String(cond.targetId || '').lastIndexOf('-');
+            const lastH = OL._refSplitIdx(String(cond.targetId || ''));
             if (lastH === -1) return;
             const tResId  = cond.targetId.substring(0, lastH);
             const tStepId = cond.targetId.substring(lastH + 1);
@@ -1552,7 +1552,7 @@ export function _printStepsHtml(stages, resources, workflows) {
         const assignees = (s.assignees || []).map(a => esc(a.name)).join(', ');
         const logic = (s.logic?.out || []).filter(l => l.targetId && !l._implicit);
         const crossLinks = logic.map(l => {
-            const lastH = String(l.targetId || '').lastIndexOf('-');
+            const lastH = OL._refSplitIdx(String(l.targetId || ''));
             if (lastH === -1) return '';
             const tResId = l.targetId.substring(0, lastH);
             if (String(tResId) === String(res.id)) return ''; // same-resource next step, skip
