@@ -3494,6 +3494,52 @@ export function _fvSetupRailScroll() {
   }, { passive: true });
 };
 
+// Places a resource from the inspector's "Stage & Workflow" dropdown.
+// Local resources: root stageId/workflowId, exactly as before.
+// Global resources: never touch the root (handleResourceSave aborts those on purpose); placement is
+// the workflow's resourceIds array, the same thing drag and drop does.
+export function setResourcePlacement(resId, stageId, workflowId) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+
+    if (!res.isGlobal) {
+        OL.handleResourceSave(resId, 'stageId', stageId || '');
+        OL.handleResourceSave(resId, 'workflowId', workflowId || '');
+        return;
+    }
+
+    const workflows = data.workflows || [];
+    const holds = (wf) => (wf.resourceIds || []).map(String).includes(String(res.id));
+    const homes = workflows.filter(holds);
+    const drop = (wf) => { wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(res.id)); };
+
+    if (workflowId) {
+        const target = workflows.find(w => String(w.id) === String(workflowId));
+        if (!target) return;
+        // A global that lives in exactly one other workflow is moved; one shared across several is only added.
+        if (homes.length === 1 && String(homes[0].id) !== String(target.id)) drop(homes[0]);
+        if (!target.resourceIds) target.resourceIds = [];
+        if (!holds(target)) target.resourceIds.push(String(res.id));
+    } else if (stageId) {
+        console.warn(`Global resource "${res.name}" can only be placed in a workflow, not a bare stage.`);
+        return;
+    } else {
+        // Remove assignment: from its only workflow, or from the one being viewed if it is in several.
+        if (homes.length === 1) drop(homes[0]);
+        else {
+            const active = homes.find(w => String(w.id) === String(OL._fv?.activeWorkflowId));
+            if (active) drop(active);
+            else { console.warn(`Global resource "${res.name}" is in ${homes.length} workflows; open one to remove it from that one.`); return; }
+        }
+    }
+
+    res.isTopShelf = false;
+    res.isDeleted = false;
+    OL.persist();
+    if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+};
+
 export async function _fvUnmapResource(resId, contextWorkflowId = null) {
     const data = OL.getCurrentProjectData();
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
@@ -7114,8 +7160,13 @@ if (mode === 'cards' && resId) {
                          style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background:var(--panel); border:1px solid var(--panel-border); color:var(--text-main); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
                         <span>
                             ${(function() {
-                                if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
                                 const projectData = OL.getCurrentProjectData();
+                                if (res.isGlobal) {
+                                    // Globals are never staged at the root; placement lives in workflow.resourceIds.
+                                    const homes = (projectData.workflows || []).filter(w => (w.resourceIds || []).map(String).includes(String(res.id)));
+                                    return homes.length ? `Workflow: ${homes.map(w => esc(w.name)).join(', ')}` : 'Unassigned (Workbench Side-Tray)';
+                                }
+                                if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
                                 if (res.workflowId) {
                                     const wf = (projectData.workflows || []).find(w => String(w.id) === String(res.workflowId));
                                     return wf ? `Workflow: ${esc(wf.name)}` : 'Select Location...';
@@ -7133,8 +7184,7 @@ if (mode === 'cards' && resId) {
                         <div class="fv-custom-option" 
                              style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
                              onclick="
-                                 OL.handleResourceSave('${res.id}', 'stageId', '');
-                                 OL.handleResourceSave('${res.id}', 'workflowId', '');
+                                 OL.setResourcePlacement('${res.id}', '', '');
                                  OL._fvOpenStepsList('${res.id}');
                                  this.parentElement.style.display = 'none';
                              "
@@ -7155,8 +7205,7 @@ if (mode === 'cards' && resId) {
                                     <div class="fv-custom-option stage-header-row" 
                                          style="padding: 8px 12px; font-size: 11px; font-weight: 700; color:var(--text-main); background:var(--panel-dark); border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 4px; cursor: pointer;"
                                          onclick="
-                                             OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
-                                             OL.handleResourceSave('${res.id}', 'workflowId', '');
+                                             OL.setResourcePlacement('${res.id}', '${s.id}', '');
                                              OL._fvOpenStepsList('${res.id}');
                                              this.parentElement.style.display = 'none';
                                          "
@@ -7170,8 +7219,7 @@ if (mode === 'cards' && resId) {
                                         <div class="fv-custom-option workflow-item-row" 
                                              style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color:var(--text-main); cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
                                              onclick="
-                                                 OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
-                                                 OL.handleResourceSave('${res.id}', 'workflowId', '${wf.id}');
+                                                 OL.setResourcePlacement('${res.id}', '${s.id}', '${wf.id}');
                                                  OL._fvOpenStepsList('${res.id}');
                                                  this.parentElement.style.display = 'none';
                                              "
@@ -8367,11 +8415,17 @@ export function addStepLogic(resId, stepId, direction) {
     const step = res.steps.find(s => String(s.id) === String(stepId));
     if (!step) return;
 
-    // 1. Initialize logic if it doesn't exist
+    // 1. Initialize logic if it doesn't exist, and make sure BOTH arrays exist.
+    // Older steps can have a logic object that is missing 'in' or 'out'; pushing onto undefined threw
+    // and silently added nothing.
     if (!step.logic) step.logic = { in: [], out: [] };
+    if (!Array.isArray(step.logic.in)) step.logic.in = [];
+    if (!Array.isArray(step.logic.out)) step.logic.out = [];
     
     // 2. Push a clean new logic object
     step.logic[direction].push({
+        type: 'next',
+        rule: '',
         condition: "If...",
         targetId: null,
         action: "Go to Step"
@@ -9116,7 +9170,7 @@ Object.assign(window.OL, {
     getAllStepOptions, addStepLogic, updateStepLogic, removeStepLogic,
     updateStepTarget, syncLogicPorts, updateStepLink, createMirrorLink,
     clearMirrorLink, getCardConnectionPoint, drawConnections, drawLogicIcon,
-    zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray
+    zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement
 });
 // Called bare from app.js's router — bridge onto window directly.
 window.renderVisualizer = renderVisualizer;
