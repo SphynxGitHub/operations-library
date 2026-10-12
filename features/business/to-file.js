@@ -13,8 +13,8 @@ const ic = (n) => `<i data-lucide="${n}" style="width:13px;height:13px;vertical-
 const dayStr = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch (e) { return ''; } };
 const daysAgo = (n) => dayStr(Date.now() - n * 86400000);
 const TAGS = ['Change', 'Decision', 'Question', 'FYI'];
-const TYPE_LABEL = { excerpt: 'Email excerpt', attachment: 'Attachment', comment: 'Comment', file: 'Task file' };
-const TYPE_ICON = { excerpt: 'quote', attachment: 'paperclip', comment: 'message-square', file: 'file' };
+const TYPE_LABEL = { email: 'Whole email', excerpt: 'Email excerpt', attachment: 'Attachment', comment: 'Comment', file: 'Task file' };
+const TYPE_ICON = { email: 'mail', excerpt: 'quote', attachment: 'paperclip', comment: 'message-square', file: 'file' };
 
 OL.toFileState = OL.toFileState || {
     emails: [], loadedEmails: false, loading: false,
@@ -31,11 +31,16 @@ const isAutoComment = (cm) => /^\s*(closed automatically|due date\b.*\b(removed|
 async function ensureEmails() {
     const st = S();
     if (st.loadedEmails) return;
-    const { data } = await scopeQueryToBusinessClients(db.from('gmail_messages')
-        .select('id, subject, date, linked_client_id, piece_links')
-        .not('piece_links', 'is', null).not('linked_client_id', 'is', null)
-        .order('date', { ascending: false }).limit(1500));
-    st.emails = (data || []).filter((m) => Array.isArray(m.piece_links) && m.piece_links.length);
+    // Whole-email links (the older linked_* columns) are included too. Their filing state lives in file_status /
+    // filed_to (see the 2026_10_to_file_whole_emails.sql migration); without it only excerpts and attachments show.
+    const base = 'id, subject, snippet, sender, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, piece_links';
+    const run = (cols, orFilter) => scopeQueryToBusinessClients(db.from('gmail_messages').select(cols)
+        .not('linked_client_id', 'is', null).or(orFilter).order('date', { ascending: false }).limit(2000));
+    const anyLink = 'piece_links.not.is.null,linked_task_id.not.is.null,linked_resource_id.not.is.null,linked_request_id.not.is.null,linked_event_id.not.is.null';
+    let res = await run(`${base}, file_status, filed_to`, anyLink);
+    st.wholeOk = !res.error;
+    if (res.error) res = await run(base, 'piece_links.not.is.null');
+    st.emails = (res.data || []).filter((m) => (Array.isArray(m.piece_links) && m.piece_links.length) || (st.wholeOk && (m.linked_task_id || m.linked_resource_id || m.linked_request_id || m.linked_event_id)));
     st.loadedEmails = true;
 }
 
@@ -64,6 +69,15 @@ function buildItems() {
     // Email pieces
     S().emails.forEach((m) => {
         const client = state.clients?.[m.linked_client_id];
+        if (S().wholeOk && (m.linked_task_id || m.linked_resource_id || m.linked_request_id || m.linked_event_id)) {
+            let wr = [];
+            if (m.linked_request_id) wr.push(String(m.linked_request_id));
+            if (m.linked_task_id) { const t = (client?.projectData?.clientTasks || []).find((x) => String(x.id) === String(m.linked_task_id)); if (t) linksForTask(t).forEach((x) => x.requestId && wr.push(String(x.requestId))); }
+            if (m.linked_resource_id) wr = wr.concat(requestsForResource(client, m.linked_resource_id));
+            items.push({ key: `w:${m.id}`, src: 'email', whole: true, msgId: m.id, pieceIds: [], clientId: m.linked_client_id, requestIds: [...new Set(wr)], type: 'email',
+                text: `${m.subject || '(no subject)'}${m.snippet ? ` — ${m.snippet}` : ''}`, from: m.subject || '(no subject)', author: m.sender, date: m.date,
+                status: m.file_status || 'open', filedTo: m.filed_to || '' });
+        }
         const grouped = new Map();   // one entry per excerpt / attachment, however many targets it is linked to
         (m.piece_links || []).forEach((l) => {
             if (!l || !l.id) return;
@@ -83,7 +97,7 @@ function buildItems() {
                 return;
             }
             const item = {
-                key: `e:${m.id}:${l.id}`, src: 'email', msgId: m.id, pieceId: l.id, pieceIds: [l.id], clientId: m.linked_client_id, requestIds: reqs,
+                key: `e:${m.id}:${l.id}`, src: 'email', attPath: isAtt ? l.attachmentPath : '', msgId: m.id, pieceId: l.id, pieceIds: [l.id], clientId: m.linked_client_id, requestIds: reqs,
                 type: isAtt ? 'attachment' : 'excerpt',
                 text: isAtt ? (l.text || String(l.attachmentPath || '').split('/').pop()) : (l.text || ''),
                 from: m.subject || '(no subject)', date: l.createdAt || m.date, status: l.fileStatus || 'open', filedTo: l.filedTo || '',
@@ -102,7 +116,7 @@ function buildItems() {
             (t.comments || []).forEach((cm) => {
                 if (!cm?.id || !String(cm.text || '').trim() || cm.system || isAutoComment(cm)) return;
                 items.push({ key: `c:${t.id}:${cm.id}`, src: 'comment', hostId: t.id, commentId: cm.id, clientId: c.id, requestIds: reqs, type: 'comment',
-                    text: cm.text, from: `Task: ${t.title || t.name || ''}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
+                    html: cm.html, text: cm.text, from: `Task: ${t.title || t.name || ''}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
             });
             (t.driveFiles || []).forEach((f) => {
                 if (!f?.id) return;
@@ -125,7 +139,7 @@ function buildItems() {
             (it.comments || []).forEach((cm) => {
                 if (!cm?.id || !String(cm.text || '').trim() || cm.system || isAutoComment(cm)) return;
                 items.push({ key: `c:${it.id}:${cm.id}`, src: 'comment', hostId: it.id, commentId: cm.id, clientId: c.id, requestIds: [String(it.id)], type: 'comment',
-                    text: cm.text, from: `Request: ${OL.requestItemTitle ? OL.requestItemTitle(c, it) : (it.title || it.name || '')}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
+                    html: cm.html, text: cm.text, from: `Request: ${OL.requestItemTitle ? OL.requestItemTitle(c, it) : (it.title || it.name || '')}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
             });
         }));
     });
@@ -190,7 +204,12 @@ OL._paintToFile = function() {
                     ${badge}
                     <span class="muted tiny">${esc(dayStr(i.date))}${i.author ? ' · ' + esc(i.author) : ''} · ${esc(i.from)}</span>
                 </div>
-                <div style="white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; ${i.type === 'excerpt' ? 'border-left:3px solid var(--accent); padding-left:8px;' : ''}">${esc(String(i.text).slice(0, 700))}${String(i.text).length > 700 ? '…' : ''}</div>
+                <div style="${i.html ? '' : 'white-space:pre-wrap;'} overflow-wrap:anywhere; font-size:13px; ${i.type === 'excerpt' ? 'border-left:3px solid var(--accent); padding-left:8px;' : ''}">${bodyHtml(i)}</div>
+                <div style="display:flex; gap:10px; margin-top:6px; flex-wrap:wrap;">
+                    ${i.src === 'email' ? `<a href="javascript:void(0)" class="tiny" onclick="OL.openGmailMessageModal('${esc(i.msgId)}')">${ic('mail-open')} Open full thread</a>` : ''}
+                    ${i.type === 'attachment' && i.attPath ? `<a href="javascript:void(0)" class="tiny" onclick="OL.toFilePreview('${esc(i.key)}')">${ic('eye')} Preview</a>` : ''}
+                    ${i.type === 'file' && i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener" class="tiny">${ic('external-link')} Open file</a>` : ''}
+                </div>
                 ${i.filedTo ? `<div class="muted tiny" style="margin-top:4px;">Filed to ${esc(i.filedTo)}</div>` : ''}
             </div>
             <div style="display:flex; gap:6px;">
@@ -232,6 +251,26 @@ OL._paintToFile = function() {
     if (window.lucide) window.lucide.createIcons();
 };
 
+// Plain text with links made clickable; comments written with the rich editor keep their own links.
+const linkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+function bodyHtml(i) {
+    if (i.html && typeof OL.sanitizeCommentHtml === 'function') return OL.sanitizeCommentHtml(i.html).replace(/<a /g, '<a target="_blank" rel="noopener" ');
+    const t = String(i.text);
+    return linkify(t.slice(0, 900)) + (t.length > 900 ? '…' : '');
+}
+
+OL.toFilePreview = async function(key) {
+    const i = S().items.find((x) => x.key === key); if (!i?.attPath) return;
+    const url = await OL.getGmailAttachmentUrl(i.attPath); if (!url) return;
+    const ext = String(i.attPath).split('.').pop().toLowerCase();
+    const name = esc(i.text || i.attPath.split('/').pop());
+    const body = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) ? `<img src="${esc(url)}" style="max-width:100%; max-height:75vh; display:block; margin:0 auto;">`
+        : ext === 'pdf' ? `<iframe src="${esc(url)}" style="width:100%; height:75vh; border:1px solid var(--line); border-radius:6px;"></iframe>`
+        : `<div class="muted" style="padding:30px; text-align:center;">No inline preview for .${esc(ext)} files. Use Open to view or download it.</div>`;
+    OL.showOverlayModal(`<div style="width:100%; box-sizing:border-box;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px;"><h3 style="margin:0; overflow-wrap:anywhere;">${name}</h3>
+        <div style="display:flex; gap:8px;"><a class="btn tiny soft" href="${esc(url)}" target="_blank" rel="noopener">Open</a><button class="btn tiny soft" onclick="OL.closeModal()">Close</button></div></div>${body}</div>`, { wide: true });
+};
+
 let _searchT;
 OL.toFileSearch = (v) => { S().f.q = v; clearTimeout(_searchT); _searchT = setTimeout(() => { OL._paintToFile(); const el = document.querySelector('#mainContent input[placeholder="Search…"]'); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 250); };
 OL.toFileSetFilter = async function(k, v) {
@@ -251,8 +290,14 @@ async function setStatus(items, status, filedTo) {
     const byMsg = {};
     items.filter((i) => i.src === 'email').forEach((i) => { (byMsg[i.msgId] = byMsg[i.msgId] || []).push(i); });
     for (const [msgId, arr] of Object.entries(byMsg)) {
+        const whole = arr.find((i) => i.whole);
+        if (whole) {
+            await db.from('gmail_messages').update({ file_status: status === 'open' ? null : status, filed_to: status === 'open' ? null : (filedTo || null) }).eq('id', msgId);
+            const cachedW = S().emails.find((e) => e.id === msgId); if (cachedW) { cachedW.file_status = status === 'open' ? null : status; cachedW.filed_to = filedTo || null; }
+            if (arr.length === 1) continue;
+        }
         const { data: m } = await db.from('gmail_messages').select('piece_links').eq('id', msgId).single();
-        const links = (m?.piece_links || []).map((l) => { if (arr.some((i) => (i.pieceIds || [i.pieceId]).includes(l.id))) { const c = { ...l }; patch(c); return c; } return l; });
+        const links = (m?.piece_links || []).map((l) => { if (arr.some((i) => (i.pieceIds || []).includes(l.id))) { const c = { ...l }; patch(c); return c; } return l; });
         await db.from('gmail_messages').update({ piece_links: links }).eq('id', msgId);
         const cached = S().emails.find((e) => e.id === msgId); if (cached) cached.piece_links = links;
     }
@@ -417,7 +462,9 @@ OL.toFileDoFile = async function() {
             if (!Array.isArray(res.comments)) res.comments = [];
             items.forEach((i) => {
                 const body = `${d.tag ? `[${d.tag}] ` : ''}${i.text}\n— filed from ${TYPE_LABEL[i.type].toLowerCase()} (${i.from}, ${dayStr(i.date)})`;
-                res.comments.push({ id: uid(), author, text: body, date: new Date().toISOString(), filedFrom: i.key });
+                const html = i.html && typeof OL.sanitizeCommentHtml === 'function'
+                    ? `${d.tag ? `<b>[${esc(d.tag)}]</b> ` : ''}${OL.sanitizeCommentHtml(i.html)}<div class="muted">— filed from ${esc(TYPE_LABEL[i.type].toLowerCase())} (${esc(i.from)}, ${dayStr(i.date)})</div>` : undefined;
+                res.comments.push({ id: uid(), author, text: body, ...(html ? { html } : {}), date: new Date().toISOString(), filedFrom: i.key });
             });
         });
     }, d.clientId);
