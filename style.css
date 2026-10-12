@@ -2249,10 +2249,10 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 #v2-inspector-panel .fvp-btn:hover { border-color: var(--accent); }
 #v2-inspector-panel .fvp-btn.is-empty { color: var(--text-muted); }
 #v2-inspector-panel .fvp-btn-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#v2-inspector-panel .fvp-menu { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 60; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 24px rgba(0,0,0,.28); overflow: hidden; }
+#v2-inspector-panel .fvp-menu { display: none; position: fixed; z-index: 2000; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 24px rgba(0,0,0,.28); overflow: hidden; }
 #v2-inspector-panel .fvp-menu.open { display: block; }
 #v2-inspector-panel .fvp-search { width: calc(100% - 12px); margin: 6px; }
-#v2-inspector-panel .fvp-list { max-height: 280px; overflow-y: auto; }
+#v2-inspector-panel .fvp-list { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
 #v2-inspector-panel .fvp-group { padding: 7px 10px 3px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); background: var(--panel-soft); }
 #v2-inspector-panel .fvp-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer; color: var(--text-main); }
 #v2-inspector-panel .fvp-item:hover { background: var(--accent-glow); }
