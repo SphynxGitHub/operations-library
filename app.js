@@ -157,7 +157,7 @@ OL.toggleSidebar = function() {
     if (!sidebar) return;
 
     const isCollapsed = sidebar.classList.toggle('collapsed');
-    if (innerContent) innerContent.style.display = isCollapsed ? 'none' : 'block';
+    if (innerContent) innerContent.style.display = isCollapsed ? 'none' : 'flex';
     if (toggleIcon) toggleIcon.innerText = isCollapsed ? '▶' : '◀';
     localStorage.setItem('sidebarCollapsed', isCollapsed);
 
@@ -808,7 +808,13 @@ window.buildLayout = function () {
 
     // 3. SURGICAL DOM UPDATES
     const sidebar = shell.querySelector('.sidebar');
-    if (sidebar) sidebar.innerHTML = sidebarContent;
+    if (sidebar) {
+        sidebar.innerHTML = sidebarContent;
+        // The menu content is drawn hidden when the saved setting says collapsed, so the sidebar's own "collapsed" class
+        // must agree on every rebuild. It used to be set only once at page load, before the layout was (re)built, and
+        // a mismatch left a full-width sidebar with its menu hidden: an empty menu until it was collapsed and reopened.
+        sidebar.classList.toggle('collapsed', isSidebarCollapsed);
+    }
 
     const main = shell.querySelector('main');
     if (main && main.id !== 'mainContent') main.id = 'mainContent';
