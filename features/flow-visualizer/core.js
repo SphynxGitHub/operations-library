@@ -519,6 +519,65 @@ export function _fvGetEffectiveOut(step, res) {
     return [{ type: 'next', types: ['next'], targetId: `${res.id}-${nextStep.id}`, _implicit: true }];
 };
 
+
+// Puts a workflow's process columns in the order that keeps the lines between them short, so they don't cross over other columns.
+// Every link between steps (and to a grouped card, which sits over its members' columns) counts its horizontal length; the
+// order with the least total length wins. Only a clear improvement changes the saved order, so columns that are not connected
+// stay where they are.
+function fvOrderColumns(wfRes) {
+  const n = wfRes.length;
+  if (n < 2 || n > 12) return wfRes;
+  const layouts = wfRes.map(r => { try { return OL._fvLayoutResource(r) || {}; } catch (e) { return {}; } });
+  const width = layouts.map(l => 1 + Math.max(0, ...Object.values(l).map(v => v.colOffset || 0)));
+  // which step is in which column, and the groups that span several columns
+  const where = new Map();                       // "resId-stepId" -> { ri, off }
+  const groups = {};                             // group name -> Set of column indexes
+  wfRes.forEach((r, ri) => (r.steps || []).forEach(st => {
+    where.set(`${r.id}-${st.id}`, { ri, off: ((layouts[ri][st.id] || {}).colOffset) || 0, group: st.stepGroup || '' });
+    if (st.stepGroup) (groups[st.stepGroup] = groups[st.stepGroup] || new Set()).add(ri);
+  }));
+  const spanning = new Set(Object.keys(groups).filter(g => groups[g].size > 1));
+  const edges = [];
+  wfRes.forEach((r, ri) => (r.steps || []).forEach(st => ((st.logic && st.logic.out) || []).forEach(l => {
+    const a = where.get(`${r.id}-${st.id}`), b = l.targetId ? where.get(String(l.targetId)) : null;
+    if (!a || !b) return;
+    const grouped = (a.group && spanning.has(a.group)) || (b.group && spanning.has(b.group));
+    if (a.ri === b.ri && !grouped) return;       // inside one column: its position does not matter
+    edges.push([a, b]);
+  })));
+  if (!edges.length) return wfRes;
+  const cost = (order) => {                      // order[k] = index of the column in slot k
+    const base = new Array(n); let cum = 0;
+    order.forEach(ri => { base[ri] = cum; cum += width[ri] + 0.15; });
+    const gx = {};
+    Object.keys(groups).forEach(g => { if (!spanning.has(g)) return; const xs = [...groups[g]].map(i => base[i]); gx[g] = (Math.min(...xs) + Math.max(...xs)) / 2; });
+    const xOf = (p) => (p.group && spanning.has(p.group)) ? gx[p.group] : base[p.ri] + p.off;
+    let c = 0;
+    edges.forEach(([a, b]) => { c += Math.abs(xOf(a) - xOf(b)); });
+    order.forEach((ri, k) => { c += Math.abs(k - ri) * 0.001; });   // prefer the existing order when it is as good
+    return c;
+  };
+  const start = wfRes.map((_, i) => i);
+  let best = start, bestCost = cost(start);
+  if (n <= 7) {
+    const perm = (arr, k) => {
+      if (k === arr.length) { const c = cost(arr); if (c < bestCost - 1e-9) { bestCost = c; best = arr.slice(); } return; }
+      for (let i = k; i < arr.length; i++) { [arr[k], arr[i]] = [arr[i], arr[k]]; perm(arr, k + 1); [arr[k], arr[i]] = [arr[i], arr[k]]; }
+    };
+    perm(start.slice(), 0);
+  } else {
+    let improved = true, guard = 0;
+    while (improved && guard++ < 50) {
+      improved = false;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        const t = best.slice(); [t[i], t[j]] = [t[j], t[i]];
+        const c = cost(t); if (c < bestCost - 1e-9) { best = t; bestCost = c; improved = true; }
+      }
+    }
+  }
+  return best.map(i => wfRes[i]);
+}
+
 // Computes per-step layout info for a single resource.
 // Main-path steps (not branch targets): colOffset=0, sequential rows.
 // Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
@@ -2200,7 +2259,7 @@ export function _fvRenderSteps(resources) {
         .map(id => resources.find(r => String(r.id) === String(id)))
         .filter(r => r && !r.isGlobal && (r.steps || []).length > 0);
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
-      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: wfRes });
+      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: fvOrderColumns(wfRes) });
     });
     if (wfGroups.length > 0 || !(OL._fv && OL._fv._printing)) stageGroups.push({ stage, wfGroups });
   });
