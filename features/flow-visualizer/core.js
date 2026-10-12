@@ -6970,66 +6970,10 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                 ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
 
                 <div class="inspector-section">
-                    <div class="section-label">
-                        <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
-                        Move to resource
-                    </div>
-                    <select class="fvi-select"
-                            onchange="if(this.value) OL.executeStepMove('${resId}', '${step.id}', this.value); this.value='';">
-                        <option value="">— Keep in ${esc(res.name)} —</option>
-                        <optgroup label="Same stage">
-                            ${(OL.getCurrentProjectData().resources || [])
-                                .filter(r => String(r.id) !== String(resId) && r.stageId === res.stageId)
-                                .sort((a,b) => a.name.localeCompare(b.name))
-                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
-                                .join('')}
-                        </optgroup>
-                        <optgroup label="All resources">
-                            ${(OL.getCurrentProjectData().resources || [])
-                                .filter(r => String(r.id) !== String(resId) && r.stageId !== res.stageId)
-                                .sort((a,b) => a.name.localeCompare(b.name))
-                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
-                                .join('')}
-                        </optgroup>
-                    </select>
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="git-merge" style="width:11px;height:11px;"></i> CONSOLIDATION GROUP
-                    </label>
-                    ${step.stepGroup ? `
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                            <span style="display:inline-flex;align-items:center;gap:5px;
-                                         padding:3px 10px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:var(--accent-glow);color:var(--accent);
-                                         border:1px solid rgba(61,217,197,0.3);">
-                                ${esc(step.stepGroup)}
-                                <span onclick="OL._fvSetStepGroup('${resId}','${step.id}',null)"
-                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;"
-                                      title="Remove from group">×</span>
-                            </span>
-                        </div>
-                        <input type="text" class="modal-input tiny" placeholder="Rename group…"
-                               value="${esc(step.stepGroup)}"
-                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
-                               onkeydown="if(event.key==='Enter'){this.blur();}">
-                    ` : `
-                        <div class="tiny muted italic" style="padding:4px 0 6px;">Not grouped</div>
-                        <input type="text" class="modal-input tiny" placeholder="Assign to group…"
-                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
-                               onkeydown="if(event.key==='Enter'){this.blur();}">
-                        <div class="tiny muted" style="margin-top:4px;opacity:0.6;">
-                            Steps with the same group name across resources consolidate into one card in the visualizer.
-                        </div>
-                    `}
-                </div>
-
-                <div class="inspector-section">
 <div class="section-label"><i data-lucide="git-branch" style="width:11px;height:11px;"></i> PATHS</div>
-                    <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:2px 0 6px;text-transform:uppercase;">Comes in from</div>
+                     <div class="fvi-sub">Comes in from</div>
                     ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
-                                  <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:14px 0 6px;text-transform:uppercase;">Goes next (lines on the map)</div>
+                                   <div class="fvi-sub">Goes next (lines on the map)</div>
                 
                   ${(step.logic?.out || []).map((l, i) => {
                     const targetId = l.targetId || '';
@@ -7144,7 +7088,7 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                           class="fvi-add-step-btn" style="margin-top:4px;">
                     + Add Output
                   </button>
-                                    <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:14px 0 6px;text-transform:uppercase;">Jumps to another process or step (rows on the card)</div>
+                                     <div class="fvi-sub">Jumps to another process or step (rows on the card)</div>
                     ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
                     <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
                                 </div>
@@ -7166,6 +7110,62 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         style="border: 1px dashed transparent; border-radius: 4px; padding: 5px; text-align: center; transition: 0.2s;">
                         <small class="tiny muted" style="font-size: 8px;">Drop tags here to map</small>
                     </div>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="git-merge" style="width:11px;height:11px;"></i> CONSOLIDATION GROUP
+                    </label>
+                    ${step.stepGroup ? `
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                            <span style="display:inline-flex;align-items:center;gap:5px;
+                                         padding:3px 10px;border-radius:99px;font-size:10px;font-weight:600;
+                                         background:var(--accent-glow);color:var(--accent);
+                                         border:1px solid rgba(61,217,197,0.3);">
+                                ${esc(step.stepGroup)}
+                                <span onclick="OL._fvSetStepGroup('${resId}','${step.id}',null)"
+                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;"
+                                      title="Remove from group">×</span>
+                            </span>
+                        </div>
+                        <input type="text" class="modal-input tiny" placeholder="Rename group…"
+                               value="${esc(step.stepGroup)}"
+                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
+                               onkeydown="if(event.key==='Enter'){this.blur();}">
+                    ` : `
+                        <div class="tiny muted italic" style="padding:4px 0 6px;">Not grouped</div>
+                        <input type="text" class="modal-input tiny" placeholder="Assign to group…"
+                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
+                               onkeydown="if(event.key==='Enter'){this.blur();}">
+                        <div class="tiny muted" style="margin-top:4px;opacity:0.6;">
+                            Steps with the same group name across resources consolidate into one card in the visualizer.
+                        </div>
+                    `}
+                </div>
+
+                <div class="inspector-section">
+                    <div class="section-label">
+                        <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
+                        Move to resource
+                    </div>
+                    <select class="fvi-select"
+                            onchange="if(this.value) OL.executeStepMove('${resId}', '${step.id}', this.value); this.value='';">
+                        <option value="">— Keep in ${esc(res.name)} —</option>
+                        <optgroup label="Same stage">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId === res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                        <optgroup label="All resources">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId !== res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                    </select>
                 </div>
             </div>
         `;
