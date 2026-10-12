@@ -6952,28 +6952,6 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
 
                 <div class="inspector-section">
                     <label class="section-label">
-                        <i data-lucide="target" style="width:11px;height:11px;"></i> RELATIONAL TARGET (MILESTONE)
-                    </label>
-                    ${step.targetResourceId ? `
-                        <div class="pill accent" style="display:flex; justify-content:space-between; align-items:center; background:rgba(var(--accent-rgb), 0.1); border:1px solid var(--accent);">
-                            <span style="display:flex;align-items:center;gap:4px;">
-                                <i data-lucide="target" style="width:10px;height:10px;"></i>
-                                ${esc(step.targetResourceName)}
-                            </span>
-                            <b class="is-clickable" style="opacity:0.5;" onclick="OL.setStepTargetResource('${resId}', '${step.id}', null, null)">×</b>
-                        </div>
-                    ` : `
-                        <div class="search-map-container">
-                            <input type="text" class="modal-input tiny" placeholder="Search Milestones..." 
-                                  onfocus="OL.filterTargetSearch('${resId}', '${step.id}', '')"
-                                  oninput="OL.filterTargetSearch('${resId}', '${step.id}', this.value)">
-                            <div id="target-search-results" class="search-results-overlay"></div>
-                        </div>
-                    `}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
                         <i data-lucide="users" style="width:11px;height:11px;"></i> ASSIGNEES (WHO?)
                     </label>
                     <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
@@ -7053,21 +7031,6 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                             Steps with the same group name across resources consolidate into one card in the visualizer.
                         </div>
                     `}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="link-2" style="width:11px;height:11px;"></i> ATTACHED GUIDES & ASSETS
-                    </label>
-                    <div id="step-resources-list-${step.id}" style="margin-bottom:8px;">
-                        ${renderStepResources(resId, step)}
-                    </div>
-                    <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" placeholder="+ Link Resource or SOP..." 
-                               onfocus="OL.filterResourceSearch('${resId}', '${step.id}', this.value)"
-                               oninput="OL.filterResourceSearch('${resId}', '${step.id}', this.value)">
-                        <div id="resource-results-${step.id}" class="search-results-overlay"></div>
-                    </div>
                 </div>
 
                 <div class="inspector-section">

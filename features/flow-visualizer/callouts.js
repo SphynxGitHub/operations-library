@@ -23,6 +23,7 @@ export const CALLOUT_KINDS = [
   { key: 'spreadsheet', label: 'Spreadsheet',    icon: 'table' },
   { key: 'document',    label: 'Document',       icon: 'file' },
   { key: 'folder',      label: 'Folder',         icon: 'folder' },
+  { key: 'guide',       label: 'How-to guide',   icon: 'book-open' },
   { key: 'event',       label: 'Event / scheduling page', icon: 'calendar' },
   { key: 'other',       label: 'Other',          icon: 'paperclip' },
 ];

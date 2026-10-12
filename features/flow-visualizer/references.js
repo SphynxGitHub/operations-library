@@ -44,6 +44,7 @@ const newId = () => `j${Math.random().toString(36).slice(2, 8)}${Date.now().toSt
 export function jumpsOf(step) {
   if (!step) return [];
   if (Array.isArray(step.jumps)) return step.jumps.filter((j) => j && j.id);
+  if (!step.refResId && step.targetResourceId) return [{ id: 'milestone', resId: String(step.targetResourceId), stepId: '', label: step.targetResourceName || '' }];
   if (step.refResId) return [{ id: 'legacy', resId: String(step.refResId), stepId: step.refStepId ? String(step.refStepId) : '', label: step.refLabel || '' }];
   return [];
 }
@@ -52,10 +53,10 @@ const isDangling = (resId, j) => !j || !j.resId || (String(j.resId) === String(r
 
 // the list stored on the step, created from the old single link the first time one is edited
 function ensureJumps(step) {
-  if (!Array.isArray(step.jumps)) step.jumps = jumpsOf(step).map((j) => ({ ...j, id: newId() }));
+  if (!Array.isArray(step.jumps)) { step.jumps = jumpsOf(step).map((j) => ({ ...j, id: newId() })); delete step.targetResourceId; delete step.targetResourceName; }
   return step.jumps;
 }
-const findJump = (step, jumpId) => { const l = ensureJumps(step); return l.find((j) => j.id === jumpId) || (jumpId === 'legacy' ? l[0] : null) || null; };
+const findJump = (step, jumpId) => { const l = ensureJumps(step); return l.find((j) => j.id === jumpId) || ((jumpId === 'legacy' || jumpId === 'milestone') ? l[0] : null) || null; };
 
 // keep the old single fields equal to the first jump, for the readers that still use them (Frame-out, print)
 function syncLegacy(step) {
