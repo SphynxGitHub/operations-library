@@ -2660,10 +2660,7 @@ export function _fvRenderSteps(resources) {
               div.style.left = x + 'px';
               div.style.top  = y + 'px';
               div.innerHTML = `
-                <button class="fv-pin-btn ${step.pinned?'pinned':''}" title="${step.pinned?'Unpin':'Pin'}"
-                        onclick="event.stopPropagation();OL._fvTogglePin('${res.id}','${step.id}')">
-                  ${OL.getLucideSVG(step.pinned?'pin':'pin-off',10,'currentColor')}
-                </button>
+                
                 ${typeof OL.fvFlagHtml === 'function' ? OL.fvFlagHtml(step, res) : ''}
                 <div class="fv-step-card-accent" style="background:${tc.color};"></div>
                 ${typeof OL.fvJumpRowsIn === 'function' ? OL.fvJumpRowsIn(step, res) : ''}
@@ -2868,7 +2865,7 @@ export function _fvRenderSteps(resources) {
                      const out = stackColumns(cards, lay, y, gapFor(res), hOf, (el) => minY.get(el));
                      cards.forEach(({ step, el }) => {
                          const top = out.tops.get(el);
-                          if (!step.pinned) { el.style.top = top + 'px'; step.coords.y = top; }
+                          { el.style.top = top + 'px'; step.coords.y = top; }   // pins are ignored here: the layout always decides
                     });
                 maxBottom = Math.max(maxBottom, out.bottom);
                 return;
@@ -2893,7 +2890,7 @@ export function _fvRenderSteps(resources) {
                 });
                 let rowH = 0;
                 rowCards.forEach(({ step, el }) => {
-                  if (!step.pinned) { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
+                  { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
                   rowH = Math.max(rowH, hOf(el));
                 });
                 // Leave room under this row for the lines that run down to the next one: a plain arrow needs a little,
