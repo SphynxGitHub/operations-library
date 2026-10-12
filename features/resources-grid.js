@@ -1257,11 +1257,9 @@ export function toggleInlineStepEditor(resId, stepId) {
                 </div>
             </div>
     
-            <div style="display:flex; align-items:center; gap:10px;">
-                <label class="modal-section-label" style="margin:0; white-space:nowrap;">Timing offset</label>
-                <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
-                       onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
-                <span class="tiny muted">days after previous</span>
+            <div>
+                <label class="modal-section-label">Scheduling</label>
+                ${typeof OL.fvSchedEditor === 'function' ? OL.fvSchedEditor(resId, step) : ''}
             </div>
     
             <div>
