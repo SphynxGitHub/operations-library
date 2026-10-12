@@ -1042,7 +1042,13 @@ export function followUpEmailData(client, ctx) {
     };
     const listed = new Set();
     const addRow = (target, note, noNote) => {
-        const row = { id: target.id, label: labelFor(client, target), note, ...(noNote ? { noNote: true } : {}) };
+        // What this is holding up: open tasks that list it as a dependency, plus the other projects it is shared with.
+        const blocking = [];
+        all.filter((d) => d && d.id !== target.id && isOpen(d, ctx) && (d.blockedBy || []).some((b) => b && b.kind === 'task' && String(b.id) === String(target.id)))
+            .forEach((d) => blocking.push(d.title || d.name || 'Task'));
+        (target.sharedWith || []).forEach((pid) => { const o = state.clients?.[pid]; if (o) blocking.push(o.meta?.name || pid); });
+        if (target._homeName) blocking.push(client?.meta?.name || 'this project');
+        const row = { id: target.id, label: labelFor(client, target), note, blocking: [...new Set(blocking)], ...(noNote ? { noNote: true } : {}) };
         (isOffsiteWaitingStatus(target.status) ? thirdPartyStalled : sphynxStalled).push(row);   // developer and third party share one section
         listed.add(String(target.id));
     };

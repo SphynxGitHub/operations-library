@@ -27,7 +27,7 @@ const SECTION_LABELS = {
     clientAsks: (clientName) => `Waiting on ${clientName}`,
     pendingReview: () => 'Pending Review/Confirmation',
     sphynxStalled: () => 'Waiting on Sphynx',
-    thirdPartyStalled: () => 'Pending Developer / Third Party',
+    thirdPartyStalled: () => 'Waiting on Developer / 3rd Party',
 };
 const SECTION_ORDER = ['clientAsks', 'pendingReview', 'sphynxStalled', 'thirdPartyStalled'];
 
@@ -89,6 +89,7 @@ function checklistSectionHtml(key, items, checked, clientName) {
                         <span style="flex:1; min-width:0;">
                             <span style="cursor:pointer;" onclick="event.preventDefault(); OL.openTaskInContext('${esc(OL._cfState.clientId)}', '${esc(String(it.id))}')">${esc(it.title || it.label || '')}</span>
                             ${(it.description || it.note) ? `<span class="muted"> — ${esc((it.description || it.note).slice(0, 90))}${(it.description || it.note).length > 90 ? '…' : ''}</span>` : ''}
+                            ${(it.blocking || []).length ? `<div class="tiny" style="margin-top:2px; color:var(--muted);"><strong>Blocking:</strong> ${esc(it.blocking.join(', '))}</div>` : ''}
                             ${it.noNote ? '<span style="color:#f59e0b;"> — no progress update yet</span>' : ''}
                             ${(it.waitNotes || []).map((n) => `<div class="tiny" style="margin-top:3px; padding-left:8px; border-left:2px solid var(--line); color:var(--muted); white-space:pre-wrap;">${n.label ? `<strong>${esc(n.label)}:</strong> ` : '<strong>Note:</strong> '}${esc(n.text)}</div>`).join('')}
                         </span>

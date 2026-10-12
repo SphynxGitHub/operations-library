@@ -19,6 +19,9 @@
 // Developer / third-party tasks also get "Also affects these projects": task.sharedWith (project ids) puts the item on each of
 // those projects' follow-ups as well (sharedParkedTasksFor in core/client-work-rules.js).
 //
+// Only the "Developer/Third Party Task" status opens this window (not Pending Developer Update / Third Party Support).
+// The same project list is editable from inside the task (OL.renderTaskSharedProjects).
+//
 // Skipped for client asks and the follow-up task itself — it is for Sphynx's own work being parked.
 
 import { state, esc, uid, updateAndSync } from '../../core/data.js';
@@ -30,8 +33,7 @@ const KIND_BY_STATUS = {
     'pending client feedback': 'feedback',
     'pending client document': 'document',
     'pending client review': 'review',
-    'pending developer update': 'developer',
-    'pending third party support': 'third_party',
+    'developer/third party task': 'third_party',
 };
 // Tasks made for the client are always "Client Task"; the kind (document, feedback, review) is kept in askKind.
 const CLIENT_TASK_STATUS = 'Client Task';
@@ -43,8 +45,8 @@ const WINDOW = {
     feedback:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
     document:    { head: 'Waiting on the client', placeholder: 'Context for the follow-up: what exactly is needed, and why.', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
     review:      { head: 'Waiting on the client', placeholder: 'What is the client reviewing, and anything they should know?', hint: 'Shown under this item in the client follow-up\'s open-items list. It isn\'t put in the email itself.' },
-    developer:   { head: 'Waiting on a developer', placeholder: 'What the developer is working on or has been asked, and what is expected back.', hint: 'Shown as this item\'s status under "Pending Developer / Third Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
-    third_party: { head: 'Waiting on a third party', placeholder: 'Who it is with, what they were asked for, and any reference or ticket number.', hint: 'Shown as this item\'s status under "Pending Developer / Third Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+    developer:   { head: 'Waiting on a developer', placeholder: 'What the developer is working on or has been asked, and what is expected back.', hint: 'Shown as this item\'s status under "Waiting on Developer / 3rd Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
+    third_party: { head: 'Waiting on a developer / third party', placeholder: 'Who it is with, what they were asked for, and any reference or ticket number.', hint: 'Shown as this item\'s status under "Waiting on Developer / 3rd Party" in the client follow-up. It is included in the email unless you uncheck the item there.' },
 };
 
 const OVERLAY_ID = 'waiting-prompt';
@@ -273,7 +275,33 @@ OL.waitPromptSave = async function() {
     if (typeof OL.refreshTaskView === 'function') OL.refreshTaskView();
 };
 
+// "Also affects these projects" block for the task modal: edits task.sharedWith directly, saving on each tick.
+OL.renderTaskSharedProjects = function(task, clientId) {
+    if (!task || task.consolidatedFollowUp || task.askKind || waitingKindForStatus(task.status) !== 'third_party') return '';
+    const have = (task.sharedWith || []).map(String);
+    return `<div id="task-shared-projects" style="margin-bottom:20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);">
+        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Also affects these projects</div>
+        <div class="tiny muted" style="margin-bottom:6px;">Every other project this is holding up. It goes on each one's client follow-up too, and comes off all of them when this is done.</div>
+        <input type="text" class="modal-input tiny" style="width:100%; margin-bottom:6px;" placeholder="Search projects…" oninput="OL.waitPromptFilterProjects(this.value)">
+        <div id="wp-share-list" style="max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:4px 8px;">
+            ${otherProjects(clientId).map((c) => `
+                <label class="tiny wp-share-row" data-name="${esc(String(c.meta?.name || c.id).toLowerCase())}" style="display:flex; align-items:center; gap:6px; padding:3px 0; cursor:pointer;">
+                    <input type="checkbox" ${have.includes(String(c.id)) ? 'checked' : ''} onchange="OL.toggleTaskSharedProject('${esc(clientId)}', '${esc(String(task.id))}', '${esc(String(c.id))}', this.checked)"> ${esc(c.meta?.name || c.id)}
+                </label>`).join('') || '<div class="tiny muted">No other projects.</div>'}
+        </div></div>`;
+};
+
+OL.toggleTaskSharedProject = async function(clientId, taskId, projectId, on) {
+    await updateAndSync(() => {
+        const t = findTask(clientId, taskId); if (!t) return;
+        const set = new Set((t.sharedWith || []).map(String));
+        on ? set.add(String(projectId)) : set.delete(String(projectId));
+        if (set.size) t.sharedWith = [...set]; else delete t.sharedWith;
+    }, clientId);
+};
+
 Object.assign(window.OL, {
+    renderTaskSharedProjects: OL.renderTaskSharedProjects, toggleTaskSharedProject: OL.toggleTaskSharedProject,
     promptClientWaiting: OL.promptClientWaiting, waitPromptClose: OL.waitPromptClose, waitPromptAddNew: OL.waitPromptAddNew,
     waitPromptLinkExisting: OL.waitPromptLinkExisting, waitPromptSave: OL.waitPromptSave, waitingKindForStatus,
     waitPromptFilterProjects: OL.waitPromptFilterProjects, renderWaitingDetailsPill: OL.renderWaitingDetailsPill,
