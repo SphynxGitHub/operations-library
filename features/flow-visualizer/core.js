@@ -4100,7 +4100,7 @@ export function _fvOpenStepsList(resId) {
         const logicIcon = icons.map(ic =>
             `<span class="fvi-badge" style="background:var(--accent-glow);color:var(--accent);">${ic}</span>`
         ).join('');
-        const hasBadges = s.appName || (s.assignees||[]).length > 0 || icons.length > 0;
+        const hasBadges = s.appName || (s.assignees||[]).length > 0;
 
         return `
           <div class="fvi-step-row v2-step-item"
@@ -4121,8 +4121,9 @@ export function _fvOpenStepsList(resId) {
               <div class="fvi-step-name">${esc(s.name||'Unnamed Step')} ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(s) : ''}</div>
               ${hasBadges ? `
                 <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">
-                  ${appBadge}${assigneeBadges}${logicIcon}
+                  ${appBadge}${assigneeBadges}
                 </div>` : ''}
+              ${typeof OL.fvPathSummary === 'function' ? OL.fvPathSummary(res, s) : ''}
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <i data-lucide="chevron-right"
@@ -6973,124 +6974,8 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
 <div class="section-label"><i data-lucide="git-branch" style="width:11px;height:11px;"></i> PATHS</div>
                      <div class="fvi-sub">Comes in from</div>
                     ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
-                                   <div class="fvi-sub">Goes next (lines on the map)</div>
-                
-                  ${(step.logic?.out || []).map((l, i) => {
-                    const targetId = l.targetId || '';
-                    let targetLabel = '— Select target —';
-                    if (targetId) {
-                      const lastH  = OL._refSplitIdx(targetId);
-                      const tResId = targetId.substring(0, lastH);
-                      const tStepId = targetId.substring(lastH + 1);
-                      const tRes  = (OL.getCurrentProjectData().resources||[]).find(r => String(r.id) === tResId);
-                      const tStep = tRes?.steps?.find(s => String(s.id) === tStepId);
-                      if (tRes && tStep) targetLabel = `${esc(tRes.name)} › ${esc(tStep.name||'Step')}`;
-                    }
-                    return `
-                      <div style="background:var(--panel-soft);border:1px solid var(--panel-border);border-radius:8px;
-                                  padding:10px 12px;margin-bottom:8px;">
-                
-                        <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
-                          ${[
-                            { key:'next',      label:'Next',  icon:'arrow-right' },
-                            { key:'condition', label:'If',    icon:'git-branch'  },
-                            { key:'loop',      label:'Loop',  icon:'repeat'      },
-                            { key:'delay',     label:'Delay', icon:'clock'       },
-                          ].map(t => {
-                            const types = (l.types || [l.type || 'next']);
-                            const isOn  = types.includes(t.key);
-                            return `
-                              <span onclick="event.stopPropagation(); OL._fvToggleLogicType('${resId}','${step.id}',${i},'${t.key}')"
-                                    style="display:inline-flex;align-items:center;gap:4px;
-                                           font-size:9px;font-weight:700;padding:3px 9px;border-radius:99px;
-                                           cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
-                                           background:${isOn ? 'var(--accent)' : 'var(--panel-soft)'};
-                                           color:${isOn ? 'var(--panel)' : 'var(--text-muted)'};
-                                           border:1px solid ${isOn ? 'var(--accent)' : 'var(--panel-border)'};">
-                                <i data-lucide="${t.icon}" style="width:10px;height:10px;pointer-events:none;"></i>
-                                ${t.label}
-                              </span>
-                            `;
-                          }).join('')}
-                        </div>
-                
-                        <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
-                          <div onclick="OL._fvOpenTargetPicker('${resId}','${step.id}',${i})"
-                               style="padding:7px 10px;border:1px solid var(--panel-border);border-radius:8px;
-                                      font-size:11px;color:${targetId ? 'var(--text-main)' : 'var(--text-muted)'};
-                                      background:var(--panel);cursor:pointer;display:flex;
-                                      align-items:center;justify-content:space-between;">
-                            <span>${targetLabel}</span>
-                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--text-muted);"></i>
-                          </div>
-                          <div id="target-picker-${resId}-${step.id}-${i}"
-                               class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
-                        </div>
-                
-                        ${(l.types||[l.type||'next']).includes('condition') ? `
-                            <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
-                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-                                    <i data-lucide="git-branch" style="width:9px;height:9px;"></i> Condition
-                                </label>
-                                <input type="text" class="fvi-input"
-                                       placeholder="e.g. If approved..."
-                                       value="${esc(l.rule||'')}"
-                                       onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)">
-                            </div>
-                        ` : ''}
-                        
-                        ${(l.types||[l.type||'next']).includes('delay') ? `
-                            <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
-                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-                                    <i data-lucide="clock" style="width:9px;height:9px;"></i> Delay
-                                </label>
-                                <div style="display:flex;gap:6px;align-items:center;">
-                                    <input type="number" class="fvi-input" style="width:70px;"
-                                           placeholder="0"
-                                           value="${esc(String(l.delayValue||''))}"
-                                           onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
-                                    <select class="fvi-select" style="flex:1;"
-                                            onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
-                                        <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
-                                        <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
-                                        <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
-                                    </select>
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${(l.types||[l.type||'next']).includes('loop') ? `
-                            <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
-                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-                                    <i data-lucide="repeat" style="width:9px;height:9px;"></i> Loop limit
-                                </label>
-                                <input type="text" class="fvi-input"
-                                       placeholder="e.g. 3 times, or leave blank for infinite"
-                                       value="${esc(l.loopLimit||'')}"
-                                       onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)">
-                            </div>
-                        ` : ''}
-                    
-                        <button onclick="OL.removeStepLogic('${resId}','${step.id}','out',${i})"
-                                style="margin-top:8px;width:100%;background:none;border:none;
-                                       color:#ef4444;font-size:10px;cursor:pointer;
-                                       text-align:left;padding:0;font-family:inherit;">
-                          Remove
-                        </button>
-                      </div>
-                    `;
-                  }).join('')}
-                
-                  <button onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')"
-                          class="fvi-add-step-btn" style="margin-top:4px;">
-                    + Add Output
-                  </button>
-                                     <div class="fvi-sub">Jumps to another process or step (rows on the card)</div>
-                    ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
-                    <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
+                                   <div class="fvi-sub">Where it goes next</div>
+                    ${typeof OL.fvPathsEditor === 'function' ? OL.fvPathsEditor(resId, step) : ''}
                                 </div>
 
                 <div class="inspector-section">

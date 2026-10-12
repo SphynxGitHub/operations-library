@@ -94,13 +94,19 @@ export function targetsFor(resId) {
     .sort((a, b) => (a.workflow || '').localeCompare(b.workflow || '') || a.name.localeCompare(b.name));
 }
 
-function redrawAfterRefEdit(resId, stepId) {
+export function redrawAfterRefEdit(resId, stepId) {
   OL().persist();
   const editorOpen = !!document.querySelector('.inspector-scroll-content');
   if (document.getElementById('fv-content') || document.getElementById('fv-canvas-wrap')) OL().renderVisualizer();
   // the redraw re-opens the step list a frame later; bring the step editor back after that
   if (editorOpen && typeof OL()._fvRefreshInspector === 'function') requestAnimationFrame(() => requestAnimationFrame(() => OL()._fvRefreshInspector(resId, stepId)));
 }
+
+// for the Paths editor (paths.js): plain edits on a step's jump list, with no redraw
+export const rawFindJump = (step, id) => findJump(step, id);
+export function rawAddJump(step, fields) { const j = { id: newId(), resId: '', stepId: '', label: '', ...fields }; ensureJumps(step).push(j); syncLegacy(step); return j; }
+export function rawRemoveJump(step, id) { const j = findJump(step, id); if (!j) return; step.jumps = step.jumps.filter((x) => x !== j); syncLegacy(step); }
+export const rawSyncJumps = syncLegacy;
 
 export function addJump(resId, stepId) {
   const step = stepOf(resById(resId), stepId); if (!step) return;
