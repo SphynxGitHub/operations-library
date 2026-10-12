@@ -2263,6 +2263,15 @@ export function _fvRenderSteps(resources) {
 
   // ── Helper: build merged flow sequence for a workflow group ──────────────────
   // Returns [{type:'columns', sections:[{res,steps:[]}]}, {type:'consolidated', groupName, members:[{res,step}]}, ...]
+  // two steps of one process are siblings when a single step sends people to both (the branches of a decision)
+  function areSiblings(res, a, b) {
+    if (!a || !b) return false;
+    const ida = `${res.id}-${a.id}`, idb = `${res.id}-${b.id}`;
+    return (res.steps || []).some(p => {
+      const outs = ((p.logic && p.logic.out) || []).map(l => l.targetId);
+      return outs.includes(ida) && outs.includes(idb);
+    });
+  }
   function buildMergedFlow(wfRes) {
     // Find consolidated groups (stepGroup appearing in >1 resource)
     const groupMap = {};
@@ -2346,6 +2355,14 @@ export function _fvRenderSteps(resources) {
           ptrs[ri]++;
         }
         if (ptrs[ri] < perResFlow[ri].length) ptrs[ri]++; // skip the group marker
+        // Branches that run side by side (the targets of one decision, e.g. In Person / Online) belong in the SAME row. A group
+        // card between them would push the second branch below the first one's card and tangle the lines, so a step that
+        // is a sibling of the last step collected here is taken into this row too.
+        while (steps.length && ptrs[ri] < perResFlow[ri].length && perResFlow[ri][ptrs[ri]].type === 'step'
+               && areSiblings(res, steps[steps.length - 1], perResFlow[ri][ptrs[ri]].step)) {
+          steps.push(perResFlow[ri][ptrs[ri]].step);
+          ptrs[ri]++;
+        }
         return { res, steps };
       });
       if (sections.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections });
