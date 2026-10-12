@@ -311,7 +311,7 @@ OL.toFileOpenDialog = function(keys) {
         const it = OL.findRequestItem ? OL.findRequestItem(client, rid) : null;
         requestResourceIds(it).forEach((id) => pre.add(String(id)));
     }));
-    S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', tag: '' };
+    S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', rtype: '', tag: '' };
     OL._paintToFileDialog();
 };
 
@@ -320,8 +320,9 @@ OL._paintToFileDialog = function() {
     const client = state.clients?.[d.clientId];
     const all = (client?.projectData?.localResources || []).filter(Boolean);
     const apps = [...new Set(all.map((r) => r.appName).filter(Boolean))].sort();
+    const rtypes = [...new Set(all.map((r) => r.type).filter(Boolean))].sort();
     const q = d.q.trim().toLowerCase();
-    const list = all.filter((r) => (!d.app || r.appName === d.app) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
+    const list = all.filter((r) => (!d.app || r.appName === d.app) && (!d.rtype || r.type === d.rtype) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
     const items = itemsFor(d.keys);
     const html = `<div style="width:100%; box-sizing:border-box;">
         <h3 style="margin:0 0 6px;">File ${items.length} item${items.length > 1 ? 's' : ''} to resources</h3>
@@ -334,6 +335,7 @@ OL._paintToFileDialog = function() {
                 <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
                     <input class="modal-input" style="flex:1; min-width:140px;" placeholder="Search resources…" value="${esc(d.q)}" oninput="OL.toFileDlg('q', this.value)">
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('app', this.value)"><option value="">All apps</option>${apps.map((a) => `<option ${a === d.app ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
+                    <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('rtype', this.value)"><option value="">All types</option>${rtypes.map((t) => `<option ${t === d.rtype ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('tag', this.value)"><option value="">No tag</option>${TAGS.map((t) => `<option ${t === d.tag ? 'selected' : ''}>${t}</option>`).join('')}</select>
                 </div>
                 <div style="border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px;">
