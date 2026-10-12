@@ -2334,7 +2334,12 @@ export function _fvRenderSteps(resources) {
         return { res, steps };
       });
       if (sections.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections });
-      sequence.push({ type: 'consolidated', groupName: group, members: consolidatedGroups[group] });
+      // the processes that carry on after this group: the card is lined up over them, so the flow reads straight down
+      const continuing = wfRes.filter((res, ri) => {
+        const at = perResFlow[ri].findIndex(x => x.type === 'consolidated' && x.group === group);
+        return at !== -1 && at < perResFlow[ri].length - 1;
+      });
+      sequence.push({ type: 'consolidated', groupName: group, members: consolidatedGroups[group], continuing });
     });
 
     // Remaining steps after last group
@@ -2550,7 +2555,10 @@ export function _fvRenderSteps(resources) {
           const { groupName, members } = item;
           // Center a standard-width card under the member resource columns
           const memberResources = [...new Set(members.map(m => m.res))];
-          const memberXs = memberResources.map(r => resBaseX.get(r)).filter(x => x !== undefined);
+          // line the card up over the columns that continue after it (so what follows sits straight below it);
+          // when none continue, centre it over all the member columns as before
+          const carryOn = (item.continuing || []).filter(r => memberResources.includes(r));
+          const memberXs = (carryOn.length ? carryOn : memberResources).map(r => resBaseX.get(r)).filter(x => x !== undefined);
           const spanLeft  = memberXs.length ? Math.min(...memberXs) : PAD_X;
           const spanRight = memberXs.length ? Math.max(...memberXs) + CARD_W : PAD_X + wfWidth;
           const consolCenterX = (spanLeft + spanRight) / 2;
