@@ -2321,6 +2321,10 @@ export function _fvRenderSteps(resources) {
       // Collect steps before this group from each resource
       const sections = wfRes.map((res, ri) => {
         const steps = [];
+        // A process that does not have a step in this group has nothing "before" it: its steps are not held above the group
+        // (that pushed the group down below the tallest unrelated column). They are drawn after it, with the rest.
+        const hasGroup = perResFlow[ri].some(x => x.type === 'consolidated' && x.group === group);
+        if (!hasGroup) return { res, steps };
         while (ptrs[ri] < perResFlow[ri].length &&
                !(perResFlow[ri][ptrs[ri]].type === 'consolidated' && perResFlow[ri][ptrs[ri]].group === group)) {
           if (perResFlow[ri][ptrs[ri]].type === 'step') steps.push(perResFlow[ri][ptrs[ri]].step);
