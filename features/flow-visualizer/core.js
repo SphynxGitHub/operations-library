@@ -2436,6 +2436,19 @@ export function _fvRenderSteps(resources) {
       // A process that has no step in this group starts level with the step that leads into it (not after every group),
       // so the line into it stays short.
       sections.forEach(sec => sec.steps.forEach(st => doneIds.add(`${sec.res.id}-${st.id}`)));
+      const memberIdx = new Set(wfRes.map((r, ri) => perResFlow[ri].some(x => x.type === 'consolidated' && x.group === group) ? ri : -1).filter(i => i >= 0));
+      // Nothing comes before this card (its steps start the flow right under the card above): stack it straight under that
+      // card instead of waiting for the columns that carry on from it, so the line into it stays short.
+      if (!sections.some(s => s.steps.length > 0)) {
+        const cont = wfRes.filter((res, ri) => {
+          const at = perResFlow[ri].findIndex(x => x.type === 'consolidated' && x.group === group);
+          return at !== -1 && at < perResFlow[ri].length - 1;
+        });
+        sequence.push({ type: 'consolidated', groupName: group, members: consolidatedGroups[group], continuing: cont });
+        consolidatedGroups[group].forEach(m => doneIds.add(`${m.res.id}-${m.step.id}`));
+        memberIdx.forEach(i => afterPrev.add(i));
+        return;
+      }
       wfRes.forEach((res, ri) => {
         if (perResFlow[ri].some(x => x.type === 'consolidated' && x.group === group)) return;
         if (!afterPrev.has(ri) && !sourcesOf[ri].some(id => doneIds.has(id))) return;   // (what carries on from the card above starts right under it too)
