@@ -7074,22 +7074,7 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     <label class="section-label">
                         <i data-lucide="calendar-clock" style="width:11px;height:11px;"></i> DYNAMIC SCHEDULING
                     </label>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <input type="number" class="modal-input tiny" style="width:50px;" 
-                               value="${step.timingValue || 0}" 
-                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'timingValue', this.value)">
-                        <select class="modal-input tiny" style="flex:1;" 
-                                onchange="OL.updateAtomicStep('${resId}', '${step.id}', 'timingType', this.value)">
-                            <option value="after_prev" ${step.timingType === 'after_prev' ? 'selected' : ''}>Days after Previous</option>
-                            <option value="after_start" ${step.timingType === 'after_start' ? 'selected' : ''}>Days after Project Start</option>
-                            <option value="manual" ${step.timingType === 'manual' ? 'selected' : ''}>Fixed Date</option>
-                        </select>
-                    </div>
-                    ${step.timingType === 'manual' ? `
-                        <input type="date" class="modal-input tiny" style="margin-top:8px;"
-                               value="${step.fixedDate || ''}"
-                               onchange="OL.updateAtomicStep('${resId}', '${step.id}', 'fixedDate', this.value)">
-                    ` : ''}
+                    ${typeof OL.fvSchedEditor === 'function' ? OL.fvSchedEditor(resId, step) : ''}
                 </div>
 
                 <div class="inspector-section">
