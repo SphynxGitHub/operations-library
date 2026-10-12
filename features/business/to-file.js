@@ -356,6 +356,8 @@ OL.toFileOpenDialog = function(keys) {
         const it = OL.findRequestItem ? OL.findRequestItem(client, rid) : null;
         requestResourceIds(it).forEach((id) => pre.add(String(id)));
     }));
+    const live = new Set((client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived).map((r) => String(r.id)));
+    [...pre].forEach((id) => { if (!live.has(id)) pre.delete(id); });
     S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', rtype: '', tag: '' };
     OL._paintToFileDialog();
 };
@@ -363,7 +365,7 @@ OL.toFileOpenDialog = function(keys) {
 OL._paintToFileDialog = function() {
     const d = S().dlg; if (!d) return;
     const client = state.clients?.[d.clientId];
-    const all = (client?.projectData?.localResources || []).filter(Boolean);
+    const all = (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && !String(r.id).startsWith('step-'));
     const apps = [...new Set(all.map((r) => r.appName).filter(Boolean))].sort();
     const rtypes = [...new Set(all.map((r) => r.type).filter(Boolean))].sort();
     const q = d.q.trim().toLowerCase();
@@ -445,7 +447,7 @@ OL.toFileDlg = (k, v) => { S().dlg[k] = v; if (k === 'q') { clearTimeout(_search
 OL.toFileDlgPick = (id, on) => { const d = S().dlg; on ? d.chosen.add(String(id)) : d.chosen.delete(String(id)); OL._paintToFileDialog(); };
 OL.toFileDlgApp = () => {
     const d = S().dlg; const client = state.clients?.[d.clientId];
-    (client?.projectData?.localResources || []).filter((r) => r && r.appName === d.app).forEach((r) => d.chosen.add(String(r.id)));
+    (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && r.appName === d.app).forEach((r) => d.chosen.add(String(r.id)));
     OL._paintToFileDialog();
 };
 
