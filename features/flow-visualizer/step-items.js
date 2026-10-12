@@ -133,7 +133,7 @@ function notifyTagged(res, step, it) {
 
 export function addItem(resId, stepId, { kind = 'question', text = '', owner = '', who = '', due = '' } = {}) {
   const t = String(text).trim(); if (!t) return null;
-  return save(resId, stepId, (step) => {
+  return save(resId, stepId, (step, res) => {
     if (!Array.isArray(step.items)) step.items = [];
     const it = { id: uid(), kind: KIND[kind] ? kind : 'note', text: t, done: false, createdAt: today() };
     const tagged = mentionsIn(t); if (tagged.length) it.mentions = tagged;
