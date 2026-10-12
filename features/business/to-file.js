@@ -64,6 +64,7 @@ function buildItems() {
     // Email pieces
     S().emails.forEach((m) => {
         const client = state.clients?.[m.linked_client_id];
+        const grouped = new Map();   // one entry per excerpt / attachment, however many targets it is linked to
         (m.piece_links || []).forEach((l) => {
             if (!l || !l.id) return;
             let reqs = [];
@@ -73,15 +74,25 @@ function buildItems() {
                 reqs = t ? linksForTask(t).map((x) => String(x.requestId)).filter(Boolean) : [];
             } else if (l.targetType === 'resource') reqs = requestsForResource(client, l.targetId);
             const isAtt = l.kind === 'attachment';
-            items.push({
-                key: `e:${m.id}:${l.id}`, src: 'email', msgId: m.id, pieceId: l.id, clientId: m.linked_client_id, requestIds: reqs,
+            const gk = isAtt ? `a|${l.attachmentPath || l.text}` : `x|${String(l.text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
+            const prev = grouped.get(gk);
+            if (prev) {
+                prev.pieceIds.push(l.id);
+                reqs.forEach((r) => { if (!prev.requestIds.includes(r)) prev.requestIds.push(r); });
+                if (!(l.fileStatus) ) { prev.status = 'open'; prev.filedTo = ''; }
+                return;
+            }
+            const item = {
+                key: `e:${m.id}:${l.id}`, src: 'email', msgId: m.id, pieceId: l.id, pieceIds: [l.id], clientId: m.linked_client_id, requestIds: reqs,
                 type: isAtt ? 'attachment' : 'excerpt',
                 text: isAtt ? (l.text || String(l.attachmentPath || '').split('/').pop()) : (l.text || ''),
                 from: m.subject || '(no subject)', date: l.createdAt || m.date, status: l.fileStatus || 'open', filedTo: l.filedTo || '',
-            });
+            };
+            grouped.set(gk, item); items.push(item);
         });
     });
     // Comments + files from project data
+    const fileSeen = new Map();
     clients.forEach((c) => {
         const pd = c.projectData; if (!pd) return;
         (pd.clientTasks || []).forEach((t) => {
@@ -95,8 +106,17 @@ function buildItems() {
             });
             (t.driveFiles || []).forEach((f) => {
                 if (!f?.id) return;
-                items.push({ key: `f:${t.id}:${f.id}`, src: 'file', hostId: t.id, fileId: f.id, clientId: c.id, requestIds: reqs, type: 'file',
+                const fk = `${c.id}|${f.url || f.name}`;
+                const seenF = fileSeen.get(fk);
+                if (seenF) {
+                    seenF.refs.push({ hostId: t.id, fileId: f.id });
+                    reqs.forEach((r) => { if (!seenF.requestIds.includes(r)) seenF.requestIds.push(r); });
+                    if (!f.fileStatus) { seenF.status = 'open'; seenF.filedTo = ''; }
+                    return;
+                }
+                const fi = ({ key: `f:${t.id}:${f.id}`, src: 'file', refs: [{ hostId: t.id, fileId: f.id }], hostId: t.id, fileId: f.id, clientId: c.id, requestIds: reqs, type: 'file',
                     text: f.name || 'File', url: f.url, from: `Task: ${t.title || t.name || ''}`, date: f.addedAt || f.date || t.createdAt, status: f.fileStatus || 'open', filedTo: f.filedTo || '' });
+                fileSeen.set(fk, fi); items.push(fi);
             });
         });
         (pd.scopingSheets || []).forEach((sh) => (sh?.lineItems || []).forEach((it) => {
@@ -232,7 +252,7 @@ async function setStatus(items, status, filedTo) {
     items.filter((i) => i.src === 'email').forEach((i) => { (byMsg[i.msgId] = byMsg[i.msgId] || []).push(i); });
     for (const [msgId, arr] of Object.entries(byMsg)) {
         const { data: m } = await db.from('gmail_messages').select('piece_links').eq('id', msgId).single();
-        const links = (m?.piece_links || []).map((l) => { if (arr.some((i) => i.pieceId === l.id)) { const c = { ...l }; patch(c); return c; } return l; });
+        const links = (m?.piece_links || []).map((l) => { if (arr.some((i) => (i.pieceIds || [i.pieceId]).includes(l.id))) { const c = { ...l }; patch(c); return c; } return l; });
         await db.from('gmail_messages').update({ piece_links: links }).eq('id', msgId);
         const cached = S().emails.find((e) => e.id === msgId); if (cached) cached.piece_links = links;
     }
@@ -242,8 +262,11 @@ async function setStatus(items, status, filedTo) {
         updateAndSync(() => {
             arr.forEach((i) => {
                 const host = OL._findCommentHost(clientId, i.hostId); if (!host) return;
-                const obj = i.src === 'comment' ? (host.comments || []).find((c) => c.id === i.commentId) : (host.driveFiles || []).find((f) => f.id === i.fileId);
-                if (obj) patch(obj);
+                if (i.src === 'comment') { const obj = (host.comments || []).find((c) => c.id === i.commentId); if (obj) patch(obj); return; }
+                (i.refs || [{ hostId: i.hostId, fileId: i.fileId }]).forEach((r) => {
+                    const h = OL._findCommentHost(clientId, r.hostId);
+                    const obj = (h?.driveFiles || []).find((f) => f.id === r.fileId); if (obj) patch(obj);
+                });
             });
         }, clientId);
     }
