@@ -15,7 +15,7 @@
 // the redraw waits until you leave it. Scroll position is kept. The flow
 // visualizer and the how-to guide editor are never redrawn from here (they manage their own state).
 
-import { db, state, ensureProjectLists } from './data.js';
+import { db, state, ensureProjectLists, isEchoOfOwnSave } from './data.js';
 
 let timer = null;
 let waitingForBlur = false;
@@ -81,7 +81,7 @@ export function scheduleViewRefresh(delay = 400) {
 
 // ---- merging other people's project changes ----
 function hasLocalUnsaved(clientId) {
-    return !!(window.saveTimeout && (state.dirtyClientIds?.has?.(clientId) || state.activeClientId === clientId)) || state.isSaving === true;
+    return !!(window.saveTimeout && (state.dirtyClientIds?.has?.(clientId) || state.activeClientId === clientId)) || state.isSaving === true || state.persistInFlight === true;
 }
 
 function mergeClientRow(row) {
@@ -90,6 +90,9 @@ function mergeClientRow(row) {
     if (!c) return false;               // not loaded in this tab; nothing to update
     if (c._metaOnly && row.meta) { c.meta = row.meta; return true; }
     if (hasLocalUnsaved(row.id)) return false;
+    // A row that is just one of our own earlier saves coming back (late realtime echo, or a poll that started before a newer save)
+    // is older than what is in memory; applying it would bring back anything deleted since.
+    if (row.project_data && isEchoOfOwnSave(row.id, row.project_data)) return false;
     // Normalise the incoming copy the same way loading does, so a project that is merely missing empty lists in the
     // database doesn't look "changed" against the in-memory copy (which has them) on every check.
     const incomingData = row.project_data ? ensureProjectLists({ ...row.project_data }) : null;

@@ -117,6 +117,35 @@ export function ensureProjectLists(pd) {
     return pd;
 }
 
+// Same JSON text regardless of key order. Postgres jsonb hands rows back with keys re-ordered, so a plain
+// JSON.stringify can never match a row we just wrote against the copy in memory.
+export function canonicalJson(v) {
+    const norm = (x) => {
+        if (Array.isArray(x)) return x.map(norm);
+        if (x && typeof x === 'object') { const o = {}; Object.keys(x).sort().forEach((k) => { o[k] = norm(x[k]); }); return o; }
+        return x;
+    };
+    return JSON.stringify(norm(v));
+}
+
+// The last few project_data payloads this tab wrote, per client. Realtime/poll rows that match one of them are
+// echoes of our own earlier saves (possibly stale by now) and must never overwrite newer in-memory edits.
+const RECENT_SAVED_KEEP = 6;
+export function rememberSavedProject(clientId, projectData) {
+    try {
+        if (!state.recentSavedProjects) state.recentSavedProjects = {};
+        const list = state.recentSavedProjects[clientId] || (state.recentSavedProjects[clientId] = []);
+        list.push(canonicalJson(projectData));
+        while (list.length > RECENT_SAVED_KEEP) list.shift();
+    } catch (e) { /* never block a save */ }
+}
+export function isEchoOfOwnSave(clientId, projectData) {
+    try {
+        const list = state.recentSavedProjects?.[clientId];
+        return !!(list && list.length && list.includes(canonicalJson(projectData)));
+    } catch (e) { return false; }
+}
+
 // ---- persist: debounced write of master + active client to Supabase ----
 export function persist() {
     // NOTE: window.IS_GUEST is set to true for any non-admin session —
@@ -162,6 +191,9 @@ export function persist() {
         window._pendingPersistResolvers.push(resolve);
         window.saveTimeout = setTimeout(async () => {
             window.saveTimeout = null;
+            // The save below awaits several network calls before it snapshots the project. Until it finishes, live
+            // refresh must not swap an older database copy over what is in memory (that undid deleted steps).
+            state.persistInFlight = true;
             try {
             console.log("☁️ Background Sync Starting...");
 
@@ -316,6 +348,7 @@ export function persist() {
                     continue;
                 }
 
+                rememberSavedProject(activeId, clientCopy.projectData || {});
                 const clientPayload = {
                     id: activeId,
                     public_token: clientCopy.publicToken || null,
@@ -360,6 +393,7 @@ export function persist() {
             console.error("💀 Persistence Error:", error);
             showSyncErrorToast(`Save failed unexpectedly (${error?.message || error}). Check your connection and try again.`);
             } finally {
+                state.persistInFlight = false;
                 const resolvers = window._pendingPersistResolvers || [];
                 window._pendingPersistResolvers = [];
                 resolvers.forEach(r => r());
