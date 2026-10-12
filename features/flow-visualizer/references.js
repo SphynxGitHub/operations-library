@@ -71,11 +71,14 @@ function syncLegacy(step) {
 // ---- who refers to what ----------------------------------------------------------------------------------------
 export function usersOf(resId, stepId) {
   const out = [];
+  // a jump to the top of a process (no particular step) arrives at that process's first step
+  const firstStep = stepId != null ? ((resById(resId) || {}).steps || []).find((x) => x && !x.isArchived) : null;
+  const arrivesAtFirst = !!(firstStep && String(firstStep.id) === String(stepId));
   allRes().forEach((r) => (r.steps || []).forEach((s) => {
     if (s.isArchived) return;
     jumpsOf(s).forEach((j) => {
       if (isDangling(r.id, j) || String(j.resId) !== String(resId)) return;
-      if (stepId != null && String(j.stepId || '') !== String(stepId)) return;
+      if (stepId != null && String(j.stepId || '') !== String(stepId) && !(arrivesAtFirst && !j.stepId)) return;
       out.push({ res: r, step: s, jump: j });
     });
   }));
