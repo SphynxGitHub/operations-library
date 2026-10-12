@@ -17,6 +17,11 @@ function findApp(idx, name) {
     const k = norm(name);
     if (!k || k === 'system') return null;
     if (idx.map.has(k)) return idx.map.get(k);
+    // Zapier's own tools arrive as a bare name ("Code", "Email", "Formatter", "Web Hook") but live in the library as
+    // "Zapier Code", "Email by Zapier", "Webhooks by Zapier"...: try those spellings before anything looser.
+    if (!k.includes('zapier')) {
+        for (const alt of [`zapier${k}`, `${k}byzapier`, `${k}sbyzapier`, `zapier${k}s`]) if (idx.map.has(alt)) return idx.map.get(alt);
+    }
     if (k.length < 4) return null;
     const hit = idx.keys.filter((x) => x.length >= 4 && (x.startsWith(k) || k.startsWith(x)));
     return hit.length === 1 ? idx.map.get(hit[0]) : null;   // only when it is unambiguous

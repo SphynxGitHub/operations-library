@@ -312,6 +312,9 @@ export function createZapImport(deps) {
       ${accountBanner(m)}
       <div style="margin:8px 0;">${chip('new', c.new, STATUS_COLOR.new)}${chip('changed', c.changed, STATUS_COLOR.changed)}${c.baseline ? chip('already here', c.baseline, STATUS_COLOR.baseline) : ''}${chip('unchanged', c.unchanged, STATUS_COLOR.unchanged)}${c.missing ? chip('missing', c.missing, '#dc2626') : ''}</div>
       ${m.historyAvailable ? '' : `<div class="tiny" style="color:#d97706; margin-bottom:6px;">Change history is not set up yet, so this import will update the cards but will not save a history. (Run the SQL migration to turn it on.)</div>`}
+      ${c.unchanged ? `<div class="tiny" style="margin:6px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="btn tiny soft" onclick="OL.zapImportSelectStatus('unchanged', true)">Select all unchanged (${c.unchanged})</button>
+        <button type="button" class="btn tiny soft" onclick="OL.zapImportSelectStatus('unchanged', false)">Clear unchanged</button></div>` : ''}
       <label class="tiny" style="display:flex; gap:6px; margin:6px 0;"><input type="checkbox" ${session.showUnchanged ? 'checked' : ''} onchange="OL.zapImportSet('showUnchanged', this.checked)"> Show unchanged Zaps</label>
       <div style="max-height:320px; overflow:auto; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:0 10px;">${rows || '<div class="tiny muted" style="padding:12px;">Nothing new or changed.</div>'}</div>
       ${missing}
@@ -500,6 +503,8 @@ export function createZapImport(deps) {
     async zapImportDrop(ev) { const f = ev && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) await loadText(await f.text()); },
     async zapImportPaste() { const el = document.getElementById('zap-import-paste'); if (el && el.value.trim()) await loadText(el.value); },
     zapImportSet(key, value, quiet) { session[key] = value; if (!quiet) show(); },
+    // Tick or untick every Zap with one status (e.g. all the unchanged ones). Ticking also shows them in the list.
+    zapImportSelectStatus(status, on) { session.model.items.forEach((i) => { if (i.status === status && !i.empty) i.selected = !!on; }); if (on && status === 'unchanged') session.showUnchanged = true; show(); },
     zapImportToggle(zapId, on) { const it = session.model.items.find((i) => i.zapId === String(zapId)); if (it) it.selected = !!on; show(); },
     zapImportToggleMissing(zapId, on) { const it = session.model.missing.find((i) => i.zapId === String(zapId)); if (it) it.selected = !!on; show(); },
     zapImportBack() { session.step = 'pick'; session.error = ''; show(); },
