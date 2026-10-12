@@ -3,7 +3,24 @@
 // Owns: the master/local datapoint + bundle library, the data detail
 // modal, bundle drag-and-drop mapping, and per-step data tag pills.
 
-import { state, esc, getActiveClient, persist } from '../core/data.js';
+import { state, esc, getActiveClient, persist, markClientDirty } from '../core/data.js';
+
+// The list of tags and bundles the Data screen is showing: the shared master list in the vault, otherwise THIS project's own list
+// (projectData.localDatapoints). Adding, renaming, deleting and bundling used to always write to the master list, so in a project
+// a new tag never appeared on the screen and was not saved with the project.
+export function dataPool(create = false) {
+    const client = getActiveClient();
+    const isVault = window.location.hash.includes('vault');
+    if (isVault || !client) { if (!state.master.datapoints) state.master.datapoints = []; return state.master.datapoints; }
+    if (!client.projectData) client.projectData = {};
+    if (!Array.isArray(client.projectData.localDatapoints)) { if (!create) return []; client.projectData.localDatapoints = []; }
+    return client.projectData.localDatapoints;
+}
+function savePool() {
+    const client = getActiveClient();
+    if (client && !window.location.hash.includes('vault') && markClientDirty) markClientDirty(client.id);
+    return persist();
+}
 
 export function renderGlobalDataManager() {
     OL.registerView(renderGlobalDataManager);
@@ -352,7 +369,7 @@ export function addNewDatapoint(isBundle = false) {
     const id = (isBundle ? 'bundle-' : 'dp-') + Date.now();
     const key = `{${name.replace(/\s+/g, '').toLowerCase()}}`;
 
-    state.master.datapoints.push({
+    dataPool(true).push({
         id: id,
         name: name,
         key: isBundle ? null : key,
@@ -361,7 +378,7 @@ export function addNewDatapoint(isBundle = false) {
         category: 'General'
     });
 
-    persist();
+    savePool();
     renderGlobalDataManager();
 }
 
@@ -371,22 +388,27 @@ export function updateMasterDatapoint(index, field, value) {
         value = newCat || 'General';
     }
 
-    state.master.datapoints[index][field] = value;
-    persist();
+    const pool = dataPool();
+    if (!pool[index]) return;
+    pool[index][field] = value;
+    savePool();
     renderGlobalDataManager();
     OL.renderWorkbenchItemsOnly();
 }
 
 export function deleteMasterDatapointById(id) {
     if (!confirm("Permanently delete this item?")) return;
-    state.master.datapoints = state.master.datapoints.filter(d => d.id !== id);
-    persist();
+    const pool = dataPool();
+    const keep = pool.filter(d => d.id !== id);
+    pool.length = 0; keep.forEach(d => pool.push(d));   // same array, so the master list or the project's own list is updated in place
+    savePool();
     renderGlobalDataManager();
 }
 
 export function editBundle(bundleId) {
-    const bundle = state.master.datapoints.find(d => d.id === bundleId);
-    const allDps = state.master.datapoints.filter(d => !d.isBundle);
+    const bundle = dataPool().find(d => d.id === bundleId);
+    if (!bundle) return;
+    const allDps = dataPool().filter(d => !d.isBundle);
 
     let html = `
         <div class="modal-head">
@@ -413,14 +435,15 @@ export function editBundle(bundleId) {
 }
 
 export function toggleDpInBundle(bundleId, dpId) {
-    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    const bundle = dataPool().find(d => d.id === bundleId);
+    if (!bundle) return;
     if (!bundle.childIds) bundle.childIds = [];
 
     const idx = bundle.childIds.indexOf(dpId);
     if (idx === -1) bundle.childIds.push(dpId);
     else bundle.childIds.splice(idx, 1);
 
-    persist();
+    savePool();
     editBundle(bundleId);
 }
 
@@ -500,12 +523,12 @@ export async function handleFieldDropOnBundle(e, bundleId) {
     const fieldId = e.dataTransfer.getData("application/sphynx-field-id");
     if (!fieldId) return;
 
-    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    const bundle = dataPool().find(d => d.id === bundleId);
     if (bundle) {
         if (!bundle.childIds) bundle.childIds = [];
         if (!bundle.childIds.includes(fieldId)) {
             bundle.childIds.push(fieldId);
-            await persist();
+            await savePool();
             renderGlobalDataManager();
             console.log(`🔗 Linked ${fieldId} to Bundle ${bundleId}`);
         }
@@ -513,10 +536,10 @@ export async function handleFieldDropOnBundle(e, bundleId) {
 }
 
 export async function removeFieldFromBundle(bundleId, fieldId) {
-    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    const bundle = dataPool().find(d => d.id === bundleId);
     if (bundle && bundle.childIds) {
         bundle.childIds = bundle.childIds.filter(id => id !== fieldId);
-        await persist();
+        await savePool();
         renderGlobalDataManager();
     }
 }
@@ -526,7 +549,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderGlobalDataManager, openMasterDataImporter, filterMasterDataImport,
     executeDataImport, renderDataRow, renderBundleRow, openDataDetailModal,
-    renderDataFlowMiniMap, addNewDatapoint, updateMasterDatapoint,
+    renderDataFlowMiniMap, addNewDatapoint, updateMasterDatapoint, dataPool,
     deleteMasterDatapointById, editBundle, toggleDpInBundle, removeStepDatapoint,
     renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
     handleBundleDragLeave, handleFieldDropOnBundle, removeFieldFromBundle
