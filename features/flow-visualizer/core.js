@@ -3018,40 +3018,48 @@ export function _fvDrawStepConnections(resources) {
         }
 
         // Logic icon on line midpoint (implicit links get no icon)
-        const hasRule  = !isImplicit && outRule.rule?.trim();
-        const hasDelay = !isImplicit && (outRule.type === 'delay' || parseInt(outRule.delayValue) > 0);
-        const iconChar = isLoop ? '↺' : hasDelay ? '◷' : hasRule ? 'λ' : null;
+        const types    = outRule.types || [outRule.type || 'next'];
+        const hasRule  = !isImplicit && !!(outRule.rule && outRule.rule.trim());
+        const hasDelay = !isImplicit && (types.includes('delay') || outRule.type === 'delay' || parseInt(outRule.delayValue) > 0);
+        const hasLoop  = !isImplicit && (isLoop || types.includes('loop'));
+        // lucide icons (24x24 drawing, scaled down) in a small pill at the middle of the line: loop, wait, condition
+        const LUCIDE = {
+          repeat:   ['<path d="m17 2 4 4-4 4"/>', '<path d="M3 11v-1a4 4 0 0 1 4-4h14"/>', '<path d="m7 22-4-4 4-4"/>', '<path d="M21 13v1a4 4 0 0 1-4 4H3"/>'],
+          clock:    ['<circle cx="12" cy="12" r="10"/>', '<polyline points="12 6 12 12 16 14"/>'],
+          branch:   ['<line x1="6" x2="6" y1="3" y2="15"/>', '<circle cx="18" cy="6" r="3"/>', '<circle cx="6" cy="18" r="3"/>', '<path d="M18 9a9 9 0 0 1-9 9"/>'],
+        };
+        const marks = [];
+        if (hasLoop) marks.push('repeat');
+        if (hasDelay) marks.push('clock');
+        if (hasRule) marks.push('branch');
 
-        if (iconChar) {
-          // Find midpoint of bezier curve
+        if (marks.length) {
           const mx = (fx + tx) / 2;
           const my = (fy + ty) / 2;
+          const size = 14, gap = 3, w = marks.length * size + (marks.length - 1) * gap + 10;
+          const tipParts = [];
+          if (hasRule) tipParts.push(outRule.rule);
+          if (hasDelay) tipParts.push(`wait ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`);
+          if (hasLoop) tipParts.push(`repeats${outRule.loopLimit ? ' (' + outRule.loopLimit + ')' : ''}`);
 
-          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
-          bg.style.fill = 'var(--panel)';
-          bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
-          frag.appendChild(bg);
-
-          const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
-          txt.setAttribute('text-anchor', 'middle');
-          txt.setAttribute('font-size', iconChar === 'λ' ? '11' : '10');
-          txt.setAttribute('font-weight', '700');
-          txt.setAttribute('fill', color);
-          txt.setAttribute('font-family', 'DM Sans, sans-serif');
-          txt.setAttribute('pointer-events', 'none');
-          txt.textContent = iconChar;
-          frag.appendChild(txt);
-
-          // Tooltip on hover showing the rule/delay
-          if (hasRule || hasDelay) {
-            const label = hasDelay
-              ? `${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
-              : outRule.rule;
-            bg.setAttribute('title', label);
-            bg.style.cursor = 'help';
-          }
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.style.cursor = 'help';
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          bg.setAttribute('x', mx - w / 2); bg.setAttribute('y', my - 10); bg.setAttribute('width', w); bg.setAttribute('height', 20); bg.setAttribute('rx', 10);
+          bg.style.fill = 'var(--panel)'; bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
+          g.appendChild(bg);
+          marks.forEach((m, i) => {
+            const ic = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const x0 = mx - w / 2 + 5 + i * (size + gap);
+            ic.setAttribute('transform', `translate(${x0} ${my - size / 2}) scale(${size / 24})`);
+            ic.setAttribute('fill', 'none'); ic.setAttribute('stroke', color); ic.setAttribute('stroke-width', '2.4');
+            ic.setAttribute('stroke-linecap', 'round'); ic.setAttribute('stroke-linejoin', 'round');
+            ic.setAttribute('pointer-events', 'none');
+            ic.innerHTML = LUCIDE[m].join('');
+            g.appendChild(ic);
+          });
+          if (tipParts.length) { const tt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); tt.textContent = tipParts.join(' | '); g.appendChild(tt); }
+          frag.appendChild(g);
         }
       });
     });
