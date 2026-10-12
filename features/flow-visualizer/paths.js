@@ -290,7 +290,19 @@ function toggleMenu(id, ev) {
   document.querySelectorAll('.fvp-menu.open').forEach((m) => m.classList.remove('open'));
   if (was) return;
   el.classList.add('open');
-  const s = el.querySelector('.fvp-search'); if (s) setTimeout(() => s.focus(), 30);
+  // The menu is drawn fixed to the window (not inside the scrolling side panel), so it is never cut off at the bottom:
+  // it opens below the button when there is room, otherwise above it, and the list scrolls within the space available.
+  const wrap = el.parentElement; const rect = wrap.getBoundingClientRect();
+  const below = window.innerHeight - rect.bottom - 12, above = rect.top - 12;
+  const up = below < 240 && above > below;
+  const room = Math.max(140, (up ? above : below));
+  const list = el.querySelector('.fvp-list');
+  const searchH = el.querySelector('.fvp-search') ? 44 : 0;
+  if (list) list.style.maxHeight = Math.min(320, room - searchH - 8) + 'px';
+  el.style.left = rect.left + 'px'; el.style.width = rect.width + 'px';
+  if (up) { el.style.top = ''; el.style.bottom = (window.innerHeight - rect.top + 4) + 'px'; }
+  else { el.style.bottom = ''; el.style.top = (rect.bottom + 4) + 'px'; }
+  const s = el.querySelector('.fvp-search'); if (s) setTimeout(() => s.focus({ preventScroll: true }), 30);
 }
 function filterMenu(input) {
   const q = String(input.value || '').toLowerCase().trim();
@@ -307,7 +319,7 @@ function filterMenu(input) {
   if (!any && q) { if (!none) { none = document.createElement('div'); none.className = 'fvp-none'; none.textContent = 'Nothing matches.'; list.appendChild(none); } none.style.display = ''; }
   else if (none) none.style.display = 'none';
 }
-if (!window.__fvpDocClose) { window.__fvpDocClose = true; document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.fvp-wrap')) document.querySelectorAll('.fvp-menu.open').forEach((m) => m.classList.remove('open')); }); }
+if (!window.__fvpDocClose) { window.__fvpDocClose = true; window.addEventListener('scroll', (e) => { if (e.target && e.target.closest && e.target.closest('.fvp-menu')) return; document.querySelectorAll('.fvp-menu.open').forEach((m) => m.classList.remove('open')); }, true); window.addEventListener('resize', () => document.querySelectorAll('.fvp-menu.open').forEach((m) => m.classList.remove('open'))); document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.fvp-wrap')) document.querySelectorAll('.fvp-menu.open').forEach((m) => m.classList.remove('open')); }); }
 
 // ---- the editor --------------------------------------------------------------------------------------------------
 function destMenu(resId, step, p, mid) {
