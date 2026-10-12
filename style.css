@@ -2073,6 +2073,26 @@ body.light-mode #ge-shell { background: #f1f5f9 !important; }
 .fv-ref-chip .fv-ref-text { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .fv-ref-chip .fv-ref-pg { white-space: nowrap; font-weight: 600; opacity: .85; }
 .fv-ref-chip .fv-ref-pg:empty, .fv-used-pg:empty { display: none; }
+/* jumps as full-width ROWS along the bottom of a step's card (features/flow-visualizer/references.js, jumpRows) */
+.fv-jump-rows { display: flex; flex-direction: column; margin-top: 2px; border-radius: 0 0 9px 9px; overflow: hidden; cursor: default; }
+.fv-list-item .fv-jump-rows { border: 1px solid rgba(61, 217, 197, 0.35); border-radius: 8px; margin-top: 6px; }
+.fv-jump-rows .fv-jump-row, .fv-jump-rows .fv-ref-chip.fv-jump-row { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 6px 11px; border: 0; border-top: 1px solid rgba(61, 217, 197, 0.35); border-radius: 0;
+  background: rgba(61, 217, 197, 0.07); color: var(--accent); font-size: 10.5px; font-weight: 700; line-height: 1.35; text-align: left; cursor: pointer; }
+.fv-jump-rows .fv-jump-row:hover, .fv-jump-rows .fv-jump-row:focus-visible { background: rgba(61, 217, 197, 0.18); outline: none; }
+.fv-jump-rows .fv-jump-row.is-missing { color: #ef4444; background: rgba(239, 68, 68, 0.08); border-top-color: rgba(239, 68, 68, 0.4); }
+.fv-jump-rows .fv-jump-in { background: transparent; color: var(--text-muted); font-weight: 600; border-top-style: dashed; }
+/* the way OUT: the arrow sits on the right of the row, centred, pointing away from the card */
+.fv-jump-rows .fv-jump-row:not(.fv-jump-in) { flex-direction: row-reverse; align-items: center; }
+.fv-jump-rows .fv-jump-row:not(.fv-jump-in) .fv-ref-arrow { font-size: 13px; }
+/* the way IN: a row across the top of the card, under the colour bar, with a down arrow */
+.fv-jump-rows.fv-jump-rows-in { border-radius: 0; margin: 0 0 2px; }
+.fv-list-item .fv-jump-rows.fv-jump-rows-in { border-radius: 8px; margin: 0 0 6px; }
+.fv-jump-rows-in .fv-jump-in { border-top: 0; border-bottom: 1px dashed rgba(61, 217, 197, 0.55); background: rgba(61, 217, 197, 0.05); color: var(--accent); }
+.fv-list-item .fv-jump-rows-in .fv-jump-in { border-bottom: 0; }
+.fv-jump-rows .fv-jump-in:hover { background: rgba(0, 0, 0, 0.04); }
+.fv-jump-row .fv-ref-name { display: block; }
+.fv-jump-row .fv-jump-when { display: block; font-weight: 600; opacity: .8; }
+.fv-jump-row .fv-jump-to { display: block; }
 .fv-used-wrap { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
 .fv-used-chip { display: inline-block; padding: 1px 8px; border-radius: 99px; cursor: pointer; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; text-transform: none;
   color: var(--accent); border: 1px dashed rgba(61, 217, 197, 0.6); white-space: nowrap; }
