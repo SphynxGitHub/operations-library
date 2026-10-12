@@ -2516,6 +2516,7 @@ export function _fvRenderSteps(resources) {
                 </button>
                 ${typeof OL.fvFlagHtml === 'function' ? OL.fvFlagHtml(step, res) : ''}
                 <div class="fv-step-card-accent" style="background:${tc.color};"></div>
+                ${typeof OL.fvJumpRowsIn === 'function' ? OL.fvJumpRowsIn(step, res) : ''}
                 <div class="fv-step-card-body" onclick="event.stopPropagation();OL._fvSelectStep('${res.id}','${step.id}')">
                   <div style="display:flex;align-items:flex-start;gap:7px;">
                     <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
@@ -2524,11 +2525,12 @@ export function _fvRenderSteps(resources) {
                                  align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
                     <div style="min-width:0;flex:1;">
                       <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
-                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}${typeof OL.fvIncomingChip === 'function' ? OL.fvIncomingChip(step, res) : ''}
+                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>
                     </div>
                   </div>
                   ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'card') : ''}
                 </div>
+                ${typeof OL.fvJumpRowsOut === 'function' ? OL.fvJumpRowsOut(step, res) : ''}
                 <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
                      showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
               OL._fvSetupCardDrag(div, res.id, step.id);
@@ -4802,11 +4804,11 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
           <div class="fv-list-type-dot" style="background:${tc.color}; margin-top:5px;"></div>
           
           <div style="display:flex; flex-direction:column; gap:1px; flex:1; min-width:0;">
+              ${typeof OL.fvJumpRowsIn === 'function' ? OL.fvJumpRowsIn(step, res) : ''}
               <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600; font-size:13px; color:var(--text-main);">${esc(step.name || 'Unnamed Step')}</span>
               ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step, { withName: true }) : ''}
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
-              ${typeof OL.fvRefChip === 'function' ? (OL.fvRefChip(step, res) ? `<div style="margin-top:3px;">${OL.fvRefChip(step, res)}</div>` : '') : ''}
-              ${typeof OL.fvIncomingChip === 'function' ? (OL.fvIncomingChip(step, res) ? `<div style="margin-top:3px;">${OL.fvIncomingChip(step, res)}</div>` : '') : ''}
+              ${typeof OL.fvJumpRowsOut === 'function' ? OL.fvJumpRowsOut(step, res) : ''}
               ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'row') : ''}
           </div>
 

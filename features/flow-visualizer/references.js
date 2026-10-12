@@ -21,7 +21,9 @@
 //                 booking link AND an unsubscribe link). resId = the process jumped to, stepId = a step of that process
 //                 (optional; may be this same process: "20 minute call scheduled" further down), label = what triggers it
 //                 (optional: "Clicks the link and books a call"). The chip then reads "Clicks the link and books a call: 20 minute
-//                 call scheduled", and the target step shows an "Entered from" badge.
+//                 call scheduled", and the target step shows an "Entered from" badge. Both are drawn as full-width rows on the step's
+//                 card, not as pills under its name: the ways out along the bottom (jumpRowsOut), and the way in across the top
+//                 of the card they land on, with a down arrow (jumpRowsIn).
 //                 The first jump is also mirrored into step.refResId / refStepId / refLabel, which is what the older single
 //                 "See another process" link (and Frame-out) used. A step that only has those fields is read as one jump.
 // ================================================================================================
@@ -127,19 +129,21 @@ export function removeJump(resId, stepId, jumpId) {
 }
 
 // ---- what is drawn -----------------------------------------------------------------------------------------------
-function oneChip(step, res, j) {
+// A jump is drawn as a full-width ROW along the bottom of the step's card, not a pill under its name. The row keeps the
+// fv-ref-chip class and data-ref-res, which is what the printout looks for to write the page number.
+function oneRow(step, res, j) {
   const t = resById(j.resId);
   const tStep = t && j.stepId ? stepOf(t, j.stepId) : null;
   const name = t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed';
   const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}','${esc(j.id)}')`;
-  return `<span class="fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${j.label ? `${esc(j.label)}: ${esc(name)}` : `See ${esc(name)}`}</span><span class="fv-ref-pg"></span></span></span>`;
+  const head = j.label ? `<span class="fv-jump-when">${esc(j.label)}</span>` : '';
+  const to = `<span class="fv-jump-to">${j.label ? '' : 'See '}${esc(name)}</span>`;
+  return `<div class="fv-jump-row fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${head}${to}</span><span class="fv-ref-pg"></span></span></div>`;
 }
-// The chips on a step, one per jump. onclick jumps; .fv-ref-pg is where the printout writes the page number.
+// The rows for a step's jumps (without the wrapper; see jumpRows).
 export function refChip(step, res) {
   if (!step || !res) return '';
-  const chips = jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => oneChip(step, res, j));
-  if (!chips.length) return '';
-  return chips.length === 1 ? chips[0] : `<div class="fv-ref-chips" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;">${chips.join('')}</div>`;
+  return jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => oneRow(step, res, j)).join('');
 }
 
 // On the TARGET step of a jump: where people come from. One source jumps straight back to it; several open a list.
@@ -148,9 +152,20 @@ export function incomingChip(step, res) {
   const from = usersOf(res.id, step.id).filter((u) => !(String(u.res.id) === String(res.id) && String(u.step.id) === String(step.id)));
   if (!from.length) return '';
   const one = from.length === 1 ? from[0] : null;
-  const text = one ? `Entered from &ldquo;${esc(one.step.name || 'a step')}&rdquo;` : `Entered from ${from.length} places`;
+  const text = one ? `Entered from &ldquo;${esc(one.step.name || 'a step')}&rdquo;${one.jump && one.jump.label ? `<span class="fv-jump-to">${esc(one.jump.label)}</span>` : ''}` : `Entered from ${from.length} places`;
   const act = one ? `OL.fvJumpToStep('${esc(one.res.id)}','${esc(one.step.id)}','${esc(res.id)}','${esc(step.id)}')` : `OL.fvShowRefUsers('${esc(res.id)}', event, '${esc(step.id)}')`;
-  return `<span class="fv-ref-chip fv-ref-in" role="button" tabindex="0" title="Where people come from to reach this step" onclick="event.stopPropagation(); ${act}" onkeydown="if(event.key==='Enter'){event.stopPropagation(); ${act}}"><span class="fv-ref-arrow" aria-hidden="true">&#8617;</span><span class="fv-ref-text"><span class="fv-ref-name">${text}</span></span></span>`;
+  return `<div class="fv-jump-row fv-jump-in" role="button" tabindex="0" title="Where people come from to reach this step" onclick="event.stopPropagation(); ${act}" onkeydown="if(event.key==='Enter'){event.stopPropagation(); ${act}}"><span class="fv-ref-arrow" aria-hidden="true">&#8595;</span><span class="fv-ref-text"><span class="fv-ref-name">${text}</span></span></div>`;
+}
+
+// The ways OUT of a step, as rows along the bottom of its card (or list row).
+export function jumpRowsOut(step, res) {
+  const html = refChip(step, res);
+  return html ? `<div class="fv-jump-rows" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${html}</div>` : '';
+}
+// The way IN: where people come from, as a row across the top of the card of the step they land on.
+export function jumpRowsIn(step, res) {
+  const html = incomingChip(step, res);
+  return html ? `<div class="fv-jump-rows fv-jump-rows-in" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${html}</div>` : '';
 }
 
 // "Used in N places" on the process that others refer to
@@ -287,6 +302,6 @@ function toast(t) { if (typeof OL().showToast === 'function') OL().showToast(t);
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvRefChip: refChip, fvUsedChip: usedChip, fvRefPicker: refPicker, fvRefUsers: usersOf, fvRefTargets: targetsFor,
-  fvAddJump: addJump, fvSetJump: setJump, fvRemoveJump: removeJump, fvJumpEditor: jumpEditor, fvJumpsOf: jumpsOf, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
+  fvAddJump: addJump, fvSetJump: setJump, fvRemoveJump: removeJump, fvJumpEditor: jumpEditor, fvJumpsOf: jumpsOf, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpRowsOut: jumpRowsOut, fvJumpRowsIn: jumpRowsIn, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
   fvShowBackPill: showBackPill, fvShowRefUsers: showRefUsers, fvCloseUsedPop: closeUsedPop,
 });
