@@ -398,7 +398,48 @@ export function pathSummary(res, step) {
   return lines.length ? `<div class="fvp-sums">${lines.join('')}</div>` : '';
 }
 
+
+// ---- consolidation groups: pick an existing group, or start a new one ---------------------------------------------
+function groupsInUse() {
+  const m = new Map();
+  allRes().forEach((r) => (r.steps || []).forEach((st) => {
+    const g = st && !st.isArchived && st.stepGroup && String(st.stepGroup).trim(); if (!g) return;
+    const e = m.get(g) || { name: g, count: 0, procs: new Set() }; e.count += 1; e.procs.add(r.name || 'Process'); m.set(g, e);
+  }));
+  return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+function setGroup(resId, stepId, name) {
+  const c = ctx(resId, stepId); if (!c) return;
+  const n = String(name || '').trim().slice(0, 80);
+  if (n) c.step.stepGroup = n; else delete c.step.stepGroup;
+  redrawAfterRefEdit(resId, stepId);
+}
+function renameGroup(resId, stepId) {
+  const c = ctx(resId, stepId); if (!c || !c.step.stepGroup) return;
+  const old = c.step.stepGroup; const hits = [];
+  allRes().forEach((r) => (r.steps || []).forEach((st) => { if (st && st.stepGroup === old) hits.push(st); }));
+  const name = window.prompt(`Rename "${old}" (changes all ${hits.length} step${hits.length === 1 ? '' : 's'} in this group)`, old);
+  if (name == null || !name.trim()) return;
+  hits.forEach((st) => { st.stepGroup = name.trim().slice(0, 80); });
+  redrawAfterRefEdit(resId, stepId);
+}
+export function groupEditor(resId, step) {
+  const r = esc(resId), s = esc(step.id);
+  const groups = groupsInUse(); const cur = step.stepGroup ? String(step.stepGroup) : '';
+  const curInfo = groups.find((g) => g.name === cur);
+  let body = groups.length ? group('Existing groups') + groups.map((g) => item('git-merge', g.name, `OL.fvGroupSet('${r}','${s}','${esc(g.name).replace(/'/g, '&#39;')}')`, { on: g.name === cur, right: `${g.count} step${g.count === 1 ? '' : 's'}`, q: g.name })).join('') : '<div class="fvp-none">No groups yet. Type a name below to start one.</div>';
+  body += `<div class="fvp-newgroup fvp-always" onclick="event.stopPropagation()">${group('Start a new group')}<div style="padding:6px;"><input type="text" class="modal-input tiny" maxlength="80" placeholder="New group name, then Enter" onkeydown="if(event.key==='Enter'){event.preventDefault(); OL.fvGroupSet('${r}','${s}', this.value);}"></div></div>`;
+  const pick = menu(`fvpm-grp-${step.id}`, cur ? `${icon('git-merge', 12)} Move to another group` : `${icon('git-merge', 12)} Add to a group`, body, { search: true });
+  const chip = cur ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+      <span class="chip-grp">${icon('git-merge', 11)} ${esc(cur)}${curInfo ? ` <span class="tiny muted">(${curInfo.count} step${curInfo.count === 1 ? '' : 's'})</span>` : ''}</span>
+      <button type="button" class="btn tiny soft" onclick="OL.fvGroupRename('${r}','${s}')">Rename group</button>
+      <button type="button" class="btn tiny soft" onclick="OL.fvGroupSet('${r}','${s}','')">Remove from group</button></div>`
+    : '<div class="tiny muted" style="margin-bottom:6px;">Not grouped</div>';
+  return `${chip}${pick}<div class="tiny muted" style="margin-top:6px;">Steps with the same group name, in any process, are shown as one card on the map.</div>`;
+}
+
 Object.assign(window.OL = window.OL || {}, {
+  fvGroupEditor: groupEditor, fvGroupSet: setGroup, fvGroupRename: renameGroup,
   fvPathsEditor: pathsEditor, fvPathSummary: pathSummary,
   fvPathAdd: addPath, fvPathRemove: removePath, fvPathTrigger: setTrigger, fvPathAsset: setAsset, fvPathSegment: setSegment,
   fvPathCustom: setCustom, fvPathWait: setWait, fvPathLimit: setLimit, fvPathDest: setDest, fvPathNewSegment: newSegmentFor,

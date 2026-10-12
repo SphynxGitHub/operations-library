@@ -7009,31 +7009,7 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     <label class="section-label">
                         <i data-lucide="git-merge" style="width:11px;height:11px;"></i> CONSOLIDATION GROUP
                     </label>
-                    ${step.stepGroup ? `
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                            <span style="display:inline-flex;align-items:center;gap:5px;
-                                         padding:3px 10px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:var(--accent-glow);color:var(--accent);
-                                         border:1px solid rgba(61,217,197,0.3);">
-                                ${esc(step.stepGroup)}
-                                <span onclick="OL._fvSetStepGroup('${resId}','${step.id}',null)"
-                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;"
-                                      title="Remove from group">×</span>
-                            </span>
-                        </div>
-                        <input type="text" class="modal-input tiny" placeholder="Rename group…"
-                               value="${esc(step.stepGroup)}"
-                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
-                               onkeydown="if(event.key==='Enter'){this.blur();}">
-                    ` : `
-                        <div class="tiny muted italic" style="padding:4px 0 6px;">Not grouped</div>
-                        <input type="text" class="modal-input tiny" placeholder="Assign to group…"
-                               onblur="if(this.value.trim()) OL._fvSetStepGroup('${resId}','${step.id}',this.value)"
-                               onkeydown="if(event.key==='Enter'){this.blur();}">
-                        <div class="tiny muted" style="margin-top:4px;opacity:0.6;">
-                            Steps with the same group name across resources consolidate into one card in the visualizer.
-                        </div>
-                    `}
+                    ${typeof OL.fvGroupEditor === 'function' ? OL.fvGroupEditor(resId, step) : ''}
                 </div>
 
                 <div class="inspector-section">
