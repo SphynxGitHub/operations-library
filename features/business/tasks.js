@@ -2171,7 +2171,7 @@ OL.handleTaskRowClick = function(event, clientId, taskId) {
 };
 
 // 📝 Standalone Generic Modal Overlay Helper
-OL.showOverlayModal = function(htmlContent) {
+OL.showOverlayModal = function(htmlContent, opts = {}) {
     let layer = document.getElementById("modal-layer");
     if (!layer) {
         layer = document.createElement("div");
@@ -2181,7 +2181,7 @@ OL.showOverlayModal = function(htmlContent) {
     }
     layer.style.display = "flex";
     layer.innerHTML = `
-        <div class="modal-box" style="background:var(--bg-card, #1e293b); border:1px solid var(--line, #334155); border-radius:8px; max-width:650px; width:90%; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5); color:inherit;" onclick="event.stopPropagation()">
+        <div class="modal-box${opts.wide ? ' modal-wide' : ''}" style="background:var(--bg-card, #1e293b); border:1px solid var(--line, #334155); border-radius:8px; max-width:650px; width:90%; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5); color:inherit;" onclick="event.stopPropagation()">
             ${htmlContent}
         </div>
     `;
@@ -2730,6 +2730,9 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                             <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
                             ${isEditable ? `
                                 <div style="display:flex; gap:4px; align-items:center;">
+                                    ${clientViewer ? '' : (c.byClient
+                                        ? `<span class="pill tiny soft" style="font-size:9px;" title="Written by the client">Client</span>`
+                                        : `<button class="btn tiny ${c.clientVisible ? 'primary' : 'soft'}" style="padding:2px 6px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" title="${c.clientVisible ? 'Clients can see this comment. Click to make it internal.' : 'Internal only. Click to let clients see this comment.'}" onclick="OL.toggleCommentClientVisible('${client?.id}', '${task.id}', '${c.id}', ${!c.clientVisible})"><i data-lucide="${c.clientVisible ? 'eye' : 'eye-off'}" style="width:10px;height:10px;"></i>${c.clientVisible ? 'Client can view' : 'Internal'}</button>`)}
                                     <button class="btn tiny soft" style="padding:2px 4px;" title="Edit comment" onclick="OL.startEditTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                                     <button class="btn tiny soft" style="padding:2px 4px; color:#ef4444;" title="Delete comment" onclick="OL.deleteTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button>
                                 </div>
@@ -2737,11 +2740,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                         </div>
                     </div>
                     <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text, c.html)}</div>
-                    ${isEditable && !clientViewer ? `
-                        <label class="tiny muted" style="display:inline-flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer;" title="Clients see this comment in their view">
-                            <input type="checkbox" ${(c.clientVisible || c.byClient) ? 'checked' : ''} ${c.byClient ? 'disabled' : ''} style="margin:0; cursor:pointer;" onchange="OL.toggleCommentClientVisible('${client?.id}', '${task.id}', '${c.id}', this.checked)">
-                            ${c.byClient ? 'Written by the client' : 'Client can view'}
-                        </label>` : ''}${isMentioned && !alreadyViewed ? `
+                    ${isMentioned && !alreadyViewed ? `
                         <label class="tiny" style="display:flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer; color:var(--accent);">
                             <input type="checkbox" onclick="OL.markTaskCommentViewed('${client?.id}', '${task.id}', '${c.id}')" style="cursor:pointer; margin:0;">
                             You were tagged — mark as viewed

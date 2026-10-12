@@ -1136,6 +1136,9 @@ OL.renderEventCommentsSidebarHTML = function(evt) {
                         <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                             <span>${c.date ? esc(new Date(c.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : ''}</span>
                             ${c._own ? `
+                                ${clientViewer ? '' : (c.byClient
+                                    ? `<span class="pill tiny soft" style="font-size:9px;" title="Written by the client">Client</span>`
+                                    : `<button class="btn tiny ${c.clientVisible ? 'primary' : 'soft'}" style="padding:2px 6px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" title="${c.clientVisible ? 'Clients can see this comment. Click to make it internal.' : 'Internal only. Click to let clients see this comment.'}" onclick="OL.toggleEventCommentClientVisible('${evt.id}', '${c.id}', ${!c.clientVisible})"><i data-lucide="${c.clientVisible ? 'eye' : 'eye-off'}" style="width:10px;height:10px;"></i>${c.clientVisible ? 'Client can view' : 'Internal'}</button>`)}
                                 <button class="btn tiny soft" style="padding:2px 4px;" title="Edit comment" onclick="OL.startEditEventComment('${evt.id}', '${c.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                                 <button class="btn tiny soft" style="padding:2px 4px; color:#ef4444;" title="Delete comment" onclick="OL.deleteEventComment('${evt.id}', '${c.id}')"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button>
                             ` : ''}
@@ -1151,11 +1154,6 @@ OL.renderEventCommentsSidebarHTML = function(evt) {
                     ${viewedNames.length ? `
                         <div class="tiny muted" style="margin-top:4px; font-style:italic;">${esc(viewedNames.join(', '))} viewed this comment</div>
                     ` : ''}
-                    ${c._own && !clientViewer ? `
-                        <label class="tiny muted" style="display:inline-flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer;" title="Clients see this comment in their view">
-                            <input type="checkbox" ${(c.clientVisible || c.byClient) ? 'checked' : ''} ${c.byClient ? 'disabled' : ''} style="margin:0; cursor:pointer;" onchange="OL.toggleEventCommentClientVisible('${evt.id}', '${c.id}', this.checked)">
-                            ${c.byClient ? 'Written by the client' : 'Client can view'}
-                        </label>` : ''}
                 </div>
                 `;
             }).join('') : `<div class="tiny muted">No comments yet.</div>`}

@@ -349,15 +349,57 @@ OL.emailLinkCounts = function(m) {
     return { task: seen.task.size, request: seen.request.size, event: seen.event.size, resource: seen.resource.size };
 };
 
-// The project tag is always first on the left, then one small tag per kind of item linked: icon and count.
+// What each counter stands for: per kind, the names of the linked items and, under each, the passages of the email that
+// were linked to it. Whole-email links have no passage.
+OL.emailLinkDetails = function(m) {
+    const client = m.linked_client_id ? state.clients?.[m.linked_client_id] : null;
+    const pd = client?.projectData;
+    const whole = {
+        task: () => (pd?.clientTasks || []).find((t) => String(t.id) === String(m.linked_task_id)),
+        request: () => OL.listProjectRequests && client ? OL.listProjectRequests(client).find((r) => String(r.id) === String(m.linked_request_id)) : null,
+        resource: () => (pd?.localResources || []).find((r) => String(r.id) === String(m.linked_resource_id)),
+    };
+    const out = { task: new Map(), request: new Map(), event: new Map(), resource: new Map() };
+    const add = (type, id, label, text) => {
+        if (!out[type] || id === undefined || id === null || id === '') return;
+        const key = String(id);
+        if (!out[type].has(key)) out[type].set(key, { label: label || '', excerpts: [] });
+        const e = out[type].get(key);
+        if (label && !e.label) e.label = label;
+        if (text && !e.excerpts.includes(text)) e.excerpts.push(text);
+    };
+    if (m.linked_task_id) { const t = whole.task(); add('task', m.linked_task_id, t ? (t.title || t.name) : 'Linked task'); }
+    if (m.linked_request_id) { const r = whole.request(); add('request', m.linked_request_id, r ? (OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title)) : 'Linked request'); }
+    if (m.linked_resource_id) { const r = whole.resource(); add('resource', m.linked_resource_id, r ? r.name : 'Linked resource'); }
+    if (m.linked_event_id) add('event', m.linked_event_id, 'Linked event');
+    (Array.isArray(m.piece_links) ? m.piece_links : []).forEach((l) => {
+        if (l) add(l.targetType, l.targetId, l.targetLabel, l.kind === 'attachment' ? `Attachment: ${l.text || l.attachmentPath || ''}` : String(l.text || '').replace(/\s+/g, ' ').trim());
+    });
+    return out;
+};
+
+// The project tag is always first on the left, then one small tag per kind of item linked: icon and count. Hovering a
+// count lists the items by name (bold) with the linked part of the email under each.
 OL.renderEmailLinkTags = function(m) {
     const counts = OL.emailLinkCounts(m);
+    const details = OL.emailLinkDetails(m);
     const project = m.linked_client_id
         ? OL.renderProjectPill(m.linked_client_id, state.clients[m.linked_client_id]?.meta?.name)
         : '<span class="pill tiny soft" style="opacity:0.6;">No project</span>';
-    const kinds = [['task', 'check-square', 'task'], ['event', 'calendar', 'event'], ['resource', 'box', 'resource'], ['request', 'git-pull-request', 'request']];
-    const tags = kinds.filter(([k]) => counts[k] > 0).map(([k, icon, noun]) =>
-        `<span class="pill tiny soft" style="font-size:10px; display:inline-flex; align-items:center; gap:3px;" title="${counts[k]} ${noun}${counts[k] === 1 ? '' : 's'} linked"><i data-lucide="${icon}" style="width:10px;height:10px; flex-shrink:0;"></i>${counts[k]}</span>`).join('');
+    const kinds = [['task', 'check-square', 'Task'], ['event', 'calendar', 'Event'], ['resource', 'box', 'Resource'], ['request', 'git-pull-request', 'Request']];
+    const clip = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+    const tags = kinds.filter(([k]) => counts[k] > 0).map(([k, icon, noun]) => {
+        const items = [...details[k].values()];
+        const pop = items.map((it) => `
+            <div style="margin-bottom:8px;">
+                <div style="font-weight:700; font-size:12px; overflow-wrap:anywhere;">${esc(it.label || noun)}</div>
+                ${it.excerpts.map((x) => `<div class="muted" style="font-size:11px; line-height:1.4; margin-top:2px; overflow-wrap:anywhere;">"${esc(clip(x, 160))}"</div>`).join('')}
+            </div>`).join('');
+        return `<span class="pill tiny soft ol-link-tag" tabindex="0" style="font-size:10px; display:inline-flex; align-items:center; gap:3px;" onclick="event.stopPropagation()" aria-label="${counts[k]} ${noun.toLowerCase()}${counts[k] === 1 ? '' : 's'} linked">
+            <i data-lucide="${icon}" style="width:10px;height:10px; flex-shrink:0;"></i>${counts[k]}
+            <span class="ol-link-pop" role="tooltip"><span class="muted" style="display:block; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">${noun}${counts[k] === 1 ? '' : 's'} linked</span>${pop}</span>
+        </span>`;
+    }).join('');
     return `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">${project}${tags}</div>`;
 };
 
@@ -1713,7 +1755,7 @@ OL.renderExcerptLinkPicker = function() {
 
     const creating = st.creatingNewTask || st.creatingNewRequest;
     const content = `
-        <div style="padding:24px 36px 24px 24px; box-sizing:border-box; width:min(1280px, 94vw);" onclick="event.stopPropagation()">
+        <div style="padding:24px 28px; box-sizing:border-box; width:100%;" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:14px;">
                 <div style="min-width:0;">
                     <h3 style="margin:0; font-size:15px;">Link this ${st.kind}</h3>
@@ -1799,7 +1841,7 @@ OL.renderExcerptLinkPicker = function() {
             </div>
         </div>
     `;
-    OL.showOverlayModal(content);
+    OL.showOverlayModal(content, { wide: true });
     if (window.lucide) lucide.createIcons();
 };
 

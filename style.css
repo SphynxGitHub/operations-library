@@ -2272,3 +2272,11 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 .fvp-use { font-size: 11px; color: var(--text-muted); padding: 1px 0; }
 #v2-inspector-panel .chip-grp { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }
 #v2-inspector-panel .fvp-newgroup { border-top: 1px solid var(--panel-border); }
+
+/* Communications: hover list for the linked tasks / events / resources / requests counters */
+.ol-link-tag { position: relative; cursor: default; }
+.ol-link-pop { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; width: max-content; max-width: min(420px, 80vw); max-height: 320px; overflow: auto; padding: 10px 12px; text-align: left; white-space: normal; font-weight: normal; background: var(--bg-card, #1e293b); color: var(--text-main, #f8fafc); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+.ol-link-tag:hover .ol-link-pop, .ol-link-tag:focus .ol-link-pop, .ol-link-tag:focus-within .ol-link-pop { display: block; }
+
+/* Wide dialogs (opt in with showOverlayModal(html, { wide: true })) use the available width */
+.modal-box.modal-wide { max-width: min(1500px, 96vw) !important; width: 96vw !important; }
