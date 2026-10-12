@@ -2672,7 +2672,7 @@ export function _fvRenderSteps(resources) {
                     <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
                                  background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
                                  font-size:9px;font-weight:800;display:flex;
-                                 align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
+                                 align-items:center;justify-content:center;margin-top:1px;">${(() => { const n = (res.steps || []).findIndex(x => String(x.id) === String(step.id)); return (n >= 0 ? n : idx) + 1; })()}</span>
                     <div style="min-width:0;flex:1;">
                       <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
                       <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>
