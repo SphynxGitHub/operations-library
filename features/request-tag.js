@@ -59,10 +59,11 @@ export async function openRequestFromTask(clientId, itemId) {
         if (document.getElementById('scoping-search-input')) break;
     }
     const client = state.clients?.[clientId];
-    const item = (client?.projectData?.scopingSheets?.[0]?.lineItems || []).find((it) => String(it.id) === String(itemId));
+    // The id is a request (a scoping line) on any of the project's sheets. Always open the request itself: a request
+    // that covers a resource used to fall through to the resource's window.
+    const item = (client?.projectData?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((it) => String(it.id) === String(itemId));
     if (!item) return;
-    const isRequestLine = String(item.id).startsWith('reqline-') || (!item.resourceId && item.name);
-    if (isRequestLine && typeof OL.openRequestLineModal === 'function') OL.openRequestLineModal(item.id);
+    if (typeof OL.openRequestLineModal === 'function') OL.openRequestLineModal(item.id);
     else if (typeof OL.openResourceModal === 'function') OL.openResourceModal(item.id);
 }
 

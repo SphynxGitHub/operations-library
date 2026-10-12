@@ -1068,10 +1068,12 @@ OL.toggleEventDescription = function(eventId) {
 // EVENT COMMENTS SIDEBAR
 // -------------------------------------------------------------
 OL.renderEventCommentsSidebarHTML = function(evt) {
-    const own = (evt.comments || []).map(c => ({ ...c, _own: true }));
+    const clientViewer = typeof OL.isClientViewer === 'function' && OL.isClientViewer();
+    const visibleTo = (list) => (typeof OL.commentsForViewer === 'function' ? OL.commentsForViewer(list) : (list || []));
+    const own = visibleTo(evt.comments || []).map(c => ({ ...c, _own: true }));
     const client = evt.linked_client_id ? state.clients[evt.linked_client_id] : null;
     const childTasks = (client?.projectData?.clientTasks || []).filter(t => t.parentEventId === evt.id);
-    const rolledUp = childTasks.flatMap(t => (t.comments || []).map(c => ({ ...c, _fromTask: t.title || t.name, _taskId: t.id })));
+    const rolledUp = childTasks.flatMap(t => visibleTo(t.comments || []).map(c => ({ ...c, _fromTask: t.title || t.name, _taskId: t.id })));
     const all = [...own, ...rolledUp].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
     return `
@@ -1087,9 +1089,15 @@ OL.renderEventCommentsSidebarHTML = function(evt) {
                       oninput="OL.handleCommentMentionInput(this, 'evt-${evt.id}')"
                       onkeydown="OL.handleCommentMentionKeydown(event, 'evt-${evt.id}')"></textarea>
             <div id="comment-mention-dropdown-evt-${evt.id}"></div>
-            <button class="btn tiny primary" style="align-self:flex-end;" onclick="OL.addEventComment('${evt.id}')">
-                <i data-lucide="send" style="width:12px;height:12px;"></i> Post
-            </button>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                ${clientViewer ? '<span></span>' : `
+                <label class="tiny" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;" title="Clients see this comment in their view. Comments left unchecked stay internal.">
+                    <input type="checkbox" id="event-comment-client-${evt.id}" style="margin:0; cursor:pointer;"> Client can view
+                </label>`}
+                <button class="btn tiny primary" onclick="OL.addEventComment('${evt.id}')">
+                    <i data-lucide="send" style="width:12px;height:12px;"></i> Post
+                </button>
+            </div>
         </div>
 
         <div style="display:grid; gap:8px; max-height:420px; overflow:auto; min-width:0;">
@@ -1143,11 +1151,29 @@ OL.renderEventCommentsSidebarHTML = function(evt) {
                     ${viewedNames.length ? `
                         <div class="tiny muted" style="margin-top:4px; font-style:italic;">${esc(viewedNames.join(', '))} viewed this comment</div>
                     ` : ''}
+                    ${c._own && !clientViewer ? `
+                        <label class="tiny muted" style="display:inline-flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer;" title="Clients see this comment in their view">
+                            <input type="checkbox" ${(c.clientVisible || c.byClient) ? 'checked' : ''} ${c.byClient ? 'disabled' : ''} style="margin:0; cursor:pointer;" onchange="OL.toggleEventCommentClientVisible('${evt.id}', '${c.id}', this.checked)">
+                            ${c.byClient ? 'Written by the client' : 'Client can view'}
+                        </label>` : ''}
                 </div>
                 `;
             }).join('') : `<div class="tiny muted">No comments yet.</div>`}
         </div>
     `;
+};
+
+OL.toggleEventCommentClientVisible = async function(eventId, commentId, checked) {
+    const { data: current, error: fetchErr } = await db.from('calendar_events').select('comments').eq('id', eventId).single();
+    if (fetchErr) { alert('Failed to load comment: ' + fetchErr.message); return; }
+    const comments = (current?.comments || []).map(c => c.id === commentId ? { ...c, clientVisible: !!checked } : c);
+    const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
+    if (error) { alert('Failed to save: ' + error.message); return; }
+    [state.master?.googleCalendarEvents, OL._calendarGridEvents, OL._dashboardEventsCache].forEach(list => {
+        const evt = (list || []).find(e => e.id === eventId);
+        if (evt) evt.comments = comments;
+    });
+    if (OL._activeEventModalId === eventId) OL.openCalendarEventModal(eventId);
 };
 
 OL._editingEventCommentId = null;
@@ -1261,7 +1287,9 @@ OL.addEventComment = async function(eventId) {
     const mentions = OL.extractMentions ? OL.extractMentions(text) : [];
 
     const { data: current } = await db.from('calendar_events').select('comments').eq('id', eventId).single();
-    const comments = [...(current?.comments || []), { id: uid(), author, text, mentions, date: new Date().toISOString() }];
+    const byClient = typeof OL.isClientViewer === 'function' && OL.isClientViewer();
+    const clientVisible = byClient || !!document.getElementById(`event-comment-client-${eventId}`)?.checked;
+    const comments = [...(current?.comments || []), { id: uid(), author, text, mentions, date: new Date().toISOString(), ...(clientVisible ? { clientVisible: true } : {}), ...(byClient ? { byClient: true } : {}) }];
 
     const { error } = await db.from('calendar_events').update({ comments }).eq('id', eventId);
     if (error) { alert('Failed to post comment: ' + error.message); return; }

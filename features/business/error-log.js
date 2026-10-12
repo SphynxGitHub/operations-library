@@ -261,7 +261,7 @@ OL.renderErrorLogRow = function(r, locked) {
     const accentColor = isResolved ? '#22c55e' : '#f59e0b';
     const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
 
-    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+    const occurred = r.occurred_at ? new Date(r.occurred_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
     const resolvedDate = r.resolution_date ? new Date(r.resolution_date).toLocaleDateString([], { dateStyle: 'medium' }) : '';
     const clientName = (!locked && r.client_id) ? (state.clients[r.client_id]?.meta?.name || 'Unknown') : '';
     const snippet = (r.message || '').replace(/\s+/g, ' ').trim();
@@ -282,7 +282,7 @@ OL.renderErrorLogRow = function(r, locked) {
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
                 ${occurred ? `<span class="pill tiny soft">${ic('calendar')}${esc(occurred)}</span>` : ''}
                 ${r.service ? `<span class="pill tiny soft">${ic('wrench')}${esc(r.service)}</span>` : ''}
-                ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" title="Click to copy Client ID: ${esc(r.client_id)}" onclick="event.stopPropagation(); navigator.clipboard.writeText('${r.client_id}'); alert('Copied Client ID: ${r.client_id}');">${ic('folder')}${esc(clientName)}</span>` : ''}
+                ${clientName ? `<span class="pill tiny" style="border:none; background:rgba(var(--accent-rgb),0.15); color:var(--accent); cursor:pointer;" title="Open ${esc(clientName)}" onclick="event.stopPropagation(); OL.closeModal?.(); OL.navigateToClientProject('${esc(r.client_id)}');">${ic('folder')}${esc(clientName)}</span>` : ''}
                 ${r.resource_name ? `<span class="pill tiny soft">${ic('git-branch')}${esc(r.resource_name)}</span>` : ''}
                 ${r.outage ? `<span class="pill tiny" style="border:none; background:rgba(239,68,68,0.15); color:#ef4444;">${ic('alert-circle')}Outage</span>` : ''}
                 ${OL.renderErrorTaskPill(r)}
@@ -603,7 +603,7 @@ OL.openErrorDetailModal = async function(id) {
                         <option value="">Unassigned</option>
                         ${clients.map(c => `<option value="${c.id}" ${r.client_id === c.id ? 'selected' : ''}>${esc(c.meta?.name || 'Unnamed')}</option>`).join('')}
                     </select>
-                    ${r.client_id ? `<span class="pill tiny soft" style="cursor:pointer;" title="Click to copy" onclick="navigator.clipboard.writeText('${r.client_id}'); alert('Copied Client ID: ${r.client_id}');">${ic('hash')}${esc(r.client_id)}</span>` : ''}
+                    ${r.client_id ? `<span class="pill tiny soft" style="cursor:pointer;" title="Open this project" onclick="OL.closeModal?.(); OL.navigateToClientProject('${esc(r.client_id)}');">${ic('folder')}${esc(state.clients[r.client_id]?.meta?.name || 'Open project')}</span>` : ''}
                 ` : ''}
                 <span id="error-resource-tag"></span>
             </div>

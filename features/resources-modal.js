@@ -421,7 +421,7 @@ export function getResourceById(id) {
 // 3c. OPEN RESOURCE MODAL
 export function openResourceModal(targetId, draftObj = null) {
     if (!state.v2) state.v2 = {}; 
-    if (!state.v2.activeCommentTab) state.v2.activeCommentTab = 'internal';
+    if (!state.v2.activeCommentTab || state.v2.activeCommentTab === 'internal' || state.v2.activeCommentTab === 'client') state.v2.activeCommentTab = 'comments';
     if (!targetId) return;
 
     const isAdmin = state.adminMode || window.FORCE_ADMIN;
@@ -807,7 +807,7 @@ const dependencyHtml = `
   //------- SCOPING STATUS ---------//
 
   // Inside OL.openResourceModal...
-  const activeTab = state.v2?.activeCommentTab || 'internal';
+  const activeTab = state.v2?.activeCommentTab || 'comments';
   const isGuest = !!window.IS_GUEST;
   const showPricing = state.v2?.showPricing || false;
 
@@ -1488,19 +1488,13 @@ const dependencyHtml = `
                 ${bodyContent}
             </div>
     
-            <!-- Sidebar -->
+            <!-- Sidebar: the same comment box tasks use (rich text, @mentions, edit/delete, "Client can view"), plus edit history -->
             <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;">
                 <div style="display:flex;border-bottom:1px solid var(--line);">
-                    ${!isGuest ? `
-                        <div onclick="state.v2.activeCommentTab='internal';OL.openResourceModal('${res.id}')"
-                             style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                    cursor:pointer;${activeTab==='internal' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
-                            INTERNAL NOTES
-                        </div>` : ''}
-                    <div onclick="state.v2.activeCommentTab='client';OL.openResourceModal('${res.id}')"
+                    <div onclick="state.v2.activeCommentTab='comments';OL.openResourceModal('${res.id}')"
                          style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                cursor:pointer;${activeTab==='client' ? 'color:#10b981;border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
-                        CLIENT FEEDBACK
+                                cursor:pointer;${activeTab!=='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        COMMENTS
                     </div>
                     <div onclick="state.v2.activeCommentTab='history';OL.openResourceModal('${res.id}')"
                          style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
@@ -1508,28 +1502,19 @@ const dependencyHtml = `
                         EDIT HISTORY
                     </div>
                 </div>
-    
-                <div style="flex:1;overflow-y:auto;padding:14px;">
+
+                <div style="flex:1;overflow-y:auto;padding:14px;min-width:0;">
                     ${activeTab === 'history' ? OL.renderEditHistory(res) : `
-                        <div id="comments-list-${res.id}">
-                            ${renderCommentsList(res, activeTab)}
+                        <div id="task-comments-sidebar-${res.id}" style="min-width:0;">
+                            ${OL._findCommentHost && typeof OL.renderTaskCommentsSidebarHTML === 'function' ? OL.renderTaskCommentsSidebarHTML(getActiveClient(), res) : ''}
                         </div>
+                        ${isGuest ? '' : `
+                        <div style="margin-top:14px;">
+                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;"><i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails</label>
+                            <div id="resource-notes-email-rows"></div>
+                        </div>`}
                     `}
                 </div>
-    
-                ${activeTab !== 'history' ? `
-                    <div style="padding:12px;border-top:1px solid var(--line);">
-                        ${commentToolbarHtml(res.id)}
-                        <textarea id="new-comment-input-${res.id}" class="modal-textarea"
-                                  placeholder="Type a ${activeTab === 'client' ? 'message to client' : 'private note'}..."
-                                  style="min-height:60px;margin-bottom:8px;font-size:11px;text-align:left;"></textarea>
-                        <button class="btn tiny full-width"
-                                style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'};"
-                                onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">
-                            Post to ${activeTab === 'client' ? 'Client Thread' : 'Internal Stack'}
-                        </button>
-                    </div>
-                ` : ''}
             </aside>
         </div>
 
@@ -1537,7 +1522,7 @@ const dependencyHtml = `
     `;
     
     openModal(html);
-    if (activeTab === 'internal') OL.loadLinkedEmailsIntoResourceNotes(res.id);
+    if (activeTab !== 'history' && !isGuest) OL.loadLinkedEmailsIntoResourceNotes(res.id);
     if (OL.hydrateRollupSection && getActiveClient()) OL.hydrateRollupSection(getActiveClient().id, 'resource', res.id);
     setTimeout(() => {
         const el = document.getElementById('modal-res-name');

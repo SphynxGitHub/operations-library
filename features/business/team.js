@@ -317,7 +317,13 @@ window.OL.renderSphynxTeamPage = OL.renderSphynxTeamPage;
 const SCHED_DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
 const isWeekendDay = (k) => k === 'sat' || k === 'sun';
 const fmtDay = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' }); };
-const fmtRange = (o) => (!o.to || o.to === o.from) ? fmtDay(o.from) : `${fmtDay(o.from)} – ${fmtDay(o.to)}`;
+const fmtTime = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); if (!m) return ''; const h = Number(m[1]); return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`; };
+const fmtRange = (o) => {
+    const one = !o.to || o.to === o.from;
+    const st = fmtTime(o.startTime), en = fmtTime(o.endTime);
+    if (one) return st || en ? `${fmtDay(o.from)}, ${st && en ? `${st} – ${en}` : st ? `from ${st}` : `until ${en}`}` : fmtDay(o.from);
+    return `${fmtDay(o.from)}${st ? ` ${st}` : ''} – ${fmtDay(o.to)}${en ? ` ${en}` : ''}`;
+};
 const localKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 OL.memberScheduleSummary = function(m) {
@@ -357,7 +363,7 @@ OL.openMemberAvailability = function(memberId) {
             </div>
 
             <div class="bold tiny uppercase muted" style="margin-bottom:6px;">Days off</div>
-            <div class="tiny muted" style="margin-bottom:8px;">Nothing is scheduled on these days, and tasks already due then move to the next day that fits.</div>
+            <div class="tiny muted" style="margin-bottom:8px;">Nothing is scheduled on these days, and tasks already due then move to the next day that fits. Add a start and/or end time for a partial day (e.g. a 2:00 PM appointment): only those hours come off that day. On a multi-day range the start time applies to the first day and the end time to the last.</div>
             <div style="display:grid; gap:6px; margin-bottom:10px;">
                 ${off.map(o => `
                     <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; ${String(o.to || o.from) < today ? 'opacity:0.5;' : ''}">
@@ -367,7 +373,9 @@ OL.openMemberAvailability = function(memberId) {
             </div>
             <div style="display:flex; gap:6px; align-items:flex-end; flex-wrap:wrap; padding-top:10px; border-top:1px solid var(--line);">
                 <label class="tiny muted" style="display:grid; gap:3px;">From<input type="date" id="off-from" class="modal-input tiny" style="padding:4px 6px;"></label>
+                <label class="tiny muted" style="display:grid; gap:3px;">Start time (optional)<input type="time" id="off-start" class="modal-input tiny" style="padding:4px 6px;"></label>
                 <label class="tiny muted" style="display:grid; gap:3px;">To (optional)<input type="date" id="off-to" class="modal-input tiny" style="padding:4px 6px;"></label>
+                <label class="tiny muted" style="display:grid; gap:3px;">End time (optional)<input type="time" id="off-end" class="modal-input tiny" style="padding:4px 6px;"></label>
                 <label class="tiny muted" style="display:grid; gap:3px; flex:1; min-width:100px;">Note<input type="text" id="off-note" class="modal-input tiny" placeholder="Vacation" style="padding:4px 6px;"></label>
                 <button class="btn tiny primary" onclick="OL.addMemberOffDates('${m.id}')">Add</button>
             </div>
@@ -396,13 +404,16 @@ OL.addMemberOffDates = function(memberId) {
     const from = document.getElementById('off-from')?.value || '';
     let to = document.getElementById('off-to')?.value || '';
     const note = (document.getElementById('off-note')?.value || '').trim();
+    const startTime = document.getElementById('off-start')?.value || '';
+    const endTime = document.getElementById('off-end')?.value || '';
     if (!from) { alert('Pick the first day off.'); return; }
     if (!to || to < from) to = from;
+    if (to === from && startTime && endTime && endTime <= startTime) { alert('The end time must be after the start time.'); return; }
     updateAndSync(() => {
         const m = state.master?.sphynxTeam?.find(x => x.id === memberId);
         if (!m) return;
         if (!m.schedule) m.schedule = {};
-        m.schedule.offDates = [...(m.schedule.offDates || []), { id: uid(), from, to, note }];
+        m.schedule.offDates = [...(m.schedule.offDates || []), { id: uid(), from, to, ...(startTime ? { startTime } : {}), ...(endTime ? { endTime } : {}), note }];
     }).then(() => {
         OL.openMemberAvailability(memberId);
         // Tasks already due on those days move on right away (needs the Calendar module; harmless if it is not loaded).

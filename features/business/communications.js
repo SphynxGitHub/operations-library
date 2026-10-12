@@ -3,6 +3,8 @@ import { esc, decodeEntities, uid, state, db, updateAndSync, getBusinessScopedCl
 import { getRequestTypes, nextOpenRound } from '../../core/requests.js';
 import { isMaintenanceClient, ensureMaintenanceSheet, buildMaintenanceRequest } from '../../core/maintenance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
+import { linksForTask } from '../../core/task-links.js';
+import { requestResourceIds } from '../../core/request-pricing.js';
 
 const GMAIL_FEED_LIMIT = 150;
 
@@ -16,7 +18,7 @@ OL.commTabState = {
     // Per-link-type filter, each 'any' | 'has' | 'not' — lets you combine
     // conditions across project/resource/task/event (e.g. "has a project,
     // no task yet") instead of one blanket labeled/unlabeled toggle.
-    linkFilters: { project: 'any', resource: 'any', task: 'any', event: 'any' },
+    linkFilters: { project: 'any', request: 'any', task: 'any', event: 'any', resource: 'any' },
     projectFilter: '',    // clientId, or '' for all
     dateFilter: 'all',    // 'all' | 'today' | 'week' | 'month'
     groupBy: 'none',      // 'none' | 'project' | 'date'
@@ -176,10 +178,12 @@ OL.renderCommFeedView = function(commsData, clients) {
             (m.subject || '').toLowerCase().includes(q) ||
             (m.snippet || '').toLowerCase().includes(q);
 
+        const counts = OL.emailLinkCounts(m);
         const matchesLinks = matchesLinkFilter(linkFilters.project, m.linked_client_id)
-            && matchesLinkFilter(linkFilters.resource, m.linked_resource_id)
-            && matchesLinkFilter(linkFilters.task, m.linked_task_id)
-            && matchesLinkFilter(linkFilters.event, m.linked_event_id);
+            && matchesLinkFilter(linkFilters.request, counts.request)
+            && matchesLinkFilter(linkFilters.resource, counts.resource)
+            && matchesLinkFilter(linkFilters.task, counts.task)
+            && matchesLinkFilter(linkFilters.event, counts.event);
         const matchesProject = !projectFilter || m.linked_client_id === projectFilter;
         const matchesDate = !dateThreshold || (m.date && new Date(m.date) >= dateThreshold);
 
@@ -197,9 +201,10 @@ OL.renderCommFeedView = function(commsData, clients) {
 
                 <div class="link-filter-group" style="display:flex; gap:4px; align-items:center; padding:3px; border:1px solid var(--line); border-radius:6px;">
                     ${OL.renderLinkFilterButton('project', 'folder', 'Project')}
-                    ${OL.renderLinkFilterButton('resource', 'box', 'Resource')}
+                    ${OL.renderLinkFilterButton('request', 'git-pull-request', 'Request')}
                     ${OL.renderLinkFilterButton('task', 'check-square', 'Task')}
                     ${OL.renderLinkFilterButton('event', 'calendar', 'Event')}
+                    ${OL.renderLinkFilterButton('resource', 'box', 'Resource')}
                 </div>
 
                 ${OL.renderSearchableProjectPicker({
@@ -332,6 +337,30 @@ OL.renderCommThreadRow = function(m) {
     return OL.renderCommThreadRow.single(m);
 };
 
+// How many different tasks, requests, events and resources an email points at: the whole-email links plus every
+// highlighted part of it that was linked. The same item linked twice counts once.
+OL.emailLinkCounts = function(m) {
+    const seen = { task: new Set(), request: new Set(), event: new Set(), resource: new Set() };
+    if (m.linked_task_id) seen.task.add(String(m.linked_task_id));
+    if (m.linked_request_id) seen.request.add(String(m.linked_request_id));
+    if (m.linked_event_id) seen.event.add(String(m.linked_event_id));
+    if (m.linked_resource_id) seen.resource.add(String(m.linked_resource_id));
+    (Array.isArray(m.piece_links) ? m.piece_links : []).forEach((l) => { if (l && seen[l.targetType]) seen[l.targetType].add(String(l.targetId)); });
+    return { task: seen.task.size, request: seen.request.size, event: seen.event.size, resource: seen.resource.size };
+};
+
+// The project tag is always first on the left, then one small tag per kind of item linked: icon and count.
+OL.renderEmailLinkTags = function(m) {
+    const counts = OL.emailLinkCounts(m);
+    const project = m.linked_client_id
+        ? OL.renderProjectPill(m.linked_client_id, state.clients[m.linked_client_id]?.meta?.name)
+        : '<span class="pill tiny soft" style="opacity:0.6;">No project</span>';
+    const kinds = [['task', 'check-square', 'task'], ['event', 'calendar', 'event'], ['resource', 'box', 'resource'], ['request', 'git-pull-request', 'request']];
+    const tags = kinds.filter(([k]) => counts[k] > 0).map(([k, icon, noun]) =>
+        `<span class="pill tiny soft" style="font-size:10px; display:inline-flex; align-items:center; gap:3px;" title="${counts[k]} ${noun}${counts[k] === 1 ? '' : 's'} linked"><i data-lucide="${icon}" style="width:10px;height:10px; flex-shrink:0;"></i>${counts[k]}</span>`).join('');
+    return `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">${project}${tags}</div>`;
+};
+
 OL.renderCommThreadRow.single = function(m, muted = false) {
     const parsedSender = OL._parseSenderHeader(m.sender);
     const senderName = parsedSender?.name || m.sender || 'Unknown';
@@ -351,15 +380,7 @@ OL.renderCommThreadRow.single = function(m, muted = false) {
             <div style="min-width:0; cursor:pointer;" onclick="OL.openGmailMessageModal('${m.id}')">
                 <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.subject)}</div>
                 ${m.snippet ? `<div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(decodeEntities(m.snippet))}</div>` : ''}
-                ${m.linked_task_id ? `
-                    <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px; white-space:normal; max-width:100%;"><i data-lucide="link" style="width:9px;height:9px; flex-shrink:0;"></i> ${esc(OL.getLinkedTaskLabel(m))}</span>
-                ` : (m.linked_resource_id ? `
-                    <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px; white-space:normal; max-width:100%;"><i data-lucide="database" style="width:9px;height:9px; flex-shrink:0;"></i> ${esc(OL.getLinkedResourceLabel(m))}</span>
-                ` : (m.linked_event_id ? `
-                    <span class="pill tiny soft" style="font-size:9px; margin-top:4px; display:inline-flex; align-items:center; gap:3px; white-space:normal; max-width:100%;"><i data-lucide="calendar" style="width:9px;height:9px; flex-shrink:0;"></i> Linked event</span>
-                ` : (m.linked_client_id ? `
-                    <span style="display:inline-block; margin-top:4px; max-width:100%;">${OL.renderProjectPill(m.linked_client_id, state.clients[m.linked_client_id]?.meta?.name)}</span>
-                ` : '')))}
+                ${OL.renderEmailLinkTags(m)}
             </div>
             <div style="display:flex; gap:6px; justify-content:flex-end;">
                 ${m.archived ? `
@@ -380,9 +401,11 @@ OL.renderCommThreadRow.single = function(m, muted = false) {
 // only / unlinked). Same pattern as the Error Log's grouping.
 // -------------------------------------------------------------
 OL._commLinkTypeLabel = function(m) {
-    if (m.linked_task_id) return 'Tasks';
-    if (m.linked_event_id) return 'Events';
-    if (m.linked_resource_id) return 'Resources';
+    const c = OL.emailLinkCounts(m);
+    if (c.task) return 'Tasks';
+    if (c.request) return 'Requests';
+    if (c.event) return 'Events';
+    if (c.resource) return 'Resources';
     if (m.linked_client_id) return 'Project Only (no specific link)';
     return 'Unlinked';
 };
@@ -598,7 +621,7 @@ OL.checkGoogleAuthReturn = function() {
 OL.loadGmailFeed = async function() {
     const { data, error } = await scopeQueryToBusinessClients(db
         .from('gmail_messages')
-        .select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, link_locked, archived, participants')
+        .select('id, thread_id, sender, subject, snippet, date, linked_client_id, linked_task_id, linked_resource_id, linked_request_id, linked_event_id, link_locked, archived, participants, piece_links')
         .eq('archived', OL.commTabState.showArchived), 'linked_client_id')
         .order('date', { ascending: false })
         .limit(GMAIL_FEED_LIMIT);
@@ -1215,7 +1238,7 @@ OL.renderGmailThread = function() {
 // "+ Link" on a thread row: open that email and go straight to its link editor.
 OL.openGmailThreadMessageLink = async function(id) {
     await OL.openGmailMessageModal(id, { keepQuoted: true });
-    OL.openGmailLinkModal();
+    OL.toggleEmailProjectPicker();
 };
 
 OL.openGmailMessageModal = async function(id, opts = {}) {
@@ -1280,11 +1303,10 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             ${total > 1 ? `<span class="pill tiny soft">Email ${position} of ${total}</span>` : ''}
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <!-- Link bar: what THIS email is linked to (click a pill to change it) and the client's open tasks. -->
+        <!-- Link bar: this email's project only. Tasks, requests, events and resources are linked from the text below. -->
         <div class="gmail-link-bar" style="position:relative; display:flex; align-items:center; gap:10px; padding:10px 24px; border-bottom:1px solid var(--line); background:rgba(255,255,255,0.02);">
             <div id="gmail-link-summary" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;"></div>
             <span style="flex:1;"></span>
-            <div id="gmail-open-client-asks"></div>
         </div>
         <div class="modal-body" style="max-width:1000px; width:100%;">
             <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:14px;">
@@ -1361,10 +1383,10 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
     openModal(html);
     OL.renderGmailLinkSummary();
     OL.renderGmailThread();
-    OL.renderGmailOpenClientAsks({ ...m, linked_client_id: askClientId });
     OL.renderGmailPieceLinks(m);
     OL.renderGmailAttachments(m);
     OL.attachExcerptSelectionHandler(m.id);
+    if (!m.body_html) OL.markLinkedExcerpts(m, null);
     OL.loadThreadLinkSuggestion(m);
     // No auto-extracted suggestions: linking is done by highlighting text in the email (latest message only).
 
@@ -1391,7 +1413,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             // this is the parent's trusted code, not anything from the
             // email's own HTML (which still can't execute, no allow-scripts).
             // That's what makes excerpt selection possible here at all.
-            frame.addEventListener('load', () => { OL._fitEmailFrame(frame, 70); OL.attachExcerptSelectionHandler(id, frame); }, { once: true });
+            frame.addEventListener('load', () => { OL.markLinkedExcerpts(m, frame); OL._fitEmailFrame(frame, 70); OL.attachExcerptSelectionHandler(id, frame); }, { once: true });
         }
     }
 
@@ -1589,11 +1611,36 @@ OL.attachExcerptSelectionHandler = function(messageId, frame) {
     });
 };
 
-// ---- the picker for one excerpt (or, once attachments are synced, one attachment) ----
+// ---- the picker for one excerpt (or one attachment) ----
+// Four sections in the order work happens: Request, Tasks, Events, Resources. Several of each can be picked at once;
+// one link is saved per pick. Picking requests narrows Tasks and Resources to what belongs to them (a "Show all" switch
+// undoes that); with no request picked, Tasks lists every task on the project.
 OL.openExcerptLinkPicker = function(messageId, excerptText, kind = 'excerpt', attachmentPath = null) {
-    OL._excerptLinkState = { messageId, excerptText, kind, attachmentPath, targetType: '', targetId: '', targetLabel: '', note: '', query: '', creatingNewTask: false, newTaskTitle: '', creatingNewRequest: false, newRequestTitle: '', newRequestType: 'build' };
+    OL._excerptLinkState = { messageId, excerptText, kind, attachmentPath, selected: [], targetType: '', targetId: '', targetLabel: '', note: '', query: '', showAllTasks: false, showDoneTasks: false, events: [], creatingNewTask: false, newTaskTitle: '', creatingNewRequest: false, newRequestTitle: '', newRequestType: 'build' };
     OL.renderExcerptLinkPicker();
+    OL._loadExcerptPickerEvents();
 };
+
+// Calendar events aren't all loaded client-side, so this asks Supabase: this project's events from a month either side,
+// or a title search while typing.
+OL._loadExcerptPickerEvents = async function() {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    const clientId = OL._gmailLinkState?.clientId || '';
+    const q = (st.query || '').trim();
+    let req = db.from('calendar_events').select('id, title, start').order('start', { ascending: false }).limit(25);
+    if (clientId) req = req.eq('linked_client_id', clientId);
+    if (q) req = req.ilike('title', `%${q}%`);
+    else {
+        req = req.gte('start', new Date(Date.now() - 30 * 86400000).toISOString()).lte('start', new Date(Date.now() + 30 * 86400000).toISOString());
+    }
+    const { data } = await req;
+    if (OL._excerptLinkState !== st || (st.query || '').trim() !== q) return;   // moved on while this was in flight
+    st.events = data || [];
+    OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker());
+};
+
+OL._excerptIsPicked = (type, id) => !!OL._excerptLinkState?.selected?.some((x) => x.type === type && String(x.id) === String(id));
 
 OL.renderExcerptLinkPicker = function() {
     const st = OL._excerptLinkState;
@@ -1603,47 +1650,84 @@ OL.renderExcerptLinkPicker = function() {
     const client = clientId ? state.clients?.[clientId] : null;
 
     const query = (st.query || '').trim().toLowerCase();
-    const taskPool = client ? (client.projectData?.clientTasks || []) : (OL._allClientTasksFlat ? OL._allClientTasksFlat() : []);
-    const requestPool = client ? OL.listProjectRequests(client) : (OL._allClientRequestsFlat ? OL._allClientRequestsFlat() : []);
-    const resourcePool = client ? (client.projectData?.localResources || []) : (OL._allClientResourcesFlat ? OL._allClientResourcesFlat() : []);
-
     const matchTitle = (v) => String(v || '').toLowerCase().includes(query);
-    const tasks = taskPool.filter((t) => matchTitle(t.title || t.name)).slice(0, 30);
-    const requests = requestPool.filter((r) => matchTitle(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))).slice(0, 30);
+    const titleOfRequest = (r) => (OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title));
+
+    const requestPool = client ? OL.listProjectRequests(client).filter((r) => st.showClosedRequests || (r.status !== 'Done' && r.status !== "Don't Do")) : (OL._allClientRequestsFlat ? OL._allClientRequestsFlat() : []);
+    const requests = requestPool.filter((r) => matchTitle(titleOfRequest(r))).slice(0, 60);
+
+    // Requests picked so far narrow the other lists.
+    const pickedRequestIds = st.selected.filter((x) => x.type === 'request').map((x) => String(x.id));
+    const narrowed = pickedRequestIds.length > 0 && !st.showAllTasks;
+    const pickedRequestItems = pickedRequestIds.map((id) => requestPool.find((r) => String(r.id) === id)).filter(Boolean);
+    const resourceIdsOfPicked = new Set(pickedRequestItems.flatMap((r) => requestResourceIds(r).map(String)));
+
+    let taskPool = client ? (client.projectData?.clientTasks || []) : (OL._allClientTasksFlat ? OL._allClientTasksFlat() : []);
+    taskPool = taskPool.filter((t) => st.showDoneTasks || !(t.status === 'Done' || t.status === 'Completed' || t.completed));
+    if (narrowed) taskPool = taskPool.filter((t) => linksForTask(t).some((l) => pickedRequestIds.includes(String(l.requestId))));
+    const tasks = taskPool.filter((t) => matchTitle(t.title || t.name)).slice(0, 80);
+
+    let resourcePool = client ? (client.projectData?.localResources || []).filter((r) => !r.systemPinned && !r.adminPinned && !String(r.id).startsWith('step-')) : (OL._allClientResourcesFlat ? OL._allClientResourcesFlat() : []);
+    if (narrowed) resourcePool = resourcePool.filter((r) => resourceIdsOfPicked.has(String(r.id)));
     const resourceGroups = groupResources(resourcePool, st.query || '', { extra: (r) => r._clientName });
-    const resources = flattenGroups(resourceGroups).slice(0, 60);
+    const resources = flattenGroups(resourceGroups).slice(0, 80);
+
+    const events = (st.events || []).filter((e) => !query || matchTitle(e.title));
 
     // Picks are looked up by position rather than written into the onclick text, so a title containing an
     // apostrophe or quote (e.g. "Review Anthony's email") can't break the handler.
-    const titleOfRequest = (r) => (OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title));
     OL._excerptPickLists = {
         task: tasks.map((t) => ({ id: t.id, label: t.title || t.name })),
         request: requests.map((r) => ({ id: r.id, label: titleOfRequest(r) })),
         resource: resources.map((r) => ({ id: r.id, label: r.name })),
+        event: events.map((e) => ({ id: e.id, label: e.title })),
     };
-    const pick = (type, id, label) => { OL._excerptLinkState.targetType = type; OL._excerptLinkState.targetId = id; OL._excerptLinkState.targetLabel = label; OL.renderExcerptLinkPicker(); };
 
+    const TYPE_LABEL = { request: 'Request', task: 'Task', event: 'Event', resource: 'Resource' };
+    const row = (type, i, label, sub) => {
+        const on = OL._excerptIsPicked(type, OL._excerptPickLists[type][i].id);
+        return `<label class="tiny" style="display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border:1px solid ${on ? 'var(--accent)' : 'var(--line)'}; background:${on ? 'rgba(var(--accent-rgb), 0.06)' : 'transparent'}; border-radius:6px; cursor:pointer;">
+            <input type="checkbox" ${on ? 'checked' : ''} style="margin:2px 0 0; flex-shrink:0;" onchange="OL.__excerptToggleIdx('${type}', ${i})">
+            <span style="min-width:0; overflow-wrap:anywhere;">${esc(label)}${sub ? `<span class="muted" style="display:block; font-size:10px;">${esc(sub)}</span>` : ''}</span>
+        </label>`;
+    };
+    const sectionHead = (icon, label, count, extraHtml = '') => `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:6px;">
+            <div class="tiny bold uppercase muted" style="display:flex; align-items:center; gap:5px;"><i data-lucide="${icon}" style="width:12px;height:12px;"></i>${label}<span class="pill tiny soft" style="font-size:9px;">${count}</span></div>
+            ${extraHtml}
+        </div>`;
+
+    const requestsHtml = requests.length ? requests.map((r, i) => row('request', i, titleOfRequest(r), [r.requestType, r.status].filter(Boolean).join(' · '))).join('') : '<div class="tiny muted">None</div>';
+    const tasksHtml = tasks.length ? tasks.map((t, i) => row('task', i, t.title || t.name, t.status && t.status !== 'To Do' ? t.status : '')).join('') : `<div class="tiny muted">${narrowed ? 'No tasks on the selected request(s).' : 'None'}</div>`;
+    const eventsHtml = events.length ? events.map((e, i) => row('event', i, e.title, e.start ? new Date(e.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')).join('') : `<div class="tiny muted">${query ? 'No matching events.' : 'No events in the last or next 30 days. Type to search.'}</div>`;
+    const resourcesHtml = groupsHtml(resourceGroups.map((g) => ({ label: g.label, items: g.items.filter((r) => resources.includes(r)) })).filter((g) => g.items.length), (r) => {
+        const i = resources.indexOf(r);
+        return row('resource', i, r.name, '');
+    }, { query: st.query || '', empty: narrowed ? 'No resources on the selected request(s).' : 'None' });
+
+    const pickedChips = st.selected.length ? `
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+            ${st.selected.map((x, i) => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:5px;"><span class="muted">${TYPE_LABEL[x.type]}</span> ${esc(x.label.length > 40 ? x.label.slice(0, 39) + '…' : x.label)}
+                <button type="button" class="btn tiny ghost" style="padding:0 2px; line-height:1;" title="Remove" onclick="OL.__excerptRemoveIdx(${i})"><i data-lucide="x" style="width:10px;height:10px;"></i></button></span>`).join('')}
+        </div>` : '';
+
+    const creating = st.creatingNewTask || st.creatingNewRequest;
     const content = `
-        <div style="padding:24px 36px 24px 24px; box-sizing:border-box; max-width:900px; width:90vw;" onclick="event.stopPropagation()">
+        <div style="padding:24px 36px 24px 24px; box-sizing:border-box; width:min(1280px, 94vw);" onclick="event.stopPropagation()">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:14px;">
-                <div>
+                <div style="min-width:0;">
                     <h3 style="margin:0; font-size:15px;">Link this ${st.kind}</h3>
-                    <div class="tiny muted" style="margin-top:4px; max-width:520px;">"${esc(st.excerptText.length > 140 ? st.excerptText.slice(0, 140) + '…' : st.excerptText)}"</div>
+                    <div class="tiny muted" style="margin-top:4px; max-width:720px;">"${esc(st.excerptText.length > 200 ? st.excerptText.slice(0, 200) + '…' : st.excerptText)}"</div>
                 </div>
-                <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">✕</button>
+                <button class="btn tiny soft" title="Close" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
             </div>
 
-            ${st.targetId ? `
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(var(--accent-rgb), 0.06); border:1px solid var(--accent); border-radius:6px; margin-bottom:12px;">
-                    <span class="tiny bold">${esc(st.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(st.targetType)}</span></span>
-                    <button class="btn tiny soft" onclick="OL._excerptLinkState.targetType=''; OL._excerptLinkState.targetId=''; OL.renderExcerptLinkPicker();">Change</button>
-                </div>
-            ` : st.creatingNewTask ? `
+            ${st.creatingNewTask ? `
                 <div style="padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:12px;">
                     <label class="tiny muted bold" style="display:block; margin-bottom:4px;">New task title</label>
                     <input type="text" id="excerpt-new-task-title" class="modal-input tiny" style="width:100%; margin-bottom:8px;" value="${esc(st.newTaskTitle || '')}"
                            oninput="OL._excerptLinkState.newTaskTitle=this.value">
-                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a task.</div>` : ''}
+                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (top of the email) before creating a task.</div>` : ''}
                 </div>
             ` : st.creatingNewRequest ? `
                 <div style="padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:12px;">
@@ -1654,7 +1738,7 @@ OL.renderExcerptLinkPicker = function() {
                     <select class="modal-input tiny" style="width:100%; margin-bottom:8px;" onchange="OL._excerptLinkState.newRequestType=this.value">
                         ${(typeof getRequestTypes === 'function' ? getRequestTypes() : [{key:'build',label:'Build'},{key:'revision',label:'Revision'}]).map((t) => `<option value="${esc(t.key)}" ${st.newRequestType === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
                     </select>
-                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (below) before creating a request.</div>` : ''}
+                    ${!clientId ? `<div class="tiny" style="color:#ef4444; margin-bottom:8px;">Link this email to a project first (top of the email) before creating a request.</div>` : ''}
                     ${(state.adminMode === true || state.teamMemberMode === true) ? `
                         <label class="tiny" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; cursor:pointer;">
                             <input type="checkbox" ${st.activateNow ? 'checked' : ''} ${clientId ? '' : 'disabled'} onchange="OL._excerptLinkState.activateNow=this.checked; OL.renderExcerptLinkPicker();">
@@ -1667,26 +1751,31 @@ OL.renderExcerptLinkPicker = function() {
                         : 'Created in the Backlog (round 0): it waits on the scoping sheet until someone gives it a round.'}</div>
                 </div>
             ` : `
-                <input type="text" class="modal-input tiny" placeholder="Search tasks, requests, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
-                       oninput="OL._excerptLinkState.query=this.value; OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker());">
-                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:8px;">
+                <input type="text" class="modal-input tiny" placeholder="Search requests, tasks, events, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
+                       oninput="OL._excerptLinkState.query=this.value; OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker()); clearTimeout(OL._excerptEventTimer); OL._excerptEventTimer = setTimeout(() => OL._loadExcerptPickerEvents(), 300);">
+                ${pickedChips}
+                ${pickedRequestIds.length ? `
+                    <div class="tiny muted" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                        <i data-lucide="filter" style="width:12px;height:12px;"></i>
+                        ${narrowed ? `Tasks and resources are filtered to the ${pickedRequestIds.length === 1 ? 'selected request' : pickedRequestIds.length + ' selected requests'}.` : 'Showing every task and resource on the project.'}
+                        <button class="btn tiny ghost" style="font-size:10px;" onclick="OL._excerptLinkState.showAllTasks=!OL._excerptLinkState.showAllTasks; OL.renderExcerptLinkPicker();">${narrowed ? 'Show all' : 'Filter to request'}</button>
+                    </div>` : ''}
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:10px;">
                     <div>
-                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Tasks</div>
-                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${tasks.length ? tasks.map((t, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('task', ${i})">${esc(t.title || t.name)}</div>`).join('') : `<div class="tiny muted">None</div>`}
-                        </div>
+                        ${sectionHead('git-pull-request', 'Request', requests.length, `<button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._excerptLinkState.showClosedRequests=!OL._excerptLinkState.showClosedRequests; OL.renderExcerptLinkPicker();">${st.showClosedRequests ? 'Hide closed' : 'Show closed'}</button>`)}
+                        <div style="display:grid; gap:4px; max-height:300px; overflow:auto;">${requestsHtml}</div>
                     </div>
                     <div>
-                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Requests</div>
-                        <div style="display:grid; gap:4px; max-height:200px; overflow:auto;">
-                            ${requests.length ? requests.map((r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('request', ${i})">${esc(OL.requestItemTitle ? OL.requestItemTitle(client, r) : (r.name || r.title))}</div>`).join('') : `<div class="tiny muted">None</div>`}
-                        </div>
+                        ${sectionHead('check-square', 'Tasks', tasks.length, `<button class="btn tiny ghost" style="font-size:9px; padding:0 4px;" onclick="OL._excerptLinkState.showDoneTasks=!OL._excerptLinkState.showDoneTasks; OL.renderExcerptLinkPicker();">${st.showDoneTasks ? 'Hide done' : 'Show done'}</button>`)}
+                        <div style="display:grid; gap:4px; max-height:300px; overflow:auto;">${tasksHtml}</div>
                     </div>
                     <div>
-                        <div class="tiny bold uppercase muted" style="margin-bottom:4px;">Resources</div>
-                        <div style="max-height:200px; overflow:auto;">
-                            ${groupsHtml(resourceGroups.map((g) => ({ label: g.label, items: g.items.filter((r) => resources.includes(r)) })).filter((g) => g.items.length), (r, i) => `<div class="tiny" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onclick="OL.__excerptPickIdx('resource', ${i})">${esc(r.name)}</div>`, { query: st.query || '', empty: 'None' })}
-                        </div>
+                        ${sectionHead('calendar', 'Events', events.length)}
+                        <div style="display:grid; gap:4px; max-height:300px; overflow:auto;">${eventsHtml}</div>
+                    </div>
+                    <div>
+                        ${sectionHead('box', 'Resources', resources.length)}
+                        <div style="max-height:300px; overflow:auto;">${resourcesHtml}</div>
                     </div>
                 </div>
                 <div class="tiny muted" style="margin-bottom:12px;">Not finding it? <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateTask();">Create a new task</a> or <a href="#" onclick="event.preventDefault(); OL.startExcerptCreateRequest();">create a new request</a> instead${!clientId ? ' (link this email to a project first)' : ''}.</div>
@@ -1705,26 +1794,29 @@ OL.renderExcerptLinkPicker = function() {
                     <button class="btn tiny primary" ${clientId ? '' : 'disabled'} onclick="OL.confirmExcerptCreateRequest()">${(state.adminMode === true || state.teamMemberMode === true) && st.activateNow ? 'Create, link & set up tasks' : 'Create & link'}</button>
                 ` : `
                     <button class="btn tiny soft" onclick="OL._excerptLinkState=null; OL.closeModal(); OL.openGmailMessageModal('${st.messageId}')">Cancel</button>
-                    <button class="btn tiny primary" ${st.targetId ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">Link ${st.kind}</button>
+                    <button class="btn tiny primary" ${st.selected.length ? '' : 'disabled'} onclick="OL.confirmExcerptLink()">${st.selected.length > 1 ? `Link ${st.kind} to ${st.selected.length} items` : `Link ${st.kind}`}</button>
                 `}
             </div>
         </div>
     `;
     OL.showOverlayModal(content);
+    if (window.lucide) lucide.createIcons();
 };
 
-OL.__excerptPickIdx = function(type, index) {
+OL.__excerptToggleIdx = function(type, index) {
+    const st = OL._excerptLinkState;
     const item = OL._excerptPickLists?.[type]?.[index];
-    if (item) OL.__excerptPick(type, item.id, item.label);
+    if (!st || !item) return;
+    const at = st.selected.findIndex((x) => x.type === type && String(x.id) === String(item.id));
+    if (at >= 0) st.selected.splice(at, 1);
+    else st.selected.push({ type, id: item.id, label: item.label });
+    OL.renderExcerptLinkPicker();
 };
 
-// Bridge for the inline onclick handlers above (keeps the picker's own
-// state update + re-render in one place rather than duplicated per column).
-OL.__excerptPick = function(type, id, label) {
-    if (!OL._excerptLinkState) return;
-    OL._excerptLinkState.targetType = type;
-    OL._excerptLinkState.targetId = id;
-    OL._excerptLinkState.targetLabel = label;
+OL.__excerptRemoveIdx = function(index) {
+    const st = OL._excerptLinkState;
+    if (!st) return;
+    st.selected.splice(index, 1);
     OL.renderExcerptLinkPicker();
 };
 
@@ -1764,7 +1856,7 @@ OL.confirmExcerptCreateTask = async function() {
     }, clientId);
     if (!newTaskId) return;
 
-    st.targetType = 'task'; st.targetId = newTaskId; st.targetLabel = title;
+    st.selected.push({ type: 'task', id: newTaskId, label: title });
     st.creatingNewTask = false;
     await OL.confirmExcerptLink();
 };
@@ -1854,7 +1946,7 @@ OL.confirmExcerptCreateRequest = async function() {
     }, clientId);
     if (!newItemId) return;
 
-    st.targetType = 'request'; st.targetId = newItemId; st.targetLabel = title;
+    st.selected.push({ type: 'request', id: newItemId, label: title });
     st.creatingNewRequest = false;
     if (activateMode === 'review') {
         st.afterLink = async () => { await OL.openActivationReview(clientId, newItemId); };
@@ -1870,17 +1962,21 @@ OL.confirmExcerptCreateRequest = async function() {
 
 OL.confirmExcerptLink = async function() {
     const st = OL._excerptLinkState;
-    if (!st || !st.targetId) return;
+    if (!st || !st.selected?.length) return;
 
     const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links, suggestions').eq('id', st.messageId).single();
     if (fetchErr) { alert('Could not load this email to link it.'); return; }
 
+    // One link per pick, all pointing at the same excerpt.
     const pieceLinks = Array.isArray(m.piece_links) ? m.piece_links.slice() : [];
-    pieceLinks.push({
-        id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
-        targetType: st.targetType, targetId: st.targetId, targetLabel: st.targetLabel,
-        attachmentPath: st.attachmentPath || null,
-        createdAt: new Date().toISOString(),
+    const createdAt = new Date().toISOString();
+    st.selected.forEach((t) => {
+        pieceLinks.push({
+            id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
+            targetType: t.type, targetId: t.id, targetLabel: t.label,
+            attachmentPath: st.attachmentPath || null,
+            createdAt,
+        });
     });
 
     const updatePayload = { piece_links: pieceLinks };
@@ -1896,9 +1992,13 @@ OL.confirmExcerptLink = async function() {
 
     // A new link straight to a request rolls down onto its existing build tasks right away — not just at
     // activation (core/roll-down.js / features/rollup.js). A no-op if the request hasn't been activated yet.
-    if (st.targetType === 'request' && typeof OL.rollDownForRequest === 'function') {
+    if (typeof OL.rollDownForRequest === 'function') {
         const clientId = OL._gmailLinkState?.clientId;
-        if (clientId) { try { await OL.rollDownForRequest(clientId, st.targetId); } catch (e) { console.warn('Roll-down failed:', e); } }
+        if (clientId) {
+            for (const t of st.selected.filter((x) => x.type === 'request')) {
+                try { await OL.rollDownForRequest(clientId, t.id); } catch (e) { console.warn('Roll-down failed:', e); }
+            }
+        }
     }
 
     const afterLink = st.afterLink;
@@ -1982,11 +2082,86 @@ OL.renderGmailPieceLinks = function(m) {
     `;
 };
 
+// ---- inline callouts: linked passages are highlighted in the email, each with a small tag for what it points at ----
+OL.markLinkedExcerpts = function(m, frame) {
+    try {
+        const doc = frame ? frame.contentDocument : document;
+        const root = frame ? doc?.body : document.getElementById('gmail-body-plain');
+        if (!doc || !root) return;
+        const links = (Array.isArray(m.piece_links) ? m.piece_links : []).filter((l) => l && l.kind !== 'attachment' && String(l.text || '').trim());
+        if (!links.length) return;
+        const clientId = m.linked_client_id || '';
+        const byText = new Map();
+        links.forEach((l) => {
+            const key = String(l.text).replace(/\s+/g, ' ').trim();
+            if (!byText.has(key)) byText.set(key, []);
+            byText.get(key).push(l);
+        });
+        const TYPE = { task: 'Task', request: 'Request', event: 'Event', resource: 'Resource' };
+        byText.forEach((group, needle) => {
+            // Flatten the text, collapsing runs of whitespace the way the selection did, remembering where each character lives.
+            const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
+            let norm = '';
+            const map = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                const tag = node.parentElement?.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE' || node.parentElement?.closest?.('[data-ol-callout]')) continue;
+                const t = node.data;
+                for (let i = 0; i < t.length; i++) {
+                    if (/\s/.test(t[i])) { if (norm.endsWith(' ')) continue; norm += ' '; } else norm += t[i];
+                    map.push([node, i]);
+                }
+            }
+            const at = norm.indexOf(needle);
+            if (at < 0) return;
+            const first = map[at], last = map[at + needle.length - 1];
+            if (!first || !last) return;
+            // The text nodes the passage covers, each with the part of it that is inside the passage.
+            const segs = [];
+            const ordered = [...new Set(map.slice(at, at + needle.length).map((x) => x[0]))];
+            ordered.forEach((n) => {
+                const s0 = n === first[0] ? first[1] : 0;
+                const e0 = n === last[0] ? last[1] + 1 : n.data.length;
+                if (e0 > s0) segs.push([n, s0, e0]);
+            });
+            let lastMark = null;
+            for (let i = segs.length - 1; i >= 0; i--) {
+                const [n, s0, e0] = segs[i];
+                const r = doc.createRange();
+                r.setStart(n, s0); r.setEnd(n, e0);
+                const mark = doc.createElement('mark');
+                mark.setAttribute('data-ol-excerpt', '1');
+                mark.style.cssText = 'background:rgba(45,212,191,0.28); color:inherit; border-bottom:2px solid #14b8a6; border-radius:2px;';
+                r.surroundContents(mark);
+                if (!lastMark) lastMark = mark;
+            }
+            if (!lastMark) return;
+            const callout = doc.createElement('span');
+            callout.setAttribute('data-ol-callout', '1');
+            callout.style.cssText = 'display:inline-flex; flex-wrap:wrap; gap:3px; margin-left:4px; vertical-align:baseline; user-select:none;';
+            group.forEach((l) => {
+                const pill = doc.createElement('span');
+                const label = String(l.targetLabel || '');
+                pill.textContent = `${TYPE[l.targetType] || 'Link'}: ${label.length > 32 ? label.slice(0, 31) + '…' : label}`;
+                pill.title = `${TYPE[l.targetType] || 'Link'}: ${label}${l.note ? '\n' + l.note : ''}\nClick to open`;
+                pill.style.cssText = 'font:600 10px/1.5 system-ui,sans-serif; padding:0 6px; border-radius:99px; background:#ccfbf1; color:#0f766e; border:1px solid #5eead4; cursor:pointer; white-space:nowrap;';
+                pill.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); OL.jumpToGmailPieceTarget(l.targetType, l.targetId, clientId); };
+                callout.appendChild(pill);
+            });
+            lastMark.after(callout);
+        });
+    } catch (e) {
+        console.warn('Could not mark linked passages:', e);
+    }
+};
+
 OL.jumpToGmailPieceTarget = function(type, id, clientId) {
     OL.closeModal();
     if (type === 'task') { OL.openTaskInContext(clientId, id); return; }
     if (type === 'request') { OL.openRequestFromTask(clientId, id); return; }
     if (type === 'resource' && typeof OL.openResourceModal === 'function') { OL.openResourceModal(id); return; }
+    if (type === 'event' && typeof OL.openCalendarEventModal === 'function') { OL.openCalendarEventModal(id); return; }
 };
 
 OL.unlinkGmailPiece = async function(messageId, pieceLinkId) {
@@ -3092,44 +3267,94 @@ OL._findResourceForTask = function(clientId, task) {
     return resources.find(r => (r.name || '').trim().toLowerCase() === label) || null;
 };
 
-// Compact, always-visible readout of the current link state (chips for
-// whatever's linked, or "Not linked yet") plus a single button. All the
-// actual picking happens in the modal opened by OL.openGmailLinkModal —
-// this just reflects the result, same as a resolved suggestion would.
+// The bar at the top of an email shows only its project: the project tag (click to open the project) and a link icon
+// that edits it, with a dropdown that has a search box. Tasks, requests, events and resources are linked from the
+// email text itself (highlight a passage, "Link this"), so they have no place up here.
+OL._emailProjectPicker = { open: false, query: '' };
+
 OL.renderGmailLinkSummary = function() {
     const st = OL._gmailLinkState;
     const container = document.getElementById('gmail-link-summary');
     if (!container || !st) return;
 
     const client = st.clientId ? state.clients[st.clientId] : null;
-    const resource = st.resourceId
-        ? (client?.projectData?.localResources || []).find(r => r.id === st.resourceId) || OL._allClientResourcesFlat().find(r => r.id === st.resourceId)
-        : null;
-    const task = st.taskId
-        ? (client?.projectData?.clientTasks || []).find(t => t.id === st.taskId) || OL._allClientTasksFlat().find(t => t.id === st.taskId)
-        : null;
-    const request = st.requestId
-        ? (client?.projectData?.scopingSheets?.[0]?.lineItems || []).find(r => String(r.id) === String(st.requestId)) || OL._allClientRequestsFlat().find(r => String(r.id) === String(st.requestId))
-        : null;
-    const event = st.eventId ? OL._gmailLinkSelectedEvent : null;
+    const picker = OL._emailProjectPicker;
+    const q = (picker.query || '').trim().toLowerCase();
+    const all = Object.values(state.clients || {}).sort((a, b) => String(a.meta?.name || '').localeCompare(String(b.meta?.name || '')));
+    const matches = (q ? all.filter((c) => String(c.meta?.name || '').toLowerCase().includes(q)) : all).slice(0, 60);
 
-    const chips = [
-        client ? `Project: ${client.meta?.name || 'Unnamed'}` : '',
-        resource ? `Resource: ${resource.name}` : '',
-        task ? `Task: ${task.title || task.name}` : '',
-        request ? `Request: ${request.name || request.title}` : '',
-        event ? `Event: ${event.title}` : ''
-    ].filter(Boolean);   // plain text; escaped once when drawn below
-
-    // A link icon, then this email's links as pills. Clicking any pill (or "+ Link" when there are none) opens the editor.
-    const pillHtml = (text) => `<span class="pill tiny soft" role="button" tabindex="0" style="cursor:pointer;" title="Click to edit this email's link" onclick="OL.openGmailLinkModal()" onkeydown="if(event.key==='Enter') OL.openGmailLinkModal()">${esc(text)}</span>`;
     container.innerHTML = `
-        <i data-lucide="link" style="width:14px;height:14px;flex-shrink:0;opacity:0.8;" aria-label="Linked to"></i>
-        ${chips.length
-            ? chips.map(pillHtml).join('')
-            : `<span class="pill tiny soft" role="button" tabindex="0" style="cursor:pointer;" onclick="OL.openGmailLinkModal()" onkeydown="if(event.key==='Enter') OL.openGmailLinkModal()">Not linked yet · + Link</span>`}
+        <i data-lucide="folder" style="width:14px;height:14px;flex-shrink:0;opacity:0.8;" aria-label="Project"></i>
+        ${client
+            ? OL.renderProjectPill(st.clientId, client.meta?.name || 'Unnamed', { stopPropagation: true }).replace('onclick="', 'onclick="OL.closeModal(); ')
+            : '<span class="pill tiny soft" style="opacity:0.75;">No project</span>'}
+        <span style="position:relative; display:inline-flex;">
+            <button type="button" class="btn tiny soft" style="padding:3px 6px;" title="${client ? 'Change project' : 'Link to a project'}" aria-label="Edit project" aria-haspopup="listbox" aria-expanded="${picker.open}" onclick="OL.toggleEmailProjectPicker()">
+                <i data-lucide="link" style="width:12px;height:12px;"></i>
+            </button>
+            ${picker.open ? `
+                <div id="email-project-picker" style="position:absolute; top:calc(100% + 6px); left:0; z-index:50; width:300px; max-width:80vw; padding:8px; background:var(--bg-card, #1e293b); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+                    <input type="text" id="email-project-search" class="modal-input tiny" style="width:100%; box-sizing:border-box; margin-bottom:6px;" placeholder="Search projects..." value="${esc(picker.query || '')}" oninput="OL.setEmailProjectQuery(this.value)">
+                    <div role="listbox" style="max-height:240px; overflow:auto; display:grid; gap:3px;">
+                        ${client ? `<div class="tiny muted" role="option" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;" onmousedown="OL.setEmailProject('')">Remove project link</div>` : ''}
+                        ${matches.length ? matches.map((c) => `<div class="tiny" role="option" aria-selected="${c.id === st.clientId}" style="padding:6px 8px; border:1px solid ${c.id === st.clientId ? 'var(--accent)' : 'var(--line)'}; border-radius:6px; cursor:pointer;" onmousedown="OL.setEmailProject('${esc(c.id)}')">${esc(c.meta?.name || 'Unnamed')}</div>`).join('') : '<div class="tiny muted" style="padding:6px 8px;">No matching projects.</div>'}
+                    </div>
+                </div>` : ''}
+        </span>
     `;
     if (window.lucide) lucide.createIcons();
+    if (picker.open) document.getElementById('email-project-search')?.focus();
+};
+
+OL.toggleEmailProjectPicker = function() {
+    OL._emailProjectPicker = { open: !OL._emailProjectPicker.open, query: '' };
+    OL.renderGmailLinkSummary();
+};
+
+OL.setEmailProjectQuery = function(value) {
+    OL._emailProjectPicker.query = value;
+    OL.reRenderPreservingFocus(() => OL.renderGmailLinkSummary());
+};
+
+// Click outside the dropdown closes it.
+document.addEventListener('mousedown', (e) => {
+    if (!OL._emailProjectPicker?.open) return;
+    const t = e.target;
+    if (!t || !document.body.contains(t)) return;
+    if (t.closest && t.closest('#email-project-picker')) return;
+    if (t.closest && t.closest('[aria-label="Edit project"]')) return;
+    OL._emailProjectPicker.open = false;
+    OL.renderGmailLinkSummary();
+});
+
+// Saves the email's project straight away. Changing the project clears a whole-email task / resource / request link made
+// under the old one (it belongs to that project); parts of the email that are linked keep their links.
+OL.setEmailProject = async function(clientId) {
+    const st = OL._gmailLinkState;
+    if (!st) return;
+    const previous = st.clientId || '';
+    OL._emailProjectPicker = { open: false, query: '' };
+    if ((clientId || '') === previous) { OL.renderGmailLinkSummary(); return; }
+
+    const payload = { linked_client_id: clientId || null, link_locked: true };
+    if (previous) Object.assign(payload, { linked_task_id: null, linked_resource_id: null, linked_request_id: null });
+    const { error } = await db.from('gmail_messages').update(payload).eq('id', st.emailId);
+    if (error) { alert('Failed to save the project: ' + error.message); OL.renderGmailLinkSummary(); return; }
+
+    st.clientId = clientId || '';
+    if (previous) { st.taskId = ''; st.resourceId = ''; st.requestId = ''; }
+    st.hadLinks = !!(st.clientId || st.eventId);
+    OL.renderGmailLinkSummary();
+    await OL.loadGmailFeed();
+    OL._refreshAfterGmailAction();
+
+    // Same prompt a whole-email link used to raise: offer to add the sender to the project's Team tab.
+    if (clientId) {
+        const { data: m } = await db.from('gmail_messages').select('participants, sender').eq('id', st.emailId).single();
+        const raw = (m?.participants && m.participants.length) ? m.participants : (m?.sender ? [m.sender] : []);
+        const external = raw.filter((email) => { const c = (email || '').toLowerCase().trim(); return c && !c.endsWith('@sphynxautomation.com') && !c.includes('no-reply'); });
+        for (const email of external) await OL._maybePromptAddSenderToTeam(clientId, email);
+    }
 };
 
 // Opens the full picker as a modal overlay on top of the email modal — the
@@ -3893,21 +4118,16 @@ OL.loadThreadLinkSuggestion = async function(m) {
     const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(prior.linked_task_id));
     const resource = client?.projectData?.localResources?.find(r => String(r.id) === String(prior.linked_resource_id));
     const request = (client?.projectData?.scopingSheets || []).flatMap(sh => sh?.lineItems || []).find(i => String(i?.id) === String(prior.linked_request_id));
-    const parts = [
-        client ? `Project: ${client.meta?.name || 'Project'}` : '',
-        request ? `Request: ${request.name || request.title || 'Request'}` : '',
-        task ? `Task: ${task.title || task.name}` : '',
-        resource ? `Resource: ${resource.name}` : '',
-        prior.linked_event_id ? 'Event' : ''
-    ].filter(Boolean);
+    const parts = [client ? `Project: ${client.meta?.name || 'Project'}` : ''].filter(Boolean);
+    if (!client) return;   // only a project is carried over; tasks, requests, events and resources are linked from the text
 
     box.innerHTML = `
         <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:14px; background:rgba(var(--accent-rgb),0.08); border:1px solid var(--accent); border-radius:8px;">
             <i data-lucide="messages-square" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
             <div class="tiny" style="flex:1; min-width:0;">
-                Another email in this thread is linked to <strong>${esc(parts.join(' · ') || 'a project')}</strong>. This one is not linked yet.
+                Another email in this thread is in <strong>${esc(parts.join(' · ') || 'a project')}</strong>. This one has no project yet.
             </div>
-            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyThreadLinkSuggestion()">Use same links</button>
+            <button class="btn tiny primary" style="flex-shrink:0;" onclick="OL.applyThreadLinkSuggestion()">Use same project</button>
             <button class="btn tiny ghost" style="flex-shrink:0;" onclick="document.getElementById('gmail-thread-link-suggestion').innerHTML = ''">Not this one</button>
         </div>`;
     if (window.lucide) lucide.createIcons();
@@ -3918,20 +4138,10 @@ OL.loadThreadLinkSuggestion = async function(m) {
 OL.applyThreadLinkSuggestion = async function() {
     const prior = OL._threadLinkSuggestion;
     const st = OL._gmailLinkState;
-    if (!prior || !st) return;
-    st.clientId = prior.linked_client_id || '';
-    st.resourceId = prior.linked_resource_id || '';
-    st.taskId = prior.linked_task_id || '';
-    st.requestId = prior.linked_request_id || '';
-    st.eventId = prior.linked_event_id || '';
-    if (st.eventId) {
-        const { data: evt } = await db.from('calendar_events').select('id, title, start, description').eq('id', st.eventId).maybeSingle();
-        OL._gmailLinkSelectedEvent = evt || null;
-    }
+    if (!prior || !st || !prior.linked_client_id) return;
     const box = document.getElementById('gmail-thread-link-suggestion');
     if (box) box.innerHTML = '';
-    OL.renderGmailLinkSummary();
-    OL.openGmailLinkModal();
+    await OL.setEmailProject(prior.linked_client_id);
 };
 
 window.OL.renderBusinessCommunications = OL.renderBusinessCommunications;

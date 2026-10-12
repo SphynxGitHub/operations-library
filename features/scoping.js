@@ -1878,7 +1878,7 @@ export function openRequestDetailDrawer(client, req) {
       ${OL.renderRollupSection ? OL.renderRollupSection(client.id, 'request', req.id) : ''}
 
       <!-- COMMENTS SIDEBAR / THREAD -->
-      <div id="request-comments-container">
+      <div id="task-comments-sidebar-${req.id}" style="min-width:0;">
         ${OL.renderTaskCommentsSidebarHTML(client, req)}
       </div>
     </div>
@@ -1913,7 +1913,7 @@ export function openRequestLineModal(itemId) {
     if (!client) return;
 
     const sheet = client.projectData?.scopingSheets?.[0];
-    const item = itemId ? sheet?.lineItems?.find(i => String(i.id) === String(itemId)) : null;
+    const item = itemId ? (client.projectData?.scopingSheets || []).flatMap(sh => sh?.lineItems || []).find(i => String(i.id) === String(itemId)) || null : null;
     const isEdit = !!item;
     const clientName = client.meta?.name || 'Client';
 

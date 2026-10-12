@@ -96,8 +96,9 @@ export function collectRollup(clientId, kind, id) {
         const t = taskById(clientId, tid);
         if (!t) return;
         const from = { taskId: t.id, taskTitle: t.title || t.name || 'Task' };
-        (t.comments || []).forEach((c) => comments.push({ ...c, ...from }));
-        (t.clickupComments || []).forEach((c) => comments.push({ ...c, ...from, _clickup: true }));
+        const forViewer = (list) => (OL.commentsForViewer ? OL.commentsForViewer(list) : (list || []));
+        forViewer(t.comments).forEach((c) => comments.push({ ...c, ...from }));
+        if (!(OL.isClientViewer && OL.isClientViewer())) (t.clickupComments || []).forEach((c) => comments.push({ ...c, ...from, _clickup: true }));
         const tf = t.driveFiles || (t.driveFileUrl ? [{ name: t.driveFileName || 'Attached Drive File', url: t.driveFileUrl }] : []);
         tf.forEach((f) => files.push({ ...f, ...from }));
     });
@@ -107,7 +108,7 @@ export function collectRollup(clientId, kind, id) {
             const item = OL.findRequestItem ? OL.findRequestItem(state.clients[clientId], rid) : null;
             if (!item) return;
             const from = { requestId: item.id, taskTitle: 'Request: ' + (OL.requestItemTitle ? OL.requestItemTitle(state.clients[clientId], item) : 'Request') };
-            (item.comments || []).forEach((c) => comments.push({ ...c, ...from }));
+            (OL.commentsForViewer ? OL.commentsForViewer(item.comments) : (item.comments || [])).forEach((c) => comments.push({ ...c, ...from }));
             (item.driveFiles || []).forEach((f) => files.push({ ...f, ...from }));
         });
     }

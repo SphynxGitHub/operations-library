@@ -119,7 +119,7 @@ OL.renderTaskRowWithMentions = function(t, todayStr, enableBulkSelect = true) {
     const isExpanded = !!OL.expandedCommentCards[t.id];
     // By default only the comments that tag me and that I haven't checked off; the 💬 count opens the whole thread.
     const mentions = OL.showTaskComments ? OL.getTaskUncheckedMentionComments(t) : [];
-    const toShow = isExpanded ? (t.comments || []) : mentions;
+    const toShow = OL.commentsForViewer(isExpanded ? (t.comments || []) : mentions);
     if (!toShow.length) return rowHTML;
 
     const sorted = [...toShow].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
@@ -2325,23 +2325,7 @@ OL.renderInContextTaskModal = function(client, task) {
                             <!-- UPLOAD BUTTON (ALWAYS ACCEPTS NEW FILES) -->
                             <label class="btn tiny soft" style="cursor:pointer; display:inline-flex; align-items:left; gap:4px; font-size:10px;">
                                 <i data-lucide="upload-cloud" style="width:11px;height:11px;color:var(--accent);"></i> Upload File to Drive
-                                <input type="file" style="display:none;" onchange="
-                                    const file = this.files[0];
-                                    if (file) {
-                                        OL.uploadFileToDrive('${client?.id}', file, 'Task Attachments').then(res => {
-                                            if (res?.webViewLink) {
-                                                OL.updateAndSync(() => {
-                                                    const targetTask = state.clients['${client?.id}']?.projectData?.clientTasks?.find(t => t.id === '${task.id}');
-                                                    if (targetTask) {
-                                                        if (!targetTask.driveFiles) targetTask.driveFiles = [];
-                                                        targetTask.driveFiles.push({ name: file.name, url: res.webViewLink });
-                                                    }
-                                                }, '${client?.id}');
-                                                OL.openTaskInContext('${client?.id}', '${task.id}');
-                                            }
-                                        });
-                                    }
-                                ">
+                                <input type="file" style="display:none;" onchange="OL.uploadTaskFile('${client?.id}', '${task.id}', this.files[0], ''); this.value='';">
                             </label>
                         </div>
                         
@@ -2352,22 +2336,8 @@ OL.renderInContextTaskModal = function(client, task) {
                             onBlur: `OL.updateTaskDescriptionRich('${client?.id}', '${task.id}', this.innerHTML)`
                         })}
 
-                        <!-- LIST OF ALL ATTACHED DRIVE FILES -->
-                        ${attachedFiles.length ? `
-                            <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:6px;">
-                                <label class="bold tiny uppercase muted">Attached Drive Files (${attachedFiles.length}):</label>${attachedFiles.map((fileObj, fIdx) => `
-                                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.15); padding:6px 10px; border-radius:4px;">
-                                        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
-                                            <i data-lucide="file-text" style="width:13px;height:13px;color:var(--accent); flex-shrink:0;"></i>
-                                            <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(fileObj.name)}</span>
-                                        </div>
-                                        <a href="${esc(fileObj.url)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; flex-shrink:0; font-weight:bold;">
-                                            <i data-lucide="external-link" style="width:11px;height:11px;"></i> Open in Drive
-                                        </a>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
+                        <!-- LIST OF ALL ATTACHED DRIVE FILES: newest version of each file first, earlier versions in its history -->
+                        <div id="task-files-${task.id}">${OL.renderTaskFilesHTML(client?.id, task)}</div>
                     </div>
 
                     <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
@@ -2472,9 +2442,180 @@ OL.renderInContextTaskModal = function(client, task) {
 // task) merged with any imported ClickUp comments (task.clickupComments,
 // read-only, kept separate from the source data). Newest first.
 // -------------------------------------------------------------
+// ---- Task attachments with versions ------------------------------------------------------
+// task.driveFiles = [{ id, name, url, addedAt, addedBy, group? }]. Files that share a name (or an explicit group, set by
+// "Upload new version") are versions of one attachment: the newest is the current one and the rest are its history.
+// "Remove" only takes the file off the task; the file stays in Drive.
+OL._taskFiles = function(task, create = false) {
+    if (!Array.isArray(task.driveFiles)) {
+        const legacy = task.driveFileUrl ? [{ name: task.driveFileName || 'Attached Drive File', url: task.driveFileUrl }] : [];
+        if (!create && !legacy.length) return [];
+        task.driveFiles = legacy;
+    }
+    task.driveFiles.forEach((f) => { if (!f.id) f.id = uid(); });
+    return task.driveFiles;
+};
+
+OL.groupTaskFiles = function(files) {
+    const groups = new Map();
+    (files || []).forEach((f, i) => {
+        const key = f.group || String(f.name || '').trim().toLowerCase() || f.id;
+        if (!groups.has(key)) groups.set(key, { key, versions: [] });
+        groups.get(key).versions.push({ ...f, _order: i });
+    });
+    groups.forEach((g) => g.versions.sort((a, b) => (new Date(b.addedAt || 0) - new Date(a.addedAt || 0)) || (b._order - a._order)));
+    return [...groups.values()].sort((a, b) => (new Date(b.versions[0].addedAt || 0) - new Date(a.versions[0].addedAt || 0)) || (b.versions[0]._order - a.versions[0]._order));
+};
+
+OL.renderTaskFilesHTML = function(clientId, task) {
+    const files = OL._taskFiles(task);
+    if (!files.length) return '';
+    const groups = OL.groupTaskFiles(files);
+    const when = (f) => f.addedAt ? new Date(f.addedAt).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+    const open = OL._openFileHistory || (OL._openFileHistory = {});
+    const rm = (f) => `<button class="btn tiny soft" style="padding:2px 6px; color:#ef4444; flex-shrink:0;" title="Remove from this task (the file stays in Drive)" onclick="OL.removeTaskFile('${clientId}', '${task.id}', '${f.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>`;
+    const openBtn = (f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" class="btn tiny primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; flex-shrink:0;"><i data-lucide="external-link" style="width:11px;height:11px;"></i> Open</a>`;
+    return `
+        <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:6px;">
+            <label class="bold tiny uppercase muted">Attached Drive Files (${groups.length}${files.length !== groups.length ? `, ${files.length} versions` : ''}):</label>
+            ${groups.map((g) => {
+                const cur = g.versions[0];
+                const older = g.versions.slice(1);
+                const isOpen = !!open[task.id + ':' + g.key];
+                return `
+                <div style="background:rgba(0,0,0,0.15); border-radius:4px; padding:6px 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+                            <i data-lucide="file-text" style="width:13px;height:13px;color:var(--accent); flex-shrink:0;"></i>
+                            <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(cur.name)}</span>
+                            ${older.length ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">v${g.versions.length}</span>` : ''}
+                            <span class="tiny muted" style="flex-shrink:0;">${esc(when(cur))}${cur.addedBy ? ' · ' + esc(cur.addedBy) : ''}</span>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <label class="btn tiny soft" style="cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:4px; margin:0;" title="Upload a new version of this file">
+                                <i data-lucide="file-up" style="width:11px;height:11px;"></i> New version
+                                <input type="file" style="display:none;" onchange="OL.uploadTaskFile('${clientId}', '${task.id}', this.files[0], '${esc(g.key)}'); this.value='';">
+                            </label>
+                            ${openBtn(cur)}${rm(cur)}
+                        </div>
+                    </div>
+                    ${older.length ? `
+                        <button class="btn tiny ghost" style="font-size:10px; margin-top:4px; padding:0 2px; display:inline-flex; align-items:center; gap:4px;" onclick="OL.toggleTaskFileHistory('${clientId}', '${task.id}', '${esc(g.key)}')">
+                            <i data-lucide="${isOpen ? 'chevron-down' : 'chevron-right'}" style="width:11px;height:11px;"></i> ${older.length} earlier version${older.length === 1 ? '' : 's'}
+                        </button>
+                        ${isOpen ? `<div style="display:grid; gap:4px; margin-top:4px; padding-left:14px; border-left:2px solid var(--line);">
+                            ${older.map((f, i) => `
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; opacity:0.8;">
+                                    <span class="tiny" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><span class="muted">v${older.length - i}</span> ${esc(f.name)} <span class="muted">${esc(when(f))}${f.addedBy ? ' · ' + esc(f.addedBy) : ''}</span></span>
+                                    <span style="display:flex; gap:6px;">${openBtn(f)}${rm(f)}</span>
+                                </div>`).join('')}
+                        </div>` : ''}` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+};
+
+OL._refreshTaskFiles = function(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const task = client?.projectData?.clientTasks?.find((t) => String(t.id) === String(taskId));
+    const box = document.getElementById(`task-files-${taskId}`);
+    if (box && task) { box.innerHTML = OL.renderTaskFilesHTML(clientId, task); if (window.lucide) lucide.createIcons(); }
+};
+
+OL.toggleTaskFileHistory = function(clientId, taskId, key) {
+    const k = taskId + ':' + key;
+    OL._openFileHistory = OL._openFileHistory || {};
+    OL._openFileHistory[k] = !OL._openFileHistory[k];
+    OL._refreshTaskFiles(clientId, taskId);
+};
+
+// groupKey '' = a plain upload (becomes a new version automatically if a file with the same name is already attached).
+OL.uploadTaskFile = async function(clientId, taskId, file, groupKey) {
+    if (!file) return;
+    const res = await OL.uploadFileToDrive(clientId, file, 'Task Attachments');
+    if (!res?.webViewLink) return;
+    const author = (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || '';
+    await updateAndSync(() => {
+        const task = state.clients?.[clientId]?.projectData?.clientTasks?.find((t) => String(t.id) === String(taskId));
+        if (!task) return;
+        const files = OL._taskFiles(task, true);
+        const entry = { id: uid(), name: file.name, url: res.webViewLink, addedAt: new Date().toISOString(), addedBy: author };
+        if (groupKey) entry.group = groupKey;
+        files.push(entry);
+    }, clientId);
+    OL._refreshTaskFiles(clientId, taskId);
+};
+
+OL.removeTaskFile = async function(clientId, taskId, fileId) {
+    if (!confirm('Remove this file from the task? It stays in Drive.')) return;
+    await updateAndSync(() => {
+        const task = state.clients?.[clientId]?.projectData?.clientTasks?.find((t) => String(t.id) === String(taskId));
+        if (!task) return;
+        const files = OL._taskFiles(task, true);
+        task.driveFiles = files.filter((f) => f.id !== fileId);
+        if (!task.driveFiles.length) { delete task.driveFileUrl; delete task.driveFileName; }   // the old single-file fields would bring it back
+    }, clientId);
+    OL._refreshTaskFiles(clientId, taskId);
+};
+
+// ---- Comment hosts and client visibility -------------------------------------------------
+// The same comment box serves tasks, requests (scoping lines) and resources. The comment functions below find the
+// record that owns the comments by id instead of assuming it is a task.
+// Each comment can carry clientVisible: true ("Client can view"). A client login sees only those comments plus the ones
+// the client wrote themselves (byClient). Staff see everything.
+OL.isClientViewer = function() {
+    return window.IS_GUEST === true && !!state.loginClientId && !state.loginIsPartner;
+};
+
+OL.commentsForViewer = function(list) {
+    const all = Array.isArray(list) ? list : [];
+    return OL.isClientViewer() ? all.filter(c => c && (c.clientVisible === true || c.isClientFacing === true || c.byClient === true)) : all;
+};
+
+OL._findCommentHost = function(clientOrId, id) {
+    const client = (clientOrId && typeof clientOrId === 'object') ? clientOrId : state.clients?.[clientOrId];
+    const pd = client?.projectData;
+    const same = (x) => x && (String(x.id) === String(id) || (x.key !== undefined && String(x.key) === String(id)));
+    let host = (pd?.clientTasks || []).find(same)
+        || (pd?.scopingSheets || []).flatMap(sh => sh?.lineItems || []).find(same)
+        || (pd?.clientRequests || []).find(same)
+        || (pd?.localResources || []).find(same)
+        || (state.master?.resources || []).find(same)
+        || null;
+    // Comments written before resources shared this box have no id and use "timestamp" / "isClientFacing".
+    if (host && Array.isArray(host.comments)) {
+        host.comments.forEach(c => {
+            if (!c.id) c.id = uid();
+            if (!c.date && c.timestamp) c.date = c.timestamp;
+            if (c.isClientFacing && c.clientVisible === undefined) c.clientVisible = true;
+        });
+    }
+    return host;
+};
+
+OL.toggleCommentClientVisible = function(clientId, hostId, commentId, checked) {
+    updateAndSync(() => {
+        const host = OL._findCommentHost(clientId, hostId);
+        const comment = host?.comments?.find(c => c.id === commentId);
+        if (comment) { comment.clientVisible = !!checked; if (!checked) delete comment.isClientFacing; }
+    }, clientId);
+    OL._refreshCommentSidebar(clientId, hostId);
+};
+
+OL._refreshCommentSidebar = function(clientId, hostId) {
+    const client = state.clients?.[clientId];
+    const host = OL._findCommentHost(client, hostId);
+    const sidebar = document.getElementById(`task-comments-sidebar-${hostId}`);
+    if (sidebar && host) {
+        sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, host);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
 OL.renderTaskCommentsSidebarHTML = function(client, task) {
-    const internal = (task.comments || []).map(c => ({ ...c, _source: 'internal' }));
-    const imported = (task.clickupComments || []).map(c => ({ ...c, _source: 'clickup' }));
+    const clientViewer = OL.isClientViewer();
+    const internal = OL.commentsForViewer(task.comments || []).map(c => ({ ...c, _source: 'internal' }));
+    const imported = clientViewer ? [] : (task.clickupComments || []).map(c => ({ ...c, _source: 'clickup' }));
     const all = [...internal, ...imported].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
     let parentLinkHTML = '';
@@ -2542,9 +2683,15 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                  onkeydown="OL.handleCommentMentionKeydown(event, '${task.id}')"></div>
 
             <div id="comment-mention-dropdown-${task.id}"></div>
-            <button class="btn tiny primary" style="align-self:flex-end; margin-top:6px;" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
-                <i data-lucide="send" style="width:12px;height:12px;"></i> Post
-            </button>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px;">
+                ${clientViewer ? '<span></span>' : `
+                <label class="tiny" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;" title="Clients see this comment in their view. Comments left unchecked stay internal.">
+                    <input type="checkbox" id="task-comment-client-${task.id}" style="margin:0; cursor:pointer;"> Client can view
+                </label>`}
+                <button class="btn tiny primary" onclick="OL.addTaskComment('${client?.id}', '${task.id}')">
+                    <i data-lucide="send" style="width:12px;height:12px;"></i> Post
+                </button>
+            </div>
         </div>
 
         <div style="display:grid; gap:8px; max-height:420px; overflow:auto;">
@@ -2589,7 +2736,12 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                             ` : ''}
                         </div>
                     </div>
-                    <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text, c.html)}</div>${isMentioned && !alreadyViewed ? `
+                    <div class="tiny" style="line-height:1.5; overflow-wrap:break-word;">${OL.renderCommentTextWithMentions(c.text, c.html)}</div>
+                    ${isEditable && !clientViewer ? `
+                        <label class="tiny muted" style="display:inline-flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer;" title="Clients see this comment in their view">
+                            <input type="checkbox" ${(c.clientVisible || c.byClient) ? 'checked' : ''} ${c.byClient ? 'disabled' : ''} style="margin:0; cursor:pointer;" onchange="OL.toggleCommentClientVisible('${client?.id}', '${task.id}', '${c.id}', this.checked)">
+                            ${c.byClient ? 'Written by the client' : 'Client can view'}
+                        </label>` : ''}${isMentioned && !alreadyViewed ? `
                         <label class="tiny" style="display:flex; align-items:center; gap:5px; margin-top:6px; cursor:pointer; color:var(--accent);">
                             <input type="checkbox" onclick="OL.markTaskCommentViewed('${client?.id}', '${task.id}', '${c.id}')" style="cursor:pointer; margin:0;">
                             You were tagged — mark as viewed
@@ -3946,15 +4098,16 @@ OL.addTaskComment = function(clientId, taskId) {
     const html = OL.sanitizeCommentHtml(editor.innerHTML);
     const author = (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Sphynx Team';
     const mentions = OL.extractMentions(text);
+    // A client's own comments are always visible to them; staff choose with the "Client can view" checkbox.
+    const byClient = OL.isClientViewer();
+    const clientVisible = byClient || !!document.getElementById(`task-comment-client-${taskId}`)?.checked;
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t =>
-            String(t.id) === String(taskId) || String(t.key) === String(taskId)
-        );
+        const task = OL._findCommentHost(clientId, taskId);
         if (task) {
             if (!task.comments) task.comments = [];
-            task.comments.push({ id: uid(), author, text, html, mentions, date: new Date().toISOString() });
+            task.comments.push({ id: uid(), author, text, html, mentions, date: new Date().toISOString(), ...(clientVisible ? { clientVisible: true } : {}), ...(byClient ? { byClient: true } : {}) });
         }
     }, clientId);
 
@@ -3962,9 +4115,7 @@ OL.addTaskComment = function(clientId, taskId) {
     // from this same comment data, see features/notifications.js).
     if (typeof OL.notifyEvent === 'function') {
         const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t =>
-            String(t.id) === String(taskId) || String(t.key) === String(taskId)
-        );
+        const task = OL._findCommentHost(clientId, taskId);
         (mentions || []).forEach(m => {
             OL.notifyEvent('newComment', m.name, {
                 subject: `${author} mentioned you on "${task?.title || task?.name || 'a task'}"`,
@@ -3976,9 +4127,7 @@ OL.addTaskComment = function(clientId, taskId) {
     if (editor) editor.innerHTML = '';
 
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t =>
-        String(t.id) === String(taskId) || String(t.key) === String(taskId)
-    );
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
@@ -3991,9 +4140,7 @@ OL.markTaskCommentViewed = function(clientId, taskId, commentId) {
 
     const saved = updateAndSync(() => {
         const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t =>
-            String(t.id) === String(taskId) || String(t.key) === String(taskId)
-        );
+        const task = OL._findCommentHost(clientId, taskId);
         const comment = task?.comments?.find(c => c.id === commentId);
         if (comment) {
             if (!comment.viewedBy) comment.viewedBy = [];
@@ -4004,7 +4151,7 @@ OL.markTaskCommentViewed = function(clientId, taskId, commentId) {
     }, clientId);
 
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
@@ -4018,7 +4165,7 @@ OL._editingTaskCommentId = null;
 OL.startEditTaskComment = function(clientId, taskId, commentId) {
     OL._editingTaskCommentId = commentId;
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
@@ -4031,7 +4178,7 @@ OL.startEditTaskComment = function(clientId, taskId, commentId) {
 OL.cancelEditTaskComment = function(clientId, taskId) {
     OL._editingTaskCommentId = null;
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
@@ -4049,9 +4196,7 @@ OL.saveEditedTaskComment = function(clientId, taskId, commentId) {
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t =>
-            String(t.id) === String(taskId) || String(t.key) === String(taskId)
-        );
+        const task = OL._findCommentHost(clientId, taskId);
         const comment = task?.comments?.find(c => c.id === commentId);
         if (comment) {
             comment.text = text;
@@ -4063,7 +4208,7 @@ OL.saveEditedTaskComment = function(clientId, taskId, commentId) {
 
     OL._editingTaskCommentId = null;
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
@@ -4076,16 +4221,14 @@ OL.deleteTaskComment = function(clientId, taskId, commentId) {
 
     updateAndSync(() => {
         const client = state.clients?.[clientId];
-        const task = client?.projectData?.clientTasks?.find(t =>
-            String(t.id) === String(taskId) || String(t.key) === String(taskId)
-        );
+        const task = OL._findCommentHost(clientId, taskId);
         if (task?.comments) {
             task.comments = task.comments.filter(c => c.id !== commentId);
         }
     }, clientId);
 
     const client = state.clients?.[clientId];
-    const task = client?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
+    const task = OL._findCommentHost(clientId, taskId);
     const sidebar = document.getElementById(`task-comments-sidebar-${taskId}`);
     if (sidebar && task) {
         sidebar.innerHTML = OL.renderTaskCommentsSidebarHTML(client, task);
