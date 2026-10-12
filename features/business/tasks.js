@@ -2484,15 +2484,17 @@ OL.renderTaskFilesHTML = function(clientId, task) {
                 const isOpen = !!open[task.id + ':' + g.key];
                 return `
                 <div style="background:rgba(0,0,0,0.15); border-radius:4px; padding:6px 10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
-                            <i data-lucide="file-text" style="width:13px;height:13px;color:var(--accent); flex-shrink:0;"></i>
-                            <span class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(cur.name)}</span>
+                    <div style="display:flex; align-items:flex-start; gap:6px; margin-bottom:6px; min-width:0;">
+                        <i data-lucide="file-text" style="width:14px;height:14px;color:var(--accent); flex-shrink:0; margin-top:2px;"></i>
+                        <span class="tiny" style="font-weight:700; font-size:12px; overflow-wrap:anywhere; line-height:1.4;">${esc(cur.name)}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:6px; min-width:0; flex-wrap:wrap;">
                             ${older.length ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">v${g.versions.length}</span>` : ''}
-                            <span class="tiny muted" style="flex-shrink:0;">${esc(when(cur))}${cur.addedBy ? ' · ' + esc(cur.addedBy) : ''}</span>
+                            <span class="tiny muted">${esc(when(cur))}${cur.addedBy ? ' · ' + esc(cur.addedBy) : ''}</span>
                         </div>
                         <div style="display:flex; gap:6px; align-items:center;">
-                            <label class="btn tiny soft" style="cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:4px; margin:0;" title="Upload a new version of this file">
+                            <label class="btn tiny soft" style="cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:4px; margin:0; white-space:nowrap;" title="Upload a new version of this file">
                                 <i data-lucide="file-up" style="width:11px;height:11px;"></i> New version
                                 <input type="file" style="display:none;" onchange="OL.uploadTaskFile('${clientId}', '${task.id}', this.files[0], '${esc(g.key)}'); this.value='';">
                             </label>
@@ -2505,9 +2507,12 @@ OL.renderTaskFilesHTML = function(clientId, task) {
                         </button>
                         ${isOpen ? `<div style="display:grid; gap:4px; margin-top:4px; padding-left:14px; border-left:2px solid var(--line);">
                             ${older.map((f, i) => `
-                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; opacity:0.8;">
-                                    <span class="tiny" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><span class="muted">v${older.length - i}</span> ${esc(f.name)} <span class="muted">${esc(when(f))}${f.addedBy ? ' · ' + esc(f.addedBy) : ''}</span></span>
-                                    <span style="display:flex; gap:6px;">${openBtn(f)}${rm(f)}</span>
+                                <div style="opacity:0.85;">
+                                    <div class="tiny" style="font-weight:700; overflow-wrap:anywhere; line-height:1.4;">${esc(f.name)}</div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-top:3px;">
+                                        <span class="tiny muted"><span class="pill tiny soft" style="font-size:9px;">v${older.length - i}</span> ${esc(when(f))}${f.addedBy ? ' · ' + esc(f.addedBy) : ''}</span>
+                                        <span style="display:flex; gap:6px;">${openBtn(f)}${rm(f)}</span>
+                                    </div>
                                 </div>`).join('')}
                         </div>` : ''}` : ''}
                 </div>`;
@@ -2732,7 +2737,7 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                                 <div style="display:flex; gap:4px; align-items:center;">
                                     ${clientViewer ? '' : (c.byClient
                                         ? `<span class="pill tiny soft" style="font-size:9px;" title="Written by the client">Client</span>`
-                                        : `<button class="btn tiny ${c.clientVisible ? 'primary' : 'soft'}" style="padding:2px 6px; display:inline-flex; align-items:center; gap:4px; font-size:10px;" title="${c.clientVisible ? 'Clients can see this comment. Click to make it internal.' : 'Internal only. Click to let clients see this comment.'}" onclick="OL.toggleCommentClientVisible('${client?.id}', '${task.id}', '${c.id}', ${!c.clientVisible})"><i data-lucide="${c.clientVisible ? 'eye' : 'eye-off'}" style="width:10px;height:10px;"></i>${c.clientVisible ? 'Client can view' : 'Internal'}</button>`)}
+                                        : `<button class="btn tiny ${c.clientVisible ? 'primary' : 'soft'}" style="padding:2px 4px;" aria-label="${c.clientVisible ? 'Clients can view this comment' : 'Internal only'}" title="${c.clientVisible ? 'Clients can see this comment. Click to make it internal.' : 'Internal only. Click to let clients see this comment.'}" onclick="OL.toggleCommentClientVisible('${client?.id}', '${task.id}', '${c.id}', ${!c.clientVisible})"><i data-lucide="${c.clientVisible ? 'eye' : 'eye-off'}" style="width:10px;height:10px;"></i></button>`)}
                                     <button class="btn tiny soft" style="padding:2px 4px;" title="Edit comment" onclick="OL.startEditTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="pencil" style="width:10px;height:10px;"></i></button>
                                     <button class="btn tiny soft" style="padding:2px 4px; color:#ef4444;" title="Delete comment" onclick="OL.deleteTaskComment('${client?.id}', '${task.id}', '${c.id}')"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button>
                                 </div>
