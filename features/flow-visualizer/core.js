@@ -6534,6 +6534,9 @@ export function deleteStep(resId, stepId) {
 
     // 3. Persist and go back to resource view
     OL.persist();
+    // The flow map is never redrawn by live refresh (it manages its own state), so redraw the canvas here or the
+    // deleted step and its lines stay on screen until a reload. Canvas first, then the inspector list.
+    if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
     OL._fvOpenStepsList(resId);
 };
 
