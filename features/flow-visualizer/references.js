@@ -17,11 +17,13 @@
 // SETTING IT:     the step editor on the flow map ("See another process"), the Frame-out step panel, or typing
 //                 "-> Process name" at the end of a step in Frame-out.
 //
-// STORED AS:      step.refResId (a process id). Nothing else changes: lines, owners and the rest of the step are untouched.
-//                 Optional, for a "jump" that lands on one step rather than a whole process (a booking link that leads to
-//                 "20 minute call scheduled"): step.refStepId (a step of that process, which may be this same process) and
-//                 step.refLabel (what triggers the jump, e.g. "Clicks the link and books a call"). The chip then reads
-//                 "Clicks the link and books a call: 20 minute call scheduled", and the target step shows an "Entered from" badge.
+// STORED AS:      step.jumps = [{ id, resId, stepId, label }], one entry per jump, so a step can carry several (an email with a
+//                 booking link AND an unsubscribe link). resId = the process jumped to, stepId = a step of that process
+//                 (optional; may be this same process: "20 minute call scheduled" further down), label = what triggers it
+//                 (optional: "Clicks the link and books a call"). The chip then reads "Clicks the link and books a call: 20 minute
+//                 call scheduled", and the target step shows an "Entered from" badge.
+//                 The first jump is also mirrored into step.refResId / refStepId / refLabel, which is what the older single
+//                 "See another process" link (and Frame-out) used. A step that only has those fields is read as one jump.
 // ================================================================================================
 
 import { esc } from '../../core/data.js';
@@ -33,22 +35,52 @@ const resById = (id) => allRes().find((r) => String(r.id) === String(id));
 const stepOf = (res, id) => ((res && res.steps) || []).find((s) => String(s.id) === String(id));
 const workflowName = (res) => { const w = (project().workflows || []).find((x) => (x.resourceIds || []).map(String).includes(String(res.id))); return w ? w.name : ''; };
 
-// ---- who refers to what ----------------------------------------------------------------------------------------
-// a step pointing at its own process with no target step is just the editor half-filled in: it jumps nowhere
-const isDangling = (resId, step) => !!(step && step.refResId && String(step.refResId) === String(resId) && !step.refStepId);
+// ---- the jumps on a step -----------------------------------------------------------------------------------------
+const newId = () => `j${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
 
+// every jump on a step, newest storage first; a step that only has the old single link reads as one jump
+export function jumpsOf(step) {
+  if (!step) return [];
+  if (Array.isArray(step.jumps)) return step.jumps.filter((j) => j && j.id);
+  if (step.refResId) return [{ id: 'legacy', resId: String(step.refResId), stepId: step.refStepId ? String(step.refStepId) : '', label: step.refLabel || '' }];
+  return [];
+}
+// a jump with no target yet, or one that points at its own process with no step, is just the editor half-filled in: it goes nowhere
+const isDangling = (resId, j) => !j || !j.resId || (String(j.resId) === String(resId) && !j.stepId);
+
+// the list stored on the step, created from the old single link the first time one is edited
+function ensureJumps(step) {
+  if (!Array.isArray(step.jumps)) step.jumps = jumpsOf(step).map((j) => ({ ...j, id: newId() }));
+  return step.jumps;
+}
+const findJump = (step, jumpId) => { const l = ensureJumps(step); return l.find((j) => j.id === jumpId) || (jumpId === 'legacy' ? l[0] : null) || null; };
+
+// keep the old single fields equal to the first jump, for the readers that still use them (Frame-out, print)
+function syncLegacy(step) {
+  const first = Array.isArray(step.jumps) ? step.jumps[0] : null;
+  if (Array.isArray(step.jumps) && !step.jumps.length) delete step.jumps;
+  if (first && first.resId) {
+    step.refResId = String(first.resId);
+    if (first.stepId) step.refStepId = String(first.stepId); else delete step.refStepId;
+    if (first.label) step.refLabel = first.label; else delete step.refLabel;
+  } else { delete step.refResId; delete step.refStepId; delete step.refLabel; }
+}
+
+// ---- who refers to what ----------------------------------------------------------------------------------------
 export function usersOf(resId, stepId) {
   const out = [];
   allRes().forEach((r) => (r.steps || []).forEach((s) => {
-    if (!s.refResId || String(s.refResId) !== String(resId) || s.isArchived) return;
-    if (isDangling(r.id, s)) return;
-    if (stepId != null && String(s.refStepId || '') !== String(stepId)) return;
-    out.push({ res: r, step: s });
+    if (s.isArchived) return;
+    jumpsOf(s).forEach((j) => {
+      if (isDangling(r.id, j) || String(j.resId) !== String(resId)) return;
+      if (stepId != null && String(j.stepId || '') !== String(stepId)) return;
+      out.push({ res: r, step: s, jump: j });
+    });
   }));
   return out;
 }
 
-// the processes a step may point at: every other process that has steps, grouped by workflow
+// the processes a step may point at: every process that has steps, grouped by workflow
 export function targetsFor(resId) {
   // this process is a valid target too, because a jump can land on another step of the same process
   return allRes().filter((r) => (r.steps || []).length && !r.isArchived)
@@ -64,39 +96,50 @@ function redrawAfterRefEdit(resId, stepId) {
   if (editorOpen && typeof OL()._fvRefreshInspector === 'function') requestAnimationFrame(() => requestAnimationFrame(() => OL()._fvRefreshInspector(resId, stepId)));
 }
 
-export function setStepRef(resId, stepId, targetId) {
-  const res = resById(resId); const step = stepOf(res, stepId); if (!step) return;
-  const changed = String(step.refResId || '') !== String(targetId || '');
-  if (targetId) step.refResId = String(targetId); else { delete step.refResId; delete step.refStepId; delete step.refLabel; }
-  if (changed) delete step.refStepId;                       // the old target step belongs to the old process
-  redrawAfterRefEdit(resId, stepId);
+export function addJump(resId, stepId) {
+  const step = stepOf(resById(resId), stepId); if (!step) return;
+  ensureJumps(step).push({ id: newId(), resId: '', stepId: '', label: '' });
+  syncLegacy(step); redrawAfterRefEdit(resId, stepId);
 }
 
-// which step of the target process the jump lands on ('' = the process as a whole)
-export function setStepRefStep(resId, stepId, targetStepId) {
-  const res = resById(resId); const step = stepOf(res, stepId); if (!step || !step.refResId) return;
-  if (targetStepId && stepOf(resById(step.refResId), targetStepId) && !(String(step.refResId) === String(resId) && String(targetStepId) === String(stepId))) step.refStepId = String(targetStepId);
-  else delete step.refStepId;
-  redrawAfterRefEdit(resId, stepId);
+// field: 'res' (the process), 'step' (the step of it to land on, '' = the top of the process) or 'label' (what triggers it)
+export function setJump(resId, stepId, jumpId, field, value) {
+  const step = stepOf(resById(resId), stepId); if (!step) return;
+  const j = findJump(step, jumpId); if (!j) return;
+  if (field === 'res') {
+    const next = value ? String(value) : '';
+    if (next !== String(j.resId || '')) j.stepId = '';        // the old target step belongs to the old process
+    j.resId = next;
+  } else if (field === 'step') {
+    const ok = value && j.resId && stepOf(resById(j.resId), value) && !(String(j.resId) === String(resId) && String(value) === String(stepId));
+    j.stepId = ok ? String(value) : '';
+  } else if (field === 'label') {
+    j.label = String(value || '').trim().slice(0, 120);
+  }
+  syncLegacy(step); redrawAfterRefEdit(resId, stepId);
 }
 
-// what triggers the jump, in the person's words ("Clicks the link and books a call")
-export function setStepRefLabel(resId, stepId, label) {
-  const res = resById(resId); const step = stepOf(res, stepId); if (!step) return;
-  const v = String(label || '').trim().slice(0, 120);
-  if (v) step.refLabel = v; else delete step.refLabel;
-  redrawAfterRefEdit(resId, stepId);
+export function removeJump(resId, stepId, jumpId) {
+  const step = stepOf(resById(resId), stepId); if (!step) return;
+  const j = findJump(step, jumpId); if (!j) return;
+  step.jumps = step.jumps.filter((x) => x !== j);
+  syncLegacy(step); redrawAfterRefEdit(resId, stepId);
 }
 
 // ---- what is drawn -----------------------------------------------------------------------------------------------
-// The chip on a step. onclick jumps; .fv-ref-pg is where the printout writes the page number.
-export function refChip(step, res) {
-  if (!step || !step.refResId || isDangling(res.id, step)) return '';
-  const t = resById(step.refResId);
-  const tStep = t && step.refStepId ? stepOf(t, step.refStepId) : null;
+function oneChip(step, res, j) {
+  const t = resById(j.resId);
+  const tStep = t && j.stepId ? stepOf(t, j.stepId) : null;
   const name = t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed';
-  const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}')`;
-  return `<span class="fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(step.refResId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${step.refLabel ? `${esc(step.refLabel)}: ${esc(name)}` : `See ${esc(name)}`}</span><span class="fv-ref-pg"></span></span></span>`;
+  const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}','${esc(j.id)}')`;
+  return `<span class="fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${j.label ? `${esc(j.label)}: ${esc(name)}` : `See ${esc(name)}`}</span><span class="fv-ref-pg"></span></span></span>`;
+}
+// The chips on a step, one per jump. onclick jumps; .fv-ref-pg is where the printout writes the page number.
+export function refChip(step, res) {
+  if (!step || !res) return '';
+  const chips = jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => oneChip(step, res, j));
+  if (!chips.length) return '';
+  return chips.length === 1 ? chips[0] : `<div class="fv-ref-chips" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;">${chips.join('')}</div>`;
 }
 
 // On the TARGET step of a jump: where people come from. One source jumps straight back to it; several open a list.
@@ -127,13 +170,31 @@ export function refPicker(resId, step, onChange) {
   return `<select class="fvi-select fo-field" onchange="${onChange}"><option value="">None</option>${missing}${body}</select>`;
 }
 
-// The second picker: which step of the chosen process the jump lands on
-export function refStepPicker(resId, step, onChange) {
-  const t = step.refResId ? resById(step.refResId) : null;
+// The second picker: which step of the chosen process a jump lands on
+export function refStepPicker(resId, step, j, onChange) {
+  const t = j && j.resId ? resById(j.resId) : null;
   if (!t) return '';
   const opts = (t.steps || []).filter((x) => x && !x.isArchived && !(String(t.id) === String(resId) && String(x.id) === String(step.id)))
-    .map((x, i) => `<option value="${esc(x.id)}" ${String(step.refStepId) === String(x.id) ? 'selected' : ''}>${i + 1}. ${esc(x.name || 'Unnamed step')}</option>`).join('');
+    .map((x, i) => `<option value="${esc(x.id)}" ${String(j.stepId) === String(x.id) ? 'selected' : ''}>${i + 1}. ${esc(x.name || 'Unnamed step')}</option>`).join('');
   return `<select class="fvi-select fo-field" onchange="${onChange}"><option value="">Top of the process</option>${opts}</select>`;
+}
+
+// The step editor's section: every jump on the step, each with its target, landing step and trigger, plus a button to add another
+export function jumpEditor(resId, step) {
+  const r = esc(resId), s = esc(step.id);
+  const rows = jumpsOf(step).map((j, i) => {
+    const h = (field) => `OL.fvSetJump('${r}','${s}','${esc(j.id)}','${field}', this.value)`;
+    const landing = refStepPicker(resId, step, j, h('step'));
+    return `<div style="border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;margin:0 0 8px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="tiny muted" style="font-weight:600;flex:1;">Jump ${i + 1}</span>
+        <button type="button" class="btn tiny soft" onclick="OL.fvRemoveJump('${r}','${s}','${esc(j.id)}')">Remove</button></div>
+      ${refPicker(resId, { refResId: j.resId }, h('res'))}
+      ${landing ? `<div class="tiny muted" style="margin:8px 0 3px;">Land on</div>${landing}` : ''}
+      <div class="tiny muted" style="margin:8px 0 3px;">What triggers it (optional)</div>
+      <input type="text" class="fvi-select fo-field" maxlength="120" value="${esc(j.label || '')}" placeholder="e.g. Clicks the link and books a call" onchange="${h('label')}">
+    </div>`;
+  }).join('');
+  return `${rows}<button type="button" class="btn tiny primary" onclick="OL.fvAddJump('${r}','${s}')">${jumpsOf(step).length ? 'Add another jump' : 'Add a jump'}</button>`;
 }
 
 // ---- jumping ---------------------------------------------------------------------------------------------------
@@ -158,20 +219,22 @@ function reveal(resId, stepId) {
   return false;
 }
 
-// Jump from a step to the process it refers to
-export function jumpToRef(fromResId, fromStepId) {
+// Jump from a step to where one of its jumps points (the first one when no jump is named)
+export function jumpToRef(fromResId, fromStepId, jumpId) {
   const from = resById(fromResId); const step = stepOf(from, fromStepId);
-  if (!step || !step.refResId || isDangling(fromResId, step)) return;
-  const t = resById(step.refResId);
+  const valid = jumpsOf(step).filter((x) => !isDangling(fromResId, x));
+  const j = (jumpId && valid.find((x) => x.id === jumpId)) || valid[0];
+  if (!step || !j) return;
+  const t = resById(j.resId);
   if (!t) { toast('That process was removed.'); return; }
+  const landStep = j.stepId && stepOf(t, j.stepId) ? j.stepId : null;
   const go = () => {
     stack().push({ resId: String(fromResId), stepId: String(fromStepId), label: step.name || 'the step', layout: OL()._fv.layout });
-    const landStep = step.refStepId && stepOf(t, step.refStepId) ? step.refStepId : null;
     if (!reveal(t.id, landStep)) { stack().pop(); toast(`"${t.name}" is not showing. Clear the stage filter, or check that it has steps.`); return; }
     showBackPill();
   };
   // a stage filter can hide the process: clear it, redraw, then jump
-  if (!(step.refStepId ? stepEl(t.id, step.refStepId) : headEl(t.id)) && OL()._fv.stageFilter) { OL()._fv.stageFilter = ''; OL().renderVisualizer(); setTimeout(go, 350); return; }
+  if (!(landStep ? stepEl(t.id, landStep) : headEl(t.id)) && OL()._fv.stageFilter) { OL()._fv.stageFilter = ''; OL().renderVisualizer(); setTimeout(go, 350); return; }
   go();
 }
 
@@ -210,7 +273,7 @@ export function showRefUsers(resId, ev, stepId) {
   const users = usersOf(resId, stepId).filter((u) => !(stepId && String(u.res.id) === String(resId) && String(u.step.id) === String(stepId))); if (!users.length) return;
   const pop = document.createElement('div');
   pop.id = 'fv-used-pop'; pop.className = 'fv-used-pop';
-  pop.innerHTML = `<div class="fv-used-title">${stepId ? 'Entered from' : 'Used in'} ${users.length} place${users.length === 1 ? '' : 's'}</div>${users.map((u) => `<button type="button" class="fv-used-item" onclick="OL.fvCloseUsedPop(); OL.fvJumpToStep('${esc(u.res.id)}','${esc(u.step.id)}','${esc(resId)}'${stepId ? `,'${esc(stepId)}'` : ''})"><b>${esc(u.step.name || 'Step')}</b><span>${esc(u.res.name)}${workflowName(u.res) ? ' &middot; ' + esc(workflowName(u.res)) : ''}</span></button>`).join('')}`;
+  pop.innerHTML = `<div class="fv-used-title">${stepId ? 'Entered from' : 'Used in'} ${users.length} place${users.length === 1 ? '' : 's'}</div>${users.map((u) => `<button type="button" class="fv-used-item" onclick="OL.fvCloseUsedPop(); OL.fvJumpToStep('${esc(u.res.id)}','${esc(u.step.id)}','${esc(resId)}'${stepId ? `,'${esc(stepId)}'` : ''})"><b>${esc(u.step.name || 'Step')}</b><span>${u.jump && u.jump.label ? esc(u.jump.label) + ' &middot; ' : ''}${esc(u.res.name)}${workflowName(u.res) ? ' &middot; ' + esc(workflowName(u.res)) : ''}</span></button>`).join('')}`;
   document.body.appendChild(pop);
   const r = (ev && ev.target && ev.target.getBoundingClientRect) ? ev.target.getBoundingClientRect() : { left: 80, bottom: 80 };
   pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 300))}px`;
@@ -224,6 +287,6 @@ function toast(t) { if (typeof OL().showToast === 'function') OL().showToast(t);
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvRefChip: refChip, fvUsedChip: usedChip, fvRefPicker: refPicker, fvRefUsers: usersOf, fvRefTargets: targetsFor,
-  fvSetStepRef: setStepRef, fvSetStepRefStep: setStepRefStep, fvSetStepRefLabel: setStepRefLabel, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
+  fvAddJump: addJump, fvSetJump: setJump, fvRemoveJump: removeJump, fvJumpEditor: jumpEditor, fvJumpsOf: jumpsOf, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
   fvShowBackPill: showBackPill, fvShowRefUsers: showRefUsers, fvCloseUsedPop: closeUsedPop,
 });
