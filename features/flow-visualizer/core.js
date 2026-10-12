@@ -6901,56 +6901,6 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
 
             <div class="inspector-body">
                 <div class="inspector-section">
-                    <div class="section-label">
-                        <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
-                        Move to resource
-                    </div>
-                    <select class="fvi-select"
-                            onchange="if(this.value) OL.executeStepMove('${resId}', '${step.id}', this.value); this.value='';">
-                        <option value="">— Keep in ${esc(res.name)} —</option>
-                        <optgroup label="Same stage">
-                            ${(OL.getCurrentProjectData().resources || [])
-                                .filter(r => String(r.id) !== String(resId) && r.stageId === res.stageId)
-                                .sort((a,b) => a.name.localeCompare(b.name))
-                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
-                                .join('')}
-                        </optgroup>
-                        <optgroup label="All resources">
-                            ${(OL.getCurrentProjectData().resources || [])
-                                .filter(r => String(r.id) !== String(resId) && r.stageId !== res.stageId)
-                                .sort((a,b) => a.name.localeCompare(b.name))
-                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
-                                .join('')}
-                        </optgroup>
-                    </select>
-                </div>
-                
-                <div class="inspector-section">
-                    <div class="section-label">
-                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
-                    </div>
-                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> JUMP TO ANOTHER PROCESS OR STEP
-                    </label>
-                    ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
-                    <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
-                </div>
-
-                ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="notebook-pen" style="width:11px;height:11px;"></i> INTERNAL NOTES
-                    </label>
-                    <textarea class="modal-textarea" style="min-height:60px;"
-                              onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
-                </div>
-
-                <div class="inspector-section">
                     <label class="section-label">
                         <i data-lucide="users" style="width:11px;height:11px;"></i> ASSIGNEES (WHO?)
                     </label>
@@ -7004,6 +6954,63 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
 
                 <div class="inspector-section">
                     <label class="section-label">
+                        <i data-lucide="calendar-clock" style="width:11px;height:11px;"></i> DYNAMIC SCHEDULING
+                    </label>
+                    ${typeof OL.fvSchedEditor === 'function' ? OL.fvSchedEditor(resId, step) : ''}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="notebook-pen" style="width:11px;height:11px;"></i> INTERNAL NOTES
+                    </label>
+                    <textarea class="modal-textarea" style="min-height:60px;"
+                              onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
+                </div>
+
+                <div class="inspector-section">
+                    <div class="section-label">
+                        <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
+                        Move to resource
+                    </div>
+                    <select class="fvi-select"
+                            onchange="if(this.value) OL.executeStepMove('${resId}', '${step.id}', this.value); this.value='';">
+                        <option value="">— Keep in ${esc(res.name)} —</option>
+                        <optgroup label="Same stage">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId === res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                        <optgroup label="All resources">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId !== res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="inspector-section">
+                    <div class="section-label">
+                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
+                    </div>
+                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> JUMP TO ANOTHER PROCESS OR STEP
+                    </label>
+                    ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
+                    <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
+                </div>
+
+                ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
+
+                <div class="inspector-section">
+                    <label class="section-label">
                         <i data-lucide="git-merge" style="width:11px;height:11px;"></i> CONSOLIDATION GROUP
                     </label>
                     ${step.stepGroup ? `
@@ -7031,13 +7038,6 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                             Steps with the same group name across resources consolidate into one card in the visualizer.
                         </div>
                     `}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="calendar-clock" style="width:11px;height:11px;"></i> DYNAMIC SCHEDULING
-                    </label>
-                    ${typeof OL.fvSchedEditor === 'function' ? OL.fvSchedEditor(resId, step) : ''}
                 </div>
 
                 <div class="inspector-section">
