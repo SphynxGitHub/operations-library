@@ -26,7 +26,7 @@ OL.toFileState = OL.toFileState || {
 
 const S = () => OL.toFileState;
 // Automatic housekeeping comments written by the work rules: nothing to file.
-const isAutoComment = (cm) => /^\s*(due date\b.*\b(removed|restored)\b|all the related client tasks are complete)/i.test(String(cm?.text || ''));
+const isAutoComment = (cm) => /^\s*(closed automatically|due date\b.*\b(removed|restored)\b|all the related client tasks are complete)/i.test(String(cm?.text || ''));
 
 async function ensureEmails() {
     const st = S();
