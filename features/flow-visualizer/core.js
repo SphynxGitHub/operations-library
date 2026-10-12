@@ -6967,6 +6967,8 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                 </div>
 
+                ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
+
                 <div class="inspector-section">
                     <div class="section-label">
                         <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
@@ -6991,23 +6993,6 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         </optgroup>
                     </select>
                 </div>
-
-                <div class="inspector-section">
-                    <div class="section-label">
-                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
-                    </div>
-                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> JUMP TO ANOTHER PROCESS OR STEP
-                    </label>
-                    ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
-                    <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
-                </div>
-
-                ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
 
                 <div class="inspector-section">
                     <label class="section-label">
@@ -7041,9 +7026,10 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                 </div>
 
                 <div class="inspector-section">
-                  <div class="section-label">
-                    <i data-lucide="arrow-up-from-line" style="width:11px;height:11px;"></i> NEXT STEP
-                </div>
+<div class="section-label"><i data-lucide="git-branch" style="width:11px;height:11px;"></i> PATHS</div>
+                    <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:2px 0 6px;text-transform:uppercase;">Comes in from</div>
+                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
+                                  <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:14px 0 6px;text-transform:uppercase;">Goes next (lines on the map)</div>
                 
                   ${(step.logic?.out || []).map((l, i) => {
                     const targetId = l.targetId || '';
@@ -7158,7 +7144,10 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                           class="fvi-add-step-btn" style="margin-top:4px;">
                     + Add Output
                   </button>
-                </div>
+                                    <div class="tiny muted" style="font-weight:700;letter-spacing:.05em;margin:14px 0 6px;text-transform:uppercase;">Jumps to another process or step (rows on the card)</div>
+                    ${typeof OL.fvJumpEditor === 'function' ? OL.fvJumpEditor(resId, step) : ''}
+                    <div class="tiny muted" style="margin-top:4px;">Each jump shows as a link on this step that scrolls to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
+                                </div>
 
                 <div class="inspector-section">
                     <label class="section-label">
