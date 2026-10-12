@@ -2280,3 +2280,5 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 
 /* Wide dialogs (opt in with showOverlayModal(html, { wide: true })) use the available width */
 .modal-box.modal-wide { max-width: min(1500px, 96vw) !important; width: 96vw !important; }
+.modal-box.modal-wide { overflow-x: hidden; box-sizing: border-box; }
+.modal-box.modal-wide > * { min-width: 0; max-width: 100%; }
