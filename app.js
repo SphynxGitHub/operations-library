@@ -47,6 +47,7 @@ import './features/dependencies.js';
 import './features/intake.js';
 import './features/rollup.js';
 import './core/live-refresh.js';
+import './core/contact-email-backfill.js';
 
 window.isMatrixActive = false;
 

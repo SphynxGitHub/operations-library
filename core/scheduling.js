@@ -153,7 +153,10 @@ export function dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeT
 // ---- Per-person availability ----
 // Each team member can have a schedule on their profile card (Sphynx Team): member.schedule =
 //   { hours: { mon: 7, tue: 7, wed: 0, ... },   // hours available that weekday; blank = the standard day; 0 = does not work it
-//     offDates: [{ id, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', note }] }   // days off (a range, inclusive)
+//     offDates: [{ id, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', startTime?: 'HH:MM', endTime?: 'HH:MM', note }] }   // days off (a range, inclusive)
+// Times are optional. With no times the whole range is off. With times, a single day is off only between startTime and
+// endTime (a partial day: those hours come out of that day's available hours); on a longer range startTime applies to the
+// first day (off from then to end of day) and endTime to the last day (off from start of day until then), days between are off in full.
 // The standard day is the roll-over limit (7h). A person with fewer (or more) available hours has the Green / Yellow /
 // Red / Closed cut-offs scaled to match — 4h available makes Green "under 4/7 of 3h", and so on — and their roll-over
 // limit is their available hours. An off day (or a 0h weekday) is Closed and gets no tasks.
@@ -171,8 +174,29 @@ export function memberSchedule(name, cfg) {
     return m?.schedule || null;
 }
 
+const timeToHours = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Math.min(24, Number(m[1]) + Number(m[2]) / 60) : null; };
+
+// Hours of this day taken by days-off entries: Infinity for a whole day off, otherwise the sum of the partial windows.
+export function offHoursForDay(schedule, dayKey) {
+    let blocked = 0;
+    for (const o of (schedule?.offDates || [])) {
+        if (!o || !o.from) continue;
+        const from = String(o.from).slice(0, 10), to = String(o.to || o.from).slice(0, 10);
+        if (dayKey < from || dayKey > to) continue;
+        const st = timeToHours(o.startTime), en = timeToHours(o.endTime);
+        if (st === null && en === null) return Infinity;
+        const isFirst = dayKey === from, isLast = dayKey === to;
+        const a = isFirst && st !== null ? st : 0;
+        const b = isLast && en !== null ? en : 24;
+        blocked += Math.max(0, b - a >= 24 ? Infinity : b - a);
+        if (blocked === Infinity) return Infinity;
+    }
+    return blocked;
+}
+
+// True only when the whole day is off (a partial day just shortens it; see memberDayHours).
 export function isOffDate(schedule, dayKey) {
-    return (schedule?.offDates || []).some((o) => o && o.from && dayKey >= String(o.from).slice(0, 10) && dayKey <= String(o.to || o.from).slice(0, 10));
+    return offHoursForDay(schedule, dayKey) === Infinity;
 }
 
 const isWeekendKey = (dayKey) => { const d = fromDayKey(dayKey).getDay(); return d === 0 || d === 6; };
@@ -183,9 +207,10 @@ export function memberDayHours(name, dayKey, cfg = getOlSettings().scheduling) {
     const sched = memberSchedule(name, cfg);
     if (isOffDate(sched, dayKey)) return 0;
     const h = sched?.hours?.[WEEKDAY_KEYS[fromDayKey(dayKey).getDay()]];
-    if (h === undefined || h === null || h === '') return isWeekendKey(dayKey) ? 0 : standardDayHours(cfg);
-    const n = Number(h);
-    return Number.isFinite(n) && n >= 0 ? n : (isWeekendKey(dayKey) ? 0 : standardDayHours(cfg));
+    let avail;
+    if (h === undefined || h === null || h === '') avail = isWeekendKey(dayKey) ? 0 : standardDayHours(cfg);
+    else { const n = Number(h); avail = Number.isFinite(n) && n >= 0 ? n : (isWeekendKey(dayKey) ? 0 : standardDayHours(cfg)); }
+    return Math.max(0, avail - offHoursForDay(sched, dayKey));   // a partial day off shortens the day
 }
 
 // The most a person's day may hold before the roll-over moves tasks off it. Unlike memberDayHours, a weekend with no hours
@@ -195,9 +220,10 @@ export function memberLimitHours(name, dayKey, cfg = getOlSettings().scheduling)
     const sched = memberSchedule(name, cfg);
     if (isOffDate(sched, dayKey)) return 0;
     const h = sched?.hours?.[WEEKDAY_KEYS[fromDayKey(dayKey).getDay()]];
-    if (h === undefined || h === null || h === '') return standardDayHours(cfg);
-    const n = Number(h);
-    return Number.isFinite(n) && n >= 0 ? n : standardDayHours(cfg);
+    let avail;
+    if (h === undefined || h === null || h === '') avail = standardDayHours(cfg);
+    else { const n = Number(h); avail = Number.isFinite(n) && n >= 0 ? n : standardDayHours(cfg); }
+    return Math.max(0, avail - offHoursForDay(sched, dayKey));
 }
 
 // ---- Priority levels (Green / Yellow / Red / Closed) ----

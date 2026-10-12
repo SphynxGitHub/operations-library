@@ -147,7 +147,17 @@ export function isEchoOfOwnSave(clientId, projectData) {
 }
 
 // ---- persist: debounced write of master + active client to Supabase ----
+// Wrapper: notices contact emails that are new on a project (core/contact-email-backfill.js) so their already-imported
+// emails get linked once the save below has gone through. Never blocks or fails a save.
 export function persist() {
+    let newContacts = null;
+    try { if (!isPreviewActive()) newContacts = window.OL?.takeNewContactEmails?.() || null; } catch (e) { /* never block a save */ }
+    const saved = persistNow();
+    if (newContacts) saved.then(() => window.OL?.backfillForNewContacts?.(newContacts)).catch(() => {});
+    return saved;
+}
+
+function persistNow() {
     // NOTE: window.IS_GUEST is set to true for any non-admin session —
     // including a real logged-in partner/client and the legacy
     // ?access=token flow (see core/auth.js). Those users legitimately
