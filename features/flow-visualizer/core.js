@@ -2306,12 +2306,27 @@ export function _fvRenderSteps(resources) {
       return flow;
     });
 
-    // Determine group ordering by min position across resources
-    const groupOrder = Object.keys(consolidatedGroups).sort((a, b) => {
-      const posA = Math.min(...perResFlow.map(f => { const i = f.findIndex(x => x.type === 'consolidated' && x.group === a); return i === -1 ? Infinity : i; }));
-      const posB = Math.min(...perResFlow.map(f => { const i = f.findIndex(x => x.type === 'consolidated' && x.group === b); return i === -1 ? Infinity : i; }));
-      return posA - posB;
+    // Determine group ordering. Each process lists its groups in its own order, so a group has to come after any group
+    // that comes before it in some process (a group that is step 1 of one process and step 12 of another sits at the top,
+    // above the groups that process reaches later). Among the groups that are free to go next, the one nearest the start
+    // of any process goes first. (Sorting by that nearest position alone put groups that tie at "step 1" in a process of
+    // their own ahead of a group they come after, and the cards then ran against the order of the steps.)
+    const posOf = (g) => Math.min(...perResFlow.map(f => { const i = f.findIndex(x => x.type === 'consolidated' && x.group === g); return i === -1 ? Infinity : i; }));
+    const names = Object.keys(consolidatedGroups);
+    const before = new Map(names.map(g => [g, new Set()]));
+    perResFlow.forEach(f => {
+      const seq = f.filter(x => x.type === 'consolidated').map(x => x.group);
+      for (let i = 1; i < seq.length; i++) before.get(seq[i]).add(seq[i - 1]);
     });
+    const groupOrder = [];
+    const placed = new Set();
+    while (groupOrder.length < names.length) {
+      const left = names.filter(g => !placed.has(g));
+      let ready = left.filter(g => [...before.get(g)].every(p => placed.has(p) || p === g));
+      if (!ready.length) ready = left;   // two processes disagree about the order: fall back to the nearest-to-the-start rule
+      ready.sort((x, y) => posOf(x) - posOf(y) || names.indexOf(x) - names.indexOf(y));
+      groupOrder.push(ready[0]); placed.add(ready[0]);
+    }
 
     // Build merged sequence
     const sequence = [];
