@@ -25,6 +25,8 @@ OL.toFileState = OL.toFileState || {
 };
 
 const S = () => OL.toFileState;
+// Automatic housekeeping comments written by the work rules: nothing to file.
+const isAutoComment = (cm) => /^\s*(due date\b.*\b(removed|restored)\b|all the related client tasks are complete)/i.test(String(cm?.text || ''));
 
 async function ensureEmails() {
     const st = S();
@@ -87,7 +89,7 @@ function buildItems() {
             const reqs = linksForTask(t).map((x) => String(x.requestId)).filter(Boolean);
             if (typeof OL._findCommentHost === 'function' && Array.isArray(t.comments) && t.comments.length) OL._findCommentHost(c, t.id);
             (t.comments || []).forEach((cm) => {
-                if (!cm?.id || !String(cm.text || '').trim() || cm.system) return;
+                if (!cm?.id || !String(cm.text || '').trim() || cm.system || isAutoComment(cm)) return;
                 items.push({ key: `c:${t.id}:${cm.id}`, src: 'comment', hostId: t.id, commentId: cm.id, clientId: c.id, requestIds: reqs, type: 'comment',
                     text: cm.text, from: `Task: ${t.title || t.name || ''}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
             });
@@ -101,7 +103,7 @@ function buildItems() {
             if (!it) return;
             if (typeof OL._findCommentHost === 'function' && Array.isArray(it.comments) && it.comments.length) OL._findCommentHost(c, it.id);
             (it.comments || []).forEach((cm) => {
-                if (!cm?.id || !String(cm.text || '').trim() || cm.system) return;
+                if (!cm?.id || !String(cm.text || '').trim() || cm.system || isAutoComment(cm)) return;
                 items.push({ key: `c:${it.id}:${cm.id}`, src: 'comment', hostId: it.id, commentId: cm.id, clientId: c.id, requestIds: [String(it.id)], type: 'comment',
                     text: cm.text, from: `Request: ${OL.requestItemTitle ? OL.requestItemTitle(c, it) : (it.title || it.name || '')}`, date: cm.date, author: cm.author, status: cm.fileStatus || 'open', filedTo: cm.filedTo || '' });
             });
