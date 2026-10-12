@@ -186,6 +186,7 @@ export function createZapImport(deps) {
         if (res.status === 'Built') summary.markedBuilt++;
         if (holdBack) summary.draftsPending++;
       }
+      if (window.OL?.autoLinkStepApps) window.OL.autoLinkStepApps(client, res);   // link each step's app name to an app in the library
       res.zapMeta = Object.assign({}, res.zapMeta, { lastImportedAt: now().toISOString(), missingFromZapier: false });
 
       // folders and spreadsheets the Zap uses: make a card once, and link it from every step that uses it

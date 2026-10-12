@@ -366,10 +366,11 @@ OL._paintToFileDialog = function() {
     const d = S().dlg; if (!d) return;
     const client = state.clients?.[d.clientId];
     const all = (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && !String(r.id).startsWith('step-'));
-    const apps = [...new Set(all.map((r) => r.appName).filter(Boolean))].sort();
+    const appsOf = (r) => [...new Set([r.appName, ...(r.steps || []).map((s) => s?.appName)].filter((x) => x && x !== 'System'))];
+    const apps = [...new Set(all.flatMap(appsOf))].sort();
     const rtypes = [...new Set(all.map((r) => r.type).filter(Boolean))].sort();
     const q = d.q.trim().toLowerCase();
-    const list = all.filter((r) => (!d.app || r.appName === d.app) && (!d.rtype || r.type === d.rtype) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
+    const list = all.filter((r) => (!d.app || appsOf(r).includes(d.app)) && (!d.rtype || r.type === d.rtype) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
     const items = itemsFor(d.keys);
     const html = `<div style="width:100%; box-sizing:border-box;">
         <h3 style="margin:0 0 6px;">File ${items.length} item${items.length > 1 ? 's' : ''} to resources</h3>
@@ -401,7 +402,7 @@ OL._paintToFileDialog = function() {
                     ${list.map((r) => `<label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;">
                         <input type="checkbox" ${d.chosen.has(String(r.id)) ? 'checked' : ''} onchange="OL.toFileDlgPick('${esc(r.id)}', this.checked)">
                         <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(r.name || 'Untitled')}</span>
-                        ${r.appName ? `<span class="pill tiny soft">${esc(r.appName)}</span>` : ''}${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
+                        ${appsOf(r).slice(0, 4).map((a) => `<span class="pill tiny soft">${esc(a)}</span>`).join('')}${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
                     </label>`).join('') || `<div class="muted tiny p-20">No resources match.</div>`}
                 </div>
             </div>
@@ -447,7 +448,7 @@ OL.toFileDlg = (k, v) => { S().dlg[k] = v; if (k === 'q') { clearTimeout(_search
 OL.toFileDlgPick = (id, on) => { const d = S().dlg; on ? d.chosen.add(String(id)) : d.chosen.delete(String(id)); OL._paintToFileDialog(); };
 OL.toFileDlgApp = () => {
     const d = S().dlg; const client = state.clients?.[d.clientId];
-    (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && r.appName === d.app).forEach((r) => d.chosen.add(String(r.id)));
+    (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && (r.appName === d.app || (r.steps || []).some((s) => s?.appName === d.app))).forEach((r) => d.chosen.add(String(r.id)));
     OL._paintToFileDialog();
 };
 
