@@ -402,26 +402,17 @@ export function persist() {
     });
 }
 
-// Loads every project row a page at a time, retrying a failed page. One request for all rows (each carrying a whole
-// project) is big enough to hit the database's statement timeout on a bad moment, and a failed load left the menu
-// without its project tabs until a few refreshes happened to get lucky.
+// One request for every project, as it always was. If it fails (timeout or network blip) it is tried again rather than
+// leaving the app with no projects loaded.
 async function fetchAllClientRows() {
-    const PAGE = 12;
-    const rows = [];
-    for (let from = 0; ; from += PAGE) {
-        let res = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            res = await db.from('workspace_clients').select('*').order('id').range(from, from + PAGE - 1);
-            if (!res.error) break;
-            console.warn(`Clients page ${from / PAGE + 1} failed (attempt ${attempt + 1}/3): ${res.error.message}`);
-            await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-        }
-        if (res.error) return { data: null, error: res.error };
-        const got = res.data || [];
-        rows.push(...got);
-        if (got.length < PAGE) break;
+    let res = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        res = await db.from('workspace_clients').select('*');
+        if (!res.error) break;
+        console.warn(`Clients load failed (attempt ${attempt + 1}/3): ${res.error.message}`);
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
-    return { data: rows, error: null };
+    return res;
 }
 
 // ---- sync: initial fetch of master registry + client list ----
