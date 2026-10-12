@@ -185,7 +185,17 @@ OL.thirdPartyAssignees = [
 
 // Master Status Pipeline Fallback
 OL.getSystemStatuses = function() {
-    return state.master?.taskStatuses || [
+    if (Array.isArray(state.master?.taskStatuses)) {
+        // The status list is saved in the database, so a status added in code has to be slotted in here or it never shows.
+        const list = state.master.taskStatuses;
+        if (!list.some(s => String(s?.name || '').toLowerCase() === 'developer/third party task')) {
+            const at = list.findIndex(s => s?.isClosed);
+            const add = { id: 'st-dev3p', name: 'Developer/Third Party Task', color: '#8b5cf6', isClosed: false };
+            return at < 0 ? [...list, add] : [...list.slice(0, at), add, ...list.slice(at)];
+        }
+        return list;
+    }
+    return [
         { id: "st-1", name: "Pending Sphynx Action", color: "#64c6a2", isClosed: false },
         { id: "st-blocked-client", name: "Pending Client Action", color: "#0880ea", isClosed: false },
         { id: "st-2", name: "Pending Client Feedback", color: "#0880ea", isClosed: false },
@@ -2383,6 +2393,7 @@ OL.renderInContextTaskModal = function(client, task) {
                         <div id="task-howto-results" style="max-height:140px; overflow:auto; margin-top:4px;"></div>
                     </div>
 
+                    ${typeof OL.renderTaskSharedProjects === 'function' ? OL.renderTaskSharedProjects(task, client?.id) : ''}
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                         ${OL.taskIsDueless(task, client) ? `
                         <div title="The client follow-up chases client tasks, so they don't need a date">
