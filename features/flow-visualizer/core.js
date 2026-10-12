@@ -2398,6 +2398,15 @@ export function _fvRenderSteps(resources) {
 
     // Build merged sequence
     const sequence = [];
+    const doneIds = new Set();   // "resId-stepId" of the steps already placed in a row above
+    let afterPrev = new Set();   // the processes that had a step in the card just above
+    const sourcesOf = wfRes.map(res => {   // the steps of the other processes that lead into this one
+      const ids = [];
+      wfRes.forEach(o => { if (o === res) return; (o.steps || []).forEach(st => ((st.logic && st.logic.out) || []).forEach(l => {
+        if (l.targetId && String(l.targetId).startsWith(`${res.id}-`)) ids.push(`${o.id}-${st.id}`);
+      })); });
+      return ids;
+    });
     const ptrs = wfRes.map(() => 0);
 
     groupOrder.forEach(group => {
@@ -2424,6 +2433,17 @@ export function _fvRenderSteps(resources) {
         }
         return { res, steps };
       });
+      // A process that has no step in this group starts level with the step that leads into it (not after every group),
+      // so the line into it stays short.
+      sections.forEach(sec => sec.steps.forEach(st => doneIds.add(`${sec.res.id}-${st.id}`)));
+      wfRes.forEach((res, ri) => {
+        if (perResFlow[ri].some(x => x.type === 'consolidated' && x.group === group)) return;
+        if (!afterPrev.has(ri) && !sourcesOf[ri].some(id => doneIds.has(id))) return;   // (what carries on from the card above starts right under it too)
+        const take = [];
+        while (ptrs[ri] < perResFlow[ri].length && perResFlow[ri][ptrs[ri]].type === 'step') { take.push(perResFlow[ri][ptrs[ri]].step); ptrs[ri]++; }
+        take.forEach(st => doneIds.add(`${res.id}-${st.id}`));
+        sections[ri] = { res, steps: take };
+      });
       if (sections.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections });
       // the processes that carry on after this group: the card is lined up over them, so the flow reads straight down
       const continuing = wfRes.filter((res, ri) => {
@@ -2431,6 +2451,9 @@ export function _fvRenderSteps(resources) {
         return at !== -1 && at < perResFlow[ri].length - 1;
       });
       sequence.push({ type: 'consolidated', groupName: group, members: consolidatedGroups[group], continuing });
+      // what the card leads into can start in the row right under it
+      consolidatedGroups[group].forEach(m => doneIds.add(`${m.res.id}-${m.step.id}`));
+      afterPrev = new Set(wfRes.map((r, ri) => perResFlow[ri].some(x => x.type === 'consolidated' && x.group === group) ? ri : -1).filter(i => i >= 0));
     });
 
     // Remaining steps after last group
