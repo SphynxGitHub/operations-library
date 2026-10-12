@@ -722,9 +722,12 @@ serve(async (req) => {
         const matchedClientIds = Array.from(new Set(matchedRules.map((r) => r.clientId)));
 
         // 3. Auto-link to the primary matched client (or the first matched client if multiple exist)
-        const primaryLinkedClientId = matchedClientIds.length > 0 ? matchedClientIds[0] : null;
+        // The app's own morning digest emails ("Daily digest: ...") mention many projects but belong to none: they are
+        // never linked to a project and go straight to the archive (in the app only; Gmail is left alone).
+        const isDailyDigest = /^\s*daily digest\s*:/i.test(subject || "");
+        const primaryLinkedClientId = isDailyDigest ? null : (matchedClientIds.length > 0 ? matchedClientIds[0] : null);
 
-        const matchedLabelNames = matchedRules.filter((r) => r.labelingEnabled).map((r) => r.labelName);
+        const matchedLabelNames = isDailyDigest ? [] : matchedRules.filter((r) => r.labelingEnabled).map((r) => r.labelName);
 
         rows.push({
           id,
@@ -743,6 +746,7 @@ serve(async (req) => {
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
           participants: Array.from(participantEmails),
           linked_client_id: primaryLinkedClientId,
+          ...(isDailyDigest ? { archived: true, link_locked: true } : {}),
           attachments
         });
 

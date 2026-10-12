@@ -65,6 +65,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: authz.error, message: authz.message }), { status: authz.status, headers: corsHeaders });
     }
 
+    // participantsOnly: match on Team tab addresses only, never on a project's name in the subject or text. The app sends
+    // this automatically when a project gets a new contact email (core/contact-email-backfill.js).
+    let participantsOnly = false;
+    try { participantsOnly = (await req.json())?.participantsOnly === true; } catch (_) { /* no body: the Backfill button */ }
+
     const projectRules = await loadProjectRules(supabase);
     if (projectRules.length === 0) {
       return new Response(JSON.stringify({ scannedCount: 0, matchedCount: 0, note: "No projects have any Team tab emails yet." }), { status: 200, headers: corsHeaders });
@@ -108,7 +113,7 @@ serve(async (req) => {
         );
 
         let matchedRules = matchProjectRules(projectRules, participantEmails);
-        if (matchedRules.length === 0) {
+        if (matchedRules.length === 0 && !participantsOnly) {
           const text = `${row.subject || ""} ${row.snippet || row.body || ""}`;
           matchedRules = matchProjectRulesByText(projectRules, text);
         }
