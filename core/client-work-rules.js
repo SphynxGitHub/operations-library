@@ -383,7 +383,7 @@ export function reconcileClientFollowUp(client, ctx) {
         const p = {
             id: ctx.uid(), title: `Status note: ${t.title || t.name}`, name: `Status note: ${t.title || t.name}`,
             description: `This has had no status change for ${daysBetween(day(t.statusChangedAt), ctx.today)} days${offsite ? ` — it's waiting on ${thirdParty ? 'a third party' : 'a developer'}` : ''}. Get a progress update${offsite ? ' from them' : ''}, add a comment with a short update the client can be told, then mark this Done. It will be included in the next client follow-up.`,
-            status: OPEN_STATUS, assignee: promptAssignee, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
+            status: FOLLOW_UP_STATUS, assignee: promptAssignee, dueDate: noteDue, isClientTask: false, loggedHours: 0, parentTaskId: null,
             createdBy: 'followup', createdAt: ctx.now, statusNoteFor: t.id, links: [],
         };
         linksForTask(t).forEach((l) => addLink(p, l.requestId, l.resourceIds || []));

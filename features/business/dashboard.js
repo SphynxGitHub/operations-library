@@ -87,7 +87,7 @@ OL.getDashboardMasterTasks = function() {
                 teamMembers: teamMembers,
                 assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
                 assignees: taskAssignees({ assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'), assignees: t.assignees }),
-                dueDate: OL.taskIsClientOwned(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
+                dueDate: OL.taskIsDueless(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
                 taskType: taskType,
                 resourceName: t.resourceName || t.category || 'General Resource',
                 loggedHours: Number(t.loggedHours || t.hoursLogged || 0)

@@ -2818,7 +2818,7 @@ OL._composeTaskListHtml = function() {
     const line = (t) => {
         const names = (OL.getTaskAssignees ? OL.getTaskAssignees(t) : [t.assignee]).filter(n => n && !['Sphynx Task', 'Client Task'].includes(n));
         const who = names.length ? ` (${names.join(', ')})` : '';
-        const due = t.dueDate && !(OL.taskIsClientOwned && OL.taskIsClientOwned(t, client)) ? `, due ${OL.formatDayKey(OL.localDayKey(t.dueDate), { month: 'short', day: 'numeric' })}` : '';
+        const due = t.dueDate && !(OL.taskIsDueless && OL.taskIsDueless(t, client)) ? `, due ${OL.formatDayKey(OL.localDayKey(t.dueDate), { month: 'short', day: 'numeric' })}` : '';
         return `${t.title || t.name}${who}${due}`;
     };
     const groups = [['Sphynx', tasks.filter(t => !isClient(t))], [client.meta?.name || 'Your team', tasks.filter(isClient)]].filter(([, l]) => l.length);

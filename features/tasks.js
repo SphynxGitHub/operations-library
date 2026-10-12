@@ -30,7 +30,7 @@ export function renderClientTaskManager() {
         resourceName: t.resourceName || t.category || 'General Resource',
         loggedHours: Number(t.loggedHours || t.hoursLogged || 0),
         assignees: taskAssignees(t),
-        dueDate: OL.taskIsClientOwned(t, client) ? '' : t.dueDate   // client tasks have no due dates of their own
+        dueDate: OL.taskIsDueless(t, client) ? '' : t.dueDate   // client tasks have no due dates of their own
     }));
 
     // Once the client follow-up is marked done it stays done until the next one is due; say so up here, since the
@@ -229,7 +229,9 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
     const pinned = clientGroup === 'top' || clientGroup === 'bottom';
     const clientOwned = pinned ? filtered.filter(t => OL.taskIsClientOwned(t, client)) : [];
     const clientIds = new Set(clientOwned.map(t => t.id));
-    const rest = pinned ? filtered.filter(t => !clientIds.has(t.id)) : filtered;
+    const devOwned = pinned ? filtered.filter(t => !clientIds.has(t.id) && OL.taskIsThirdPartyOwned(t, client)) : [];
+    const devIds = new Set(devOwned.map(t => t.id));
+    const rest = pinned ? filtered.filter(t => !clientIds.has(t.id) && !devIds.has(t.id)) : filtered;
 
     const renderRest = () => {
         if (!rest.length) return '';
@@ -309,7 +311,22 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         </div>
     `;
 
-    return clientGroup === 'top' ? clientBlock + renderRest() : renderRest() + clientBlock;
+    const devBlock = !devOwned.length ? '' : `
+        <div style="margin-bottom: 20px; padding: 14px; background: rgba(139,92,246,0.05); border: 1px solid rgba(139,92,246,0.3); border-radius: 10px;">
+            <div style="font-weight: 800; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: #8b5cf6; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span onclick="event.stopPropagation();">${OL.renderGroupSelectCheckbox(devOwned)}</span>
+                <i data-lucide="code-2" style="width:13px;height:13px;"></i>
+                <span>Developer / Third Party Tasks</span>
+                <span class="pill tiny soft" style="font-size:10px;">${devOwned.length}</span>
+                <span class="muted" style="text-transform:none; letter-spacing:0; font-weight:500; font-size:11px;">No due dates. The follow-up task chases these.</span>
+            </div>
+            <div style="display: grid; gap: 8px;">
+                ${OL.sortTasksWithSubtasksNested(devOwned).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+            </div>
+        </div>
+    `;
+
+    return clientGroup === 'top' ? clientBlock + devBlock + renderRest() : renderRest() + clientBlock + devBlock;
 };
 
 OL.isSphynxAssignee = function(assignee) {

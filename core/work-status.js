@@ -55,7 +55,7 @@ const ASK_KEYS = Object.keys(ASK_KINDS);
 // A task the implementer has parked while waiting on someone else: "Pending Client Action", "Pending Client
 // Feedback", "Pending Client Document", "Pending Client Review", or "Pending Third Party ...".
 export const isClientWaitingStatus = (status) => /^pending client\b/i.test(String(status || '').trim());
-export const isThirdPartyWaitingStatus = (status) => /^pending third party\b/i.test(String(status || '').trim());
+export const isThirdPartyWaitingStatus = (status) => /^(pending third party\b|developer\/third party task$)/i.test(String(status || "").trim());
 export const isDeveloperWaitingStatus = (status) => /^pending developer\b/i.test(String(status || '').trim());
 // Parked on someone other than the client: a developer or a third party. Handled like the client-waiting statuses for
 // due dates (logged and removed while parked, restored when the status changes) and listed on the client follow-up.

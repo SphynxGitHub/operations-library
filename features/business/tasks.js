@@ -195,6 +195,7 @@ OL.getSystemStatuses = function() {
         { id: "st-6", name: "Pending Third Party Support", color: "#ffca18", isClosed: false },
         { id: "st-7", name: "Needs Follow Up", color: "#ff7f27", isClosed: false },
         { id: "st-8", name: "Client Task", color: "#cb1d63", isClosed: false },
+        { id: "st-dev3p", name: "Developer/Third Party Task", color: "#8b5cf6", isClosed: false },
         { id: "st-9", name: "Done", color: "#299764", isClosed: true }
     ];
 };
@@ -393,6 +394,19 @@ OL.taskIsClientOwned = function(task, client) {
     return people.every(a => OL.classifyTask({ assignee: a, clientId: task?.clientId }, client || state.clients?.[task?.clientId]).key === 'client');
 };
 
+// A task a developer or third party owns (status "Developer/Third Party Task", or assigned only to developer/vendor
+// people). Like client tasks: no due date of its own, the follow-up task chases it.
+OL.DEV_3P_STATUS = 'Developer/Third Party Task';
+OL.taskIsThirdPartyOwned = function(task, client) {
+    if (!task || task.statusNoteFor || task.consolidatedFollowUp || task.askKind === 'follow_up') return false;
+    if (task.status === OL.DEV_3P_STATUS) return true;
+    const people = taskAssignees(task);
+    if (!people.length) return false;
+    return people.every(a => OL.classifyTask({ assignee: a, clientId: task.clientId }, client || state.clients?.[task.clientId]).key === 'thirdparty');
+};
+// Tasks with no due date of their own (client- or developer/third-party-owned).
+OL.taskIsDueless = (task, client) => OL.taskIsClientOwned(task, client) || OL.taskIsThirdPartyOwned(task, client);
+
 // Kept for callers that only need "is this Sphynx staff?"
 OL.isSphynxAssignee = function(assignee) {
     if (!assignee) return true;
@@ -489,7 +503,7 @@ OL.renderBusinessTaskManager = function() {
                 teamMembers: teamMembers,
                 assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'),
                 assignees: taskAssignees({ assignee: t.assignee || t.responsibleParty || (t.isClientTask ? 'Client Task' : 'Sphynx Task'), assignees: t.assignees }),
-                dueDate: OL.taskIsClientOwned(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
+                dueDate: OL.taskIsDueless(t, c) ? '' : t.dueDate,   // client tasks have no due dates of their own
                 taskType: cls.label,
                 taskClass: cls.key,
                 taskPartnerId: cls.partnerId || null,
@@ -1207,7 +1221,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
     const activeStatusObj = masterStatuses.find(s => s.name === t.status) || { color: '#94a3b8', isClosed: false };
     const dotColor = activeStatusObj.color;
     // Client tasks have no due dates of their own (the client follow-up chases them), so no date and never "overdue".
-    const dueless = OL.taskIsClientOwned(t, state.clients?.[t.clientId]);
+    const dueless = OL.taskIsDueless(t, state.clients?.[t.clientId]);
     const isOverdue = !dueless && !!t.dueDate && OL.localDayKey(t.dueDate) < (todayStr || OL.localDateStr()) && !activeStatusObj.isClosed && t.status !== 'Done';
 
     const { avatarBg, avatarColor, avatarContent, avatarBorder } = OL.computeAssigneeAvatar(t.assignee);
@@ -1543,7 +1557,7 @@ OL.applyBulkTaskEdit = function() {
                 if (newBillableVal !== '') {
                     task.billable = (OL.isClientTaskForBilling && OL.isClientTaskForBilling(task, client)) ? false : newBillableVal === 'true';
                 }
-                if (newDueDate && !OL.taskIsClientOwned(task, client)) {   // client tasks have no due dates of their own
+                if (newDueDate && !OL.taskIsDueless(task, client)) {   // client tasks have no due dates of their own
                     task.dueDate = newDueDate;
                 }
             });
@@ -2370,9 +2384,9 @@ OL.renderInContextTaskModal = function(client, task) {
                     </div>
 
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
-                        ${OL.taskIsClientOwned(task, client) ? `
+                        ${OL.taskIsDueless(task, client) ? `
                         <div title="The client follow-up chases client tasks, so they don't need a date">
-                            <strong class="muted">Due Date:</strong> <span class="muted">Not needed for client tasks</span>
+                            <strong class="muted">Due Date:</strong> <span class="muted">Not needed: the follow-up task chases this</span>
                         </div>` : `
                         <div style="cursor:pointer;" onclick="OL.openDueDateDropdown(event, '${client?.id}', '${task.id}')">
                             <strong class="muted">Due Date:</strong> ${task.dueDate ? OL.formatDayKey(OL.localDayKey(task.dueDate), {}) : (task.dueRelativeTo ? 'Relative (see below)' : 'Unscheduled')}
