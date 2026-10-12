@@ -632,13 +632,27 @@ export function _fvLayoutResource(res) {
 
     // Branch steps: same row as parent, colOffset > 0
     const rowBranchCount = {};
-    steps.forEach(step => {
-        const parentId = branchOf[step.id];
-        if (!parentId) return;
-        const pRow = parentRow[parentId] ?? 0;
-        rowBranchCount[pRow] = (rowBranchCount[pRow] || 0) + 1;
-        layout[step.id] = { colOffset: rowBranchCount[pRow], row: pRow, parentId };
-    });
+    // (a branch whose parent is itself a branch sits on its parent's row; one whose parent is not laid out yet waits, and
+    // as a last resort takes the row of the main step before it. It used to fall back to row 0 and fly to the top.)
+    let pending = steps.filter(s => branchOf[s.id]);
+    for (let guard = 0; pending.length && guard <= steps.length; guard++) {
+        const last = guard === steps.length;
+        const rest = [];
+        pending.forEach(step => {
+            const parentId = branchOf[step.id];
+            let pRow = parentRow[parentId];
+            if (pRow === undefined) {
+                if (!last) { rest.push(step); return; }
+                let i = stepIdx.get(String(step.id)) - 1;
+                while (i >= 0 && (branchOf[steps[i].id] || parentRow[steps[i].id] === undefined)) i--;
+                pRow = i >= 0 ? parentRow[steps[i].id] : 0;
+            }
+            rowBranchCount[pRow] = (rowBranchCount[pRow] || 0) + 1;
+            layout[step.id] = { colOffset: rowBranchCount[pRow], row: pRow, parentId };
+            parentRow[step.id] = pRow;
+        });
+        pending = rest;
+    }
 
     return layout;
 };
