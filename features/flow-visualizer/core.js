@@ -3500,7 +3500,7 @@ export function _fvPopulateWb(tab, resources) {
     const data         = OL.getCurrentProjectData();
     const masterGuides = OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || []);
     const localGuides  = client?.projectData?.localHowTo || [];
-    const datapoints   = state.master?.datapoints || [];
+    const datapoints   = (OL.dataPool ? OL.dataPool() : []).length ? OL.dataPool() : (state.master?.datapoints || []);
 
     let allItems = [];
 
@@ -3643,7 +3643,7 @@ export function _fvFilterWb(tab) {
     } else if (tab === 'guides') {
         items = [...(OL.masterGuidesFor ? OL.masterGuidesFor(client) : (state.master?.howToLibrary || [])), ...(client?.projectData?.localHowTo || [])];
     } else if (tab === 'data') {
-        items = state.master?.datapoints || [];
+        items = (OL.dataPool ? OL.dataPool() : []).length ? OL.dataPool() : (state.master?.datapoints || []);
     }
 
     if (q) items = items.filter(i => (i.name || i.title || '').toLowerCase().includes(q));
@@ -5250,13 +5250,14 @@ export async function handleUniversalDropOnStep(e, resId, stepId) {
     await OL.updateAndSync(() => {
         if (type === 'datapoint') {
             if (!step.datapoints) step.datapoints = [];
-            const dp = (state.master.datapoints || []).find(d => String(d.id) === String(id));
+            const pools = [...(OL.dataPool ? OL.dataPool() : []), ...(state.master.datapoints || [])];
+            const dp = pools.find(d => String(d.id) === String(id));
             if (!dp) { console.warn('Data tag not found:', id); return; }
             
             if (dp.isBundle) {
                 // Expand bundle and add all children
                 dp.childIds.forEach(childId => {
-                    const child = state.master.datapoints.find(c => String(c.id) === String(childId));
+                    const child = pools.find(c => String(c.id) === String(childId));
                     if (child && !step.datapoints.some(existing => existing.id === child.id)) {
                         step.datapoints.push(child);
                     }
