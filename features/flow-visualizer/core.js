@@ -3655,12 +3655,18 @@ export function _fvFilterWb(tab) {
 export function _fvWbDragStart(e, id, type) {
   e.dataTransfer.setData('application/fv-resource', id);
   e.dataTransfer.setData('application/fv-tab', type);
+  // A data tag: also say so in the form the step's "Drop tags here" zone reads (handleUniversalDropOnStep)
+  if (type === 'data') {
+    e.dataTransfer.setData('application/sphynx-type', 'datapoint');
+    e.dataTransfer.setData('application/sphynx-id', id);
+  }
   e.dataTransfer.effectAllowed = 'move';
-  // Visual feedback
-  e.currentTarget.style.opacity = '0.4';
-  e.currentTarget.addEventListener('dragend', () => {
-    e.currentTarget.style.opacity = '1';
-  }, { once: true });
+  // Visual feedback. currentTarget is cleared once the event has been handled, so keep the element itself.
+  const el = e.currentTarget;
+  if (el && el.style) {
+    el.style.opacity = '0.4';
+    el.addEventListener('dragend', () => { el.style.opacity = '1'; }, { once: true });
+  }
 };
 
 // RAIL SCROLL AND CANVAS CLICK
@@ -5244,12 +5250,13 @@ export async function handleUniversalDropOnStep(e, resId, stepId) {
     await OL.updateAndSync(() => {
         if (type === 'datapoint') {
             if (!step.datapoints) step.datapoints = [];
-            const dp = state.master.datapoints.find(d => d.id === id);
+            const dp = (state.master.datapoints || []).find(d => String(d.id) === String(id));
+            if (!dp) { console.warn('Data tag not found:', id); return; }
             
             if (dp.isBundle) {
                 // Expand bundle and add all children
                 dp.childIds.forEach(childId => {
-                    const child = state.master.datapoints.find(c => c.id === childId);
+                    const child = state.master.datapoints.find(c => String(c.id) === String(childId));
                     if (child && !step.datapoints.some(existing => existing.id === child.id)) {
                         step.datapoints.push(child);
                     }
@@ -5264,6 +5271,10 @@ export async function handleUniversalDropOnStep(e, resId, stepId) {
     });
 
     OL.renderVisualizer();
+    // the step editor is still open beside the map: redraw it so the new tag shows in its list
+    if (document.querySelector('.inspector-scroll-content') && typeof OL._fvRefreshInspector === 'function') {
+        requestAnimationFrame(() => requestAnimationFrame(() => OL._fvRefreshInspector(resId, stepId)));
+    }
 };
 
 export function renderTrayContent(isVault, query = "", typeFilter = "All") {
