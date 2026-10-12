@@ -2524,7 +2524,7 @@ export function _fvRenderSteps(resources) {
                                  align-items:center;justify-content:center;margin-top:1px;">${idx+1}</span>
                     <div style="min-width:0;flex:1;">
                       <div class="fv-step-name">${esc(step.name||'Unnamed Step')}</div>
-                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}
+                      <div class="fv-step-badges" style="margin-top:4px;">${appBadge}${assigneeBadges}${groupTag}${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step) : ''}</div>${typeof OL.fvRefChip === 'function' ? OL.fvRefChip(step, res) : ''}${typeof OL.fvIncomingChip === 'function' ? OL.fvIncomingChip(step, res) : ''}
                     </div>
                   </div>
                   ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'card') : ''}
@@ -4806,6 +4806,7 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
               ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(step, { withName: true }) : ''}
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
               ${typeof OL.fvRefChip === 'function' && step.refResId ? `<div style="margin-top:3px;">${OL.fvRefChip(step, res)}</div>` : ''}
+              ${typeof OL.fvIncomingChip === 'function' ? (OL.fvIncomingChip(step, res) ? `<div style="margin-top:3px;">${OL.fvIncomingChip(step, res)}</div>` : '') : ''}
               ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'row') : ''}
           </div>
 
@@ -6931,10 +6932,16 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
 
                 <div class="inspector-section">
                     <label class="section-label">
-                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> SEE ANOTHER PROCESS
+                        <i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> JUMP TO ANOTHER PROCESS OR STEP
                     </label>
                     ${typeof OL.fvRefPicker === 'function' ? OL.fvRefPicker(resId, step, `OL.fvSetStepRef('${resId}', '${step.id}', this.value)`) : ''}
-                    <div class="tiny muted" style="margin-top:4px;">For a process used in several places: this step shows a link that jumps to it, and the printout notes the page.</div>
+                    ${typeof OL.fvRefStepPicker === 'function' && step.refResId ? `
+                      <div class="tiny muted" style="margin:8px 0 3px;">Land on</div>
+                      ${OL.fvRefStepPicker(resId, step, `OL.fvSetStepRefStep('${resId}', '${step.id}', this.value)`)}
+                      <div class="tiny muted" style="margin:8px 0 3px;">What triggers it (optional)</div>
+                      <input type="text" class="fvi-select fo-field" maxlength="120" value="${esc(step.refLabel || '')}" placeholder="e.g. Clicks the link and books a call"
+                             onchange="OL.fvSetStepRefLabel('${resId}', '${step.id}', this.value)">` : ''}
+                    <div class="tiny muted" style="margin-top:4px;">This step shows a link that jumps to the process, or to one step in it (this process included), with a Back button. The step it lands on shows where people came from, and the printout notes the page.</div>
                 </div>
 
                 ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}

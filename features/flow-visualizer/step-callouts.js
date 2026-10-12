@@ -16,7 +16,7 @@
 // ================================================================================================
 
 import { esc, uid, getActiveClient, persist, markClientDirty, state } from '../../core/data.js';
-import { CALLOUT_KINDS, calloutKindForType, calloutsFor } from './callouts.js';
+import { CALLOUT_KINDS, calloutKindForType, calloutsFor, isFlowType } from './callouts.js';
 import { orderedResources } from './step-items.js';
 
 const KIND = Object.fromEntries(CALLOUT_KINDS.map((k) => [k.key, k]));
@@ -39,6 +39,9 @@ function kindForType(type) {
   if (/sheet/.test(t)) return 'spreadsheet';
   if (/doc|pdf|agreement|contract/.test(t)) return 'document';
   if (/folder/.test(t)) return 'folder';
+  if (/event|calendar|schedul|booking|appointment/.test(t)) return 'event';
+  // any other type that is not a flow (a custom reference type, say) can still be attached, as "Other"
+  if (t && !isFlowType(t)) return 'other';
   return null;
 }
 
@@ -79,6 +82,11 @@ function previewHtml(c, h = 240) {
   // anything with a web link: try to show the live page. Forms from Jotform / Google Forms and Google Docs-type
   // files can usually be framed; sites that forbid it show blank, so the Open button and a note sit above the frame.
   const raw = safeUrl(lib.externalUrl || lib.url);
+  // a scheduling page is a booking screen, not something to show in a frame: show where it goes and let people open it
+  if (c.kind === 'event') {
+    const bits = [lib.type && `Type: ${lib.type}`, lib.description || lib.notes].filter(Boolean).map((t) => `<div class="fv-callout-meta">${esc(clip(t, 300))}</div>`).join('');
+    return bits + (raw ? `<div class="fv-callout-meta" style="word-break:break-all;">${esc(raw)}</div>` : '');
+  }
   if (raw) {
     let src = raw;
     if (/docs\.google\.com\/forms\//.test(src)) src = src.replace(/\/(edit|viewform)?(\?.*)?$/, '/viewform?embedded=true');
@@ -106,7 +114,7 @@ function panelHtml(resId, stepId, c) {
     ${c.missing ? '' : previewHtml(c)}
     ${c.missing ? '<div class="fv-callout-meta">The linked library item is no longer there.</div>' : (!c.url ? '<div class="fv-callout-meta">No link yet. Use Edit to add one.</div>' : '')}
     <div class="fv-callout-actions">
-      ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open ${icon('external-link', 11)}</a>` : ''}
+      ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${c.kind === 'event' ? 'Open scheduling page' : 'Open'} ${icon('external-link', 11)}</a>` : ''}
       ${c.kind === 'email' && c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.previewEmailTemplate('${esc(c.libId)}')">Full preview</button>` : ''}
       ${c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.libId)}', null, 'cards')">In library</button>` : ''}
       <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">Edit</button>
@@ -184,11 +192,11 @@ function afterChange(resId, stepId) {
 }
 
 // The library type a new item of each kind is filed under (an existing type of that kind is preferred).
-const KIND_TYPE = { email: 'Email Template', form: 'Form Template', spreadsheet: 'Spreadsheet', document: 'Document', folder: 'Folder', other: 'Reference' };
+const KIND_TYPE = { email: 'Email Template', form: 'Form Template', spreadsheet: 'Spreadsheet', document: 'Document', folder: 'Folder', event: 'Event', other: 'Reference' };
 function typeNameForKind(kind) {
   const types = ((state.master && state.master.resourceTypes) || []).map((t) => t.type).filter(Boolean);
   const want = String(KIND_TYPE[kind] || 'Reference').toLowerCase();
-  return types.find((t) => t.toLowerCase() === want) || types.find((t) => kindForType(t) === kind) || KIND_TYPE[kind] || 'Reference';
+  return types.find((t) => t.toLowerCase() === want) || (kind !== 'other' && types.find((t) => kindForType(t) === kind)) || KIND_TYPE[kind] || 'Reference';
 }
 
 // "Create new": adds the item to the library right here, so nobody has to leave the flow map to make it first.
@@ -268,14 +276,14 @@ function edit(resId, stepId, calloutId) {
   window.openModal(`
     <div class="modal-head"><div class="modal-title-text">${cur ? 'Edit collateral' : 'Add collateral'}</div><button class="btn small soft" style="margin-left:auto;" onclick="OL.closeModal()">Close</button></div>
     <div class="modal-body" style="width:100%;box-sizing:border-box;">
-      <p class="tiny muted" style="margin-top:0;">Something someone uses to complete <strong>${esc(step.name || 'this step')}</strong>: a form, an email template, a sheet, a document. Pick it from the library, or create it here without leaving the map.</p>
+      <p class="tiny muted" style="margin-top:0;">Something someone uses to complete <strong>${esc(step.name || 'this step')}</strong>: a form, an email template, a sheet, a document, an event&rsquo;s scheduling page, or any other non-flow item. Pick it from the library, or create it here without leaving the map.</p>
       <input type="hidden" id="fvsc-lib" value="${curLib ? esc(cur.libId) : ''}">
       <input type="hidden" id="fvsc-new" value="">
       <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:start;">
         <div>
           <label class="tiny muted" style="display:block;font-weight:600;margin:0 0 4px;">Find in the library</label>
           <div style="display:flex;gap:8px;align-items:center;">
-            <input id="fvsc-search" class="modal-input" type="text" autocomplete="off" placeholder="Search forms, email templates, sheets, documents..." style="flex:1;min-width:0;margin:0;" oninput="OL.fvStepCalloutFilter()">
+            <input id="fvsc-search" class="modal-input" type="text" autocomplete="off" placeholder="Search the library: forms, templates, sheets, events..." style="flex:1;min-width:0;margin:0;" oninput="OL.fvStepCalloutFilter()">
             <select id="fvsc-filter" class="modal-input" style="width:auto;margin:0;" onchange="OL.fvStepCalloutFilter()"><option value="">All types</option>${kindOpts}</select>
           </div>
           <div id="fvsc-list" style="margin-top:8px;height:min(520px,52vh);overflow-y:auto;border:1px solid var(--panel-border);border-radius:8px;"></div>
@@ -289,7 +297,7 @@ function edit(resId, stepId, calloutId) {
             <div><label ${lbl}>Type</label>
               <select id="fvsc-kind" class="modal-input" onchange="OL.fvStepCalloutKindChanged()">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
             <div><label ${lbl}>Name</label>
-              <input id="fvsc-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email, Onboarding questionnaire"></div>
+              <input id="fvsc-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email, 20 minute call scheduling page"></div>
           </div>
           <label ${lbl}>Link (optional)</label>
           <input id="fvsc-url" class="modal-input" type="text" value="${esc(cur ? cur.url || '' : '')}" placeholder="https://">

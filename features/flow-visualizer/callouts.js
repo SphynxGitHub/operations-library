@@ -23,6 +23,7 @@ export const CALLOUT_KINDS = [
   { key: 'spreadsheet', label: 'Spreadsheet',    icon: 'table' },
   { key: 'document',    label: 'Document',       icon: 'file' },
   { key: 'folder',      label: 'Folder',         icon: 'folder' },
+  { key: 'event',       label: 'Event / scheduling page', icon: 'calendar' },
   { key: 'other',       label: 'Other',          icon: 'paperclip' },
 ];
 const KIND = Object.fromEntries(CALLOUT_KINDS.map((k) => [k.key, k]));
@@ -33,6 +34,11 @@ const TYPE_TO_KIND = {
   'email template': 'email', 'email': 'email', 'signature': 'email', 'form template': 'form', 'template': 'other',
 };
 export const calloutKindForType = (type) => TYPE_TO_KIND[String(type || '').trim().toLowerCase()] || null;
+
+// Resource types that are part of the flow itself (they are drawn as cards with steps), so they are not collateral.
+// Everything else in the library (an event type's scheduling page, a form, a spreadsheet, any custom type) can be attached to a step.
+const FLOW_TYPES = new Set(['zap', 'workflow', 'email campaign', 'process', 'decision', 'checklist', 'task']);
+export const isFlowType = (type) => FLOW_TYPES.has(String(type || '').trim().toLowerCase());
 
 const safeUrl = (u) => { const v = String(u || '').trim(); return /^https?:\/\//i.test(v) ? v : ''; };
 const clip = (s, n) => { const t = String(s || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
