@@ -47,7 +47,7 @@ function warmIntro(clientName, contactName) {
 function bulletFor(key, it) {
     if (key === 'clientAsks') return String(it.title || '').trim();
     if (key === 'pendingReview') return String(it.label || '').trim();
-    return `${String(it.label || '').trim()}${it.note ? `: ${it.note}` : ''}`;
+    return `${String(it.label || '').trim()}${it.note ? `: ${it.note}` : ''}${(it.blocking || []).length ? ` (blocking: ${it.blocking.join(', ')})` : ''}`;
 }
 
 // The checked items of each section as {heading, lines}, skipping empty sections and repeated lines (two tasks on the
