@@ -311,6 +311,17 @@ OL._paintToFileDialog = function() {
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('app', this.value)"><option value="">All apps</option>${apps.map((a) => `<option ${a === d.app ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('tag', this.value)"><option value="">No tag</option>${TAGS.map((t) => `<option ${t === d.tag ? 'selected' : ''}>${t}</option>`).join('')}</select>
                 </div>
+                <div style="border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px;">
+                    ${d.newOpen ? `<div class="tiny muted" style="margin-bottom:4px;">New resource (required: name and type)</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <input id="tf-new-name" class="modal-input" style="flex:2; min-width:160px;" placeholder="Name, e.g. Intake form" value="${esc(d.newName || '')}" oninput="OL.toFileDlgNew('newName', this.value)">
+                        <select id="tf-new-type" class="modal-input" style="flex:1; min-width:120px;" onchange="OL.toFileDlgNew('newType', this.value)"><option value="">Type…</option>${newTypeList().map((t) => `<option ${t === d.newType ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+                        <select class="modal-input" style="flex:1; min-width:120px;" onchange="OL.toFileDlgNew('newApp', this.value)"><option value="">App (optional)</option>${apps.map((a) => `<option ${a === d.newApp ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
+                    </div>
+                    <label class="tiny" style="display:flex; gap:6px; align-items:center; margin-top:6px;"><input type="checkbox" ${d.newLink === false ? '' : 'checked'} onchange="OL.toFileDlgNew('newLink', this.checked)"> Also add it to the request${items.some((i) => i.requestIds.length) ? '' : ' (these items have no request)'}</label>
+                    <div style="display:flex; gap:6px; margin-top:6px;"><button class="btn tiny primary" onclick="OL.toFileCreateResource()">Create and tick it</button><button class="btn tiny soft" onclick="OL.toFileDlgNew('newOpen', false)">Cancel</button></div>`
+                    : `<button class="btn tiny soft" onclick="OL.toFileDlgNew('newOpen', true)">${ic('plus')} New resource</button>`}
+                </div>
                 ${d.app ? `<button class="btn tiny soft" style="margin-bottom:8px;" onclick="OL.toFileDlgApp()">${ic('check-check')} Tick every ${esc(d.app)} resource</button>` : ''}
                 <div style="max-height:46vh; overflow:auto; display:grid; gap:4px;">
                     ${list.map((r) => `<label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;">
@@ -329,6 +340,33 @@ OL._paintToFileDialog = function() {
         const box = document.querySelector('.modal-box.modal-wide'); box.innerHTML = html;
     } else OL.showOverlayModal(html, { wide: true });
     if (window.lucide) window.lucide.createIcons();
+};
+
+function newTypeList() {
+    const t = (state.master?.resourceTypes || []).map((x) => x.type).filter(Boolean);
+    return t.length ? t : ['Zap', 'Form', 'Scheduler Event', 'Workflow', 'Reference', 'General'];
+}
+OL.toFileDlgNew = (k, v) => { const d = S().dlg; d[k] = v; if (k === 'newOpen' || k === 'newLink') OL._paintToFileDialog(); };
+OL.toFileCreateResource = function() {
+    const d = S().dlg; const name = String(d.newName || '').trim();
+    if (!name) { alert('Give the resource a name.'); return; }
+    if (!d.newType) { alert('Pick a type for the resource.'); return; }
+    const id = `local-prj-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const items = itemsFor(d.keys);
+    updateAndSync(() => {
+        const client = state.clients?.[d.clientId]; if (!client?.projectData) return;
+        if (!Array.isArray(client.projectData.localResources)) client.projectData.localResources = [];
+        client.projectData.localResources.push({ id, name, type: d.newType, archetype: 'Base', integration: null, data: {}, steps: [], triggers: [],
+            createdDate: new Date().toISOString(), isShell: true, ...(d.newApp ? { appName: d.newApp } : {}) });
+        if (d.newLink !== false) {
+            const rids = new Set(items.flatMap((i) => i.requestIds));
+            (client.projectData.scopingSheets || []).forEach((sh) => (sh?.lineItems || []).forEach((it) => {
+                if (rids.has(String(it.id))) it.resourceIds = [...requestResourceIds(it), id];
+            }));
+        }
+    }, d.clientId);
+    d.chosen.add(id); d.newOpen = false; d.newName = ''; d.newType = ''; d.newApp = '';
+    OL._paintToFileDialog();
 };
 
 OL.toFileDlg = (k, v) => { S().dlg[k] = v; if (k === 'q') { clearTimeout(_searchT); _searchT = setTimeout(() => { OL._paintToFileDialog(); const el = document.querySelector('.modal-wide input[placeholder="Search resources…"]'); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 200); } else OL._paintToFileDialog(); };
