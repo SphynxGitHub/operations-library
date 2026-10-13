@@ -2504,6 +2504,11 @@ export function goToResourceInMap(resId) {
 
     // 3. Close the modal and go to the real map route (the same way the library's step jump does)
     const isVaultMode = currentHash.includes('vault');
+    // remember which resource to reopen, and where the page was scrolled, when "Back to Library" is clicked
+    sessionStorage.setItem('map_return_resource', String(resId));
+    sessionStorage.setItem('map_return_scroll', String((document.getElementById('mainContent') || {}).scrollTop || 0));
+    sessionStorage.setItem('map_return_winscroll', String(window.scrollY || 0));
+
     OL.closeModal();
     OL.focusedResourceId = String(resId);
     state.focusedResourceId = String(resId);
@@ -2511,9 +2516,6 @@ export function goToResourceInMap(resId) {
 
     const target = isVaultMode ? '#/vault/visualizer' : '#/visualizer';
     if (window.location.hash.split('?')[0] !== target) window.location.hash = target;
-
-    // remember which resource to reopen when "Back to Library" is clicked
-    sessionStorage.setItem('map_return_resource', String(resId));
 
     // 4. Wait for the map to draw (the route change renders it), then centre the card and open its panel. A card with no
     // stage is not drawn on the map, but its panel (with Stage & Workflow) still opens so it can be placed.
@@ -3192,3 +3194,6 @@ Object.assign(window.OL, {
 // features/resources-grid.js) — bridge onto window directly.
 window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
+
+// build stamp: type OL.build in the browser console to see which version of each file is running
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.d' });
