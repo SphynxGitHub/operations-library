@@ -454,6 +454,12 @@ export function openResourceModal(targetId, draftObj = null) {
     }
 
     if (!res) return;
+    // the external link lives in one field, externalUrl; a link saved by the old sidebar field is carried across
+    if (res.externalLink !== undefined) {
+        if (!res.externalUrl && res.externalLink) res.externalUrl = res.externalLink;
+        delete res.externalLink;
+        OL.persist();
+    }
     const activeData = lineItem || res;
 
     // 🧠 2. AUTO-MAPPING LOGIC (The New Brain)
@@ -923,6 +929,22 @@ const dependencyHtml = `
             </select>` : ''}
         </div>` : '';
 
+    // --- STEPS (types without the inline editor) ---
+    // Steps are edited on the flow map, where the full step editor is. Here they are listed, with a way across.
+    const stepSummaryHtml = (!showWorkflowSteps && (res.steps || []).length) ? `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="list" style="width:14px;height:14px;"></i> STEPS
+                <span class="pill tiny soft">${(res.steps || []).length}</span>
+            </label>
+            <ol style="margin:8px 0 10px 18px;padding:0;font-size:12px;line-height:1.7;">
+                ${(res.steps || []).map((st) => `<li>${esc(st.name || 'Unnamed step')}${st.appName ? ` <span class="pill tiny soft">${esc(st.appName)}</span>` : ''}</li>`).join('')}
+            </ol>
+            <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> Edit steps on the flow map
+            </button>
+        </div>` : '';
+
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
     if (resType === "email" || resType === "email template") {
@@ -1308,6 +1330,15 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="link" style="width:14px;height:14px;"></i> ${isZap ? 'Zapier Link' : 'External Link'}
+                </label>
+                <input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalUrl || '')}"
+                       data-original="${esc(res.externalUrl || '')}"
+                       onblur="const v=this.value.trim(); if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'externalUrl', v);">
+            </div>
+
            <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="align-start-vertical" style="width:14px;height:14px;"></i>
@@ -1346,6 +1377,8 @@ const dependencyHtml = `
         
             ${dataTagsHtml}
 
+            ${stepSummaryHtml}
+
             ${showWorkflowSteps ? `
                 <div class="card-section" style="margin-top:20px;">
                     <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
@@ -1353,7 +1386,7 @@ const dependencyHtml = `
                     </label>
                     <div style="display:flex;gap:8px;margin-bottom:10px;">
                         <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex;align-items:center;gap:6px;">
-                            <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> Visual Editor
+                            <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> Edit on flow map
                         </button>
                         <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')" style="display:flex;align-items:center;gap:6px;">
                             <i data-lucide="plus" style="width:12px;height:12px;"></i> Add Step
@@ -2518,6 +2551,8 @@ export function goToResourceInMap(resId) {
             return;
         }
          if (typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
+         // open the resource's panel (details and steps) beside the map; "Resource details" there opens this modal again
+         if (typeof OL._fvOpenStepsList === 'function') OL._fvOpenStepsList(String(resId));
      }, 150);
  };
 
