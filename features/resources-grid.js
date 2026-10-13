@@ -596,7 +596,8 @@ export function setResourceGroupBy(value) {
 // ── PARENT INDEX ─────────────────────────────────────────────────────────────────────────────────────────────────
 // "Parent resource" grouping: a form or email template sits under the resource that uses it (a scheduling event, an email
 // campaign, a Zap...). A resource uses another when one of its steps links to it, when a step's logic points at it, or when
-// it is the form's / email's parent in the process map. Forms and emails themselves are never parents.
+// it is the form's / email's parent in the process map. Emails are never parents; a form can be the parent of its own
+// emails (autoresponders), and then it heads its own group instead of sitting under the event or Zap.
 // Same idea as the flow map's collateral: any type that reads as a form or an email (Email Template, Welcome Email, Intake Form...),
 // except the types that run a flow of their own (Email Campaign, Email Sequence, Workflow...), which are parents.
 const FLOW_KINDS = new Set(['zap', 'workflow', 'email campaign', 'process', 'decision', 'checklist', 'task']);
@@ -605,6 +606,8 @@ const isChildKind = (r) => {
     if (!t || FLOW_KINDS.has(t) || /campaign|sequence|series|drip|automation|workflow|journey/.test(t)) return false;
     return /\b(forms?|questionnaires?|emails?|signatures?|letters?)\b/.test(t);
 };
+const isEmailKind = (r) => isChildKind(r) && /\bemails?\b|letters?/.test(String(r?.type || '').toLowerCase());
+const isFormKind = (r) => isChildKind(r) && !isEmailKind(r);
 function buildParentIndex(all) {
     const byId = new Map(all.map((r) => [String(r.id), r]));
     // a logic target looks like "<resourceId>-<stepId>"; take the longest prefix that is a real resource
@@ -620,7 +623,9 @@ function buildParentIndex(all) {
     const parentsOf = new Map();   // child id -> [parent resource]
     const kids = new Set();        // ids of resources that have at least one form/email under them
     const add = (parent, child) => {
-        if (!parent || !child || parent === child || isChildKind(parent) || !isChildKind(child)) return;
+        if (!parent || !child || parent === child || !isChildKind(child)) return;
+        // a form can parent its own emails; nothing else that reads as a form/email can be a parent
+        if (isChildKind(parent) && !(isFormKind(parent) && isEmailKind(child))) return;
         const key = String(child.id);
         const list = parentsOf.get(key) || [];
         if (!list.includes(parent)) { list.push(parent); parentsOf.set(key, list); }
@@ -666,19 +671,21 @@ function buildResourceGroups(items, mode) {
     };
 
     items.forEach(res => {
-        const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
-        if (mode === 'none') put('All resources', res, { icon: 'layers' });
-        else if (mode === 'parent') {
-            if (isChildKind(res)) {
-                const ps = parentIdx.parentsOf.get(String(res.id)) || [];
-                if (ps.length) ps.forEach((p) => put(labelFor(p), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(p.type) : 'folder', pin: String(p.id) }));
-                else put('Forms and emails with no parent', res, { icon: 'circle-dashed', last: true });
-            } else if (parentIdx.kids.has(String(res.id))) {
-                put(labelFor(res), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(res.type) : 'folder', pin: String(res.id) });
-            } else {
-                put('Other resources', res, { icon: 'layers', last: true });
-            }
-        }
+       const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
+       if (mode === 'none') put('All resources', res, { icon: 'layers' });
+       else if (mode === 'parent') {
+           // a form that has its own emails (autoresponders) heads its own group instead of sitting under the event/Zap
+           const formWithKids = isFormKind(res) && parentIdx.kids.has(String(res.id));
+           if (isChildKind(res) && !formWithKids) {
+               const ps = parentIdx.parentsOf.get(String(res.id)) || [];
+               if (ps.length) ps.forEach((p) => put(labelFor(p), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(p.type) : 'folder', pin: String(p.id) }));
+               else put('Forms and emails with no parent', res, { icon: 'circle-dashed', last: true });
+           } else if (parentIdx.kids.has(String(res.id))) {
+               put(labelFor(res), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(res.type) : 'folder', pin: String(res.id) });
+           } else {
+               put('Other resources', res, { icon: 'layers', last: true });
+           }
+       }
         else if (mode === 'updated') {
             const bi = updatedBucket(res);
             bi === null ? put('No edit date yet', res, { icon: 'circle-dashed', last: true }) : put(UPDATED_BUCKETS[bi].label, res, { icon: 'clock', order: bi });
