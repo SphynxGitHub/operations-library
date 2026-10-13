@@ -229,6 +229,23 @@ export function buildFlow(zap, resId, byId) {
 
 export function zapEditorUrl(zapId) { return `https://zapier.com/editor/${zapId}`; }
 
+// The Zapier folder a Zap sits in, if the export carries one. The export has been read under several spellings, so the usual ones
+// are tried: a name, an object with a name or title, or a path (a list of names, or "Parent / Child"). A nested folder gives the
+// top folder and, below it, the sub-group.
+export function zapFolderOf(zap) {
+  if (!zap || typeof zap !== 'object') return null;
+  const raw = firstDefined(zap.folderPath, zap.folder_path, zap.folderName, zap.folder_name, zap.zapFolder, zap.zapierFolder, zap.folder);
+  if (raw === undefined) return null;
+  let parts = [];
+  if (Array.isArray(raw)) parts = raw.map((x) => (x && typeof x === 'object' ? firstDefined(x.name, x.title, x.label) : x));
+  else if (raw && typeof raw === 'object') parts = [firstDefined(raw.path, raw.name, raw.title, raw.label)].flat();
+  else parts = String(raw).split(/\s*(?:\/|>|›|»)\s*/);
+  parts = parts.map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
+  // an id with no name ("12345") is not a folder name worth showing
+  if (!parts.length || parts.every((x) => /^\d+$/.test(x))) return null;
+  return { folder: parts[0].slice(0, 80), subGroup: parts.slice(1).join(' / ').slice(0, 80), path: parts.join(' / ') };
+}
+
 export function zapToResource(zap, opts = {}) {
   const resId = opts.resourceId || `zap-${zap.zapId}`;
   const byId = new Map((zap.steps || []).map((s) => [String(s.stepId), s]));
@@ -269,7 +286,10 @@ export function zapToResource(zap, opts = {}) {
       accountId: zap.zapierAccountId, accountName: zap.zapierAccountName,
       timezone: zap.timezone, contentHash: fingerprint(zap.steps || []),
       trigger: triggerInfo(zap).label || undefined,
+      zapierFolder: (zapFolderOf(zap) || {}).path || undefined,
     },
+    // the library's folder and sub-group, so Zaps group by their Zapier folders (set once; a folder chosen by hand is kept)
+    ...(zapFolderOf(zap) ? { folder: zapFolderOf(zap).folder, ...(zapFolderOf(zap).subGroup ? { subGroup: zapFolderOf(zap).subGroup } : {}) } : {}),
   };
 }
 
@@ -280,6 +300,7 @@ export function mergeIntoExisting(oldRes, newRes) {
   const merged = { ...oldRes };
   for (const k of IMPORT_OWNED) if (newRes[k] !== undefined) merged[k] = newRes[k];
   if (merged.isExpanded === undefined) merged.isExpanded = newRes.isExpanded;
+  if (newRes.folder && !String(merged.folder || '').trim()) { merged.folder = newRes.folder; if (newRes.subGroup && !String(merged.subGroup || '').trim()) merged.subGroup = newRes.subGroup; }
   const oldByZapId = new Map();
   const oldByName = new Map();
   (oldRes.steps || []).forEach((s) => { if (s.zap && s.zap.stepId) oldByZapId.set(String(s.zap.stepId), s); else oldByName.set(s.name, s); });

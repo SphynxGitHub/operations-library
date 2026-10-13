@@ -214,6 +214,10 @@ function _renderResourceManagerImpl() {
                     <select id="lib-group-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceGroupBy(this.value)">
                         ${RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
                     </select>
+                    <span class="tiny muted bold uppercase">Then by:</span>
+                    <select id="lib-subgroup-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceSubGroupBy(this.value)">
+                        ${RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
+                    </select>
                 </div>
 
                 <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
@@ -512,6 +516,14 @@ export const RESOURCE_GROUP_MODES = [
     { key: 'none', label: 'No grouping' },
 ];
 const GROUP_BY_KEY = 'ol_resource_group_by';
+// A second level inside each group. "Automatic" keeps the old behaviour (a folder's own sub-groups); "None" is one flat group.
+const SUBGROUP_BY_KEY = 'ol_resource_subgroup_by';
+export const RESOURCE_SUBGROUP_MODES = [
+    { key: 'auto', label: 'Automatic' },
+    { key: 'none', label: 'Nothing (one level)' },
+    ...RESOURCE_GROUP_MODES.filter((m) => m.key !== 'none').map((m) => ({ key: m.key, label: m.key === 'parent' ? 'Parent resource' : m.label })),
+    { key: 'subgroup', label: 'Sub-group (inside a folder)' },
+];
 
 // Which group sections are open survives re-renders (every save redraws the page) and reloads. Stored per grouping
 // mode + group name on this device; a section nobody has touched falls back to the "short list opens" default.
@@ -566,6 +578,15 @@ export function getResourceGroupBy() {
     let v = '';
     try { v = localStorage.getItem(GROUP_BY_KEY) || ''; } catch (e) { /* storage blocked: fall back to Type */ }
     return RESOURCE_GROUP_MODES.some(m => m.key === v) ? v : 'type';
+}
+export function getResourceSubGroupBy() {
+    let v = '';
+    try { v = localStorage.getItem(SUBGROUP_BY_KEY) || ''; } catch (e) { /* storage blocked: automatic */ }
+    return RESOURCE_SUBGROUP_MODES.some(m => m.key === v) ? v : 'auto';
+}
+export function setResourceSubGroupBy(value) {
+    try { localStorage.setItem(SUBGROUP_BY_KEY, value); } catch (e) { /* not remembered, still applies now */ }
+    OL.syncResourceLibraryFilters();
 }
 export function setResourceGroupBy(value) {
     try { localStorage.setItem(GROUP_BY_KEY, value); } catch (e) { /* not remembered, still applies now */ }
@@ -661,6 +682,10 @@ function buildResourceGroups(items, mode) {
         else if (mode === 'updated') {
             const bi = updatedBucket(res);
             bi === null ? put('No edit date yet', res, { icon: 'circle-dashed', last: true }) : put(UPDATED_BUCKETS[bi].label, res, { icon: 'clock', order: bi });
+        }
+        else if (mode === 'subgroup') {
+            const sg = String(res.subGroup || '').trim();
+            sg ? put(sg, res, { icon: 'corner-down-right' }) : put('No sub-group', res, { icon: 'circle-dashed', last: true });
         }
         else if (mode === 'folder') {
             const f = String(res.folder || '').trim();
@@ -778,18 +803,41 @@ function _renderResourceGroupsImpl(container, items) {
                         </div>
                         ${mode === 'type' && g.typeKey ? `<button class="btn tiny soft" onclick="event.preventDefault(); event.stopPropagation(); OL.promptBulkReclassify('${esc(g.typeKey)}')">Bulk Move</button>` : ''}
                     </summary>
-                    ${(mode === 'folder' ? splitSubGroups(g.items) : [{ label: '', items: g.items }]).map(sg => `
-                        ${sg.label ? `<div class="tiny bold uppercase muted" style="margin:10px 0 6px 2px; display:flex; align-items:center; gap:6px;"><i data-lucide="corner-down-right" style="width:12px;height:12px;"></i>${esc(sg.label)} <span class="pill tiny soft">${sg.items.length}</span></div>` : ''}
-                        ${listMode ? `
+                    ${(() => {
+                        const pick = OL.getResourceSubGroupBy();
+                        const sub = pick === 'auto' ? (mode === 'folder' ? 'subgroup' : 'none') : (pick === mode ? 'none' : pick);
+                        const parts = sub === 'none' ? [{ label: '', items: g.items }]
+                            : sub === 'subgroup' ? splitSubGroups(g.items)
+                            : buildResourceGroups(g.items, sub);
+                        const cards = (list) => listMode ? `
                             <div style="display:flex;flex-direction:column;gap:2px;">
-                                ${sg.items.map(res => OL._renderResourceListRow(res)).join('')}
-                            </div>
-                        ` : `
+                                ${list.map(res => OL._renderResourceListRow(res)).join('')}
+                            </div>` : `
                             <div class="cards-grid">
-                                ${sg.items.map(r => renderResourceCard(r, { selectable: true })).join('')}
-                            </div>
-                        `}
-                    `).join('')}
+                                ${list.map(r => renderResourceCard(r, { selectable: true })).join('')}
+                            </div>`;
+                        // a lone unlabelled part (nothing to split by) is drawn as before
+                        if (parts.length === 1 && !parts[0].label) return cards(parts[0].items);
+                        if (sub === 'subgroup') return parts.map(sg => `
+                            ${sg.label ? `<div class="tiny bold uppercase muted" style="margin:10px 0 6px 2px; display:flex; align-items:center; gap:6px;"><i data-lucide="corner-down-right" style="width:12px;height:12px;"></i>${esc(sg.label)} <span class="pill tiny soft">${sg.items.length}</span></div>` : ''}
+                            ${cards(sg.items)}`).join('');
+                        // a second level of grouping: each part is its own collapsible section inside the group
+                        return parts.map(sg => {
+                            const sKey = `${mode}|${g.label}|${sub}|${sg.label}`;
+                            const savedSub = readGroupOpen()[sKey];
+                            return `
+                            <details class="res-group" data-group-key="${esc(sKey)}" ${typeof savedSub === 'boolean' ? (savedSub ? 'open' : '') : 'open'} style="margin:0 0 14px 14px;">
+                                <summary onclick="OL.rememberResourceGroup(this)" style="display:flex; align-items:center; gap:8px; padding:4px 0 6px; margin-bottom:8px; border-bottom:1px solid var(--line); cursor:pointer; list-style:none;">
+                                    <input type="checkbox" data-res-group="${esc(sg.items.map(r => r.id).join(','))}" title="Select every resource in this section"
+                                           onclick="event.stopPropagation()" onchange="OL.toggleResourceGroupSelect(this.getAttribute('data-res-group'), this.checked)">
+                                    <i data-lucide="${sg.icon || 'corner-down-right'}" style="width:14px;height:14px;color:var(--text-muted);"></i>
+                                    <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">${esc(sg.label)}</span>
+                                    <span class="pill tiny soft">${sg.items.length}</span>
+                                </summary>
+                                ${cards(sg.items)}
+                            </details>`;
+                        }).join('');
+                    })()}
                 </details>
             `; }).join('')}
         </div>
@@ -1756,7 +1804,7 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     syncResourceLibraryFilters, renderResourceGroups, _renderResourceListRow,
-    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSort, setResourceSort, rememberResourceGroup, setAllResourceGroups,
+    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSubGroupBy, setResourceSubGroupBy, getResourceSort, setResourceSort, rememberResourceGroup, setAllResourceGroups,
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
