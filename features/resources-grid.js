@@ -1190,6 +1190,8 @@ export function toggleInlineStepEditor(resId, stepId) {
     if (!Array.isArray(step.logic.in)) step.logic.in = [];
     if (!Array.isArray(step.logic.out)) step.logic.out = [];
     if (!step.assignees) step.assignees = [];
+    // An imported step that has an app name but no app link gets linked now (e.g. "Code by Zapier" -> "Zapier Code").
+    if (!step.appId && step.appName && typeof OL.autoLinkStepApps === 'function' && OL.autoLinkStepApps(getActiveClient(), res)) persist();
 
     drawer.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:12px;">
