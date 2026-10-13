@@ -937,9 +937,14 @@ const dependencyHtml = `
                 <i data-lucide="list" style="width:14px;height:14px;"></i> STEPS
                 <span class="pill tiny soft">${(res.steps || []).length}</span>
             </label>
-            <ol style="margin:8px 0 10px 18px;padding:0;font-size:12px;line-height:1.7;">
-                ${(res.steps || []).map((st) => `<li>${esc(st.name || 'Unnamed step')}${st.appName ? ` <span class="pill tiny soft">${esc(st.appName)}</span>` : ''}</li>`).join('')}
-            </ol>
+            <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0 16px;">
+                ${(res.steps || []).map((st, i) => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
+                        <span style="flex:0 0 24px;height:24px;border-radius:50%;background:var(--accent);color:#000;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">${i + 1}</span>
+                        <span style="flex:1;min-width:0;font-size:13px;line-height:1.4;">${esc(st.name || 'Unnamed step')}</span>
+                        ${st.appName ? `<span class="pill tiny soft" style="flex:0 0 auto;">${esc(st.appName)}</span>` : ''}
+                    </div>`).join('')}
+            </div>
             <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex;align-items:center;gap:6px;">
                 <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> Edit steps on the flow map
             </button>
@@ -2532,29 +2537,28 @@ export function goToResourceInMap(resId) {
     // 2. Save it to session storage so it survives the view change
     sessionStorage.setItem('map_return_path', returnPath);
 
-    // 3. Proceed with existing logic
-    OL.closeModal(); 
+    // 3. Close the modal and go to the real map route (the same way the library's step jump does)
+    const isVaultMode = currentHash.includes('vault');
+    OL.closeModal();
     OL.focusedResourceId = String(resId);
-    
-    if (typeof OL.setView === 'function') OL.setView('map');
-    OL.renderVisualizer();
-    
-    setTimeout(() => {
-        // A card that is not in any stage is not drawn on the flowchart (imported Zaps start that way), so there is
-        // nothing to centre on. Open the card's own step editor instead: that is what this button is for.
+    state.focusedResourceId = String(resId);
+    sessionStorage.setItem('active_resource_id', String(resId));
+
+    const target = isVaultMode ? '#/vault/visualizer' : '#/visualizer';
+    if (window.location.hash.split('?')[0] !== target) window.location.hash = target;
+
+    // 4. Once the map has drawn: centre the card if it is on the map, then open its side panel. A card with no stage is
+    // not drawn on the map, but its panel (with Stage & Workflow) still opens so it can be placed.
+    const open = () => {
+        if (typeof OL.renderVisualizer === 'function' && !document.getElementById('fv-canvas-wrap')) OL.renderVisualizer(isVaultMode);
         const safeId = (window.CSS && CSS.escape) ? CSS.escape(String(resId)) : String(resId).replace(/["\\]/g, '\\$&');
-        const onCanvas = document.querySelector(`.fv-card[data-res-id="${safeId}"]`)
-            || document.getElementById(`v2-node-${resId}`) || document.getElementById(String(resId));
-        if (!onCanvas && typeof OL._fvOpenStepCanvas === 'function') {
-            OL.focusedResourceId = null;
-            OL._fvOpenStepCanvas(String(resId));
-            return;
-        }
-         if (typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
-         // open the resource's panel (details and steps) beside the map; "Resource details" there opens this modal again
-         if (typeof OL._fvOpenStepsList === 'function') OL._fvOpenStepsList(String(resId));
-     }, 150);
- };
+        const onCanvas = document.querySelector(`.fv-card[data-res-id="${safeId}"]`) || document.getElementById(`v2-node-${resId}`);
+        if (onCanvas && typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
+        if (typeof OL._fvOpenStepsList === 'function') OL._fvOpenStepsList(String(resId));
+        if (typeof OL.renderFocusControls === 'function') OL.renderFocusControls();
+    };
+    setTimeout(open, 300);
+};
 
 export function navigateBack() {
     const history = JSON.parse(sessionStorage.getItem('ol_nav_history') || '[]');

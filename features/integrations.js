@@ -866,7 +866,9 @@ export async function autoPullIntegrations(client) {
             if (it.csv || !hasKey(getCredsForApp(client, it.creds))) continue;
             const last = synced[it.key] || {};
             if (!last.at && !hasPulledBefore(client, it.key)) continue;                      // the first pull is a deliberate click
-            if (last.at && nowMs - Date.parse(last.at) < everyMs) continue;                   // pulled recently
+            // events pulled before forms and emails were created are brought up to date on the next open, not a day later
+            const needsCatchUp = it.key === 'calendly' && (client.projectData.localResources || []).some((r) => r && r.source === 'calendly' && r.type === 'Event' && !r.flowSeeded && !r.isDeleted);
+            if (!needsCatchUp && last.at && nowMs - Date.parse(last.at) < everyMs) continue;  // pulled recently
             if (last.errorAt && nowMs - Date.parse(last.errorAt) < AUTO_RETRY_AFTER_ERROR_MS) continue;
             try { results.push(await runOneSync(client, it.key, { auto: true })); }
             catch (e) { if (!e.skip) { console.warn(`Automatic ${it.name} pull failed:`, e); recordSyncError(client, it.key, e); } }
@@ -1009,6 +1011,9 @@ export async function importCalendly(client, opts = {}) {
         const name = ev.name || 'Calendly Event';
         const active = ev.active !== false;   // an event that is off is still pulled in, and archived
         const app = 'Calendly';
+        // where each piece is edited in Calendly: the booking page for the event, the event's own settings page for the
+        // booking questions and the notification emails
+        const editUrl = `https://calendly.com/event_types/${id}/edit`;
 
         // booking form: name and email are always asked; the rest are the event's own questions
         const tags = [
@@ -1035,16 +1040,16 @@ export async function importCalendly(client, opts = {}) {
         });
         items.push({
             externalId: `form-${id}`, name: `${name}: Booking Form`, type: 'Form', archetype: 'Base',
-            description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
+            externalUrl: editUrl, description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags }],
         });
         items.push({
-            externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base',
+            externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl,
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-confirm-${id}-s0`, name: `${app} sends confirmation email`, appName: app }],
         });
         items.push({
-            externalId: `reminder-${id}`, name: `${name}: Reminder Email`, type: 'Email', archetype: 'Base',
+            externalId: `reminder-${id}`, name: `${name}: Reminder Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl,
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-reminder-${id}-s0`, name: `${app} sends meeting reminder email`, appName: app }],
         });
