@@ -614,6 +614,7 @@ function commitPull(client, source, items, extra = {}) {
     const summary = reconcileExternal(client.projectData.localResources, source, items);
     (extra.logicChanged || []).forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });   // a form whose logic changed counts as changed
     logExternalPull(client.projectData, summary);
+    if (typeof extra.afterReconcile === 'function') extra.afterReconcile(client.projectData.localResources);
     tieExternalToZaps(client.projectData.localResources);
     markClientDirty(client.id);
     refreshAfterPull(client);
@@ -944,6 +945,40 @@ export function openImportHub() {
     openModal(html);
 };
 
+// ---- Calendly: one event type becomes four linked cards -------------------------------------------------
+// The event (with a default flow), its booking form (the questions as data tags), and a confirmation and a reminder email.
+// The default flow is added once; after that the steps, links and email content belong to the person editing them.
+const camel = (t) => String(t).replace(/[^A-Za-z0-9 ]+/g, ' ').trim().split(/\s+/).map((w, i) => i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()).join('');
+
+// Finds a data tag by name in the project's list, else copies it from the master list (as "Import Master" does), else makes it.
+function findOrMakeTag(client, names, category) {
+    const pd = client.projectData;
+    if (!Array.isArray(pd.localDatapoints)) pd.localDatapoints = [];
+    const want = names.map((n) => n.toLowerCase().trim());
+    const hit = (list) => list.find((d) => d && !d.isBundle && want.includes(String(d.name || '').toLowerCase().trim()));
+    const local = hit(pd.localDatapoints);
+    if (local) return local;
+    const master = hit(state.master?.datapoints || []);
+    const tag = master
+        ? { ...JSON.parse(JSON.stringify(master)), masterRefId: master.id, id: 'local-dp-' + Date.now() + Math.random().toString(36).slice(2, 6) }
+        : { id: 'local-dp-' + Date.now() + Math.random().toString(36).slice(2, 6), name: names[0], key: '{' + camel(names[0]) + '}', category };
+    pd.localDatapoints.push(tag);
+    return tag;
+}
+
+// Ties each default-flow step to the form or email card it was made for, once (the marker is removed after).
+function linkCalendlyFlow(library) {
+    const cards = (library || []).filter((r) => r && r.source === 'calendly');
+    cards.forEach((card) => (card.steps || []).forEach((st) => {
+        if (!st.seedLink) return;
+        const target = cards.find((r) => String(r.externalId) === st.seedLink);
+        if (!target) return;
+        if (!st.links) st.links = [];
+        if (!st.links.some((l) => l.id === target.id)) st.links.push({ id: target.id, name: target.name, type: target.type });
+        delete st.seedLink;
+    }));
+}
+
 export async function importCalendly(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'calendly');
     if (!hasKey(creds)) throw new Error("Calendly API Key missing in Credentials.");
@@ -952,25 +987,54 @@ export async function importCalendly(client, opts = {}) {
     const data = await importFrom('calendly', client.id, creds.id, creds.calendlyUser ? { calendlyUser: creds.calendlyUser } : {});
     const events = data.collection || [];
 
-    const items = events.map((ev) => {
-        const externalId = String(ev.uri || '').split('/').pop();
-        // The booking form: the extra questions Calendly asks on top of name and email.
-        const questions = (ev.custom_questions || []).filter((q) => q && q.enabled !== false).sort((a, b) => (a.position || 0) - (b.position || 0));
-        const bookingForm = questions.map((q) => ({
-            question: q.name, type: q.type, required: !!q.required,
-            choices: q.answer_choices || [], includeOther: !!q.include_other,
-        }));
-        const formText = bookingForm.map((q) => `- ${q.question}${q.required ? ' (required)' : ''}${q.choices.length ? ': ' + q.choices.join(' / ') : ''}`).join('\n');
-        return {
-            externalId, name: ev.name, type: 'Event', externalUrl: ev.scheduling_url,
+    const items = [];
+    events.forEach((ev) => {
+        const id = String(ev.uri || '').split('/').pop();
+        if (!id) return;
+        const name = ev.name || 'Calendly Event';
+        const active = ev.active !== false;   // an event that is off is still pulled in, and archived
+        const app = 'Calendly';
+
+        // booking form: name and email are always asked; the rest are the event's own questions
+        const tags = [
+            findOrMakeTag(client, ['Full Name', 'Name'], 'Contact'),
+            findOrMakeTag(client, ['Email Address', 'Email'], 'Contact'),
+        ];
+        (ev.custom_questions || []).filter((q) => q && q.enabled !== false && String(q.name || '').trim())
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
+            .forEach((q) => {
+                const t = findOrMakeTag(client, [String(q.name).trim().slice(0, 80)], 'Calendly Booking Form');
+                if (!tags.some((x) => x.id === t.id)) tags.push(t);
+            });
+
+        items.push({
+            externalId: id, name, type: 'Event', externalUrl: ev.scheduling_url,
             description: ev.description_plain || ev.description || "Calendly Event Type",
-            bookingForm,
-            serviceActive: ev.active !== false,   // Calendly's on/off switch; an "off" event is still pulled in, and archived
-            steps: [{ id: `cal-${externalId}-s0`, name: "Client Schedules Appointment", appName: "Calendly",
-                      ...(formText ? { description: 'Booking form questions (besides name and email):\n' + formText } : {}) }],
-        };
-    }).filter((i) => i.externalId);
-    return commitPull(client, 'calendly', items);
+            serviceActive: active, keepSteps: true,
+            steps: [{ id: `cal-${id}-s0`, name: "Lead/Client accesses booking page and chooses datetime", appName: app }],
+            seedSteps: [
+                { id: `cal-${id}-s1`, name: "Lead/Client completes booking form", appName: app, seedLink: `form-${id}` },
+                { id: `cal-${id}-s2`, name: `${app} sends confirmation email`, appName: app, seedLink: `confirm-${id}` },
+                { id: `cal-${id}-s3`, name: `${app} sends meeting reminder email`, appName: app, seedLink: `reminder-${id}` },
+            ],
+        });
+        items.push({
+            externalId: `form-${id}`, name: `${name} Booking Form`, type: 'Form', archetype: 'Base',
+            description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
+            steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags }],
+        });
+        items.push({
+            externalId: `confirm-${id}`, name: `${name} Confirmation Email`, type: 'Email', archetype: 'Base',
+            serviceActive: active, keepSteps: true,
+            steps: [{ id: `cal-confirm-${id}-s0`, name: `${app} sends confirmation email`, appName: app }],
+        });
+        items.push({
+            externalId: `reminder-${id}`, name: `${name} Reminder Email`, type: 'Email', archetype: 'Base',
+            serviceActive: active, keepSteps: true,
+            steps: [{ id: `cal-reminder-${id}-s0`, name: `${app} sends meeting reminder email`, appName: app }],
+        });
+    });
+    return commitPull(client, 'calendly', items, { afterReconcile: linkCalendlyFlow });
 };
 
 export async function importYCBM(client, opts = {}) {
