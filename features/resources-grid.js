@@ -480,6 +480,7 @@ export const RESOURCE_GROUP_MODES = [
     { key: 'folder', label: 'Folder / sub-group' },
     { key: 'stage', label: 'Process stage' },
     { key: 'workflow', label: 'Parent workflow' },
+    { key: 'parent', label: 'Parent resource (forms and emails under what uses them)' },
     { key: 'app', label: 'App' },
     { key: 'scope', label: 'Scoping status' },
     { key: 'party', label: 'Responsible party' },
@@ -547,6 +548,42 @@ export function setResourceGroupBy(value) {
     OL.syncResourceLibraryFilters();
 }
 
+// ── PARENT INDEX ─────────────────────────────────────────────────────────────────────────────────────────────────
+// "Parent resource" grouping: a form or email template sits under the resource that uses it (a scheduling event, an email
+// campaign, a Zap...). A resource uses another when one of its steps links to it, when a step's logic points at it, or when
+// it is the form's / email's parent in the process map. Forms and emails themselves are never parents.
+const isChildKind = (r) => /^(form|email)( template)?$/i.test(String(r?.type || '').trim());   // not "Email Campaign": that is a parent
+function buildParentIndex(all) {
+    const byId = new Map(all.map((r) => [String(r.id), r]));
+    // a logic target looks like "<resourceId>-<stepId>"; take the longest prefix that is a real resource
+    const resolve = (tid) => {
+        const t = String(tid || '');
+        if (byId.has(t)) return byId.get(t);
+        for (let i = t.lastIndexOf('-'); i > 0; i = t.lastIndexOf('-', i - 1)) {
+            const hit = byId.get(t.slice(0, i));
+            if (hit) return hit;
+        }
+        return null;
+    };
+    const parentsOf = new Map();   // child id -> [parent resource]
+    const kids = new Set();        // ids of resources that have at least one form/email under them
+    const add = (parent, child) => {
+        if (!parent || !child || parent === child || isChildKind(parent) || !isChildKind(child)) return;
+        const key = String(child.id);
+        const list = parentsOf.get(key) || [];
+        if (!list.includes(parent)) { list.push(parent); parentsOf.set(key, list); }
+        kids.add(String(parent.id));
+    };
+    all.forEach((p) => {
+        (p.steps || []).forEach((st) => {
+            (st.links || []).forEach((l) => add(p, byId.get(String(l.id))));
+            ((st.logic && st.logic.out) || []).forEach((o) => add(p, resolve(o.targetId)));
+        });
+    });
+    all.forEach((c) => { if (c.parentId && isChildKind(c)) add(byId.get(String(c.parentId)), c); });
+    return { parentsOf, kids };
+}
+
 // items -> [{ label, icon, items, typeKey? }]. Named groups run A-Z; the "none of these" group always runs last.
 function buildResourceGroups(items, mode) {
     const data = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData() : null) || {};
@@ -556,6 +593,17 @@ function buildResourceGroups(items, mode) {
     const byName = sortMode === 'recent' ? (a, b) => (updatedMs(b) - updatedMs(a)) || String(a.name || '').localeCompare(String(b.name || ''))
         : sortMode === 'oldest' ? (a, b) => ((updatedMs(a) || Infinity) - (updatedMs(b) || Infinity)) || String(a.name || '').localeCompare(String(b.name || ''))
         : (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
+    const parentIdx = mode === 'parent' ? buildParentIndex(all) : null;
+    const parentLabels = new Map();   // parent id -> its group label (two parents with one name stay separate)
+    const labelFor = (p) => {
+        const k = String(p.id);
+        if (!parentLabels.has(k)) {
+            const base = p.name || 'Untitled';
+            const taken = new Set(parentLabels.values());
+            parentLabels.set(k, taken.has(base) ? `${base} (${p.type || 'resource'})` : base);
+        }
+        return parentLabels.get(k);
+    };
     const buckets = new Map();   // label -> { icon, items, order, last, typeKey }
     const put = (label, item, extra = {}) => {
         if (!buckets.has(label)) buckets.set(label, { label, icon: 'folder', items: [], order: 0, last: false, ...extra });
@@ -565,6 +613,17 @@ function buildResourceGroups(items, mode) {
     items.forEach(res => {
         const scope = OL.getScopingDataForResource ? OL.getScopingDataForResource(res.id) : null;
         if (mode === 'none') put('All resources', res, { icon: 'layers' });
+        else if (mode === 'parent') {
+            if (isChildKind(res)) {
+                const ps = parentIdx.parentsOf.get(String(res.id)) || [];
+                if (ps.length) ps.forEach((p) => put(labelFor(p), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(p.type) : 'folder', pin: String(p.id) }));
+                else put('Forms and emails with no parent', res, { icon: 'circle-dashed', last: true });
+            } else if (parentIdx.kids.has(String(res.id))) {
+                put(labelFor(res), res, { icon: OL.getRegistryIcon ? OL.getRegistryIcon(res.type) : 'folder', pin: String(res.id) });
+            } else {
+                put('Other resources', res, { icon: 'layers', last: true });
+            }
+        }
         else if (mode === 'updated') {
             const bi = updatedBucket(res);
             bi === null ? put('No edit date yet', res, { icon: 'circle-dashed', last: true }) : put(UPDATED_BUCKETS[bi].label, res, { icon: 'clock', order: bi });
@@ -592,7 +651,10 @@ function buildResourceGroups(items, mode) {
     });
 
     const list = [...buckets.values()];
-    list.forEach(g => g.items.sort(byName));
+    const rank = (r) => (/^form/i.test(r.type || '') ? 0 : /^email( template)?$/i.test(r.type || '') ? 1 : 2);
+    list.forEach(g => g.items.sort(g.pin
+        ? (a, b) => ((String(b.id) === g.pin) - (String(a.id) === g.pin)) || (rank(a) - rank(b)) || byName(a, b)   // the parent first, then its forms, then its emails
+        : byName));
     // Stages follow their order on the process map; everything else is A-Z.
     return list.sort((a, b) => (a.last - b.last) || ((mode === 'stage' || mode === 'updated') ? a.order - b.order : 0) || a.label.localeCompare(b.label));
 }
