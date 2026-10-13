@@ -954,10 +954,20 @@ export async function importCalendly(client, opts = {}) {
 
     const items = events.map((ev) => {
         const externalId = String(ev.uri || '').split('/').pop();
+        // The booking form: the extra questions Calendly asks on top of name and email.
+        const questions = (ev.custom_questions || []).filter((q) => q && q.enabled !== false).sort((a, b) => (a.position || 0) - (b.position || 0));
+        const bookingForm = questions.map((q) => ({
+            question: q.name, type: q.type, required: !!q.required,
+            choices: q.answer_choices || [], includeOther: !!q.include_other,
+        }));
+        const formText = bookingForm.map((q) => `- ${q.question}${q.required ? ' (required)' : ''}${q.choices.length ? ': ' + q.choices.join(' / ') : ''}`).join('\n');
         return {
             externalId, name: ev.name, type: 'Event', externalUrl: ev.scheduling_url,
-            description: ev.description || "Calendly Event Type",
-            steps: [{ id: `cal-${externalId}-s0`, name: "Client Schedules Appointment", appName: "Calendly" }],
+            description: ev.description_plain || ev.description || "Calendly Event Type",
+            bookingForm,
+            serviceActive: ev.active !== false,   // Calendly's on/off switch; an "off" event is still pulled in, and archived
+            steps: [{ id: `cal-${externalId}-s0`, name: "Client Schedules Appointment", appName: "Calendly",
+                      ...(formText ? { description: 'Booking form questions (besides name and email):\n' + formText } : {}) }],
         };
     }).filter((i) => i.externalId);
     return commitPull(client, 'calendly', items);
