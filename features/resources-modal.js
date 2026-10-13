@@ -1058,7 +1058,6 @@ export function openResourceModal(targetId, draftObj = null) {
                               onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'description', v);">${esc(res.description || '')}</textarea>
                 </div>
 
-            ${(getActiveClient() && (getActiveClient().projectData?.localResources || []).some(r => r.id === res.id) && OL.renderDependencySection) ? `<div style="margin-top:20px;">${OL.renderDependencySection(getActiveClient().id, 'resource', res.id)}${OL.renderRollupSection ? OL.renderRollupSection(getActiveClient().id, 'resource', res.id) : ''}</div>` : ''}
         
                 <!-- EMAIL COMPOSITION -->
                 <div class="card-section" style="margin-bottom:16px;background:rgba(255,255,255,0.02);padding:15px;border-radius:8px;border:1px solid var(--line);">
@@ -3293,4 +3292,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.k' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.l' });
