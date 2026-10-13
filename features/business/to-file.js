@@ -319,7 +319,12 @@ async function setStatus(items, status, filedTo) {
     }
 }
 
-async function afterChange() { S().selected = new Set(); OL._paintToFile(); }
+async function afterChange() {
+    S().selected = new Set();
+    if (/to-file/.test(location.hash)) OL._paintToFile(); else buildItems();
+    await closeFilingTasks();
+    if (S().co) OL._paintCloseOut();
+}
 
 OL.toFileDismiss = async function(keys) { const it = itemsFor(keys).filter((i) => i.status === 'open'); await setStatus(it, 'dismissed'); afterChange(); };
 OL.toFileKeep = async function(keys) { const it = itemsFor(keys).filter((i) => i.status === 'open'); await setStatus(it, 'kept'); afterChange(); };
@@ -506,7 +511,7 @@ function suggestionScore(ph, r) {
 }
 
 OL.toFileMatchOpen = (id) => { S().dlg.matching = String(id); S().dlg.matchQ = ''; OL._paintToFileDialog(); };
-OL.toFileMatchBack = () => { S().dlg.matching = null; OL._paintToFileDialog(); };
+OL.toFileMatchBack = () => { const d = S().dlg; d.matching = null; if (d.fromCloseOut) { S().dlg = null; OL._paintCloseOut(); } else OL._paintToFileDialog(); };
 OL.toFileMatchQ = (v) => { const d = S().dlg; d.matchQ = v; clearTimeout(_searchT); _searchT = setTimeout(() => { OL._paintToFileMatch(); const el = document.querySelector('.modal-wide input[placeholder="Search resources…"]'); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 200); };
 
 OL._paintToFileMatch = function() {
@@ -553,7 +558,7 @@ OL.toFileMatchDo = function(phId, realId) {
         pd.localResources = list.filter((r) => String(r.id) !== String(phId));
     }, clientId);
     d.chosen.delete(String(phId)); d.matching = null;
-    OL._paintToFileDialog();
+    if (d.fromCloseOut) { S().dlg = null; OL._paintCloseOut(); } else OL._paintToFileDialog();
 };
 
 // "Pull from queue" on a resource page: opens the queue for that project with the resource pre-ticked in the filing dialog.
@@ -565,3 +570,167 @@ OL.toFilePull = function(clientId, resId) {
     if (location.hash === '#/business/to-file') OL.renderToFileQueue(); else location.hash = '#/business/to-file';
 };
 OL.toFileClearPull = () => { S().pullRes = null; OL._paintToFile(); };
+
+// ================================================================ CLOSE-OUT of a request (two steps, one window)
+// Step 1: resources (the request's own, plus leads that are not resources yet). Step 2: items still open for the
+// request. Anything left open gets ONE non-billable task for whoever closed the request, which closes by itself once
+// the request's queue is empty (closeFilingTasks).
+const lc = (x) => String(x || '').trim().toLowerCase();
+const userName = () => (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Arielle Minicozzi';
+const reqOf = (client, id) => (client?.projectData?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((it) => String(it.id) === String(id));
+const reqTitle = (client, it) => (OL.requestItemTitle ? OL.requestItemTitle(client, it) : (it?.title || it?.name || 'request'));
+const openItemsFor = (reqId) => S().items.filter((i) => i.status === 'open' && i.requestIds.includes(String(reqId)));
+
+OL.openCloseOut = async function(clientId, reqId) {
+    const st = S();
+    try { await ensureEmails(); } catch (e) { console.warn('Close-out: queue load failed', e); }
+    buildItems();
+    st.co = { clientId, reqId: String(reqId), step: 1, picked: new Set() };
+    OL._paintCloseOut();
+};
+
+function closeOutLeads(client, item) {
+    const pd = client.projectData; const out = []; const dismissed = new Set(item.closeOutDismissed || []);
+    const names = new Set((pd.localResources || []).map((r) => lc(r.name)));
+    const seen = new Set();
+    (pd.clientTasks || []).forEach((t) => {
+        if (!t || !linksForTask(t).some((l) => String(l.requestId) === String(item.id))) return;
+        const n = String(t.resourceName || '').trim();
+        if (!n || /^general resource$/i.test(n) || names.has(lc(n)) || seen.has(lc(n))) return;
+        seen.add(lc(n)); const key = `n:${lc(n)}`;
+        if (!dismissed.has(key)) out.push({ key, name: n, why: `Named on the task "${t.title || t.name}" but there is no resource with that name` });
+    });
+    openItemsFor(item.id).filter((i) => i.type === 'attachment' || i.type === 'file').forEach((i) => {
+        const key = `f:${i.key}`;
+        if (!dismissed.has(key)) out.push({ key, name: String(i.text).replace(/\.[a-z0-9]{2,5}$/i, ''), why: `The file "${i.text}" is not filed to any resource` });
+    });
+    return out;
+}
+
+OL._paintCloseOut = function() {
+    const co = S().co; if (!co) return;
+    const client = state.clients?.[co.clientId]; const item = reqOf(client, co.reqId);
+    if (!client || !item) { S().co = null; return; }
+    const pd = client.projectData; const title = reqTitle(client, item);
+    const res = requestResourceIds(item).map((id) => (pd.localResources || []).find((r) => String(r.id) === String(id))).filter(Boolean);
+    const real = (pd.localResources || []).filter((r) => r && !r.isArchived && !r.archived && !r.isPlaceholder && !String(r.id).startsWith('step-') && r.systemKey !== 'project-notes');
+    const types = newTypeList();
+    let body;
+    if (co.step === 1) {
+        const leads = closeOutLeads(client, item);
+        body = `<div class="muted tiny" style="margin-bottom:8px;">Step 1 of 2: resources. These are the resources on "${esc(title)}", plus anything that looks like a resource but isn't one in the library yet.</div>
+        <div class="tiny bold uppercase muted" style="margin:8px 0 4px;">On this request (${res.length})</div>
+        <div style="display:grid; gap:4px;">${res.map((r) => `<div style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+            <span style="flex:1; overflow-wrap:anywhere;">${esc(r.name)}</span>${r.isPlaceholder ? '<span class="pill tiny soft" style="background:rgba(245,158,11,.2);">Pending placeholder</span>' : ''}<span class="pill tiny soft">${esc(r.type || '')}</span>
+            ${r.isPlaceholder ? `<button class="btn tiny soft" onclick="OL.coMatchPlaceholder('${esc(r.id)}')">Match to real…</button>` : ''}</div>`).join('') || '<div class="muted tiny">No resources are linked.</div>'}</div>
+        <div class="tiny bold uppercase muted" style="margin:14px 0 4px;">Possible resources not in the library yet (${leads.length})</div>
+        <div style="display:grid; gap:6px;">${leads.map((l, n) => `<div style="padding:8px; border:1px solid var(--line); border-radius:6px;">
+            <div class="muted tiny" style="margin-bottom:4px;">${esc(l.why)}</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <input id="co-name-${n}" class="modal-input" style="flex:2; min-width:160px;" value="${esc(l.name)}">
+                <select id="co-type-${n}" class="modal-input" style="flex:1; min-width:120px;"><option value="">Type…</option>${types.map((t) => `<option>${esc(t)}</option>`).join('')}</select>
+                <button class="btn tiny primary" onclick="OL.coCreate(${n})">Create resource</button>
+                <select class="modal-input" style="flex:1; min-width:140px;" onchange="if(this.value) OL.coLink(${n}, this.value)"><option value="">Link to existing…</option>${real.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select>
+                <button class="btn tiny soft" onclick="OL.coDismiss(${n})">Dismiss</button>
+            </div></div>`).join('') || '<div class="muted tiny">Nothing else looks like a resource.</div>'}</div>`;
+        co.leads = leads;
+    } else {
+        const open = openItemsFor(co.reqId);
+        body = `<div class="muted tiny" style="margin-bottom:8px;">Step 2 of 2: ${open.length} linked item${open.length === 1 ? '' : 's'} not filed yet. File or dismiss them now; anything you leave becomes one task for you that closes itself when the list is empty.</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+            <button class="btn tiny primary" onclick="OL.coFileSelected()">File selected…</button><button class="btn tiny soft" onclick="OL.coDismissSelected()">Dismiss selected</button>
+            <label class="tiny" style="display:flex; gap:6px; align-items:center;"><input type="checkbox" onchange="OL.coSelectAll(this.checked)"> Select all</label></div>
+        <div style="max-height:50vh; overflow:auto; display:grid; gap:6px;">${open.map((i) => `<label class="card" style="padding:8px 10px; display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+            <input type="checkbox" ${co.picked.has(i.key) ? 'checked' : ''} onchange="OL.coPick('${esc(i.key)}', this.checked)">
+            <span style="min-width:0; overflow-wrap:anywhere;"><span class="pill tiny soft">${TYPE_LABEL[i.type]}</span> <span class="muted tiny">${esc(dayStr(i.date))} · ${esc(i.from)}</span><div style="font-size:13px; white-space:pre-wrap;">${esc(String(i.text).slice(0, 300))}</div></span></label>`).join('') || '<div class="muted tiny p-20">Everything for this request is filed.</div>'}</div>`;
+    }
+    const html = `<div style="width:100%; box-sizing:border-box;"><h3 style="margin:0 0 4px;">Close out: ${esc(title)}</h3>${body}
+        <div style="display:flex; justify-content:space-between; gap:8px; margin-top:14px;">
+            <button class="btn soft" onclick="OL.coFinish(${co.step === 2 ? '' : 'true'})">${co.step === 2 ? 'Finish' : 'Skip close-out'}</button>
+            <div style="display:flex; gap:8px;">${co.step === 2 ? '<button class="btn soft" onclick="OL.coStep(1)">Back</button>' : '<button class="btn primary" onclick="OL.coStep(2)">Next: open items</button>'}</div></div></div>`;
+    const box = document.querySelector('.modal-box.modal-wide');
+    if (box) { box.innerHTML = html; } else OL.showOverlayModal(html, { wide: true });
+    if (window.lucide) window.lucide.createIcons();
+};
+
+OL.coStep = (n) => { S().co.step = n; OL._paintCloseOut(); };
+OL.coPick = (k, on) => { const p = S().co.picked; on ? p.add(k) : p.delete(k); };
+OL.coSelectAll = (on) => { const co = S().co; openItemsFor(co.reqId).forEach((i) => { on ? co.picked.add(i.key) : co.picked.delete(i.key); }); OL._paintCloseOut(); };
+OL.coFileSelected = () => { const co = S().co; const keys = [...co.picked]; if (!keys.length) { alert('Tick the items to file first.'); return; } OL.toFileOpenDialog(keys); };
+OL.coDismissSelected = async () => { const co = S().co; const it = itemsFor([...co.picked]).filter((i) => i.status === 'open'); await setStatus(it, 'dismissed'); co.picked = new Set(); await afterChange(); };
+
+const coLead = (n) => S().co?.leads?.[n];
+OL.coCreate = function(n) {
+    const co = S().co; const l = coLead(n); if (!l) return;
+    const name = String(document.getElementById(`co-name-${n}`)?.value || '').trim(); const type = document.getElementById(`co-type-${n}`)?.value;
+    if (!name) { alert('Give the resource a name.'); return; }
+    if (!type) { alert('Pick a type for the resource.'); return; }
+    const id = `local-prj-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    updateAndSync(() => {
+        const pd = state.clients?.[co.clientId]?.projectData; if (!pd) return;
+        pd.localResources = pd.localResources || [];
+        pd.localResources.push({ id, name, type, archetype: 'Base', integration: null, data: {}, steps: [], triggers: [], createdDate: new Date().toISOString(), isShell: true });
+        const it = reqOf(state.clients[co.clientId], co.reqId); if (it) it.resourceIds = [...requestResourceIds(it), id];
+    }, co.clientId);
+    OL._paintCloseOut();
+};
+OL.coLink = function(n, resId) {
+    const co = S().co; if (!coLead(n)) return;
+    updateAndSync(() => { const it = reqOf(state.clients[co.clientId], co.reqId); if (it) it.resourceIds = [...new Set([...requestResourceIds(it), String(resId)])]; }, co.clientId);
+    OL.coDismissKey(coLead(n).key);
+};
+OL.coDismiss = (n) => { if (coLead(n)) OL.coDismissKey(coLead(n).key); };
+OL.coDismissKey = (key) => {
+    const co = S().co;
+    updateAndSync(() => { const it = reqOf(state.clients[co.clientId], co.reqId); if (it) it.closeOutDismissed = [...new Set([...(it.closeOutDismissed || []), key])]; }, co.clientId);
+    OL._paintCloseOut();
+};
+// Match a pending placeholder from the close-out window (reuses the filing dialog's matcher).
+OL.coMatchPlaceholder = function(id) {
+    const co = S().co;
+    S().dlg = { keys: [], clientId: co.clientId, chosen: new Set(), q: '', app: '', rtype: '', tag: '', matching: String(id), fromCloseOut: true };
+    OL._paintToFileMatch();
+};
+
+OL.coFinish = async function(skip) {
+    const co = S().co; if (!co) { OL.closeModal?.(); return; }
+    const client = state.clients?.[co.clientId]; const item = reqOf(client, co.reqId);
+    const n = item ? openItemsFor(co.reqId).length : 0;
+    if (!skip && item && n) await ensureFilingTask(co.clientId, item, n);
+    S().co = null; S().dlg = null;
+    OL.closeModal?.();
+    if (!skip && n && typeof OL.showToast === 'function') OL.showToast(`${n} item${n === 1 ? '' : 's'} left open: a task was made for ${userName()}.`);
+};
+
+async function ensureFilingTask(clientId, item, n) {
+    const client = state.clients?.[clientId]; const title = `File ${n} item${n === 1 ? '' : 's'} from ${reqTitle(client, item)}`;
+    await updateAndSync(() => {
+        const pd = state.clients?.[clientId]?.projectData; if (!pd) return;
+        pd.clientTasks = pd.clientTasks || [];
+        const ex = pd.clientTasks.find((t) => t && String(t.fileQueueFor) === String(item.id) && t.status !== 'Done');
+        if (ex) { ex.title = title; ex.name = title; return; }
+        pd.clientTasks.unshift({ id: uid(), title, name: title, description: 'Linked emails, comments and files from this request still need filing to resources. Closes itself when the queue for the request is empty (To File tab).',
+            status: 'Pending Sphynx Action', assignee: userName(), dueDate: dayStr(Date.now()), isClientTask: false, loggedHours: 0, parentTaskId: null, billable: false,
+            createdBy: 'close-out', createdAt: new Date().toISOString(), fileQueueFor: String(item.id), links: [{ requestId: String(item.id), resourceIds: [] }] });
+    }, clientId);
+}
+
+// The "File N items" task closes by itself when nothing is left open for its request, and keeps its count current.
+async function closeFilingTasks() {
+    for (const c of getBusinessScopedClients()) {
+        const tasks = (c.projectData?.clientTasks || []).filter((t) => t && t.fileQueueFor && t.status !== 'Done');
+        for (const t of tasks) {
+            const left = openItemsFor(t.fileQueueFor).length; const it = reqOf(c, t.fileQueueFor);
+            if (left === 0) {
+                await updateAndSync(() => {
+                    const x = (state.clients[c.id].projectData.clientTasks || []).find((y) => y.id === t.id); if (!x) return;
+                    x.status = 'Done'; x.completedAt = new Date().toISOString();
+                    (x.comments = x.comments || []).push({ id: uid(), author: 'System', text: 'Closed automatically: nothing is left to file for this request.', date: new Date().toISOString(), system: true });
+                }, c.id);
+            } else if (it) {
+                const title = `File ${left} item${left === 1 ? '' : 's'} from ${reqTitle(c, it)}`;
+                if (t.title !== title) await updateAndSync(() => { const x = (state.clients[c.id].projectData.clientTasks || []).find((y) => y.id === t.id); if (x) { x.title = title; x.name = title; } }, c.id);
+            }
+        }
+    }
+}

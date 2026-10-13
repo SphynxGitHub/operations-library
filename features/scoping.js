@@ -924,6 +924,8 @@ export function updateLineItem(itemId, field, value) {
 
         OL.persist(); 
         window.renderScopingSheet();
+        // A request marked Done opens the close-out window (resources, then anything still unfiled).
+        if (field === 'status' && value === 'Done' && previousValue !== 'Done' && typeof OL.openCloseOut === 'function') OL.openCloseOut(client.id, item.id);
     }
 };
 
