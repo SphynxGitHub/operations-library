@@ -5541,6 +5541,49 @@ document.addEventListener('mousedown', function(e) {
 // Global to track the dragged index
 state.draggingStepIdx = null;
 
+// "Edit on flow map" in a resource's modal leaves a note (which resource, how far the page was scrolled). However the map is left,
+// the page it came from is drawn again and the modal is opened on top of it. The page is redrawn more than once by the route, so
+// this keeps checking for a few seconds and reopens the modal whenever it is not showing, once the page has stopped changing.
+export function _fvReturnToResource() {
+    const resId = sessionStorage.getItem('map_return_resource');
+    if (!resId) return;
+    const scroll = Number(sessionStorage.getItem('map_return_scroll') || 0);
+    const winScroll = Number(sessionStorage.getItem('map_return_winscroll') || 0);
+    ['map_return_resource', 'map_return_scroll', 'map_return_winscroll'].forEach((k) => sessionStorage.removeItem(k));
+
+    const host = () => document.getElementById('mainContent');
+    const modalShowing = () => { const l = document.getElementById('modal-layer'); return !!(l && l.style.display !== 'none' && l.innerHTML.trim()); };
+    const restore = () => { const h = host(); if (h) h.scrollTop = scroll; window.scrollTo(0, winScroll); };
+    let lastChange = Date.now();
+    let opened = 0;
+    const startedAt = Date.now();
+    let observer = null;
+    if (typeof MutationObserver === 'function' && host()) {
+        observer = new MutationObserver(() => { lastChange = Date.now(); });
+        observer.observe(host(), { childList: true, subtree: true });
+    }
+    const timer = setInterval(() => {
+        const h = host();
+        const onPage = h && h.children.length > 0 && !document.getElementById('fv-canvas-wrap') && !h.querySelector('.fv-spinner')
+            && !window.location.hash.includes('visualizer');
+        const settled = Date.now() - lastChange > 400;
+        if (onPage && settled && !modalShowing() && opened < 4 && typeof OL.openResourceModal === 'function') {
+            opened++;
+            restore();
+            OL.openResourceModal(resId);
+            setTimeout(restore, 80);
+            lastChange = Date.now();
+        }
+        if (Date.now() - startedAt > 8000 || (opened && settled && modalShowing() && Date.now() - startedAt > 2500)) {
+            clearInterval(timer);
+            if (observer) observer.disconnect();
+        }
+    }, 150);
+}
+window.addEventListener('hashchange', () => {
+    if (!window.location.hash.includes('visualizer') && sessionStorage.getItem('map_return_resource')) OL._fvReturnToResource();
+});
+
 export function renderFocusControls() {
     let scopeBtn = document.getElementById('exit-focus-btn');
     
@@ -5568,27 +5611,8 @@ export function renderFocusControls() {
     scopeBtn.onclick = () => {
         const savedPath = sessionStorage.getItem('map_return_path') || "/scoping-sheet";
 
-        // Came from a resource's modal ("Edit on flow map"): once the page has drawn again, put the scroll back and reopen it.
-        // This is scheduled first so it still happens if the page redraw below throws.
-        const backToRes = sessionStorage.getItem('map_return_resource');
-        const backScroll = Number(sessionStorage.getItem('map_return_scroll') || 0);
-        const backWinScroll = Number(sessionStorage.getItem('map_return_winscroll') || 0);
-        ['map_return_resource', 'map_return_scroll', 'map_return_winscroll'].forEach((k) => sessionStorage.removeItem(k));
-        if (backToRes) {
-            let tries = 0;
-            const reopen = () => {
-                const host = document.getElementById('mainContent');
-                const drawn = host && host.children.length > 0 && !document.getElementById('fv-canvas-wrap') && !host.querySelector('.fv-spinner');
-                if (!drawn && tries++ < 40) return setTimeout(reopen, 100);
-                const restore = () => { const h = document.getElementById('mainContent'); if (h) h.scrollTop = backScroll; window.scrollTo(0, backWinScroll); };
-                restore();
-                if (typeof OL.openResourceModal === 'function') OL.openResourceModal(backToRes);
-                setTimeout(restore, 60); setTimeout(restore, 300);
-                // the route may redraw the page once more after this; if that wiped the modal, open it again
-                setTimeout(() => { const l = document.getElementById('modal-layer'); if (l && !l.innerHTML.trim() && typeof OL.openResourceModal === 'function') { OL.openResourceModal(backToRes); restore(); } }, 1000);
-            };
-            setTimeout(reopen, 200);
-        }
+        // reopen the resource it was launched from (also runs on any other way of leaving the map, see below)
+        OL._fvReturnToResource();
 
         // 1. Reset Focus State
         OL.focusedResourceId = null;
@@ -9259,7 +9283,7 @@ Object.assign(window.OL, {
     _fvShowTidyMenu, _fvTogglePin, _fvToggleWb, _fvPopulateWb,
     _fvRenderWbItems, _fvFilterWb, _fvWbDragStart, _fvSetupRailScroll,
     _fvUnmapResource, _fvHandleCanvasClick, closeInspectorPanel, _fvSelectStep,
-    _fvBuildListShell, _fvOpenStepsList, _fvAssignStageAndWorkflow, _fvOpenStepCanvas,
+    _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas,
     _fvToggleStepsPanel, _fvRenderListStep, fvSearch, fvNextMatch,
     fvPrevMatch, fvActivateMatch, fvClearSearch, fvToggleConnections,
     _fvSetupZoom, fvZoom, handleSidebarSearch, getStepIcon,
@@ -9300,4 +9324,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.d' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.e' });
