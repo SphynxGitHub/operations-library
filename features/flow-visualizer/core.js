@@ -4212,12 +4212,22 @@ export function _fvOpenStepsList(resId) {
   const stageName = stages.find(s => s.id === res.stageId)?.name || '';
 
   // ── APP SECTION ──────────────────────────────────────
+  // Same rules as the resource modal: a resource whose type is tied to a function gets that function's app when it has none,
+  // and an app picked by hand is never replaced (it is marked as a custom override).
   const rawType    = String(res.type || 'General');
   const typeDef    = (state.master?.resourceTypes||[])
     .find(t => t.type.toLowerCase() === rawType.toLowerCase());
   const isZap      = rawType.toLowerCase() === 'zap';
-  const autoApp    = (!isZap && typeDef?.matchedFunctionId)
-    ? OL.getAppByFunction?.(rawType) : null;
+  const isLockedType = !!(typeDef?.matchedFunctionId || res.matchedFunctionId);
+  const autoApp    = (!isZap && isLockedType)
+    ? OL.getAppByFunction?.(rawType, res.matchedFunctionId) : null;
+  if (autoApp && !res.appId) {
+    res.appId = autoApp.id;
+    res.appName = autoApp.name;
+    OL.handleResourceSave(res.id, 'appId', autoApp.id);
+    OL.handleResourceSave(res.id, 'appName', autoApp.name);
+  }
+  const isManualOverride = !!(res.appId && autoApp && String(res.appId) !== String(autoApp.id));
 
   const appSection = isZap
     ? `<div class="fvi-value muted">Multi-app automation.</div>`
@@ -4229,9 +4239,11 @@ export function _fvOpenStepsList(resId) {
              <span style="font-size:12px;font-weight:500;color:var(--text-main);">
                ${esc(res.appName||'')}
              </span>
+             ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;letter-spacing:0.5px;margin-left:auto;">CUSTOM OVERRIDE</span>' : ''}
            </div>
            <button onclick="OL.handleResourceSave('${res.id}','appId',null);
                             OL.handleResourceSave('${res.id}','appName',null);"
+                   title="Clear and revert"
                    style="padding:7px;border:1px solid var(--panel-border);border-radius:8px;
                           background:var(--panel);cursor:pointer;color:var(--text-muted);
                           transition:color 0.15s;">
@@ -4244,7 +4256,40 @@ export function _fvOpenStepsList(resId) {
                   onfocus="OL.filterAppSearch('${res.id}',null,true,'')"
                   oninput="OL.filterAppSearch('${res.id}',null,true,this.value)">
            <div id="res-app-results" class="search-results-overlay"></div>
-         </div>`;
+         </div>
+         ${isLockedType && !autoApp && !isZap ? '<div class="tiny muted italic" style="margin-top:6px;">No primary tool found for this function in the registry.</div>' : ''}`;
+
+  // the external link lives in one field, externalUrl; a link saved by the old sidebar field is carried across
+  if (res.externalLink !== undefined) {
+    if (!res.externalUrl && res.externalLink) res.externalUrl = res.externalLink;
+    delete res.externalLink;
+    OL.persist();
+  }
+
+  // resource assignees (people and roles; not for Zaps)
+  const resAssignees = res.assignees || [];
+  const assigneeSection = isZap ? '' : `
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="users" style="width:11px;height:11px;"></i>
+          Assignees
+        </div>
+        <div id="res-assignee-pills-${res.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+          ${resAssignees.length ? resAssignees.map((a, idx) => `
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+                         background:var(--accent-glow);color:var(--accent);border:1px solid rgba(61,217,197,0.3);">
+              <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px;height:10px;"></i>
+              ${esc(a.name)}
+              <span onclick="OL.removeResourceAssignee('${res.id}', ${idx})" style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
+            </span>`).join('') : '<div class="tiny muted italic">Unassigned</div>'}
+        </div>
+        <div style="position:relative;">
+          <input type="text" class="fvi-input" placeholder="Search people or roles…"
+                 onfocus="OL.filterResourceAssignmentSearch('${res.id}', '')"
+                 oninput="OL.filterResourceAssignmentSearch('${res.id}', this.value)">
+          <div id="res-assignment-results" class="search-results-overlay"></div>
+        </div>
+      </div>`;
 
   // ── STEPS LIST ───────────────────────────────────────
   const stepsList = (res.steps||[]).length > 0
@@ -4342,13 +4387,36 @@ export function _fvOpenStepsList(resId) {
         </button>
       </div>
 
-      <!-- PRIMARY APP -->
+      <!-- RESOURCE DETAILS -->
       <div class="fvi-section">
         <div class="fvi-label">
           <i data-lucide="smartphone" style="width:11px;height:11px;"></i>
           Primary Application
         </div>
         ${appSection}
+      </div>
+
+      <!-- EXTERNAL LINK (one field: externalUrl) -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="link" style="width:11px;height:11px;"></i>
+          ${isZap ? 'Zapier Link' : 'External Link'}
+        </div>
+        <input type="url" class="fvi-input"
+               placeholder="https://…"
+               value="${esc(res.externalUrl||'')}"
+               onblur="if(this.value.trim() !== '${esc(res.externalUrl||'').replace(/'/g, "\\'")}') OL.handleResourceSave('${res.id}','externalUrl',this.value.trim())">
+      </div>
+
+      ${assigneeSection}
+
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="calendar" style="width:11px;height:11px;"></i>
+          Due Date
+        </div>
+        <input type="date" class="fvi-input" value="${esc(String(res.dueDate||'').slice(0,10))}"
+               onchange="OL.handleResourceSave('${res.id}','dueDate',this.value)">
       </div>
 
       <!-- STAGE -->
@@ -4393,28 +4461,63 @@ export function _fvOpenStepsList(resId) {
           <i data-lucide="folder" style="width:11px;height:11px;"></i>
           Classification
         </div>
-        <select class="fvi-select"
-                onchange="OL.handleResourceSave('${res.id}','type',this.value)">
-          <option value="General" ${res.type==='General'?'selected':''}>General</option>
-          ${(state.master?.resourceTypes||[]).map(t =>
-            `<option value="${esc(t.type)}"
-                     ${res.type===t.type?'selected':''}>
-               ${esc(t.type)}
-             </option>`
-          ).join('')}
-        </select>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select class="fvi-select" style="flex:1;"
+                  onchange="OL.handleResourceSave('${res.id}','type',this.value)">
+            <option value="General" ${res.type==='General'?'selected':''}>General</option>
+            ${(state.master?.resourceTypes||[]).map(t =>
+              `<option value="${esc(t.type)}"
+                       ${res.type===t.type?'selected':''}>
+                 ${esc(t.type)}
+               </option>`
+            ).join('')}
+          </select>
+          <button onclick="event.preventDefault(); event.stopPropagation(); OL.duplicateResourceV2('${res.id}');"
+                  title="Duplicate this resource (all its steps) into the same workflow"
+                  style="padding:7px 10px;border-radius:8px;font-size:11px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel-soft);color:var(--text-dim);">
+            Duplicate
+          </button>
+          <button onclick="event.preventDefault(); event.stopPropagation(); OL.handleResourceSave('${res.id}','isArchived',${!res.isArchived});"
+                  title="${res.isArchived ? 'Unarchive' : 'Archive'}"
+                  style="padding:7px;border-radius:8px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel);color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
+            <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:12px;height:12px;"></i>
+          </button>
+        </div>
       </div>
 
-      <!-- EXTERNAL LINK -->
       <div class="fvi-section">
         <div class="fvi-label">
-          <i data-lucide="link" style="width:11px;height:11px;"></i>
-          ${isZap ? 'Zapier Link' : 'External Link'}
+          <i data-lucide="globe" style="width:11px;height:11px;"></i>
+          Visibility
         </div>
-        <input type="url" class="fvi-input"
-               placeholder="https://…"
-               value="${esc(res.externalLink||'')}"
-               onblur="OL.handleResourceSave('${res.id}','externalLink',this.value)">
+        <button onclick="OL.handleResourceSave('${res.id}','isGlobal',${!res.isGlobal});"
+                style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                       border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
+                       background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
+                       color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
+          ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
+        </button>
+      </div>
+
+      <!-- DESCRIPTION -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="file-text" style="width:11px;height:11px;"></i>
+          Description
+        </div>
+        <textarea class="fvi-textarea"
+                  placeholder="Notes…"
+                  onblur="OL.handleResourceSave('${res.id}','description',this.value)"
+        >${esc(res.description||'')}</textarea>
+      </div>
+
+      <!-- DIVIDER: resource details above, steps below -->
+      <div style="margin:6px 14px 0;border-top:2px solid var(--panel-border);padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span class="tiny muted bold uppercase" style="letter-spacing:0.08em;">Steps</span>
+        <button class="fvi-add-step-btn" onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')" title="Open the full resource: comments, history, relationships and more">
+          <i data-lucide="panel-top" style="width:11px;height:11px;"></i>
+          Resource details
+        </button>
       </div>
 
       <!-- STEPS -->
@@ -4442,18 +4545,6 @@ export function _fvOpenStepsList(resId) {
              style="display:${stepsOpen ? 'block' : 'none'};">
           ${stepsList}
         </div>
-      </div>
-
-      <!-- DESCRIPTION -->
-      <div class="fvi-section">
-        <div class="fvi-label">
-          <i data-lucide="file-text" style="width:11px;height:11px;"></i>
-          Description
-        </div>
-        <textarea class="fvi-textarea"
-                  placeholder="Notes…"
-                  onblur="OL.handleResourceSave('${res.id}','description',this.value)"
-        >${esc(res.description||'')}</textarea>
       </div>
 
     </div>
@@ -7204,273 +7295,9 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
         return;
     }
     // 📑 3. RESOURCE (CARD) DETAIL MODE
-if (mode === 'cards' && resId) {
-    const res = resources.find(r => String(r.id) === String(resId));
-    if (!res) return;
-
-    const rawType = String(res.type || 'General');
-    const resTypeLower = rawType.toLowerCase();
-    
-    // 1. Resolve Auto-Mapping from Registry
-    const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === resTypeLower);
-    const isLockedType = !!(typeDef && typeDef.matchedFunctionId);
-    const isZap = resTypeLower === 'zap';
-    const autoApp = (isLockedType && !isZap) ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
-
-    // 🎯 2. THE OVERRIDE PROTECTION
-    // Only auto-assign if the field is currently EMPTY.
-    if (autoApp && !res.appId) {
-        console.log(`🤖 Inspector auto-assigning ${autoApp.name}`);
-        res.appId = autoApp.id;
-        res.appName = autoApp.name;
-        OL.handleResourceSave(res.id, 'appId', autoApp.id);
-        OL.handleResourceSave(res.id, 'appName', autoApp.name);
-    }
-
-    // 3. Determine UI state for the override badge
-    const isManualOverride = res.appId && autoApp && String(res.appId) !== String(autoApp.id);
-
-    content.innerHTML = `
-        <div class="inspector-header">
-            <div class="section-label">EDIT RESOURCE</div>
-            <textarea id="modal-res-name" class="inspector-name-input res-name-auto" 
-                onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
-        </div>
-
-        <div class="inspector-body">
-            <div class="inspector-section no-border">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <label class="section-label" style="margin:0;">
-                        <i data-lucide="smartphone" style="width:11px;height:11px;"></i> PRIMARY APPLICATION
-                    </label>
-                    ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px; letter-spacing:0.5px;">CUSTOM OVERRIDE</span>' : ''}
-                </div>
-
-                <div id="res-app-pill-${res.id}" class="pill-display">
-                    ${isZap ? `
-                        <div class="tiny muted italic">Multi-app automation.</div>
-                    ` : (res.appId ? `
-                        <div class="pill ${isManualOverride ? 'accent' : 'primary'}" 
-                             style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                            <span class="pill-text">
-                                ${isManualOverride ? '<i data-lucide="pencil" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>' : '<i data-lucide="bot" style="width:11px;height:11px;display:inline-block;vertical-align:middle;"></i>'} ${esc(res.appName)}
-                            </span>
-                            <b class="is-clickable pill-remove" 
-                               title="Clear and Revert"
-                               style="padding: 2px 6px; opacity: 0.5;"
-                               onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.handleResourceSave('${res.id}', 'appName', null); OL.openInspector('${res.id}', null, 'cards');">
-                               ×
-                            </b>
-                        </div>
-                    ` : `
-                        <div class="search-map-container">
-                            <input type="text" class="modal-input tiny" placeholder="Search App Registry..."
-                                   onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
-                                   oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
-                            <div id="res-app-results" class="search-results-overlay"></div>
-                        </div>
-                    `)}
-                </div>
-            </div>
-
-            ${isLockedType && !autoApp && !isZap ? `
-                <div class="inspector-section no-border">
-                    <div class="pill warning">
-                        <span class="pill-text">No Primary tool found for this function in the Registry.</span>
-                    </div>
-                </div>
-            ` : ''}
-
-                <div class="inspector-section no-border">
-                    <label class="section-label">
-                        <i data-lucide="link-2" style="width:11px;height:11px;"></i> EXTERNAL LINK
-                    </label>
-                    <input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalLink || '')}" onblur="OL.handleResourceSave('${res.id}', 'externalLink', this.value)">
-                </div>
-
-                ${!isZap ? `
-                <div class="inspector-section no-border">
-                    <label class="section-label">
-                        <i data-lucide="users" style="width:11px;height:11px;"></i> RESOURCE ASSIGNEE(S)
-                    </label>
-                    <div id="res-assignee-pills-${res.id}" class="pill-display assignee-row">
-                        ${(res.assignees || []).length > 0 ? res.assignees.map((a, idx) => `
-                            <span style="display:inline-flex;align-items:center;gap:5px;
-                                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:var(--accent-glow);color:var(--accent);
-                                         border:1px solid rgba(61,217,197,0.3);">
-                                <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px;height:10px;"></i>
-                                ${esc(a.name)}
-                                <span onclick="OL.removeResourceAssignee('${res.id}', ${idx})"
-                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
-                            </span>
-                        `).join('') : '<div class="tiny muted italic">Unassigned</div>'}
-                    </div>
-                    <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" placeholder="Search People or Roles..." onfocus="OL.filterAssignmentSearch('${res.id}', null, true, '')" oninput="OL.filterAssignmentSearch('${res.id}', null, true, this.value)">
-                        <div id="res-assignment-results" class="search-results-overlay"></div>
-                    </div>
-                </div>
-                ` : ''}
-
-                <div class="inspector-section no-border">
-                    <label class="section-label">
-                        <i data-lucide="calendar" style="width:11px;height:11px;"></i> DUE DATE
-                    </label>
-                    <input type="date" class="modal-input tiny" value="${res.dueDate || ''}" onchange="OL.handleResourceSave('${res.id}', 'dueDate', this.value)">
-                </div>
-
-                <div class="inspector-section" style="position: relative; width: 100%;">
-                    <label class="section-label" style="display: flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 6px;">
-                        <i data-lucide="milestone" style="width:11px; height:11px;"></i> STAGE & WORKFLOW
-                    </label>
-                    
-                    <div class="fv-custom-select-trigger" 
-                         onclick="event.stopPropagation(); const menu = this.nextElementSibling; menu.style.display = menu.style.display === 'block' ? 'none' : 'block';"
-                         style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background:var(--panel); border:1px solid var(--panel-border); color:var(--text-main); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
-                        <span>
-                            ${(function() {
-                                const projectData = OL.getCurrentProjectData();
-                                if (res.isGlobal) {
-                                    // Globals are never staged at the root; placement lives in workflow.resourceIds.
-                                    const homes = (projectData.workflows || []).filter(w => (w.resourceIds || []).map(String).includes(String(res.id)));
-                                    return homes.length ? `Workflow: ${homes.map(w => esc(w.name)).join(', ')}` : 'Unassigned (Workbench Side-Tray)';
-                                }
-                                if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
-                                if (res.workflowId) {
-                                    const wf = (projectData.workflows || []).find(w => String(w.id) === String(res.workflowId));
-                                    return wf ? `Workflow: ${esc(wf.name)}` : 'Select Location...';
-                                }
-                                const stg = (projectData.stages || []).find(s => String(s.id) === String(res.stageId));
-                                return stg ? `Stage: ${esc(stg.name)}` : 'Select Location...';
-                            })()}
-                        </span>
-                        <i data-lucide="chevron-down" style="width: 14px; height: 14px; opacity: 0.6; color:var(--text-dim);"></i>
-                    </div>
-                
-                    <div class="fv-custom-select-menu" 
-                         style="display: none; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; background:var(--panel); border:1px solid var(--panel-border); border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); max-height: 250px; overflow-y: auto; margin-top: 4px; box-sizing: border-box;">
-                        
-                        <div class="fv-custom-option" 
-                             style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
-                             onclick="
-                                 OL.setResourcePlacement('${res.id}', '', '');
-                                 OL._fvOpenStepsList('${res.id}');
-                                 this.parentElement.style.display = 'none';
-                             "
-                             onmouseover="this.style.background='rgba(239,68,68,0.08)';"
-                             onmouseout="this.style.background='transparent';">
-                             Remove Assignment (Workbench Side-Tray)
-                        </div>
-                
-                        ${(function() {
-                            const projectData = OL.getCurrentProjectData();
-                            const currentStages = projectData.stages || [];
-                            const currentWorkflows = projectData.workflows || [];
-                            
-                            const stageIds = new Set(currentStages.map(x => String(x.id)));
-                            const orphanWfs = currentWorkflows.filter(w => !stageIds.has(String(w.stageId)));
-                            const orphanHtml = orphanWfs.length ? `
-                                <div class="fv-custom-option" style="padding: 8px 12px; font-size: 11px; font-weight: 700; color:var(--text-main); background:var(--panel-dark); border-bottom: 1px solid #f3f4f6;">WORKFLOWS WITHOUT A STAGE</div>
-                                ${orphanWfs.map(wf => `
-                                    <div class="fv-custom-option workflow-item-row"
-                                         style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color:var(--text-main); cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px;"
-                                         onclick="OL.setResourcePlacement('${res.id}', '', '${wf.id}'); OL._fvOpenStepsList('${res.id}'); this.parentElement.style.display = 'none';"
-                                         onmouseover="this.style.background='rgba(61,217,197,0.08)';" onmouseout="this.style.background='transparent';">
-                                         <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i><span>${esc(wf.name)}</span>
-                                    </div>`).join('')}` : '';
-                            return currentStages.map(s => {
-                                const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
-                                
-                                return `
-                                    <div class="fv-custom-option stage-header-row" 
-                                         style="padding: 8px 12px; font-size: 11px; font-weight: 700; color:var(--text-main); background:var(--panel-dark); border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 4px; cursor: pointer;"
-                                         onclick="
-                                             OL.setResourcePlacement('${res.id}', '${s.id}', '');
-                                             OL._fvOpenStepsList('${res.id}');
-                                             this.parentElement.style.display = 'none';
-                                         "
-                                         onmouseover="this.style.background='var(--panel-soft)';"
-                                         onmouseout="this.style.background='var(--panel-dark)';">
-                                         <i data-lucide="folder" style="width:12px; height:12px; color:var(--text-dim);"></i>
-                                         <span>STAGE: ${esc(s.name.toUpperCase())}</span>
-                                    </div>
-                                    
-                                    ${stageWorkflows.map(wf => `
-                                        <div class="fv-custom-option workflow-item-row" 
-                                             style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color:var(--text-main); cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
-                                             onclick="
-                                                 OL.setResourcePlacement('${res.id}', '${s.id}', '${wf.id}');
-                                                 OL._fvOpenStepsList('${res.id}');
-                                                 this.parentElement.style.display = 'none';
-                                             "
-                                             onmouseover="this.style.background='rgba(61,217,197,0.08)'; this.style.color='#0d9488';"
-                                             onmouseout="this.style.background='transparent'; this.style.color='var(--text-main)';">
-                                             <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i>
-                                             <span>${esc(wf.name)}</span>
-                                        </div>
-                                    `).join('')}
-                                `;
-                            }).join('') + orphanHtml;
-                        })()}
-                    </div>
-                </div>
-                
-                <script>
-                    // Global auto-dismiss framework listener loop
-                    document.addEventListener('click', function() {
-                        document.querySelectorAll('.fv-custom-select-menu').forEach(el => el.style.display = 'none');
-                    });
-                </script>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="folder" style="width:11px;height:11px;"></i> CLASSIFICATION
-                    </label>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'type', this.value); OL.openInspector('${res.id}', null, 'cards');">
-                            <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
-                            ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
-                        </select>
-                        <button onclick="event.preventDefault(); event.stopPropagation(); OL.duplicateResourceV2('${res.id}');"
-                                title="Duplicate this resource (all its steps) into the same workflow"
-                                style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;flex-shrink:0;border:1px solid var(--panel-border);background:var(--panel-soft);color:var(--text-dim);">
-                            Duplicate
-                        </button>
-                        <button onclick="event.preventDefault(); event.stopPropagation(); 
-                                         OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
-                                         renderResourceManager();"
-                                title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                                style="color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                            <i data-lucide="archive" style="width:12px;height:12px;"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="globe" style="width:11px;height:11px;"></i> VISIBILITY
-                    </label>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openInspector('${res.id}', null, 'cards');"
-                                style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                                       border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
-                                       background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
-                                       color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
-                            ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
-                        </button>
-                    </div>
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="file-text" style="width:11px;height:11px;"></i> DESCRIPTION
-                    </label>
-                    <textarea class="modal-textarea res-desc-input" placeholder="Notes..." onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-                </div>
-            </div>
-        `;
-        if (window.lucide) window.lucide.createIcons();
+// The separate "Edit resource" view is gone: its fields are at the top of the resource panel (_fvOpenStepsList), above the steps.
+    if (mode === 'cards' && resId) {
+        OL._fvOpenStepsList(String(resId));
         return;
     }
 
@@ -7874,6 +7701,43 @@ export async function executeAssignment(parentId, stepId, isResource, assigneeId
         searchInput.value = '';
         searchInput.focus(); // Keep focus if you want to add multiple people quickly
     }
+};
+
+// ---- resource-level assignees (people and roles on the resource itself, not on a step) ----
+export function filterResourceAssignmentSearch(resId, query) {
+    const box = document.getElementById('res-assignment-results');
+    if (!box) return;
+    const q = (query || '').toLowerCase().trim();
+    const res = OL.getResourceById(resId);
+    const have = new Set(((res && res.assignees) || []).map((a) => String(a.id)));
+    const matches = OL.getFilteredAssigneeOptions(q).filter((o) => o.type !== 'app' && !have.has(String(o.id)));
+    if (!matches.length) { box.innerHTML = '<div class="p-10 tiny muted">No matches found.</div>'; box.style.display = 'block'; return; }
+    const groups = { role: { label: 'Roles & Clients', items: [] }, person: { label: 'Team Members', items: [] } };
+    matches.forEach((o) => { if (groups[o.type]) groups[o.type].items.push(o); });
+    box.innerHTML = Object.values(groups).filter((g) => g.items.length).map((g) =>
+        `<div class="search-category-label">${g.label}</div>` + g.items.map((o) => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.addResourceAssignee('${esc(resId)}', '${esc(o.id)}', '${esc(o.name).replace(/'/g, "\\'")}', '${o.type}')">
+                <i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(o.name)}
+            </div>`).join('')).join('');
+    box.style.display = 'block';
+    if (window.lucide) window.lucide.createIcons();
+};
+
+export async function addResourceAssignee(resId, assigneeId, name, type) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+    if (!Array.isArray(res.assignees)) res.assignees = [];
+    if (!res.assignees.some((a) => String(a.id) === String(assigneeId))) res.assignees.push({ id: assigneeId, name, type });
+    await OL.persist();
+    OL._fvOpenStepsList(String(resId));
+};
+
+export async function removeResourceAssignee(resId, index) {
+    const res = OL.getResourceById(resId);
+    if (!res || !Array.isArray(res.assignees)) return;
+    res.assignees.splice(index, 1);
+    await OL.persist();
+    OL._fvOpenStepsList(String(resId));
 };
 
 export async function removeAssignee(parentId, stepId, index) {
@@ -9393,6 +9257,7 @@ Object.assign(window.OL, {
     _fvToggleLogicType, _fvOpenTargetPicker, renderStepResources, updateAtomicStep,
     _fvRefreshInspector, filterAppSearch, selectAppForResource, selectAppForStep,
     removeAppFromStep, getFilteredAssigneeOptions, filterAssignmentSearch, executeAssignment,
+    filterResourceAssignmentSearch, addResourceAssignee, removeResourceAssignee,
     removeAssignee, filterTargetSearch, setStepTargetResource, filterResourceSearch,
     toggleFilterMenu, syncCanvasFilters, centerNextCanvasMatch, centerPrevCanvasMatch,
     centerCanvasNode, refreshFilterDropdowns, clearAllFilters, addLinkToStep,
