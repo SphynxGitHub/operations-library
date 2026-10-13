@@ -12,7 +12,8 @@ import { requestResourceIds } from '../../core/request-pricing.js';
 const ic = (n) => `<i data-lucide="${n}" style="width:13px;height:13px;vertical-align:-2px;"></i>`;
 const dayStr = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch (e) { return ''; } };
 const daysAgo = (n) => dayStr(Date.now() - n * 86400000);
-const TAGS = ['Change', 'Decision', 'Question', 'FYI'];
+const TAGS = ['Change', 'Decision', 'Question', 'FYI', 'Preference', 'Idea', 'Next step'];
+const NOTES = '__notes';   // stands for the project's pinned "Project Notes" resource, created the first time something is filed to it
 const TYPE_LABEL = { email: 'Whole email', excerpt: 'Email excerpt', attachment: 'Attachment', comment: 'Comment', file: 'Task file' };
 const TYPE_ICON = { email: 'mail', excerpt: 'quote', attachment: 'paperclip', comment: 'message-square', file: 'file' };
 
@@ -224,6 +225,7 @@ OL._paintToFile = function() {
             <h2 style="margin:0;">To File</h2>
             <button class="btn tiny soft" onclick="OL.reloadToFile()">${ic('refresh-cw')} Refresh</button>
         </div>
+        ${st.pullRes ? `<div class="card" style="padding:8px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:10px;"><span class="tiny">Filing into <strong>${esc((client?.projectData?.localResources || []).find((r) => String(r.id) === st.pullRes)?.name || 'a resource')}</strong>: tick items and choose File, that resource is pre-ticked.</span><button class="btn tiny soft" onclick="OL.toFileClearPull()">Clear</button></div>` : ''}
         <div class="muted tiny" style="margin-bottom:12px;">Linked email excerpts, attachments, comments and task files that haven't been filed to a resource yet. ${counts.open} open · ${counts.filed} filed · ${counts.dismissed} dismissed</div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
             <select class="modal-input" style="width:auto;" onchange="OL.toFileSetFilter('status', this.value)">
@@ -358,6 +360,7 @@ OL.toFileOpenDialog = function(keys) {
     }));
     const live = new Set((client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived).map((r) => String(r.id)));
     [...pre].forEach((id) => { if (!live.has(id)) pre.delete(id); });
+    if (S().pullRes && live.has(S().pullRes)) pre.add(S().pullRes);
     S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', rtype: '', tag: '' };
     OL._paintToFileDialog();
 };
@@ -365,7 +368,8 @@ OL.toFileOpenDialog = function(keys) {
 OL._paintToFileDialog = function() {
     const d = S().dlg; if (!d) return;
     const client = state.clients?.[d.clientId];
-    const all = (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && !String(r.id).startsWith('step-'));
+    if (d.matching) { OL._paintToFileMatch(); return; }
+    const all = (client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived && !String(r.id).startsWith('step-') && r.systemKey !== 'project-notes');
     const appsOf = (r) => [...new Set([r.appName, ...(r.steps || []).map((s) => s?.appName)].filter((x) => x && x !== 'System'))];
     const apps = [...new Set(all.flatMap(appsOf))].sort();
     const rtypes = [...new Set(all.map((r) => r.type).filter(Boolean))].sort();
@@ -393,15 +397,21 @@ OL._paintToFileDialog = function() {
                         <select id="tf-new-type" class="modal-input" style="flex:1; min-width:120px;" onchange="OL.toFileDlgNew('newType', this.value)"><option value="">Type…</option>${newTypeList().map((t) => `<option ${t === d.newType ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
                         <select class="modal-input" style="flex:1; min-width:120px;" onchange="OL.toFileDlgNew('newApp', this.value)"><option value="">App (optional)</option>${apps.map((a) => `<option ${a === d.newApp ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
                     </div>
+                    <label class="tiny" style="display:flex; gap:6px; align-items:center; margin-top:6px;"><input type="checkbox" ${d.newPlaceholder === false ? '' : 'checked'} onchange="OL.toFileDlgNew('newPlaceholder', this.checked)"> Not built yet: keep it as a pending placeholder, to be matched to the real resource later</label>
                     <label class="tiny" style="display:flex; gap:6px; align-items:center; margin-top:6px;"><input type="checkbox" ${d.newLink === false ? '' : 'checked'} onchange="OL.toFileDlgNew('newLink', this.checked)"> Also add it to the request${items.some((i) => i.requestIds.length) ? '' : ' (these items have no request)'}</label>
                     <div style="display:flex; gap:6px; margin-top:6px;"><button class="btn tiny primary" onclick="OL.toFileCreateResource()">Create and tick it</button><button class="btn tiny soft" onclick="OL.toFileDlgNew('newOpen', false)">Cancel</button></div>`
                     : `<button class="btn tiny soft" onclick="OL.toFileDlgNew('newOpen', true)">${ic('plus')} New resource</button>`}
                 </div>
                 ${d.app ? `<button class="btn tiny soft" style="margin-bottom:8px;" onclick="OL.toFileDlgApp()">${ic('check-check')} Tick every ${esc(d.app)} resource</button>` : ''}
                 <div style="max-height:46vh; overflow:auto; display:grid; gap:4px;">
+                    <label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px dashed var(--accent); border-radius:6px; cursor:pointer;" title="Catch-all for preferences, decisions, ideas and next steps that don't belong to one resource (naming conventions, folder structure...).">
+                        <input type="checkbox" ${d.chosen.has(NOTES) ? 'checked' : ''} onchange="OL.toFileDlgPick('${NOTES}', this.checked)">
+                        <span style="flex:1;">${ic('notebook-pen')} Project Notes <span class="muted tiny">(preferences, decisions, ideas, next steps)</span></span>
+                    </label>
                     ${list.map((r) => `<label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;">
                         <input type="checkbox" ${d.chosen.has(String(r.id)) ? 'checked' : ''} onchange="OL.toFileDlgPick('${esc(r.id)}', this.checked)">
                         <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(r.name || 'Untitled')}</span>
+                        ${r.isPlaceholder ? `<span class="pill tiny soft" style="background:rgba(245,158,11,.2);">Pending</span><button type="button" class="btn tiny soft" onclick="event.preventDefault(); OL.toFileMatchOpen('${esc(r.id)}')">Match to real…</button>` : ''}
                         ${appsOf(r).slice(0, 4).map((a) => `<span class="pill tiny soft">${esc(a)}</span>`).join('')}${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
                     </label>`).join('') || `<div class="muted tiny p-20">No resources match.</div>`}
                 </div>
@@ -421,7 +431,7 @@ function newTypeList() {
     const t = (state.master?.resourceTypes || []).map((x) => x.type).filter(Boolean);
     return t.length ? t : ['Zap', 'Form', 'Scheduler Event', 'Workflow', 'Reference', 'General'];
 }
-OL.toFileDlgNew = (k, v) => { const d = S().dlg; d[k] = v; if (k === 'newOpen' || k === 'newLink') OL._paintToFileDialog(); };
+OL.toFileDlgNew = (k, v) => { const d = S().dlg; d[k] = v; if (k === 'newOpen' || k === 'newLink' || k === 'newPlaceholder') OL._paintToFileDialog(); };
 OL.toFileCreateResource = function() {
     const d = S().dlg; const name = String(d.newName || '').trim();
     if (!name) { alert('Give the resource a name.'); return; }
@@ -432,7 +442,8 @@ OL.toFileCreateResource = function() {
         const client = state.clients?.[d.clientId]; if (!client?.projectData) return;
         if (!Array.isArray(client.projectData.localResources)) client.projectData.localResources = [];
         client.projectData.localResources.push({ id, name, type: d.newType, archetype: 'Base', integration: null, data: {}, steps: [], triggers: [],
-            createdDate: new Date().toISOString(), isShell: true, ...(d.newApp ? { appName: d.newApp } : {}) });
+            createdDate: new Date().toISOString(), isShell: true, ...(d.newApp ? { appName: d.newApp } : {}),
+            ...(d.newPlaceholder !== false ? { isPlaceholder: true, workingName: name, placeholderFrom: [...new Set(items.flatMap((i) => i.requestIds))] } : {}) });
         if (d.newLink !== false) {
             const rids = new Set(items.flatMap((i) => i.requestIds));
             (client.projectData.scopingSheets || []).forEach((sh) => (sh?.lineItems || []).forEach((it) => {
@@ -459,7 +470,15 @@ OL.toFileDoFile = async function() {
     const names = [];
     updateAndSync(() => {
         const client = state.clients?.[d.clientId];
-        d.chosen.forEach((rid) => {
+        d.chosen.forEach((rid0) => {
+            let rid = rid0;
+            if (rid0 === NOTES) {
+                const pd = client.projectData; if (!Array.isArray(pd.localResources)) pd.localResources = [];
+                let n = pd.localResources.find((r) => r && r.systemKey === 'project-notes');
+                if (!n) { n = { id: `project-notes-${Date.now()}`, name: 'Project Notes', type: 'Reference', archetype: 'Base', integration: null, data: {}, steps: [], triggers: [],
+                    description: 'Preferences, decisions, ideas and next steps for this project that do not belong to one resource.', createdDate: new Date().toISOString(), systemPinned: true, systemKey: 'project-notes' }; pd.localResources.unshift(n); }
+                rid = n.id;
+            }
             const res = OL._findCommentHost(client, rid); if (!res) return;
             names.push(res.name || 'resource');
             if (!Array.isArray(res.comments)) res.comments = [];
@@ -476,3 +495,73 @@ OL.toFileDoFile = async function() {
     OL.closeModal?.();
     afterChange();
 };
+
+// ---------------------------------------------------------------- pending placeholders: match to a real resource
+const words = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+function suggestionScore(ph, r) {
+    const a = new Set(words(ph.workingName || ph.name)); const b = words(r.name);
+    let score = b.filter((w) => a.has(w)).length * 2;
+    if (ph.type && r.type === ph.type) score += 3;
+    return score;
+}
+
+OL.toFileMatchOpen = (id) => { S().dlg.matching = String(id); S().dlg.matchQ = ''; OL._paintToFileDialog(); };
+OL.toFileMatchBack = () => { S().dlg.matching = null; OL._paintToFileDialog(); };
+OL.toFileMatchQ = (v) => { const d = S().dlg; d.matchQ = v; clearTimeout(_searchT); _searchT = setTimeout(() => { OL._paintToFileMatch(); const el = document.querySelector('.modal-wide input[placeholder="Search resources…"]'); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 200); };
+
+OL._paintToFileMatch = function() {
+    const d = S().dlg; const client = state.clients?.[d.clientId];
+    const all = client?.projectData?.localResources || [];
+    const ph = all.find((r) => String(r.id) === d.matching); if (!ph) { d.matching = null; return OL._paintToFileDialog(); }
+    const q = (d.matchQ || '').trim().toLowerCase();
+    const cands = all.filter((r) => r && r.id !== ph.id && !r.isPlaceholder && !r.isArchived && !r.archived && !String(r.id).startsWith('step-') && r.systemKey !== 'project-notes' && (!q || String(r.name || '').toLowerCase().includes(q)))
+        .map((r) => ({ r, sc: suggestionScore(ph, r) })).sort((a, b) => b.sc - a.sc || String(a.r.name).localeCompare(String(b.r.name))).slice(0, 60);
+    const box = document.querySelector('.modal-box.modal-wide'); if (!box) return;
+    box.innerHTML = `<div style="width:100%; box-sizing:border-box;">
+        <h3 style="margin:0 0 6px;">Match "${esc(ph.workingName || ph.name)}" to a real resource</h3>
+        <div class="muted tiny" style="margin-bottom:10px;">Placeholder type: <strong>${esc(ph.type || '?')}</strong>. Everything filed to the placeholder moves to the real resource (noted as filed while pending), requests that listed the placeholder switch to the real one, and the placeholder disappears. Suggestions are ranked by name and type; nothing is matched until you pick one.</div>
+        <input class="modal-input" style="width:100%; margin-bottom:8px;" placeholder="Search resources…" value="${esc(d.matchQ || '')}" oninput="OL.toFileMatchQ(this.value)">
+        <div style="max-height:52vh; overflow:auto; display:grid; gap:4px;">
+            ${cands.map(({ r, sc }) => `<div style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px;">
+                <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(r.name || 'Untitled')}</span>
+                ${sc >= 3 ? '<span class="pill tiny soft" style="background:rgba(41,151,100,.2);">Suggested</span>' : ''}${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
+                <button class="btn tiny primary" onclick="OL.toFileMatchDo('${esc(ph.id)}', '${esc(r.id)}')">Match</button></div>`).join('') || '<div class="muted tiny p-20">No resources match.</div>'}
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:14px;"><button class="btn soft" onclick="OL.toFileMatchBack()">Back</button></div></div>`;
+    if (window.lucide) window.lucide.createIcons();
+};
+
+OL.toFileMatchDo = function(phId, realId) {
+    const d = S().dlg; const clientId = d.clientId;
+    updateAndSync(() => {
+        const pd = state.clients?.[clientId]?.projectData; if (!pd) return;
+        const list = pd.localResources || [];
+        const ph = list.find((r) => String(r.id) === String(phId)); const real = list.find((r) => String(r.id) === String(realId));
+        if (!ph || !real) return;
+        if (!Array.isArray(real.comments)) real.comments = [];
+        const phName = ph.workingName || ph.name;
+        (ph.comments || []).forEach((c) => real.comments.push({ ...c, filedWhilePendingAs: phName }));
+        real.comments.push({ id: uid(), author: (OL.getCurrentUserName ? OL.getCurrentUserName() : '') || 'Sphynx Team', date: new Date().toISOString(),
+            text: `Matched from the pending placeholder "${phName}". ${(ph.comments || []).length} note${(ph.comments || []).length === 1 ? '' : 's'} filed while pending moved here.` });
+        (pd.scopingSheets || []).forEach((sh) => (sh?.lineItems || []).forEach((it) => {
+            if (String(it.resourceId) === String(phId)) it.resourceId = real.id;
+            if (Array.isArray(it.resourceIds) && it.resourceIds.map(String).includes(String(phId))) it.resourceIds = [...new Set(it.resourceIds.map((x) => (String(x) === String(phId) ? real.id : x)))];
+        }));
+        (pd.clientTasks || []).forEach((t) => (t?.links || []).forEach((l) => {
+            if (Array.isArray(l.resourceIds) && l.resourceIds.map(String).includes(String(phId))) l.resourceIds = [...new Set(l.resourceIds.map((x) => (String(x) === String(phId) ? real.id : x)))];
+        }));
+        pd.localResources = list.filter((r) => String(r.id) !== String(phId));
+    }, clientId);
+    d.chosen.delete(String(phId)); d.matching = null;
+    OL._paintToFileDialog();
+};
+
+// "Pull from queue" on a resource page: opens the queue for that project with the resource pre-ticked in the filing dialog.
+OL.toFilePull = function(clientId, resId) {
+    const st = S();
+    st.f = { status: 'open', client: clientId, request: '', type: '', from: '', q: '' };
+    st.pullRes = String(resId); st.selected = new Set(); st.rendered = false;
+    OL.closeModal?.();
+    if (location.hash === '#/business/to-file') OL.renderToFileQueue(); else location.hash = '#/business/to-file';
+};
+OL.toFileClearPull = () => { S().pullRes = null; OL._paintToFile(); };

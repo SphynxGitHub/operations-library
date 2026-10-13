@@ -1490,6 +1490,7 @@ const dependencyHtml = `
     
             <!-- Sidebar: the same comment box tasks use (rich text, @mentions, edit/delete, "Client can view"), plus edit history -->
             <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;">
+                ${(typeof OL.toFilePull === 'function' && !OL.isClientViewer?.() && !window.IS_GUEST) ? `<button class="btn tiny soft" style="margin:8px 10px 0;" onclick="OL.toFilePull('${esc(getActiveClient()?.id || '')}', '${esc(String(res.id))}')" title="Open the To File queue for this project and file open items into this resource"><i data-lucide="folder-input" style="width:12px;height:12px;vertical-align:-2px;"></i> Pull from queue</button>` : ''}
                 <div style="display:flex;border-bottom:1px solid var(--line);">
                     <div onclick="state.v2.activeCommentTab='comments';OL.openResourceModal('${res.id}')"
                          style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
