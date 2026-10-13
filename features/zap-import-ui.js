@@ -195,7 +195,7 @@ export function createZapImport(deps) {
         let r = library.find((x) => x.discoveredKey === key || (d.url && x.externalUrl === d.url));
         if (!r) {
           r = { id: 'local-prj-' + uid(), name: `[Discovered] ${clip(d.label, 60)}`, type: d.kind, externalUrl: d.url || '', discoveredKey: key,
-            discoveredFrom: d.appName, isGlobal: true, coords: null, stageId: null };
+            discoveredFrom: d.appName, isGlobal: false, coords: null, stageId: null };
           library.push(r); summary.discovered++;
         }
         d.stepIds.forEach((sid) => {
