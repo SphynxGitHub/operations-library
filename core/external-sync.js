@@ -35,6 +35,7 @@ export function fingerprintItem(item) {
   const basis = JSON.stringify([
     item.name || '', item.externalUrl || '', item.description || '', item.serviceActive === undefined ? '' : item.serviceActive,
     (item.steps || []).map((s) => [s.name || '', s.description || '', s.appName || '', (s.datapoints || []).map((d) => d.id)]),
+    item.formFields || '',
   ]);
   let h = 5381;
   for (let i = 0; i < basis.length; i++) h = ((h << 5) + h + basis.charCodeAt(i)) | 0;
@@ -53,7 +54,9 @@ function mergeSteps(oldSteps, newSteps) {
     if (!os) return ns;
     used.add(os.id);
     // Data tags the service reports are added to the step; tags a person added by hand stay.
-    const tags = ns.datapoints ? [...(os.datapoints || []), ...ns.datapoints.filter((d) => !(os.datapoints || []).some((x) => x.id === d.id))] : os.datapoints;
+    let tags = ns.datapoints ? [...(os.datapoints || []), ...ns.datapoints.filter((d) => !(os.datapoints || []).some((x) => x.id === d.id))] : os.datapoints;
+    // tags an earlier pull made that this one replaces (a single full name becoming first and last name)
+    if (tags && ns.dropTagNames && ns.dropTagNames.length) { const drop = ns.dropTagNames.map((n) => norm(n)); tags = tags.filter((d) => !drop.includes(norm(d && d.name))); }
     return { ...os, name: ns.name, appName: ns.appName || os.appName, description: os.description || ns.description, id: os.id, ...(tags ? { datapoints: tags } : {}) };
   });
   // a step the service no longer has: dropped, unless someone connected it to something by hand
@@ -61,7 +64,7 @@ function mergeSteps(oldSteps, newSteps) {
   return merged;
 }
 
-const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype'];
+const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype', 'formFields'];
 
 // library = the project's localResources array (changed in place). items = what the service returned, each already shaped as a
 // card: { externalId, name, type, externalUrl?, description?, steps: [{id, name, appName}], ...extra new-card fields }.
