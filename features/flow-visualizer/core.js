@@ -2066,6 +2066,7 @@ export function _fvBuildCard(res, num, isGlobal, globalStageCount) {
           <span class="fv-card-step-num">${num}</span>
         </div>
         <div class="fv-card-name">${esc(res.name)}</div>
+        ${res.placementLabel || res.placementWhen ? `<div class="fv-card-placement" style="font-size:10px;color:var(--text-muted);margin:-2px 0 4px;">${res.placementLabel ? `<b style="font-weight:600;">${esc(res.placementLabel)}</b>` : ''}${res.placementLabel && res.placementWhen ? ' · ' : ''}${res.placementWhen ? esc(res.placementWhen) : ''}</div>` : ''}
         ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
         ${assetIconsHtml}
         ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}
@@ -4019,7 +4020,9 @@ export function _fvBuildListShell(stages, resources) {
                             ...found,
                             stageId: stage.id,
                             workflowId: wf.id,
-                            isGlobalInstanceCopy: true
+                            isGlobalInstanceCopy: true,
+                            placementLabel: ((found.placements || []).find(p => String(p.workflowId) === String(wf.id)) || {}).label || '',
+                            placementWhen: OL.placementWhenText(found, (found.placements || []).find(p => String(p.workflowId) === String(wf.id)))
                         };
                     }
                     return found;
@@ -4425,34 +4428,7 @@ export function _fvOpenStepsList(resId) {
             <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
             Stage & Workflow
         </div>
-        <select class="fvi-select"
-                onchange="OL._fvAssignStageAndWorkflow('${res.id}', this.value)">
-            <option value="">— Unassigned —</option>
-            ${stages.map(s => {
-                const stageWorkflows = (OL.getWorkflows()||[]).filter(w => w.stageId === s.id);
-                const stageVal = `stage:${s.id}`;
-                const stageSelected = res.stageId === s.id && !res.workflowId;
-                return `
-                    <option value="${stageVal}" ${stageSelected ? 'selected' : ''}>
-                        ${esc(s.name)}
-                    </option>
-                    ${stageWorkflows.map(wf => {
-                        const wfSelected = res.workflowId === wf.id;
-                        return `
-                            <option value="wf:${wf.id}:${s.id}" ${wfSelected ? 'selected' : ''}>
-                                &nbsp;&nbsp;↳ ${esc(wf.name)}
-                            </option>
-                        `;
-                    }).join('')}
-                `;
-            }).join('')}
-            ${(function() {
-                const ids = new Set(stages.map(x => String(x.id)));
-                const orphans = (OL.getWorkflows()||[]).filter(w => !ids.has(String(w.stageId)));
-                return orphans.length ? `<option disabled>— Workflows without a stage —</option>` + orphans.map(wf =>
-                    `<option value="wf:${wf.id}:" ${String(res.workflowId) === String(wf.id) ? 'selected' : ''}>&nbsp;&nbsp;↳ ${esc(wf.name)}</option>`).join('') : '';
-            })()}
-        </select>
+        ${OL.placementsEditor(res.id)}
     </div>
 
       <!-- CLASSIFICATION -->
@@ -4485,19 +4461,6 @@ export function _fvOpenStepsList(resId) {
         </div>
       </div>
 
-      <div class="fvi-section">
-        <div class="fvi-label">
-          <i data-lucide="globe" style="width:11px;height:11px;"></i>
-          Visibility
-        </div>
-        <button onclick="OL.handleResourceSave('${res.id}','isGlobal',${!res.isGlobal});"
-                style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                       border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
-                       background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
-                       color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
-          ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
-        </button>
-      </div>
 
       <!-- DESCRIPTION -->
       <div class="fvi-section">
@@ -4563,7 +4526,172 @@ export function _fvOpenStepsList(resId) {
   });
 };
 
+
+// ── PLACEMENTS ───────────────────────────────────────────────────────────────────────────────────────────────────
+// A resource can sit in several workflows (Strategy Session: two meetings). res.placements is the list the editor works on:
+//   [{ id, workflowId, stageId, label, when: { formId, tagId, value } | null }]
+// workflow.resourceIds stays the source the map renders from; setPlacements keeps both in step. A resource with two or more
+// workflow placements is "global" automatically (isGlobal is derived, not chosen), so the flag no longer needs its own button.
+const plcId = () => 'plc-' + Math.random().toString(36).slice(2, 8);
+function plcData() { return OL.getCurrentProjectData(); }
+export function getPlacements(res) {
+  if (Array.isArray(res.placements)) {
+    // drop placements whose workflow was deleted
+    const wfs = plcData().workflows || [];
+    return res.placements.filter((p) => !p.workflowId || wfs.some((w) => String(w.id) === String(p.workflowId)));
+  }
+  const data = plcData();
+  const homes = (data.workflows || []).filter((w) => (w.resourceIds || []).map(String).includes(String(res.id)));
+  if (homes.length) return homes.map((w) => ({ id: plcId(), workflowId: String(w.id), stageId: String(w.stageId || ''), label: '', when: null }));
+  if (res.stageId) return [{ id: plcId(), workflowId: '', stageId: String(res.stageId), label: '', when: null }];
+  return [];
+}
+export function setPlacements(resId, list) {
+  const data = plcData();
+  const res = (data.resources || []).find((r) => String(r.id) === String(resId));
+  if (!res) return;
+  const wfs = data.workflows || [];
+  let next = (list || []).map((p) => ({ id: p.id || plcId(), workflowId: String(p.workflowId || ''), stageId: String(p.stageId || ''), label: String(p.label || ''), when: p.when && p.when.formId ? p.when : null }));
+  // several placements must each be in a workflow, and each workflow holds the resource once
+  if (next.length > 1) {
+    const seen = new Set();
+    next = next.filter((p) => { if (!p.workflowId) { p.stageId = ''; return true; } if (seen.has(p.workflowId)) return false; seen.add(p.workflowId); return true; });
+  }
+  wfs.forEach((w) => { w.resourceIds = (w.resourceIds || []).filter((x) => String(x) !== String(resId)); });
+  next.forEach((p) => {
+    const w = wfs.find((x) => String(x.id) === p.workflowId);
+    if (w) { if (!w.resourceIds) w.resourceIds = []; w.resourceIds.push(String(resId)); if (!p.stageId) p.stageId = String(w.stageId || ''); }
+  });
+  res.placements = next;
+  const first = next.find((p) => p.workflowId) || next[0];
+  res.stageId = first ? (first.stageId || null) : null;
+  res.workflowId = first && first.workflowId ? first.workflowId : null;
+  res.isGlobal = next.filter((p) => p.workflowId).length > 1;
+  if (!next.length) delete res.coords;
+  res.isTopShelf = false;
+}
+function plcCommit(resId) {
+  OL.persist().then(() => {
+    if (typeof OL.autoAlignNodes === 'function') OL.autoAlignNodes();
+    if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+  });
+  document.querySelectorAll(`[data-plc="${resId}"]`).forEach((el) => { el.innerHTML = placementsInner(resId); });
+  if (window.lucide) lucide.createIcons();
+}
+function plcEdit(resId, fn) {
+  const res = (plcData().resources || []).find((r) => String(r.id) === String(resId));
+  if (!res) return;
+  const list = getPlacements(res).map((p) => ({ ...p }));
+  fn(list);
+  setPlacements(resId, list);
+  plcCommit(resId);
+}
+export function placementSet(resId, idx, value) {
+  plcEdit(resId, (list) => {
+    const p = list[idx]; if (!p) return;
+    if (!value) { list.splice(idx, 1); return; }
+    if (value.startsWith('stage:')) { p.stageId = value.slice(6); p.workflowId = ''; }
+    else if (value.startsWith('wf:')) { const [, wf, st] = value.split(':'); p.workflowId = wf; p.stageId = st || ''; }
+  });
+}
+export function placementAdd(resId) {
+  plcEdit(resId, (list) => { list.push({ id: plcId(), workflowId: '', stageId: '', label: '', when: null }); });
+}
+export function placementRemove(resId, idx) { plcEdit(resId, (list) => { list.splice(idx, 1); }); }
+export function placementLabel(resId, idx, text) {
+  const res = (plcData().resources || []).find((r) => String(r.id) === String(resId)); if (!res) return;
+  const list = getPlacements(res).map((p) => ({ ...p })); if (!list[idx]) return;
+  list[idx].label = String(text || '').trim().slice(0, 60);
+  setPlacements(resId, list); OL.persist().then(() => { if (window.location.hash.includes('visualizer')) OL.renderVisualizer(); });
+}
+// "chosen when": which form answer picks this placement
+export function placementWhen(resId, idx, part, value) {
+  plcEdit(resId, (list) => {
+    const p = list[idx]; if (!p) return;
+    if (part === 'form') p.when = value ? { formId: value, tagId: '', value: '' } : null;
+    else if (p.when && part === 'field') p.when = { ...p.when, tagId: value, value: '' };
+    else if (p.when && part === 'value') p.when = { ...p.when, value };
+  });
+}
+function plcForms(res) {
+  const all = (plcData().resources || []).filter((r) => Array.isArray(r.formFields) && r.formFields.length);
+  const mine = new Set();
+  (res.steps || []).forEach((s) => { (s.callouts || []).forEach((c) => c && c.libId && mine.add(String(c.libId))); (s.links || []).forEach((l) => l && l.id && mine.add(String(l.id))); });
+  return all.sort((a, b) => (mine.has(String(b.id)) ? 1 : 0) - (mine.has(String(a.id)) ? 1 : 0));
+}
+export function placementWhenText(res, p) {
+  if (!p || !p.when || !p.when.formId) return '';
+  const f = (plcData().resources || []).find((r) => String(r.id) === String(p.when.formId));
+  const fld = f && (f.formFields || []).find((x) => String(x.tagId) === String(p.when.tagId));
+  if (!fld) return '';
+  return p.when.value ? `${fld.label} = ${p.when.value}` : fld.label;
+}
+function placementsInner(resId) {
+  const data = plcData();
+  const res = (data.resources || []).find((r) => String(r.id) === String(resId));
+  if (!res) return '';
+  const list = getPlacements(res);
+  const multi = list.length > 1;
+  const stages = data.stages || [];
+  const forms = plcForms(res);
+  const opt = (v, text, sel) => `<option value="${esc(v)}" ${sel ? 'selected' : ''}>${text}</option>`;
+  const rows = list.map((p, i) => {
+    const cur = p.workflowId ? `wf:${p.workflowId}:${p.stageId}` : (p.stageId ? `stage:${p.stageId}` : '');
+    const picker = `<select class="modal-input tiny" style="flex:1;min-width:0;" onchange="OL.placementSet('${res.id}',${i},this.value)">
+      ${opt('', i === 0 && !multi ? '— Workbench (Unassigned) —' : '— Choose a workflow —', !cur)}
+      ${stages.map((s) => {
+        const wfs = (data.workflows || []).filter((w) => String(w.stageId) === String(s.id));
+        return `${multi || i > 0 ? '' : opt('stage:' + s.id, esc(s.name), cur === 'stage:' + s.id)}
+          ${multi || i > 0 ? `<optgroup label="${esc(s.name)}">` : ''}
+          ${wfs.map((w) => opt(`wf:${w.id}:${s.id}`, `${multi || i > 0 ? '' : '&nbsp;&nbsp;↳ '}${esc(w.name)}`, cur === `wf:${w.id}:${s.id}`)).join('')}
+          ${multi || i > 0 ? '</optgroup>' : ''}`;
+      }).join('')}
+    </select>`;
+    let when = '';
+    if (multi && forms.length) {
+      const f = forms.find((x) => String(x.id) === String(p.when && p.when.formId));
+      const fld = f && (f.formFields || []).find((x) => String(x.tagId) === String(p.when.tagId));
+      const vals = fld && (fld.options || []);
+      when = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+        <span class="small muted" style="font-size:10.5px;">Chosen when</span>
+        <select class="modal-input tiny" style="flex:1;min-width:120px;" onchange="OL.placementWhen('${res.id}',${i},'form',this.value)">
+          ${opt('', 'Not tied to an answer', !f)}${forms.map((x) => opt(String(x.id), esc(x.name || 'Form'), f && String(f.id) === String(x.id))).join('')}
+        </select>
+        ${f ? `<select class="modal-input tiny" style="flex:1;min-width:120px;" onchange="OL.placementWhen('${res.id}',${i},'field',this.value)">
+          ${opt('', 'Field…', !fld)}${(f.formFields || []).map((x) => opt(String(x.tagId), esc(x.label), fld && String(fld.tagId) === String(x.tagId))).join('')}
+        </select>` : ''}
+        ${fld ? (vals.length
+          ? `<select class="modal-input tiny" style="flex:1;min-width:100px;" onchange="OL.placementWhen('${res.id}',${i},'value',this.value)">${opt('', 'is…', !p.when.value)}${vals.map((v) => opt(v, esc(v), p.when.value === v)).join('')}</select>`
+          : `<input type="text" class="modal-input tiny" style="flex:1;min-width:100px;" maxlength="120" placeholder="is… (answer)" value="${esc(p.when.value || '')}" onchange="OL.placementWhen('${res.id}',${i},'value',this.value)">`) : ''}
+      </div>`;
+    }
+    return `<div style="border:1px solid var(--panel-border);border-radius:8px;padding:8px;margin-bottom:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${picker}
+        ${multi ? `<input type="text" class="modal-input tiny" style="width:34%;min-width:90px;" maxlength="60" placeholder="Label, e.g. Meeting 1" value="${esc(p.label || '')}" onchange="OL.placementLabel('${res.id}',${i},this.value)">` : ''}
+        ${list.length > 0 && (multi || cur) ? `<button type="button" class="btn tiny" title="Remove this placement" onclick="OL.placementRemove('${res.id}',${i})">×</button>` : ''}
+      </div>${when}
+    </div>`;
+  }).join('');
+  const placeOpts = stages.map((s) => opt('stage:' + s.id, esc(s.name), false) + (data.workflows || []).filter((w) => String(w.stageId) === String(s.id)).map((w) => opt(`wf:${w.id}:${s.id}`, '&nbsp;&nbsp;↳ ' + esc(w.name), false)).join('')).join('');
+  return `${rows || `<div class="small muted" style="margin-bottom:6px;">On the workbench (not placed on the map yet).</div>
+    <select class="modal-input tiny" onchange="if(this.value) OL.placementPlace('${res.id}', this.value)">${opt('', '— Choose where it goes —', true)}${placeOpts}</select>`}
+    ${list.length ? `<button type="button" class="btn tiny" style="margin-top:2px;" onclick="OL.placementAdd('${res.id}')">+ Add another placement</button>` : ''}
+    ${multi ? `<div class="small muted" style="margin-top:6px;font-size:10.5px;">Shown on the map in each workflow, with its label. Each workflow holds it once.</div>` : ''}`;
+}
+export function placementPlace(resId, value) {
+  plcEdit(resId, (list) => { list.length = 0; list.push({ id: plcId(), workflowId: '', stageId: '', label: '', when: null }); });
+  placementSet(resId, 0, value);
+}
+export function placementsEditor(resId) { return `<div data-plc="${esc(String(resId))}">${placementsInner(resId)}</div>`; }
+
 export function _fvAssignStageAndWorkflow(resId, value) {
+    // single-placement assignment now goes through the placements list (keeps extra placements intact)
+    const res = (OL.getCurrentProjectData().resources || []).find(r => String(r.id) === String(resId));
+    if (res && getPlacements(res).length) { placementSet(resId, 0, value || ''); OL._fvOpenStepsList(resId); return; }
+    if (value) { placementPlace(resId, value); OL._fvOpenStepsList(resId); }
+}
+export function _fvAssignStageAndWorkflowLegacy(resId, value) {
     const data = OL.getCurrentProjectData();
     const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     if (!res) return;
@@ -9298,7 +9426,7 @@ Object.assign(window.OL, {
     _fvShowTidyMenu, _fvTogglePin, _fvToggleWb, _fvPopulateWb,
     _fvRenderWbItems, _fvFilterWb, _fvWbDragStart, _fvSetupRailScroll,
     _fvUnmapResource, _fvHandleCanvasClick, closeInspectorPanel, _fvSelectStep,
-    _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas,
+    _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas, placementsEditor, placementSet, placementAdd, placementRemove, placementLabel, placementWhen, placementPlace, placementWhenText, getPlacements,
     _fvToggleStepsPanel, _fvRenderListStep, fvSearch, fvNextMatch,
     fvPrevMatch, fvActivateMatch, fvClearSearch, fvToggleConnections,
     _fvSetupZoom, fvZoom, handleSidebarSearch, getStepIcon,
@@ -9339,4 +9467,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.g' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.h' });
