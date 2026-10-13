@@ -5601,6 +5601,11 @@ export function renderFocusControls() {
         }
 
         scopeBtn.remove();
+
+        // came from a resource's modal ("Edit on flow map"): open it again where it was left
+        const backToRes = sessionStorage.getItem('map_return_resource');
+        sessionStorage.removeItem('map_return_resource');
+        if (backToRes && typeof OL.openResourceModal === 'function') setTimeout(() => OL.openResourceModal(backToRes), 150);
     };
         
     // 🛑 REMOVED: The self-calling line that was causing the crash
