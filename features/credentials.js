@@ -87,6 +87,11 @@ export function renderAccessSection(ownerId, type) {
 
                             <div style="flex: 1; padding: 5px;">
                                 ${secretFieldHtml(conn)}
+                                ${/calendly/i.test((allApps.find((a) => a.id === conn.appId) || {}).name || '') ? `
+                                <input type="text" autocomplete="off" class="modal-input tiny" style="font-family: monospace; font-size:10px; margin-top:4px;"
+                                       placeholder="Calendly user ID (optional; lets a scheduling-only key work)"
+                                       value="${esc(conn.calendlyUser || '')}"
+                                       onchange="OL.updateAccessValue('${conn.id}', 'calendlyUser', this.value.trim())">` : ''}
                             </div>
 
                             <div style="display:flex; align-items:center; gap:8px; padding: 5px;">

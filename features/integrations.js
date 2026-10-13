@@ -949,7 +949,7 @@ export async function importCalendly(client, opts = {}) {
     if (!hasKey(creds)) throw new Error("Calendly API Key missing in Credentials.");
     await secureEntry(client, creds);
 
-    const data = await importFrom('calendly', client.id, creds.id);
+    const data = await importFrom('calendly', client.id, creds.id, creds.calendlyUser ? { calendlyUser: creds.calendlyUser } : {});
     const events = data.collection || [];
 
     const items = events.map((ev) => {
@@ -1149,7 +1149,11 @@ function findRegistryEntry(client, hints) {
         const name = (apps.find((a) => a.id === r.appId)?.name || '').toLowerCase();
         return hints.some((h) => name.includes(h));
     });
-    return matches.find((r) => r.secretSet || String(r.secret || '').trim()) || matches[0] || null;
+    // If several entries hold a key (an old one plus a newly pasted one), use the most recently saved,
+    // so a replaced or revoked key is not picked ahead of the new one.
+    const withKey = matches.filter((r) => r.secretSet || String(r.secret || '').trim());
+    withKey.sort((a, b) => String(b.secretUpdatedAt || '').localeCompare(String(a.secretUpdatedAt || '')));
+    return withKey[0] || matches[0] || null;
 }
 const hasKey = (entry) => !!(entry && (entry.secretSet || String(entry.secret || '').trim()));
 
