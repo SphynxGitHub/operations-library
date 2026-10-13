@@ -959,7 +959,7 @@ export function openResourceModal(targetId, draftObj = null) {
     // removing one here and there is the same change. A form always shows the section; any other resource shows it once it has tags.
     const formTags = [];
     (res.steps || []).forEach((st) => (st.datapoints || []).forEach((d) => { if (d && !formTags.some((x) => x.id === d.id)) formTags.push(d); }));
-    const showDataTags = /\b(forms?|questionnaires?)\b/.test(resType) || formTags.length > 0;
+    const showDataTags = true;   // any card can carry data tags (an email's merge fields, a spreadsheet's columns, a form's fields)
     const tagPool = (client?.projectData?.localDatapoints?.length ? client.projectData.localDatapoints : (state.master.datapoints || []));
     const tagChoices = tagPool.filter((d) => d && !formTags.some((x) => x.id === d.id));
     const tagGroups = tagChoices.reduce((g, d) => { const c = d.category || 'Other'; (g[c] = g[c] || []).push(d); return g; }, {});
@@ -969,8 +969,8 @@ export function openResourceModal(targetId, draftObj = null) {
                 <i data-lucide="tags" style="width:14px;height:14px;"></i> DATA TAGS
                 <span class="pill tiny soft">${formTags.length}</span>
             </label>
-            <div class="tiny muted" style="margin:4px 0 8px;">The fields this form collects${(res.formFields || []).length ? `, as ${esc(res.source || 'the service')} reports them (refreshed on each pull)` : ''}.</div>
-            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+            <div class="tiny muted" style="margin:4px 0 8px;">${/\b(forms?|questionnaires?)\b/.test(resType) ? 'The fields this form collects' : 'The data this resource uses or collects'}${(res.formFields || []).length ? `, as ${esc(res.source || 'the service')} reports them (refreshed on each pull)` : ''}.</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
                 ${(() => {
                     const fields = res.formFields || [];
                     const rank = (d) => { const i = fields.findIndex((f) => String(f.tagId) === String(d.id)); return i < 0 ? 999 : i; };
@@ -978,15 +978,15 @@ export function openResourceModal(targetId, draftObj = null) {
                     if (!rows.length) return '<span class="tiny muted">No data tags yet.</span>';
                     return rows.map((d) => {
                         const f = fields.find((x) => String(x.tagId) === String(d.id));
-                        return `<div style="padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
-                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                <i data-lucide="tag" style="width:13px;height:13px;color:#a78bfa;flex:0 0 auto;"></i>
-                                <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(f ? f.label : d.name)}</span>
+                        return `<div style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);">
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <i data-lucide="tag" style="width:11px;height:11px;color:#a78bfa;flex:0 0 auto;"></i>
+                                <span style="font-size:11px;font-weight:600;line-height:1.35;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(f ? f.label : d.name)}</span>
                                 ${f ? `<span class="pill tiny soft">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>` : ''}
                                 ${f && f.required ? '<span class="pill tiny" style="color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
                                 <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:14px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
                             </div>
-                            ${f && (f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-left:21px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);">${esc(o)}</span>`).join('')}</div>` : ''}
+                            ${f && (f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding-left:17px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);font-size:9.5px;padding:1px 6px;">${esc(o)}</span>`).join('')}</div>` : ''}
                         </div>`;
                     }).join('');
                 })()}
@@ -1223,6 +1223,7 @@ export function openResourceModal(targetId, draftObj = null) {
                         ✓ Done Editing
                     </button>
                 </div>
+                ${dataTagsHtml}
                 ${collateralHtml}
                 ${pathsHtml}
             `;
@@ -2135,7 +2136,7 @@ export async function addResourceDataTag(resId, tagId) {
     const add = tag.isBundle ? (tag.childIds || []).map((id) => pool.find((d) => String(d.id) === String(id))).filter(Boolean) : [tag];
     await OL.updateAndSync(() => {
         if (!Array.isArray(res.steps)) res.steps = [];
-        if (!res.steps.length) res.steps.push({ id: 'step_' + Date.now(), name: 'Form completed', appName: res.appName || '', datapoints: [] });
+        if (!res.steps.length) res.steps.push({ id: 'step_' + Date.now(), name: /\b(forms?|questionnaires?)\b/i.test(String(res.type || '')) ? 'Form completed' : 'Data used', appName: res.appName || '', datapoints: [] });
         const step = res.steps[0];
         if (!Array.isArray(step.datapoints)) step.datapoints = [];
         add.forEach((d) => {
@@ -3196,4 +3197,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.g' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.h' });

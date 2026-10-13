@@ -23,6 +23,7 @@ import {
 import { importFrom, secureEntry } from '../core/secrets.js';
 import { reconcileExternal, logExternalPull, tieExternalToZaps, EXTERNAL_SOURCES } from '../core/external-sync.js';
 import { getOlSettings } from '../core/ol-settings.js';
+import { normalizeJotformLogic, logicFingerprint } from '../core/jotform-logic.js';
 
 //======================= CLICKUP CSV IMPORT =======================//
 // One-way import of ClickUp tasks (+ comments + tracked time) from a
@@ -869,7 +870,10 @@ export async function autoPullIntegrations(client) {
             if (!last.at && !hasPulledBefore(client, it.key)) continue;                      // the first pull is a deliberate click
             // events pulled before forms and emails were created are brought up to date on the next open, not a day later
             const needsCatchUp = it.key === 'calendly' && (client.projectData.localResources || []).some((r) => r && r.source === 'calendly' && r.type === 'Event' && !r.isDeleted && (!r.flowSeeded || !(r.steps || []).some((st) => (st.callouts || []).length)));
-            if (!needsCatchUp && last.at && nowMs - Date.parse(last.at) < everyMs) continue;  // pulled recently
+            // Jotform forms are read a few at a time, so until every form has been read the next pull is not a day away (but not every open either)
+            const moreToRead = it.key === 'jotform' && (!last.at || nowMs - Date.parse(last.at) > 3600 * 1000)
+                && (client.projectData.localResources || []).some((r) => r && r.source === 'jotform' && !r.isDeleted && !r.missingUpstream && !r.formDetails);
+            if (!needsCatchUp && !moreToRead && last.at && nowMs - Date.parse(last.at) < everyMs) continue;  // pulled recently
             if (last.errorAt && nowMs - Date.parse(last.errorAt) < AUTO_RETRY_AFTER_ERROR_MS) continue;
             try { results.push(await runOneSync(client, it.key, { auto: true })); }
             catch (e) { if (!e.skip) { console.warn(`Automatic ${it.name} pull failed:`, e); recordSyncError(client, it.key, e); } }
@@ -987,8 +991,8 @@ function findOrMakeTag(client, names, category) {
 // Ties each default-flow step to the form or email card it was made for, as Collateral on that step (step.callouts, what the
 // step editor's "Collateral for this step" list and the resource's Collateral section read). Also moves links made the old way
 // (step.links to a form or email) across, so cards pulled before this still get it.
-function linkCalendlyFlow(library) {
-    const cards = (library || []).filter((r) => r && r.source === 'calendly');
+function linkSeededFlow(library, source) {
+    const cards = (library || []).filter((r) => r && r.source === source);
     const kindOf = (r) => (/form/i.test(r.type) ? 'form' : (/email/i.test(r.type) ? 'email' : null));
     const attach = (st, target) => {
         const kind = kindOf(target); if (!kind) return false;
@@ -1097,7 +1101,7 @@ export async function importCalendly(client, opts = {}) {
             steps: [{ id: `cal-reminder-${id}-s0`, name: `${app} sends meeting reminder email`, appName: app }],
         });
     });
-    return commitPull(client, 'calendly', items, { afterReconcile: linkCalendlyFlow });
+    return commitPull(client, 'calendly', items, { afterReconcile: (lib) => linkSeededFlow(lib, 'calendly') });
 };
 
 export async function importYCBM(client, opts = {}) {
@@ -1199,6 +1203,52 @@ export async function importKeap(client, opts = {}) {
     return commitPull(client, 'keap', items);
 };
 
+// ---- Jotform: every form's fields, its logic and the emails it sends ---------------------------------------------------
+// Reading one form's questions, logic and emails is two more calls to Jotform, so a pull does a limited number of forms at a
+// time (30 when pulled by hand, 10 when automatic): forms never read come first, then the oldest read. What was read stays on
+// the card (card.formDetails) until the next time that form is read.
+const JF_SKIP = /^control_(head|button|text|pagebreak|divider|image|widget|collapse|captcha|spacer|pagebreak|fullname_hidden)$/;
+const JF_TYPE = {
+    control_textbox: 'text', control_textarea: 'long text', control_email: 'email', control_phone: 'phone', control_fullname: 'name',
+    control_dropdown: 'select', control_radio: 'radio', control_checkbox: 'checkbox', control_datetime: 'date', control_birthdate: 'date',
+    control_address: 'address', control_fileupload: 'file', control_number: 'number', control_scale: 'scale', control_rating: 'rating',
+    control_signature: 'signature', control_payment: 'payment', control_paypal: 'payment', control_stripe: 'payment', control_time: 'time',
+    control_spinner: 'number', control_matrix: 'matrix', control_slider: 'number',
+};
+const jfOptions = (q) => String(q.options || '').split('|').map((o) => o.trim()).filter(Boolean).slice(0, 40);
+
+function jotformFieldsOf(client, raw) {
+    const questions = (raw.questions || []).filter((q) => q && !JF_SKIP.test(q.type)).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const fields = []; const tags = [];
+    const add = (label, names, category, type, required, options) => {
+        const tag = findOrMakeTag(client, names, category);
+        if (options && options.length) tag.options = [...new Set([...(tag.options || []), ...options])];
+        if (!tags.some((x) => x.id === tag.id)) tags.push(tag);
+        if (!fields.some((f) => f.tagId === tag.id)) fields.push({ tagId: tag.id, label, type, required: !!required, options: options || [] });
+    };
+    questions.forEach((q) => {
+        const label = String(q.text || q.name || '').trim().slice(0, 80);
+        if (!label) return;
+        const type = JF_TYPE[q.type] || String(q.type || 'text').replace(/^control_/, '');
+        if (q.type === 'control_fullname') { add('First Name', ['First Name'], 'Contact', 'text', true); add('Last Name', ['Last Name'], 'Contact', 'text', true); }
+        else if (q.type === 'control_email') add(label, ['Email Address', 'Email'], 'Contact', 'email', true);
+        else if (q.type === 'control_phone') add(label, ['Phone Number', 'Phone'], 'Contact', 'phone', false);
+        else add(label, [label], 'Jotform Form', type, false, jfOptions(q));
+    });
+    return { fields, tags };
+}
+
+async function readJotformForm(client, creds, form) {
+    const raw = await importFrom('jotform', client.id, creds.id, { formId: String(form.id) });
+    const norm = normalizeJotformLogic({ conditions: raw.conditions, questions: raw.questions });
+    const { fields, tags } = jotformFieldsOf(client, raw);
+    const emails = (raw.emails || []).map((e, i) => ({
+        key: `${/auto/i.test(e.type) ? 'auto' : 'notify'}${i}`, kind: /auto/i.test(e.type) ? 'Autoresponder' : 'Notification',
+        name: e.name || '', subject: e.subject || '',
+    }));
+    return { at: new Date().toISOString(), fields, tagIds: tags.map((t) => t.id), emails, logic: { norm, fp: logicFingerprint(norm) } };
+}
+
 export async function importJotform(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'jotform');
     if (!hasKey(creds)) throw new Error("Jotform API Key missing.");
@@ -1206,22 +1256,72 @@ export async function importJotform(client, opts = {}) {
 
     const data = await importFrom('jotform', client.id, creds.id);
     const forms = data.content || data.data || (Array.isArray(data) ? data : []);
+    const library = client.projectData.localResources || (client.projectData.localResources = []);
+    const cardOf = (id) => library.find((r) => r && r.source === 'jotform' && String(r.externalId) === String(id));
 
-    const items = forms.map((form) => ({
-        externalId: form.id, name: form.title, type: 'Form', externalUrl: `https://www.jotform.com/form/${form.id}`,
-        steps: [{ id: `jf-${form.id}-s0`, name: "User Submits Form", appName: "Jotform" }],
-    }));
-    const summary = commitPull(client, 'jotform', items);
-    // Forms whose logic was loaded before: read again, and say which changed (features/jotform-logic.js)
-    try {
-        if (typeof OL.refreshLoadedFormLogic === 'function') {
-            const logicChanged = await OL.refreshLoadedFormLogic(client, opts.auto ? 10 : 30);
-            if (logicChanged.length) {
-                logicChanged.forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });
-                logExternalPull(client.projectData, { ...summary, added: [], renamed: [], changed: logicChanged.map((n) => `${n} (form logic)`), missing: [], restored: [] });
-            }
+    // which forms to read this time: never read first, then the longest ago
+    const cap = opts.auto ? 10 : 30;
+    const pending = forms.filter((f) => f && f.id != null && !(f.status && /delet/i.test(String(f.status))))
+        .map((f) => ({ f, at: (cardOf(f.id)?.formDetails?.at) || '' }))
+        .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+        .slice(0, cap).map((x) => x.f);
+    const fresh = new Map();   // form id -> details read now
+    const logicChanged = [];
+    for (const f of pending) {
+        try {
+            const d = await readJotformForm(client, creds, f);
+            const had = cardOf(f.id)?.formLogic;
+            if (had && had.fp !== d.logic.fp) logicChanged.push(f.title);
+            fresh.set(String(f.id), d);
+        } catch (e) { console.warn(`Could not read the form "${f.title}":`, e); }
+    }
+    const detailsOf = (id) => fresh.get(String(id)) || cardOf(id)?.formDetails || null;
+    const tagById = (id) => (client.projectData.localDatapoints || []).find((t) => t && t.id === id);
+
+    const items = [];
+    forms.forEach((form) => {
+        const id = String(form.id);
+        const d = detailsOf(id);
+        const tags = d ? (d.tagIds || []).map(tagById).filter(Boolean) : [];
+        const emails = d ? (d.emails || []) : [];
+        const formUrl = `https://www.jotform.com/form/${id}`;
+        const editUrl = `https://www.jotform.com/build/${id}`;
+        const item = {
+            externalId: id, name: form.title, type: 'Form', externalUrl: formUrl,
+            steps: [{ id: `jf-${id}-s0`, name: "User Submits Form", appName: "Jotform", ...(tags.length ? { datapoints: tags } : {}) }],
+        };
+        if (d) {
+            item.keepSteps = true;
+            item.formFields = d.fields;
+            item.seedSteps = emails.map((e, i) => ({ id: `jf-${id}-e${i}`, name: `Jotform sends ${e.kind.toLowerCase()} email`, appName: 'Jotform', seedLink: `jfemail-${id}-${e.key}` }));
+            if (!item.seedSteps.length) delete item.seedSteps;
         }
-    } catch (e) { console.warn('Form logic refresh skipped:', e); }
+        items.push(item);
+        emails.forEach((e, i) => {
+            const same = emails.filter((x) => x.kind === e.kind).length > 1 ? ` ${emails.filter((x) => x.kind === e.kind).indexOf(e) + 1}` : '';
+            items.push({
+                externalId: `jfemail-${id}-${e.key}`, name: `${form.title}: ${e.kind} Email${same}`, type: 'Email', archetype: 'Base',
+                externalUrl: `${editUrl}/settings/emails`, keepSteps: true,
+                description: e.subject ? `Subject: ${e.subject}` : (e.name || ''),
+                steps: [{ id: `jf-email-${id}-${e.key}-s0`, name: `Jotform sends ${e.kind.toLowerCase()} email`, appName: 'Jotform' }],
+            });
+        });
+    });
+    const summary = commitPull(client, 'jotform', items, { afterReconcile: (lib) => linkSeededFlow(lib, 'jotform') });
+
+    // keep what was read on each form's card (and its logic, for the "Form logic" callout)
+    fresh.forEach((d, id) => {
+        const card = cardOf(id); if (!card) return;
+        card.formDetails = { at: d.at, fields: d.fields, tagIds: d.tagIds, emails: d.emails };
+        card.formLogic = { at: d.at, fp: d.logic.fp, rules: d.logic.norm.rules.slice(0, 200), pages: d.logic.norm.pages.slice(0, 60), fieldCount: d.logic.norm.fieldCount };
+    });
+    if (logicChanged.length) {
+        logicChanged.forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });
+        logExternalPull(client.projectData, { ...summary, added: [], renamed: [], changed: logicChanged.map((n) => `${n} (form logic)`), missing: [], restored: [] });
+    }
+    const unread = forms.length - [...forms].filter((f) => detailsOf(f.id)).length;
+    if (unread > 0) summary.note = `${unread} form${unread === 1 ? '' : 's'} still to read (the next pull continues)`;
+    markClientDirty(client.id);
     return summary;
 };
 
@@ -1812,3 +1912,6 @@ Object.assign(window.OL, {
     setClickUpMapping, setClickUpTargetMode, setClickUpTargetClient,
     setClickUpRoutingColumn, setClickUpRoutingMapByIndex, runClickUpImport
 });
+
+// build stamp: type OL.build in the browser console to see which version of each file is running
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.h' });

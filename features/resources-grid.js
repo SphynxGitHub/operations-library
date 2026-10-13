@@ -453,6 +453,7 @@ OL.applyBulkResourceEdit = function() {
     const list = selectedResources();
     if (!list.length) { alert('None of the selected resources are in this library any more.'); return; }
 
+    let stepsChanged = 0;
     list.forEach(res => {
         if (type) {
             res.type = type;
@@ -463,8 +464,17 @@ OL.applyBulkResourceEdit = function() {
         if (status) res.status = status;
         if (stage) res.stageId = stage === '__none__' ? '' : stage;
         if (app) {
-            if (appPick) { res.appId = appPick.id; res.appName = appPick.name; }
-            else { res.appId = ''; res.appName = ''; }   // no app: grouping falls back to the apps its steps use
+            const prevAppId = res.appId;
+            const isZap = String(res.type || '').toLowerCase() === 'zap';   // a Zap is several apps by design: its steps keep their own
+            if (appPick) {
+                res.appId = appPick.id; res.appName = appPick.name;
+                // the steps use it too where they have no app of their own
+                if (!isZap) (res.steps || []).forEach((st) => { if (st && !st.appId) { st.appId = appPick.id; st.appName = appPick.name; stepsChanged++; } });
+            } else {
+                res.appId = ''; res.appName = '';   // no app: grouping falls back to the apps its steps use
+                // steps that used the app this resource had are cleared with it; steps with another app keep it
+                if (!isZap && prevAppId) (res.steps || []).forEach((st) => { if (st && String(st.appId) === String(prevAppId)) { st.appId = ''; st.appName = ''; stepsChanged++; } });
+            }
         }
         if (folder) {
             res.folder = folder === '__none__' ? '' : folder;
@@ -473,7 +483,7 @@ OL.applyBulkResourceEdit = function() {
         if (sub) res.subGroup = sub === '__none__' ? '' : sub;
     });
     afterBulkResourceChange();
-    if (typeof OL.showToast === 'function') OL.showToast(`Updated ${list.length} resource${list.length === 1 ? '' : 's'}.`);
+    if (typeof OL.showToast === 'function') OL.showToast(`Updated ${list.length} resource${list.length === 1 ? '' : 's'}${stepsChanged ? ` and ${stepsChanged} step${stepsChanged === 1 ? '' : 's'}` : ''}.`);
 };
 
 OL.bulkArchiveResources = function(archive) {
