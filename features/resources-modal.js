@@ -1440,26 +1440,9 @@ export function openResourceModal(targetId, draftObj = null) {
            <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="align-start-vertical" style="width:14px;height:14px;"></i>
-                    Hierarchy Context
+                    Where it sits on the map
                 </label>
-                <select class="modal-input tiny"
-                        onchange="OL._fvAssignStageAndWorkflow('${res.id}', this.value)">
-                    <option value="">— Workbench (Unassigned) —</option>
-                    ${(OL.getCurrentProjectData().stages || []).map(s => {
-                        const stageWorkflows = (OL.getCurrentProjectData().workflows || []).filter(w => String(w.stageId) === String(s.id));
-                        const stageSelected  = res.stageId === s.id && !res.workflowId;
-                        return `
-                            <option value="stage:${esc(s.id)}" ${stageSelected ? 'selected' : ''}>
-                                ${esc(s.name)}
-                            </option>
-                            ${stageWorkflows.map(wf => `
-                                <option value="wf:${wf.id}:${s.id}" ${res.workflowId === wf.id ? 'selected' : ''}>
-                                    &nbsp;&nbsp;↳ ${esc(wf.name)}
-                                </option>
-                            `).join('')}
-                        `;
-                    }).join('')}
-                </select>
+                ${OL.placementsEditor ? OL.placementsEditor(res.id) : ''}
             </div>
                         
             <div class="card-section" style="margin-top:20px;">
@@ -3322,4 +3305,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.m' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.n' });
