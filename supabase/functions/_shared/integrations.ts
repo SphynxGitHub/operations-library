@@ -61,12 +61,15 @@ export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn)
     order: Number(q?.order) || 0, options: typeof q?.options === "string" ? q.options.slice(0, 400) : "",
   })).filter((q: any) => q.qid);
   // The emails the form sends (notifications to the team, autoresponders to the person who filled it in). Only what each one is
-  // called and its subject are handed on, not the addresses or the body.
+  // called, its subject, its message and whether it carries the PDF are handed on, not the addresses.
   let emailsRaw: any = props?.content?.emails ?? props?.content?.properties?.emails ?? [];
   if (typeof emailsRaw === "string") { try { emailsRaw = JSON.parse(emailsRaw); } catch { emailsRaw = []; } }
   if (!Array.isArray(emailsRaw)) emailsRaw = Object.values(emailsRaw || {});
   const emails = emailsRaw.filter((e: any) => e && typeof e === "object").slice(0, 12).map((e: any, i: number) => ({
     id: String(e?.id ?? i), type: String(e?.type ?? "").toLowerCase().slice(0, 30), name: String(e?.name ?? "").slice(0, 80), subject: String(e?.subject ?? "").slice(0, 160),
+    // the message itself (HTML, with the form's {field} placeholders) and whether Jotform attaches the submission as a PDF
+    body: String(e?.body ?? e?.html_body ?? (typeof e?.html === "string" && e.html.length > 2 ? e.html : "") ?? "").slice(0, 20000),
+    attachPdf: ["1", "true", "yes"].includes(String(e?.attachPDF ?? e?.attachPdf ?? "").toLowerCase()),
   }));
   return { form_id: id, conditions, questions, emails };
 }
