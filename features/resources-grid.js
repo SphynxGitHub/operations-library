@@ -391,7 +391,7 @@ OL.refreshBulkResourceBar = function() {
     const ids = Object.keys(OL.bulkResourceSelection);
     // Only on the library screen, and only while something is ticked.
     if (!ids.length || !document.getElementById('resource-library-results')) { if (bar) bar.remove(); return; }
-    const keepState = bar ? ['bulk-res-type', 'bulk-res-status', 'bulk-res-stage', 'bulk-res-folder', 'bulk-res-subgroup'].map(id => [id, document.getElementById(id)?.value || '']) : [];
+    const keepState = bar ? ['bulk-res-type', 'bulk-res-status', 'bulk-res-stage', 'bulk-res-app', 'bulk-res-folder', 'bulk-res-subgroup'].map(id => [id, document.getElementById(id)?.value || '']) : [];
     if (!bar) { bar = document.createElement('div'); bar.id = 'bulk-resource-bar'; document.body.appendChild(bar); }
     bar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:500; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center; border:1px solid var(--accent); background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:94vw;';
 
@@ -400,6 +400,13 @@ OL.refreshBulkResourceBar = function() {
     const stages = data.stages || [];
     const folders = distinct('folder'), subGroups = distinct('subGroup');
     const opts = (list) => list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    // apps: this project's own first, then the master list; one entry per name
+    const apps = []; const seenApps = new Set();
+    [...(getActiveClient()?.projectData?.localApps || []), ...(state.master.apps || [])].forEach(a => {
+        const k = String(a?.name || '').trim().toLowerCase();
+        if (k && !seenApps.has(k)) { seenApps.add(k); apps.push(a); }
+    });
+    apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const sel = (id, first, body, w = 'auto') => `<select id="${id}" class="modal-input tiny" style="width:${w};">${`<option value="">${first}</option>`}${body}</select>`;
 
     bar.innerHTML = `
@@ -407,6 +414,7 @@ OL.refreshBulkResourceBar = function() {
         ${sel('bulk-res-type', 'Set Type...', opts(types))}
         ${sel('bulk-res-status', 'Set Status...', opts(RESOURCE_STATUSES))}
         ${sel('bulk-res-stage', 'Set Process Stage...', `<option value="__none__">— No stage —</option>${stages.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}`)}
+        ${sel('bulk-res-app', 'Set App...', `<option value="__none__">— No app —</option>${apps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}`)}
         <select id="bulk-res-folder" class="modal-input tiny" style="width:auto;" onchange="OL.bulkResourceNewOption(this)"><option value="">Set Folder...</option><option value="__none__">— No folder —</option>${opts(folders)}<option value="__new__">+ New folder…</option></select>
         <select id="bulk-res-subgroup" class="modal-input tiny" style="width:auto;" onchange="OL.bulkResourceNewOption(this)"><option value="">Set Sub-group...</option><option value="__none__">— No sub-group —</option>${opts(subGroups)}<option value="__new__">+ New sub-group…</option></select>
         <button class="btn tiny primary" onclick="OL.applyBulkResourceEdit()">Apply to Selected</button>
@@ -438,8 +446,10 @@ const afterBulkResourceChange = () => {
 
 OL.applyBulkResourceEdit = function() {
     const v = (id) => document.getElementById(id)?.value || '';
-    const type = v('bulk-res-type'), status = v('bulk-res-status'), stage = v('bulk-res-stage'), folder = v('bulk-res-folder'), sub = v('bulk-res-subgroup');
-    if (!type && !status && !stage && !folder && !sub) { alert('Choose at least one thing to change (type, status, process stage, folder or sub-group), or use Archive.'); return; }
+    const type = v('bulk-res-type'), status = v('bulk-res-status'), stage = v('bulk-res-stage'), app = v('bulk-res-app'), folder = v('bulk-res-folder'), sub = v('bulk-res-subgroup');
+    if (!type && !status && !stage && !app && !folder && !sub) { alert('Choose at least one thing to change (type, status, process stage, app, folder or sub-group), or use Archive.'); return; }
+    const appPick = app && app !== '__none__' ? [...(getActiveClient()?.projectData?.localApps || []), ...(state.master.apps || [])].find(a => String(a.id) === app) : null;
+    if (app && app !== '__none__' && !appPick) { alert('That app is no longer in the library.'); return; }
     const list = selectedResources();
     if (!list.length) { alert('None of the selected resources are in this library any more.'); return; }
 
@@ -452,6 +462,10 @@ OL.applyBulkResourceEdit = function() {
         }
         if (status) res.status = status;
         if (stage) res.stageId = stage === '__none__' ? '' : stage;
+        if (app) {
+            if (appPick) { res.appId = appPick.id; res.appName = appPick.name; }
+            else { res.appId = ''; res.appName = ''; }   // no app: grouping falls back to the apps its steps use
+        }
         if (folder) {
             res.folder = folder === '__none__' ? '' : folder;
             if (folder === '__none__') res.subGroup = '';   // a sub-group lives inside a folder

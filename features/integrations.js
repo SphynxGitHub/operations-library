@@ -609,12 +609,27 @@ function refreshAfterPull(client) {
     }, 150);
 }
 
+// Cards an importer makes belong to the service they came from (a Keap campaign is a Keap resource), and their steps use
+// its app. Only an empty app is filled: one chosen by hand is never changed.
+function applyServiceApp(client, source) {
+    const label = EXTERNAL_SOURCES[source]?.label;
+    if (!label) return;
+    const app = typeof OL.findAppByName === 'function' ? OL.findAppByName(client, label) : null;
+    (client.projectData.localResources || []).forEach((r) => {
+        if (!r || r.source !== source) return;
+        if (!r.appId && !r.appName) { r.appName = app ? app.name : label; if (app) r.appId = app.id; }
+        else if (!r.appId && app && String(r.appName).toLowerCase() === label.toLowerCase()) { r.appId = app.id; r.appName = app.name; }
+        if (typeof OL.autoLinkStepApps === 'function') OL.autoLinkStepApps(client, r);
+    });
+}
+
 function commitPull(client, source, items, extra = {}) {
     if (!client.projectData.localResources) client.projectData.localResources = [];
     const summary = reconcileExternal(client.projectData.localResources, source, items);
     (extra.logicChanged || []).forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });   // a form whose logic changed counts as changed
     logExternalPull(client.projectData, summary);
     if (typeof extra.afterReconcile === 'function') extra.afterReconcile(client.projectData.localResources);
+    applyServiceApp(client, source);
     tieExternalToZaps(client.projectData.localResources);
     markClientDirty(client.id);
     refreshAfterPull(client);
