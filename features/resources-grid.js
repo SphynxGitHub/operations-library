@@ -566,7 +566,14 @@ export function setResourceGroupBy(value) {
 // "Parent resource" grouping: a form or email template sits under the resource that uses it (a scheduling event, an email
 // campaign, a Zap...). A resource uses another when one of its steps links to it, when a step's logic points at it, or when
 // it is the form's / email's parent in the process map. Forms and emails themselves are never parents.
-const isChildKind = (r) => /^(form|email)( template)?$/i.test(String(r?.type || '').trim());   // not "Email Campaign": that is a parent
+// Same idea as the flow map's collateral: any type that reads as a form or an email (Email Template, Welcome Email, Intake Form...),
+// except the types that run a flow of their own (Email Campaign, Email Sequence, Workflow...), which are parents.
+const FLOW_KINDS = new Set(['zap', 'workflow', 'email campaign', 'process', 'decision', 'checklist', 'task']);
+const isChildKind = (r) => {
+    const t = String(r?.type || '').trim().toLowerCase();
+    if (!t || FLOW_KINDS.has(t) || /campaign|sequence|series|drip|automation|workflow|journey/.test(t)) return false;
+    return /\b(forms?|questionnaires?|emails?|signatures?|letters?)\b/.test(t);
+};
 function buildParentIndex(all) {
     const byId = new Map(all.map((r) => [String(r.id), r]));
     // a logic target looks like "<resourceId>-<stepId>"; take the longest prefix that is a real resource
@@ -591,9 +598,12 @@ function buildParentIndex(all) {
     all.forEach((p) => {
         (p.steps || []).forEach((st) => {
             (st.links || []).forEach((l) => add(p, byId.get(String(l.id))));
+            // collateral attached on the flow map ("+" on a step): an email template or form picked from the library
+            (st.callouts || []).forEach((c) => { if (c && c.libId) add(p, byId.get(String(c.libId))); });
             ((st.logic && st.logic.out) || []).forEach((o) => add(p, resolve(o.targetId)));
         });
     });
+    all.forEach((p) => (p.callouts || []).forEach((c) => { if (c && c.libId) add(p, byId.get(String(c.libId))); }));
     all.forEach((c) => { if (c.parentId && isChildKind(c)) add(byId.get(String(c.parentId)), c); });
     return { parentsOf, kids };
 }
@@ -665,7 +675,7 @@ function buildResourceGroups(items, mode) {
     });
 
     const list = [...buckets.values()];
-    const rank = (r) => (/^form/i.test(r.type || '') ? 0 : /^email( template)?$/i.test(r.type || '') ? 1 : 2);
+    const rank = (r) => (/\b(form|questionnaire)s?\b/i.test(r.type || '') ? 0 : 1);
     list.forEach(g => g.items.sort(g.pin
         ? (a, b) => ((String(b.id) === g.pin) - (String(a.id) === g.pin)) || (rank(a) - rank(b)) || byName(a, b)   // the parent first, then its forms, then its emails
         : byName));
