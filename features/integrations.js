@@ -1019,17 +1019,17 @@ export async function importCalendly(client, opts = {}) {
             ],
         });
         items.push({
-            externalId: `form-${id}`, name: `${name} Booking Form`, type: 'Form', archetype: 'Base',
+            externalId: `form-${id}`, name: `${name}: Booking Form`, type: 'Form', archetype: 'Base',
             description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags }],
         });
         items.push({
-            externalId: `confirm-${id}`, name: `${name} Confirmation Email`, type: 'Email', archetype: 'Base',
+            externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base',
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-confirm-${id}-s0`, name: `${app} sends confirmation email`, appName: app }],
         });
         items.push({
-            externalId: `reminder-${id}`, name: `${name} Reminder Email`, type: 'Email', archetype: 'Base',
+            externalId: `reminder-${id}`, name: `${name}: Reminder Email`, type: 'Email', archetype: 'Base',
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-reminder-${id}-s0`, name: `${app} sends meeting reminder email`, appName: app }],
         });
