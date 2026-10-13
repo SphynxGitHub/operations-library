@@ -1015,17 +1015,43 @@ export async function importCalendly(client, opts = {}) {
         // booking questions and the notification emails
         const editUrl = `https://calendly.com/event_types/${id}/edit`;
 
-        // booking form: name and email are always asked; the rest are the event's own questions
-        const tags = [
-            findOrMakeTag(client, ['Full Name', 'Name'], 'Contact'),
-            findOrMakeTag(client, ['Email Address', 'Email'], 'Contact'),
-        ];
-        (ev.custom_questions || []).filter((q) => q && q.enabled !== false && String(q.name || '').trim())
-            .sort((a, b) => (a.position || 0) - (b.position || 0))
-            .forEach((q) => {
-                const t = findOrMakeTag(client, [String(q.name).trim().slice(0, 80)], 'Calendly Booking Form');
-                if (!tags.some((x) => x.id === t.id)) tags.push(t);
-            });
+        // booking form: first and last name and email are always asked; phone when the event calls the invitee or asks for it;
+        // location always; the rest are the event's own questions. fields keeps each one's type and answer options.
+        const fields = [];
+        const tags = [];
+        const addField = (label, names, category, type, required, options) => {
+            const tag = findOrMakeTag(client, names, category);
+            if (options && options.length) tag.options = [...new Set([...(tag.options || []), ...options])];
+            if (!tags.some((x) => x.id === tag.id)) tags.push(tag);
+            if (!fields.some((f) => f.tagId === tag.id)) fields.push({ tagId: tag.id, label, type, required: !!required, options: options || [] });
+        };
+        addField('First Name', ['First Name'], 'Contact', 'text', true);
+        addField('Last Name', ['Last Name'], 'Contact', 'text', true);
+        addField('Email Address', ['Email Address', 'Email'], 'Contact', 'email', true);
+
+        const LOCATION_LABEL = {
+            physical: 'In person', ask_invitee: 'Invitee chooses (free text)', inbound_call: 'Invitee calls the host', outbound_call: 'Host calls the invitee',
+            zoom_conference: 'Zoom', google_conference: 'Google Meet', microsoft_teams_conference: 'Microsoft Teams', webex_conference: 'Webex',
+            gotomeeting_conference: 'GoTo Meeting', custom: 'Custom', zoom: 'Zoom', google_meet: 'Google Meet',
+        };
+        const locs = (ev.locations || []).filter(Boolean);
+        const locOptions = locs.map((l) => {
+            const base = LOCATION_LABEL[l.kind] || String(l.kind || 'Location').replace(/_/g, ' ');
+            const detail = String(l.location || l.additional_info || '').trim();
+            return detail ? `${base}: ${detail}` : base;
+        });
+        const needsPhone = locs.some((l) => l.kind === 'outbound_call');
+        const questions = (ev.custom_questions || []).filter((q) => q && q.enabled !== false && String(q.name || '').trim())
+            .sort((a, b) => (a.position || 0) - (b.position || 0));
+        const phoneQ = questions.find((q) => q.type === 'phone_number' || /\b(phone|mobile|cell)\b/i.test(q.name));
+        if (needsPhone || phoneQ) addField('Phone Number', ['Phone Number', 'Phone'], 'Contact', 'phone', needsPhone || (phoneQ && phoneQ.required));
+        addField('Location', ['Location'], 'Calendly Booking Form', locs.length > 1 ? 'select' : (locs.some((l) => l.kind === 'ask_invitee') ? 'text' : 'fixed'), true, locOptions);
+        questions.forEach((q) => {
+            if (q === phoneQ) return;
+            const choices = (q.answer_choices || []).map((c) => String(c)).filter(Boolean);
+            if (q.include_other) choices.push('Other');
+            addField(String(q.name).trim().slice(0, 80), [String(q.name).trim().slice(0, 80)], 'Calendly Booking Form', q.type || 'text', q.required, choices);
+        });
 
         items.push({
             externalId: id, name, type: 'Event', externalUrl: ev.scheduling_url,
@@ -1041,7 +1067,8 @@ export async function importCalendly(client, opts = {}) {
         items.push({
             externalId: `form-${id}`, name: `${name}: Booking Form`, type: 'Form', archetype: 'Base',
             externalUrl: editUrl, description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
-            steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags }],
+            steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags, dropTagNames: ['Full Name', 'Name'] }],
+            formFields: fields,
         });
         items.push({
             externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl,

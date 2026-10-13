@@ -758,57 +758,112 @@ export function openResourceModal(targetId, draftObj = null) {
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
     
-    const sopLibraryHtml = `
-        <div class="card-section" style="margin-bottom:20px;">
-            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                <i data-lucide="library" style="width:14px; height:14px;"></i> LINKED MASTER GUIDES
-            </label>
-            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
-                ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `
-                    <span class="pill soft tiny" style="display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="book-open" style="width:10px; height:10px;"></i> 
-                        ${esc(sop.name)}
-                    </span>`).join("") : `
-                    <span class="tiny muted" style="display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="info" style="width:12px; height:12px; opacity:0.5;"></i>
-                        No guides linked to this resource template.
-                    </span>`}
+    // --- COLLATERAL: everything this resource points at (linked resources, guides, and what its steps use) ---
+    const splitRef = (ref) => { const i = OL._refSplitIdx ? OL._refSplitIdx(String(ref)) : String(ref).lastIndexOf('-'); return i === -1 ? [String(ref), ''] : [String(ref).substring(0, i), String(ref).substring(i + 1)]; };
+    const findRes = (id) => allResources.find((r) => String(r.id) === String(id));
+    const collateralSeen = new Set((resDeps || []).map((d) => String(d.id || d.resourceId || '')));
+    const collateralRows = [];
+    (res.steps || []).forEach((st, i) => {
+        const refs = [...(st.links || []).map((l) => ({ id: l.id, name: l.name, type: l.type })),
+                      ...(st.callouts || []).filter((c) => c && c.libId).map((c) => ({ id: c.libId, name: c.name, type: c.kind }))];
+        refs.forEach((ref) => {
+            const key = String(ref.id);
+            if (!ref.id || key === String(res.id) || collateralSeen.has(key)) return;
+            collateralSeen.add(key);
+            const target = findRes(ref.id);
+            collateralRows.push({ id: ref.id, name: (target && target.name) || ref.name || 'Resource', type: (target && target.type) || ref.type || 'Resource', note: `Step ${i + 1}: ${st.name || 'Unnamed step'}`, open: !!target });
+        });
+    });
+    const collateralRowHtml = (r) => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);${r.open ? 'cursor:pointer;' : ''}"
+             ${r.open ? `onclick="OL.openResourceModal('${esc(r.id)}')"` : ''}>
+            ${OL.getLucideSVG(OL.getRegistryIcon(r.type), 14, 'var(--accent)')}
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;line-height:1.4;">${esc(r.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(r.note)}</div>
             </div>
+            <span class="pill tiny soft" style="flex:0 0 auto;">${esc(String(r.type).toUpperCase())}</span>
         </div>`;
+    const guideRows = linkedSOPs.map((sop) => ({ id: sop.id, name: sop.name, type: 'Guide', note: 'Master guide', open: false }));
 
-const dependencyHtml = `
+    const collateralHtml = `
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
         <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-            <i data-lucide="list-checks" style="width:14px; height:14px;"></i> TASK DEPENDENCIES (PROJECT-SPECIFIC)
+            <i data-lucide="paperclip" style="width:14px; height:14px;"></i> COLLATERAL
         </label>
-        <div class="dp-manager-list" id="task-dependency-list">
-            ${taskDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No tasks linked.</div>'}
-        </div>
-        <div class="search-map-container" style="margin-top:8px; position:relative; display:flex; align-items:center;">
-            <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
-            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search or Create Task..." 
-                   onfocus="OL.filterDependencySearch('${res.id}', 'task', '')"
-                   oninput="OL.filterDependencySearch('${res.id}', 'task', this.value)">
-            <div id="task-dep-results" class="search-results-overlay"></div>
-        </div>
-    </div>
-
-    <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
-        <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-            <i data-lucide="layers" style="width:14px; height:14px;"></i> RESOURCE DEPENDENCIES (INFRASTRUCTURE)
-        </label>
+        <div class="tiny muted" style="margin:4px 0 10px;">The forms, emails, guides and documents this resource uses, including what its steps link to.</div>
         <div class="dp-manager-list" id="res-dependency-list">
-            ${resDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No resources linked.</div>'}
+            ${resDeps.map((dep) => renderDependencyRow(dep, res.id)).join('')}
         </div>
-        <div class="search-map-container" style="margin-top:8px; position:relative; display:flex; align-items:center;">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:${resDeps.length ? '8' : '0'}px;">
+            ${[...collateralRows, ...guideRows].map(collateralRowHtml).join('')}
+            ${(resDeps.length + collateralRows.length + guideRows.length) ? '' : '<div class="tiny muted" style="padding:6px 0;">No collateral yet.</div>'}
+        </div>
+        <div class="search-map-container" style="margin-top:12px; position:relative; display:flex; align-items:center;">
             <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
-            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search Project Library..." 
+            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Add collateral from the library..."
                    onfocus="OL.filterDependencySearch('${res.id}', 'resource', '')"
                    oninput="OL.filterDependencySearch('${res.id}', 'resource', this.value)">
             <div id="res-dep-results" class="search-results-overlay"></div>
         </div>
-    </div>
-`;
+    </div>`;
+
+    // --- PATHS: where this resource's steps lead (outbound) and what leads into it (inbound), as on the flow map sidebar ---
+    const outboundPaths = [];
+    const inboundPaths = [];
+    const ruleBadge = (rule) => {
+        const parts = [];
+        if (rule.type === 'delay' || parseInt(rule.delayValue) > 0) parts.push(`Wait ${rule.delayValue || '?'} ${rule.delayUnit || 'days'}`);
+        if (rule.type === 'loop') parts.push(`Loop${rule.loopLimit ? ` (${rule.loopLimit}x)` : ''}`);
+        if (rule.rule && String(rule.rule).trim()) parts.push(`If: ${String(rule.rule).trim()}`);
+        else if (rule.type === 'condition') parts.push('Conditional');
+        return parts;
+    };
+    (res.steps || []).forEach((st, i) => {
+        (st.logic?.out || []).filter((r) => r && r.targetId).forEach((rule) => {
+            const [tResId, tStepId] = splitRef(rule.targetId);
+            const tRes = findRes(tResId);
+            const tStep = tRes && (tRes.steps || []).find((x) => String(x.id) === String(tStepId));
+            if (!tRes || !tStep) return;
+            const badge = ruleBadge(rule);
+            if (String(tResId) === String(res.id) && !badge.length) return;   // plain step-to-step flow inside this resource is the steps list
+            outboundPaths.push({ fromLabel: `Step ${i + 1}: ${st.name || 'Unnamed step'}`, toRes: tRes, toStep: tStep, badge, jumpRes: tResId, jumpStep: tStepId });
+        });
+    });
+    allResources.forEach((other) => {
+        if (String(other.id) === String(res.id)) return;
+        (other.steps || []).forEach((st, i) => (st.logic?.out || []).filter((r) => r && r.targetId).forEach((rule) => {
+            const [tResId, tStepId] = splitRef(rule.targetId);
+            if (String(tResId) !== String(res.id)) return;
+            const tStep = (res.steps || []).find((x) => String(x.id) === String(tStepId));
+            inboundPaths.push({ fromRes: other, fromStep: st, fromIdx: i, toStep: tStep, badge: ruleBadge(rule), jumpRes: other.id, jumpStep: st.id });
+        }));
+    });
+    const pathRowHtml = (title, sub, badge, jumpRes, jumpStep) => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;line-height:1.4;">${esc(title)}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(sub)}</div>
+                ${badge.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${badge.map((b) => `<span class="pill tiny" style="background:rgba(245,184,0,0.08);color:#f5b800;border:1px solid rgba(245,184,0,0.25);">${esc(b)}</span>`).join('')}</div>` : ''}
+            </div>
+            <button class="btn tiny soft" style="flex:0 0 auto;display:flex;align-items:center;gap:6px;" onclick="event.stopPropagation();OL.goToStepFromLibrary('${esc(String(jumpRes))}','${esc(String(jumpStep))}')">
+                <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> View on map
+            </button>
+        </div>`;
+    const pathGroup = (label, rows) => `
+        <div style="margin-top:12px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px;">${label} <span class="pill tiny soft">${rows.length}</span></div>
+            <div style="display:flex;flex-direction:column;gap:8px;">${rows.length ? rows.join('') : '<div class="tiny muted">None.</div>'}</div>
+        </div>`;
+    const pathsHtml = `
+    <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
+        <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+            <i data-lucide="git-branch" style="width:14px; height:14px;"></i> PATHS
+        </label>
+        <div class="tiny muted" style="margin:4px 0 0;">Paths to and from other resources, and any step that waits, loops or branches. Edit them on the flow map.</div>
+        ${pathGroup('INBOUND', inboundPaths.map((p) => pathRowHtml(`${p.fromRes.name}`, `Step ${p.fromIdx + 1}: ${p.fromStep.name || 'Unnamed step'}${p.toStep ? `  →  enters at ${p.toStep.name || 'a step'}` : ''}`, p.badge, p.jumpRes, p.jumpStep)))}
+        ${pathGroup('OUTBOUND', outboundPaths.map((p) => pathRowHtml(`${p.toRes.name}`, `From ${p.fromLabel}  →  ${p.toStep.name || 'Unnamed step'}`, p.badge, p.jumpRes, p.jumpStep)))}
+    </div>`;
 
   //------- SCOPING STATUS ---------//
 
@@ -922,6 +977,21 @@ const dependencyHtml = `
                         <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:12px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
                     </div>`).join('') : '<span class="tiny muted">No data tags yet.</span>'}
             </div>
+            ${(res.formFields || []).length ? `
+            <div style="margin:4px 0 14px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px;">FIELD DETAILS <span style="font-weight:400;letter-spacing:0;">(refreshed from ${esc(res.source || 'the service')} on each pull)</span></div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${(res.formFields || []).map((f) => `
+                    <div style="padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <span style="font-size:13px;font-weight:600;">${esc(f.label)}</span>
+                            <span class="pill tiny soft">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>
+                            ${f.required ? '<span class="pill tiny" style="color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
+                        </div>
+                        ${(f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);">${esc(o)}</span>`).join('')}</div>` : ''}
+                    </div>`).join('')}
+                </div>
+            </div>` : ''}
             ${tagChoices.length ? `
             <select class="modal-input tiny" style="width:100%;" onchange="if(this.value) OL.addResourceDataTag('${esc(res.id)}', this.value)">
                 <option value="">Add a data tag...</option>
@@ -1154,73 +1224,8 @@ const dependencyHtml = `
                         ✓ Done Editing
                     </button>
                 </div>
-                <!-- CONNECTED RELATIONSHIPS -->
-                <div class="card-section" style="margin-bottom:16px;">
-                    <label class="modal-section-label">
-                        <i data-lucide="share-2" style="width:14px;height:14px;"></i> Connected Relationships
-                    </label>
-                    <div style="display:flex;gap:5px;margin:8px 0;overflow-x:auto;padding-bottom:5px;">
-                        ${['All',...new Set(allConnections.map(c=>c.type))].map(t => `
-                            <span onclick="state.ui.relationshipFilter='${t}';OL.openResourceModal('${targetId}')"
-                                  style="font-size:9px;padding:2px 8px;border-radius:100px;cursor:pointer;white-space:nowrap;
-                                         background:${activeFilter===t?'var(--accent)':'rgba(255,255,255,0.05)'};
-                                         color:${activeFilter===t?'#000':'#94a3b8'};
-                                         border:1px solid rgba(255,255,255,0.1);">
-                                ${t.toUpperCase()}
-                            </span>
-                        `).join('')}
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:6px;">
-                        ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
-                            <div class="pill accent is-clickable"
-                                 style="display:flex;align-items:center;justify-content:space-between;
-                                        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
-                                        cursor:pointer;padding:8px 12px;border-radius:8px;"
-                                 onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();OL.openInspector('${conn.id}')">
-                                <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
-                                    ${OL.getLucideSVG(OL.getRegistryIcon(conn.type),14,'var(--accent)')}
-                                    <div>
-                                        <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
-                                        <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
-                                    </div>
-                                </div>
-                                <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
-                            </div>
-                        `).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
-                    </div>
-                </div>
-        
-                <!-- TASK DEPENDENCIES -->
-                <div class="card-section" style="margin-top:16px;border-top:1px solid var(--line);padding-top:15px;">
-                    <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
-                        <i data-lucide="list-checks" style="width:14px;height:14px;"></i> TASK DEPENDENCIES
-                    </label>
-                    <div class="dp-manager-list" id="task-dependency-list">
-                        ${taskDeps.map(dep => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No tasks linked.</div>'}
-                    </div>
-                    <div class="search-map-container" style="margin-top:8px;position:relative;display:flex;align-items:center;">
-                        <i data-lucide="search" style="position:absolute;left:10px;width:12px;height:12px;opacity:0.4;"></i>
-                        <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search or Create Task..."
-                               onfocus="OL.filterDependencySearch('${res.id}', 'task', '')"
-                               oninput="OL.filterDependencySearch('${res.id}', 'task', this.value)">
-                        <div id="task-dep-results" class="search-results-overlay"></div>
-                    </div>
-                </div>
-        
-                <!-- LINKED MASTER GUIDES -->
-                <div class="card-section" style="margin-top:16px;">
-                    <label class="modal-section-label">
-                        <i data-lucide="library" style="width:14px;height:14px;"></i> LINKED MASTER GUIDES
-                    </label>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-                        ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `
-                            <span class="pill soft tiny" style="display:flex;align-items:center;gap:4px;">
-                                <i data-lucide="book-open" style="width:10px;height:10px;"></i>
-                                ${esc(sop.name)}
-                            </span>`).join('') : `
-                            <span class="tiny muted">No guides linked to this resource.</span>`}
-                    </div>
-                </div>
+                ${collateralHtml}
+                ${pathsHtml}
             `;
     }
     else if (isHierarchy) {
@@ -1401,49 +1406,10 @@ const dependencyHtml = `
                 </div>
             ` : ''}
         
-            ${dependencyHtml}
-            ${sopLibraryHtml}
+            ${collateralHtml}
             ${containerHtml}
         
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="share-2" style="width:14px;height:14px;"></i> Connected Relationships
-                </label>
-                <div style="display:flex;gap:5px;margin:8px 0;overflow-x:auto;padding-bottom:5px;">
-                    ${types.map(t => `
-                        <span onclick="state.ui.relationshipFilter='${t}';OL.openResourceModal('${targetId}')"
-                              style="font-size:9px;padding:2px 8px;border-radius:100px;cursor:pointer;white-space:nowrap;
-                                     background:${activeFilter===t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
-                                     color:${activeFilter===t ? '#000' : '#94a3b8'};
-                                     border:1px solid rgba(255,255,255,0.1);">
-                            ${t.toUpperCase()}
-                        </span>
-                    `).join('')}
-                </div>
-                <div style="display:flex;flex-direction:column;gap:6px;">
-                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
-                        const navAction = window.location.hash.includes('scoping-sheet')
-                            ? `OL.openResourceModal('${conn.id}')`
-                            : `OL.openInspector('${conn.id}')`;
-                        return `
-                        <div class="pill accent is-clickable"
-                             style="display:flex;align-items:center;justify-content:space-between;
-                                    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
-                                    cursor:pointer;padding:8px 12px;border-radius:8px;"
-                             onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();${navAction}">
-                            <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
-                                ${OL.getLucideSVG(OL.getRegistryIcon(conn.type), 14, 'var(--accent)')}
-                                <div>
-                                    <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
-                                    <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
-                                </div>
-                            </div>
-                            <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
-                        </div>
-                        `;
-                    }).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
-                </div>
-            </div>
+            ${pathsHtml}
         `;
       }
       // --- 🧱 FINAL RENDER ---
