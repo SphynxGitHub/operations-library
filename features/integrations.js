@@ -868,7 +868,7 @@ export async function autoPullIntegrations(client) {
             const last = synced[it.key] || {};
             if (!last.at && !hasPulledBefore(client, it.key)) continue;                      // the first pull is a deliberate click
             // events pulled before forms and emails were created are brought up to date on the next open, not a day later
-            const needsCatchUp = it.key === 'calendly' && (client.projectData.localResources || []).some((r) => r && r.source === 'calendly' && r.type === 'Event' && !r.flowSeeded && !r.isDeleted);
+            const needsCatchUp = it.key === 'calendly' && (client.projectData.localResources || []).some((r) => r && r.source === 'calendly' && r.type === 'Event' && !r.isDeleted && (!r.flowSeeded || !(r.steps || []).some((st) => (st.callouts || []).length)));
             if (!needsCatchUp && last.at && nowMs - Date.parse(last.at) < everyMs) continue;  // pulled recently
             if (last.errorAt && nowMs - Date.parse(last.errorAt) < AUTO_RETRY_AFTER_ERROR_MS) continue;
             try { results.push(await runOneSync(client, it.key, { auto: true })); }
@@ -984,16 +984,31 @@ function findOrMakeTag(client, names, category) {
     return tag;
 }
 
-// Ties each default-flow step to the form or email card it was made for, once (the marker is removed after).
+// Ties each default-flow step to the form or email card it was made for, as Collateral on that step (step.callouts, what the
+// step editor's "Collateral for this step" list and the resource's Collateral section read). Also moves links made the old way
+// (step.links to a form or email) across, so cards pulled before this still get it.
 function linkCalendlyFlow(library) {
     const cards = (library || []).filter((r) => r && r.source === 'calendly');
+    const kindOf = (r) => (/form/i.test(r.type) ? 'form' : (/email/i.test(r.type) ? 'email' : null));
+    const attach = (st, target) => {
+        const kind = kindOf(target); if (!kind) return false;
+        if (!Array.isArray(st.callouts)) st.callouts = [];
+        if (!st.callouts.some((c) => c && String(c.libId) === String(target.id))) {
+            st.callouts.push({ id: `cal-co-${st.id}-${target.id}`, kind, name: target.name, url: '', note: '', libId: target.id });
+        }
+        return true;
+    };
     cards.forEach((card) => (card.steps || []).forEach((st) => {
-        if (!st.seedLink) return;
-        const target = cards.find((r) => String(r.externalId) === st.seedLink);
-        if (!target) return;
-        if (!st.links) st.links = [];
-        if (!st.links.some((l) => l.id === target.id)) st.links.push({ id: target.id, name: target.name, type: target.type });
-        delete st.seedLink;
+        if (st.seedLink) {
+            const target = cards.find((r) => String(r.externalId) === st.seedLink);
+            if (target && attach(st, target)) delete st.seedLink;
+        }
+        if (Array.isArray(st.links)) {
+            st.links = st.links.filter((l) => {
+                const target = l && cards.find((r) => String(r.id) === String(l.id));
+                return !(target && attach(st, target));
+            });
+        }
     }));
 }
 
