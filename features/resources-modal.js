@@ -542,8 +542,8 @@ export function openResourceModal(targetId, draftObj = null) {
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
                     onchange="OL.updateResourceMeta('${res.id}', 'type', this.value); OL.openResourceModal('${res.id}')">
                 <option value="General">General</option>
-                ${(state.master.resourceTypes || []).map(t => `
-                    <option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>
+                ${[...new Set([...(state.master.resourceTypes || []).map(t => t.type), res.type].filter(t => t && t !== 'General'))].map(t => `
+                    <option value="${esc(t)}" ${res.type === t ? "selected" : ""}>${esc(t)}</option>
                 `).join("")}
             </select>
         </div>`;
@@ -3305,4 +3305,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.n' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.o' });
