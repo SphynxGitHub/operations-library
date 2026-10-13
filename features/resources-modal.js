@@ -893,6 +893,36 @@ const dependencyHtml = `
             </div>
         `;
     }
+    // --- DATA TAGS (forms) ---
+    // The fields a form collects, as data tags. They live on the form's steps (the same tags the flow map shows), so adding or
+    // removing one here and there is the same change. A form always shows the section; any other resource shows it once it has tags.
+    const formTags = [];
+    (res.steps || []).forEach((st) => (st.datapoints || []).forEach((d) => { if (d && !formTags.some((x) => x.id === d.id)) formTags.push(d); }));
+    const showDataTags = /\b(forms?|questionnaires?)\b/.test(resType) || formTags.length > 0;
+    const tagPool = (client?.projectData?.localDatapoints?.length ? client.projectData.localDatapoints : (state.master.datapoints || []));
+    const tagChoices = tagPool.filter((d) => d && !formTags.some((x) => x.id === d.id));
+    const tagGroups = tagChoices.reduce((g, d) => { const c = d.category || 'Other'; (g[c] = g[c] || []).push(d); return g; }, {});
+    const dataTagsHtml = showDataTags ? `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="tags" style="width:14px;height:14px;"></i> DATA TAGS
+                <span class="pill tiny soft">${formTags.length}</span>
+            </label>
+            <div class="tiny muted" style="margin:4px 0 8px;">The fields this form collects.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+                ${formTags.length ? formTags.map((d) => `
+                    <div class="pill purple" style="background:rgba(167,139,250,0.1);border:1px solid #a78bfa;display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;">
+                        <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><i data-lucide="tag" style="width:11px;height:11px;"></i>${esc(d.name)}</span>
+                        <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:12px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
+                    </div>`).join('') : '<span class="tiny muted">No data tags yet.</span>'}
+            </div>
+            ${tagChoices.length ? `
+            <select class="modal-input tiny" style="width:100%;" onchange="if(this.value) OL.addResourceDataTag('${esc(res.id)}', this.value)">
+                <option value="">Add a data tag...</option>
+                ${Object.keys(tagGroups).sort().map((c) => `<optgroup label="${esc(c)}">${tagGroups[c].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}${d.isBundle ? ' (bundle)' : ''}</option>`).join('')}</optgroup>`).join('')}
+            </select>` : ''}
+        </div>` : '';
+
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
     if (resType === "email" || resType === "email template") {
@@ -1314,6 +1344,8 @@ const dependencyHtml = `
                               onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'description', v);">${esc(res.description || '')}</textarea>
             </div>
         
+            ${dataTagsHtml}
+
             ${showWorkflowSteps ? `
                 <div class="card-section" style="margin-top:20px;">
                     <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
@@ -2087,6 +2119,36 @@ export function handleTreeDragOver(e) {
 
 export function handleTreeDragLeave(e) {
     e.currentTarget.classList.remove('drag-over');
+};
+
+// Adds a data tag (or a bundle's tags) to a form. They go on the form's first step; a form with no steps gets one.
+export async function addResourceDataTag(resId, tagId) {
+    const res = OL.getResourceById(resId);
+    if (!res || !tagId) return;
+    const client = getActiveClient();
+    const pool = [...(client?.projectData?.localDatapoints || []), ...(state.master.datapoints || [])];
+    const tag = pool.find((d) => String(d.id) === String(tagId));
+    if (!tag) return;
+    const add = tag.isBundle ? (tag.childIds || []).map((id) => pool.find((d) => String(d.id) === String(id))).filter(Boolean) : [tag];
+    await OL.updateAndSync(() => {
+        if (!Array.isArray(res.steps)) res.steps = [];
+        if (!res.steps.length) res.steps.push({ id: 'step_' + Date.now(), name: 'Form completed', appName: res.appName || '', datapoints: [] });
+        const step = res.steps[0];
+        if (!Array.isArray(step.datapoints)) step.datapoints = [];
+        add.forEach((d) => {
+            if (!res.steps.some((st) => (st.datapoints || []).some((x) => x.id === d.id))) step.datapoints.push(d);
+        });
+    }, client?.id);
+    OL.openResourceModal(resId);
+};
+
+export async function removeResourceDataTag(resId, tagId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+    await OL.updateAndSync(() => {
+        (res.steps || []).forEach((st) => { if (Array.isArray(st.datapoints)) st.datapoints = st.datapoints.filter((d) => String(d.id) !== String(tagId)); });
+    }, getActiveClient()?.id);
+    OL.openResourceModal(resId);
 };
 
 export function handleConventionUpdate(resId, section, key, value) {
@@ -3102,7 +3164,7 @@ Object.assign(window.OL, {
     _geInsertDataTag, _geSanitizeEmailHtml, _geSaveEmailBody, promptEditLink,
     getResourceDatapoints, renderHierarchyTree, addFolderNode, updateTreeNode,
     removeTreeNode, handleTreeDragStart, handleTreeDrop, handleTreeDragOver,
-    handleTreeDragLeave, handleConventionUpdate, updateContainerFile,
+    handleTreeDragLeave, handleConventionUpdate, addResourceDataTag, removeResourceDataTag, updateContainerFile,
     addFileToContainer, removeFileFromContainer, simulateUpload,
     addResourceComment, wrapCommentSelection, renderResourceMiniMaps, goToResourceInMap,
     navigateBack, trackNav, clearNavHistory, filterSignatureSearch,
