@@ -33,8 +33,8 @@ const clip = (s, n) => { const t = String(s == null ? '' : s); return t.length >
 // A short stable fingerprint of what the service told us about an item (so "changed upstream" is knowable).
 export function fingerprintItem(item) {
   const basis = JSON.stringify([
-    item.name || '', item.externalUrl || '', item.description || '', item.bookingForm || '', item.serviceActive === undefined ? '' : item.serviceActive,
-    (item.steps || []).map((s) => [s.name || '', s.description || '', s.appName || '']),
+    item.name || '', item.externalUrl || '', item.description || '', item.serviceActive === undefined ? '' : item.serviceActive,
+    (item.steps || []).map((s) => [s.name || '', s.description || '', s.appName || '', (s.datapoints || []).map((d) => d.id)]),
   ]);
   let h = 5381;
   for (let i = 0; i < basis.length; i++) h = ((h << 5) + h + basis.charCodeAt(i)) | 0;
@@ -52,14 +52,16 @@ function mergeSteps(oldSteps, newSteps) {
     const os = olds.find((o) => o && o.id === ns.id) || olds.find((o) => o && !used.has(o.id) && o.name === ns.name);
     if (!os) return ns;
     used.add(os.id);
-    return { ...os, name: ns.name, appName: ns.appName || os.appName, description: os.description || ns.description, id: os.id };
+    // Data tags the service reports are added to the step; tags a person added by hand stay.
+    const tags = ns.datapoints ? [...(os.datapoints || []), ...ns.datapoints.filter((d) => !(os.datapoints || []).some((x) => x.id === d.id))] : os.datapoints;
+    return { ...os, name: ns.name, appName: ns.appName || os.appName, description: os.description || ns.description, id: os.id, ...(tags ? { datapoints: tags } : {}) };
   });
   // a step the service no longer has: dropped, unless someone connected it to something by hand
   olds.forEach((o) => { if (o && !used.has(o.id) && hasHandLogic(o)) merged.push({ ...o, removedUpstream: true }); });
   return merged;
 }
 
-const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype', 'bookingForm'];
+const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype'];
 
 // library = the project's localResources array (changed in place). items = what the service returned, each already shaped as a
 // card: { externalId, name, type, externalUrl?, description?, steps: [{id, name, appName}], ...extra new-card fields }.
@@ -86,7 +88,22 @@ export function reconcileExternal(library, source, items, opts = {}) {
       const next = { ...old };
       IMPORT_OWNED.forEach((k) => { if (item[k] !== undefined) next[k] = item[k]; });
       if (item.description !== undefined && (!old.description || old.description === old._importDescription)) { next.description = item.description; next._importDescription = item.description; }
-      next.steps = mergeSteps(old.steps, item.steps);
+      if (item.keepSteps || item.seedSteps) {
+        // Steps a person added or reordered stay (an import-made flow is a starting point, not a mirror of the service).
+        // seedSteps are the default flow: added once, to a card that has not had them yet.
+        const merged = mergeSteps(old.steps, item.steps);
+        const byId = new Map(merged.map((s) => [s.id, s]));
+        const steps = [];
+        (old.steps || []).forEach((o) => { if (!o) return; steps.push(byId.get(o.id) || o); byId.delete(o.id); });
+        byId.forEach((m) => steps.push(m));
+        if (item.seedSteps && !old.flowSeeded) {
+          item.seedSteps.forEach((s) => { if (!steps.some((x) => x.id === s.id)) steps.push(s); });
+          next.flowSeeded = true;
+        }
+        next.steps = steps;
+      } else {
+        next.steps = mergeSteps(old.steps, item.steps);
+      }
       // The service's on/off switch. A card is archived when the service turns it off (or when first seen off) and
       // unarchived when it is turned back on; between changes, a person's own archive choice stays.
       if (item.serviceActive !== undefined) {
@@ -117,6 +134,8 @@ export function reconcileExternal(library, source, items, opts = {}) {
       ...item, id, source, extHash: hash, firstPulledAt: now, lastPulledAt: now,
     };
     if (item.description !== undefined) card._importDescription = item.description;
+    if (item.seedSteps) { card.steps = [...(item.steps || []), ...item.seedSteps]; card.flowSeeded = true; delete card.seedSteps; }
+    delete card.keepSteps;
     if (item.serviceActive === false) { card.isArchived = true; card.autoArchived = true; }
     library.push(card);
     claimed.add(card);
