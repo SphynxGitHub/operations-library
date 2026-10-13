@@ -2243,6 +2243,13 @@ export function printFlowDiagram(orientation) {
   return _printFlowDiagram({ OL, document, window }, { orientation, title: (client && client.meta && client.meta.name) || 'Flow map' });
 }
 
+// The workflow a multi-placement resource is drawn in on the steps map: its first placement, else the first workflow that holds it.
+function fvFirstHome(res, workflows) {
+  const first = (res.placements || []).find(p => p.workflowId && workflows.some(w => String(w.id) === String(p.workflowId)));
+  if (first) return String(first.workflowId);
+  const home = workflows.find(w => (w.resourceIds || []).map(String).includes(String(res.id)));
+  return home ? String(home.id) : '';
+}
 export function _fvRenderSteps(resources) {
   const canvas    = document.getElementById('fv-content');
   const svg       = document.getElementById('fv-svg-layer');
@@ -2272,7 +2279,9 @@ export function _fvRenderSteps(resources) {
     stageWfs.forEach(wf => {
       const wfRes = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
-        .filter(r => r && !r.isGlobal && (r.steps || []).length > 0);
+        // A resource placed in several workflows has one set of step cards (they share ids and positions), so it is drawn in
+        // its first placement; its other placements show as a note on that card's heading.
+        .filter(r => r && (r.steps || []).length > 0 && (!r.isGlobal || fvFirstHome(r, wfAll) === String(wf.id)));
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
       if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: fvOrderColumns(wfRes) });
     });
@@ -2615,7 +2624,19 @@ export function _fvRenderSteps(resources) {
             <span title="${esc(res.name)} (double-click to rename)" class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}"
                   style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                          letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                         text-overflow:ellipsis;max-width:${headW - 20}px;">${esc(res.name)}</span>
+                         text-overflow:ellipsis;max-width:${headW - 20}px;">${esc(res.name)}</span>${(() => {
+              if (!res.isGlobal) return '';
+              const pl = (res.placements || []);
+              const mine = pl.find(p => String(p.workflowId) === String(workflow.id)) || {};
+              const others = pl.filter(p => p.workflowId && String(p.workflowId) !== String(workflow.id)).map(p => {
+                const w = wfAll.find(x => String(x.id) === String(p.workflowId));
+                return (w ? w.name : 'a workflow') + (p.label ? ` (${p.label})` : '');
+              });
+              const when = typeof OL.placementWhenText === 'function' ? OL.placementWhenText(res, mine) : '';
+              const bits = [mine.label, when].filter(Boolean).join(' · ');
+              return (bits ? `<span style="font-size:9px;color:var(--text-muted);white-space:nowrap;">· ${esc(bits)}</span>` : '')
+                + (others.length ? `<span title="Also placed in: ${esc(others.join(', '))}" style="font-size:9px;color:#7c3aed;white-space:nowrap;border:1px solid #7c3aed55;border-radius:99px;padding:0 5px;">+${others.length} more</span>` : '');
+            })()}
           </div>
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
           ${typeof OL.fvUsedChip === 'function' && OL.fvUsedChip(res) ? `<div style="margin-top:4px;">${OL.fvUsedChip(res)}</div>` : ''}
@@ -9467,4 +9488,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.i' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.j' });
