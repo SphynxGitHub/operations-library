@@ -33,7 +33,7 @@ const clip = (s, n) => { const t = String(s == null ? '' : s); return t.length >
 // A short stable fingerprint of what the service told us about an item (so "changed upstream" is knowable).
 export function fingerprintItem(item) {
   const basis = JSON.stringify([
-    item.name || '', item.externalUrl || '', item.description || '',
+    item.name || '', item.externalUrl || '', item.description || '', item.bookingForm || '', item.serviceActive === undefined ? '' : item.serviceActive,
     (item.steps || []).map((s) => [s.name || '', s.description || '', s.appName || '']),
   ]);
   let h = 5381;
@@ -59,7 +59,7 @@ function mergeSteps(oldSteps, newSteps) {
   return merged;
 }
 
-const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype'];
+const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'archetype', 'bookingForm'];
 
 // library = the project's localResources array (changed in place). items = what the service returned, each already shaped as a
 // card: { externalId, name, type, externalUrl?, description?, steps: [{id, name, appName}], ...extra new-card fields }.
@@ -87,6 +87,15 @@ export function reconcileExternal(library, source, items, opts = {}) {
       IMPORT_OWNED.forEach((k) => { if (item[k] !== undefined) next[k] = item[k]; });
       if (item.description !== undefined && (!old.description || old.description === old._importDescription)) { next.description = item.description; next._importDescription = item.description; }
       next.steps = mergeSteps(old.steps, item.steps);
+      // The service's on/off switch. A card is archived when the service turns it off (or when first seen off) and
+      // unarchived when it is turned back on; between changes, a person's own archive choice stays.
+      if (item.serviceActive !== undefined) {
+        const prev = old.serviceActive;
+        if (item.serviceActive === false && prev !== false) next.isArchived = true;
+        else if (item.serviceActive === true && prev === false && old.autoArchived) next.isArchived = false;
+        next.autoArchived = item.serviceActive === false ? (prev === false ? old.autoArchived : !old.isArchived) : false;
+        next.serviceActive = item.serviceActive;
+      }
       next.extHash = hash;
       next.lastPulledAt = now;
       next.source = source;
@@ -108,6 +117,7 @@ export function reconcileExternal(library, source, items, opts = {}) {
       ...item, id, source, extHash: hash, firstPulledAt: now, lastPulledAt: now,
     };
     if (item.description !== undefined) card._importDescription = item.description;
+    if (item.serviceActive === false) { card.isArchived = true; card.autoArchived = true; }
     library.push(card);
     claimed.add(card);
     summary.added.push(card.name);
