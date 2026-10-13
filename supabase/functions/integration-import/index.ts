@@ -61,7 +61,7 @@ serve(async (req) => {
     key = String(stored);
 
     console.log(`integration-import: ${authz.role} ${authz.userId} ran ${service} for ${clientId}`);
-    const result = await runImport(service, key, { baseUrl: body?.baseUrl, page: Number(body?.page) || undefined, email: body?.email, formId: body?.formId }, fetch);
+    const result = await runImport(service, key, { baseUrl: body?.baseUrl, page: Number(body?.page) || undefined, email: body?.email, formId: body?.formId, calendlyUser: body?.calendlyUser }, fetch);
     return json(result);
 
   } catch (err: any) {
