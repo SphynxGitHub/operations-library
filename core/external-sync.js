@@ -116,6 +116,13 @@ export function reconcileExternal(library, source, items, opts = {}) {
         next.autoArchived = item.serviceActive === false ? (prev === false ? old.autoArchived : !old.isArchived) : false;
         next.serviceActive = item.serviceActive;
       }
+      // item.defaults: starting values for fields a person owns (an email's subject, sender, recipient). Filled when the card is new
+      // or the field is still empty; never written over once someone has set it.
+      if (item.defaults) Object.keys(item.defaults).forEach((k) => {
+        const cur = next[k];
+        if (cur === undefined || cur === null || cur === '' || (Array.isArray(cur) && !cur.length)) next[k] = item.defaults[k];
+      });
+      delete next.defaults;
       next.extHash = hash;
       next.lastPulledAt = now;
       next.source = source;
@@ -136,6 +143,7 @@ export function reconcileExternal(library, source, items, opts = {}) {
       visible: true, isExpanded: true, ...(cfg.global ? { isGlobal: true } : {}),
       ...item, id, source, extHash: hash, firstPulledAt: now, lastPulledAt: now,
     };
+    if (item.defaults) { Object.assign(card, item.defaults); delete card.defaults; }
     if (item.description !== undefined) card._importDescription = item.description;
     if (item.seedSteps) { card.steps = [...(item.steps || []), ...item.seedSteps]; card.flowSeeded = true; delete card.seedSteps; }
     delete card.keepSteps;
