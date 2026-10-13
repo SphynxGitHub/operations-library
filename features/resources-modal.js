@@ -786,12 +786,38 @@ export function openResourceModal(targetId, draftObj = null) {
         </div>`;
     const guideRows = linkedSOPs.map((sop) => ({ id: sop.id, name: sop.name, type: 'Guide', note: 'Master guide', open: false }));
 
+    // where this resource is used: every resource with a step that has it as collateral (or an email that attaches it)
+    const referencedIn = [];
+    allResources.forEach((other) => {
+        if (!other || String(other.id) === String(res.id)) return;
+        (other.steps || []).forEach((st, i) => {
+            const hit = (st.callouts || []).some((c) => c && String(c.libId) === String(res.id)) || (st.links || []).some((l) => l && String(l.id) === String(res.id));
+            if (hit) referencedIn.push({ parent: other, step: st, label: `Step ${i + 1}: ${st.name || 'Unnamed step'}` });
+        });
+        if ((other.emailAttachments || []).some((a) => a && String(a.libId) === String(res.id))) referencedIn.push({ parent: other, step: null, label: 'Attached to this email' });
+    });
+    const referencedRowHtml = (r) => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);cursor:pointer;"
+             onclick="OL.openResourceModal('${esc(r.parent.id)}')">
+            ${OL.getLucideSVG(OL.getRegistryIcon(r.parent.type), 14, 'var(--accent)')}
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;line-height:1.4;">${esc(r.parent.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(r.label)}</div>
+            </div>
+            <span class="pill tiny soft" style="flex:0 0 auto;">${esc(String(r.parent.type || 'Resource').toUpperCase())}</span>
+            ${r.step ? `<button class="btn tiny soft" style="flex:0 0 auto;display:flex;align-items:center;gap:6px;" onclick="event.stopPropagation();OL.goToStepFromLibrary('${esc(r.parent.id)}','${esc(r.step.id)}')">
+                <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> View on map
+            </button>` : ''}
+        </div>`;
+    const subLabel = (text, n) => `<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);margin:14px 0 8px;">${text}${n === undefined ? '' : ` <span class="pill tiny soft">${n}</span>`}</div>`;
+
     const collateralHtml = `
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
         <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
             <i data-lucide="paperclip" style="width:14px; height:14px;"></i> COLLATERAL
         </label>
-        <div class="tiny muted" style="margin:4px 0 10px;">The forms, emails, guides and documents this resource uses, including what its steps link to.</div>
+        <div class="tiny muted" style="margin:4px 0 0;">What this resource uses, and where it is used.</div>
+        ${subLabel('USES', resDeps.length + collateralRows.length + guideRows.length)}
         <div class="dp-manager-list" id="res-dependency-list">
             ${resDeps.map((dep) => renderDependencyRow(dep, res.id)).join('')}
         </div>
@@ -805,6 +831,10 @@ export function openResourceModal(targetId, draftObj = null) {
                    onfocus="OL.filterDependencySearch('${res.id}', 'resource', '')"
                    oninput="OL.filterDependencySearch('${res.id}', 'resource', this.value)">
             <div id="res-dep-results" class="search-results-overlay"></div>
+        </div>
+        ${subLabel('REFERENCED IN', referencedIn.length)}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            ${referencedIn.length ? referencedIn.map(referencedRowHtml).join('') : '<div class="tiny muted" style="padding:6px 0;">Not used anywhere yet.</div>'}
         </div>
     </div>`;
 
@@ -3292,4 +3322,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.l' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.m' });
