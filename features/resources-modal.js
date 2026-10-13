@@ -969,29 +969,28 @@ export function openResourceModal(targetId, draftObj = null) {
                 <i data-lucide="tags" style="width:14px;height:14px;"></i> DATA TAGS
                 <span class="pill tiny soft">${formTags.length}</span>
             </label>
-            <div class="tiny muted" style="margin:4px 0 8px;">The fields this form collects.</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
-                ${formTags.length ? formTags.map((d) => `
-                    <div class="pill purple" style="background:rgba(167,139,250,0.1);border:1px solid #a78bfa;display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;">
-                        <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><i data-lucide="tag" style="width:11px;height:11px;"></i>${esc(d.name)}</span>
-                        <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:12px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
-                    </div>`).join('') : '<span class="tiny muted">No data tags yet.</span>'}
+            <div class="tiny muted" style="margin:4px 0 8px;">The fields this form collects${(res.formFields || []).length ? `, as ${esc(res.source || 'the service')} reports them (refreshed on each pull)` : ''}.</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+                ${(() => {
+                    const fields = res.formFields || [];
+                    const rank = (d) => { const i = fields.findIndex((f) => String(f.tagId) === String(d.id)); return i < 0 ? 999 : i; };
+                    const rows = [...formTags].sort((a, b) => rank(a) - rank(b));
+                    if (!rows.length) return '<span class="tiny muted">No data tags yet.</span>';
+                    return rows.map((d) => {
+                        const f = fields.find((x) => String(x.tagId) === String(d.id));
+                        return `<div style="padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <i data-lucide="tag" style="width:13px;height:13px;color:#a78bfa;flex:0 0 auto;"></i>
+                                <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(f ? f.label : d.name)}</span>
+                                ${f ? `<span class="pill tiny soft">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>` : ''}
+                                ${f && f.required ? '<span class="pill tiny" style="color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
+                                <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:14px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
+                            </div>
+                            ${f && (f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-left:21px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);">${esc(o)}</span>`).join('')}</div>` : ''}
+                        </div>`;
+                    }).join('');
+                })()}
             </div>
-            ${(res.formFields || []).length ? `
-            <div style="margin:4px 0 14px;">
-                <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px;">FIELD DETAILS <span style="font-weight:400;letter-spacing:0;">(refreshed from ${esc(res.source || 'the service')} on each pull)</span></div>
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${(res.formFields || []).map((f) => `
-                    <div style="padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);">
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            <span style="font-size:13px;font-weight:600;">${esc(f.label)}</span>
-                            <span class="pill tiny soft">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>
-                            ${f.required ? '<span class="pill tiny" style="color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
-                        </div>
-                        ${(f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);">${esc(o)}</span>`).join('')}</div>` : ''}
-                    </div>`).join('')}
-                </div>
-            </div>` : ''}
             ${tagChoices.length ? `
             <select class="modal-input tiny" style="width:100%;" onchange="if(this.value) OL.addResourceDataTag('${esc(res.id)}', this.value)">
                 <option value="">Add a data tag...</option>

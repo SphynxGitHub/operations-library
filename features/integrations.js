@@ -1083,7 +1083,7 @@ export async function importCalendly(client, opts = {}) {
         items.push({
             externalId: `form-${id}`, name: `${name}: Booking Form`, type: 'Form', archetype: 'Base',
             externalUrl: editUrl, description: `Questions Calendly asks when booking ${name}.`, serviceActive: active, keepSteps: true,
-            steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags, dropTagNames: ['Full Name', 'Name'] }],
+            steps: [{ id: `cal-form-${id}-s0`, name: "Lead/Client completes booking form", appName: app, datapoints: tags, dropTagNames: ['Full Name', 'Name', ...questions.filter((q) => q === phoneQ).map((q) => String(q.name).trim().slice(0, 80))] }],
             formFields: fields,
         });
         items.push({
