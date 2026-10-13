@@ -2513,17 +2513,27 @@ export function goToResourceInMap(resId) {
     const target = isVaultMode ? '#/vault/visualizer' : '#/visualizer';
     if (window.location.hash.split('?')[0] !== target) window.location.hash = target;
 
-    // 4. Once the map has drawn: centre the card if it is on the map, then open its side panel. A card with no stage is
-    // not drawn on the map, but its panel (with Stage & Workflow) still opens so it can be placed.
+    // remember which resource to reopen when "Back to Library" is clicked
+    sessionStorage.setItem('map_return_resource', String(resId));
+
+    // 4. Wait for the map to draw (the route change renders it), then centre the card and open its panel. A card with no
+    // stage is not drawn on the map, but its panel (with Stage & Workflow) still opens so it can be placed.
+    const safeId = (window.CSS && CSS.escape) ? CSS.escape(String(resId)) : String(resId).replace(/["\\]/g, '\\$&');
+    let tries = 0;
     const open = () => {
-        if (typeof OL.renderVisualizer === 'function' && !document.getElementById('fv-canvas-wrap')) OL.renderVisualizer(isVaultMode);
-        const safeId = (window.CSS && CSS.escape) ? CSS.escape(String(resId)) : String(resId).replace(/["\\]/g, '\\$&');
+        const drawn = document.getElementById('fv-canvas-wrap') && document.getElementById('inspector-content');
+        if (!drawn && tries++ < 30) {
+            if (tries === 8 && typeof OL.renderVisualizer === 'function') OL.renderVisualizer(isVaultMode);   // the route did not draw it: draw it
+            return setTimeout(open, 100);
+        }
         const onCanvas = document.querySelector(`.fv-card[data-res-id="${safeId}"]`) || document.getElementById(`v2-node-${resId}`);
-        if (onCanvas && typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
-        if (typeof OL._fvOpenStepsList === 'function') OL._fvOpenStepsList(String(resId));
+        // open the side panel properly (it is closed when the map first draws), then centre the card
+        if (typeof OL.openInspector === 'function') OL.openInspector(String(resId), null, 'cards');
+        else if (typeof OL._fvOpenStepsList === 'function') OL._fvOpenStepsList(String(resId));
+        if (onCanvas && typeof OL.centerCanvasNode === 'function') setTimeout(() => OL.centerCanvasNode(resId), 120);
         if (typeof OL.renderFocusControls === 'function') OL.renderFocusControls();
     };
-    setTimeout(open, 300);
+    setTimeout(open, 150);
 };
 
 export function navigateBack() {
