@@ -35,6 +35,11 @@ function findApp(idx, name) {
     return hit.length === 1 ? idx.map.get(hit[0]) : null;   // only when it is unambiguous
 }
 
+// The project's (or master) app with this name, or null. Used to put the service's own app on cards an importer made.
+export function findAppByName(client, name) {
+    return findApp(appIndex(client), name);
+}
+
 // Returns how many steps were linked.
 export function autoLinkStepApps(client, resource) {
     if (!client || !resource || !Array.isArray(resource.steps)) return 0;
@@ -56,4 +61,4 @@ export function autoLinkAllStepApps(clientId) {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { autoLinkStepApps, autoLinkAllStepApps });
+Object.assign(window.OL, { autoLinkStepApps, autoLinkAllStepApps, findAppByName });
