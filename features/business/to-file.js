@@ -1,6 +1,7 @@
 import { esc, uid, state, db, updateAndSync, getBusinessScopedClients, scopeQueryToBusinessClients } from '../../core/data.js';
 import { linksForTask } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
+import { RESOURCE_STATUSES, normalizeResourceStatus } from '../../core/resource-status.js';
 
 // ============================================================================
 // TO FILE QUEUE
@@ -366,7 +367,7 @@ OL.toFileOpenDialog = function(keys) {
     const live = new Set((client?.projectData?.localResources || []).filter((r) => r && !r.isArchived && !r.archived).map((r) => String(r.id)));
     [...pre].forEach((id) => { if (!live.has(id)) pre.delete(id); });
     if (S().pullRes && live.has(S().pullRes)) pre.add(S().pullRes);
-    S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', rtype: '', tag: '' };
+    S().dlg = { keys: items.map((i) => i.key), clientId: clientIds[0], chosen: pre, q: '', app: '', rtype: '', rstatus: '', tag: '', tags: {} };
     OL._paintToFileDialog();
 };
 
@@ -379,21 +380,22 @@ OL._paintToFileDialog = function() {
     const apps = [...new Set(all.flatMap(appsOf))].sort();
     const rtypes = [...new Set(all.map((r) => r.type).filter(Boolean))].sort();
     const q = d.q.trim().toLowerCase();
-    const list = all.filter((r) => (!d.app || appsOf(r).includes(d.app)) && (!d.rtype || r.type === d.rtype) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
+    const list = all.filter((r) => (!d.app || appsOf(r).includes(d.app)) && (!d.rtype || r.type === d.rtype) && (!d.rstatus || statusOf(r) === d.rstatus) && (!q || `${r.name || ''} ${r.appName || ''} ${r.type || ''}`.toLowerCase().includes(q)));
     const items = itemsFor(d.keys);
     const html = `<div style="width:100%; box-sizing:border-box;">
         <h3 style="margin:0 0 6px;">File ${items.length} item${items.length > 1 ? 's' : ''} to resources</h3>
         <div class="muted tiny" style="margin-bottom:10px;">Each item is added as a comment on every resource you tick, then marked Filed. The request's own resources are ticked for you.</div>
-        <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:16px;">
-            <div style="max-height:55vh; overflow:auto; display:grid; gap:6px; align-content:start;">
+        <div style="display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:16px;">
+            <div style="order:2; max-height:62vh; overflow:auto; display:grid; gap:6px; align-content:start;">
                 ${items.map((i) => `<div class="card" style="padding:8px 10px; font-size:12px; overflow-wrap:anywhere;"><span class="muted tiny">${TYPE_LABEL[i.type]}</span><div>${esc(String(i.text).slice(0, 260))}</div></div>`).join('')}
+                ${summaryHtml(d, items, all, appsOf)}
             </div>
-            <div>
+            <div style="order:1; min-width:0;">
                 <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
                     <input class="modal-input" style="flex:1; min-width:140px;" placeholder="Search resources…" value="${esc(d.q)}" oninput="OL.toFileDlg('q', this.value)">
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('app', this.value)"><option value="">All apps</option>${apps.map((a) => `<option ${a === d.app ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
                     <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('rtype', this.value)"><option value="">All types</option>${rtypes.map((t) => `<option ${t === d.rtype ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
-                    <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('tag', this.value)"><option value="">No tag</option>${TAGS.map((t) => `<option ${t === d.tag ? 'selected' : ''}>${t}</option>`).join('')}</select>
+                    <select class="modal-input" style="width:auto;" onchange="OL.toFileDlg('rstatus', this.value)"><option value="">All statuses</option>${RESOURCE_STATUSES.map((t) => `<option ${t === d.rstatus ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
                 </div>
                 <div style="border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px;">
                     ${d.newOpen ? `<div class="tiny muted" style="margin-bottom:4px;">New resource (required: name and type)</div>
@@ -411,13 +413,13 @@ OL._paintToFileDialog = function() {
                 <div style="max-height:46vh; overflow:auto; display:grid; gap:4px;">
                     <label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px dashed var(--accent); border-radius:6px; cursor:pointer;" title="Catch-all for preferences, decisions, ideas and next steps that don't belong to one resource (naming conventions, folder structure...).">
                         <input type="checkbox" ${d.chosen.has(NOTES) ? 'checked' : ''} onchange="OL.toFileDlgPick('${NOTES}', this.checked)">
-                        <span style="flex:1;">${ic('notebook-pen')} Project Notes <span class="muted tiny">(preferences, decisions, ideas, next steps)</span></span>
+                        <span style="flex:1;">${ic('notebook-pen')} Project Notes <span class="muted tiny">(preferences, decisions, ideas, next steps)</span></span>${tagSelect(d, NOTES)}
                     </label>
                     ${list.map((r) => `<label style="display:flex; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;">
                         <input type="checkbox" ${d.chosen.has(String(r.id)) ? 'checked' : ''} onchange="OL.toFileDlgPick('${esc(r.id)}', this.checked)">
                         <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(r.name || 'Untitled')}</span>
                         ${r.isPlaceholder ? `<span class="pill tiny soft" style="background:rgba(245,158,11,.2);">Pending</span><button type="button" class="btn tiny soft" onclick="event.preventDefault(); OL.toFileMatchOpen('${esc(r.id)}')">Match to real…</button>` : ''}
-                        ${appsOf(r).slice(0, 4).map((a) => `<span class="pill tiny soft">${esc(a)}</span>`).join('')}${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
+                        <span class="pill tiny soft" style="color:${STATUS_COLOR[statusOf(r)] || 'inherit'};">${esc(statusOf(r))}</span>${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}${tagSelect(d, r.id)}
                     </label>`).join('') || `<div class="muted tiny p-20">No resources match.</div>`}
                 </div>
             </div>
@@ -431,6 +433,30 @@ OL._paintToFileDialog = function() {
     } else OL.showOverlayModal(html, { wide: true });
     if (window.lucide) window.lucide.createIcons();
 };
+
+const STATUS_COLOR = { 'Pending': '#94a3b8', 'In Process': '#38bdf8', 'Built': '#64c6a2', 'In Review': '#f59e0b' };
+const statusOf = (r) => { try { return normalizeResourceStatus(r.status) || 'Pending'; } catch (e) { return r.status || 'Pending'; } };
+
+// Everything the chosen items are, or will be, linked to: the request(s), the request's own resources, and each ticked resource.
+function summaryHtml(d, items, all, appsOf) {
+    const client = state.clients?.[d.clientId];
+    const reqIds = [...new Set(items.flatMap((i) => i.requestIds))];
+    const reqNames = reqIds.map((id) => { const it = OL.findRequestItem ? OL.findRequestItem(client, id) : null; return it ? (OL.requestItemTitle ? OL.requestItemTitle(client, it) : it.title) : ''; }).filter(Boolean);
+    const onReq = new Set(reqIds.flatMap((id) => requestResourceIds(OL.findRequestItem ? OL.findRequestItem(client, id) : null)));
+    const chosen = [...d.chosen].map((id) => id === NOTES ? { id: NOTES, name: 'Project Notes', type: 'Reference', notes: true } : all.find((r) => String(r.id) === String(id))).filter(Boolean);
+    return `<div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px;">
+        <div class="tiny bold uppercase muted" style="margin-bottom:6px;">Linked to, or will be linked to</div>
+        ${reqNames.length ? `<div style="margin-bottom:6px;">${reqNames.map((n) => `<span class="pill tiny soft">${ic('git-pull-request')} ${esc(n)}</span>`).join(' ')}</div>` : '<div class="muted tiny" style="margin-bottom:6px;">Not tied to a request.</div>'}
+        <div style="display:grid; gap:4px;">${chosen.map((r) => `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:5px 8px; border:1px solid var(--line); border-radius:6px; font-size:12px;">
+            <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(r.name || 'Untitled')}</span>
+            ${onReq.has(String(r.id)) ? '<span class="pill tiny soft">On the request</span>' : ''}${r.isPlaceholder ? '<span class="pill tiny soft" style="background:rgba(245,158,11,.2);">Pending</span>' : ''}
+            ${r.type ? `<span class="pill tiny soft">${esc(r.type)}</span>` : ''}
+            <i data-lucide="x" class="is-clickable" style="width:12px;height:12px;opacity:.5;" onclick="OL.toFileDlgPick('${esc(r.id)}', false)"></i></div>`).join('') || '<div class="muted tiny">Nothing ticked yet.</div>'}</div></div>`;
+}
+
+const tagSelect = (d, id) => d.chosen.has(String(id))
+    ? `<select class="modal-input tiny" style="width:auto; padding:2px 6px;" onclick="event.stopPropagation()" onchange="OL.toFileDlgTag('${esc(id)}', this.value)"><option value="">Tag…</option>${TAGS.map((t) => `<option ${t === (d.tags || {})[String(id)] ? 'selected' : ''}>${t}</option>`).join('')}</select>` : '';
+OL.toFileDlgTag = (id, v) => { const d = S().dlg; d.tags = d.tags || {}; d.tags[String(id)] = v; };
 
 function newTypeList() {
     const t = (state.master?.resourceTypes || []).map((x) => x.type).filter(Boolean);
@@ -488,9 +514,10 @@ OL.toFileDoFile = async function() {
             names.push(res.name || 'resource');
             if (!Array.isArray(res.comments)) res.comments = [];
             items.forEach((i) => {
-                const body = `${d.tag ? `[${d.tag}] ` : ''}${i.text}\n— filed from ${TYPE_LABEL[i.type].toLowerCase()} (${i.from}, ${dayStr(i.date)})`;
+                const tag = (d.tags || {})[rid0] || '';
+                const body = `${tag ? `[${tag}] ` : ''}${i.text}\n— filed from ${TYPE_LABEL[i.type].toLowerCase()} (${i.from}, ${dayStr(i.date)})`;
                 const html = i.html && typeof OL.sanitizeCommentHtml === 'function'
-                    ? `${d.tag ? `<b>[${esc(d.tag)}]</b> ` : ''}${OL.sanitizeCommentHtml(i.html)}<div class="muted">— filed from ${esc(TYPE_LABEL[i.type].toLowerCase())} (${esc(i.from)}, ${dayStr(i.date)})</div>` : undefined;
+                    ? `${tag ? `<b>[${esc(tag)}]</b> ` : ''}${OL.sanitizeCommentHtml(i.html)}<div class="muted">— filed from ${esc(TYPE_LABEL[i.type].toLowerCase())} (${esc(i.from)}, ${dayStr(i.date)})</div>` : undefined;
                 res.comments.push({ id: uid(), author, text: body, ...(html ? { html } : {}), date: new Date().toISOString(), filedFrom: i.key });
             });
         });
@@ -536,8 +563,8 @@ OL._paintToFileMatch = function() {
     if (window.lucide) window.lucide.createIcons();
 };
 
-OL.toFileMatchDo = function(phId, realId) {
-    const d = S().dlg; const clientId = d.clientId;
+// Moves everything from a pending placeholder onto the real resource and removes the placeholder.
+function mergePlaceholder(clientId, phId, realId) {
     updateAndSync(() => {
         const pd = state.clients?.[clientId]?.projectData; if (!pd) return;
         const list = pd.localResources || [];
@@ -557,8 +584,41 @@ OL.toFileMatchDo = function(phId, realId) {
         }));
         pd.localResources = list.filter((r) => String(r.id) !== String(phId));
     }, clientId);
+}
+
+OL.toFileMatchDo = function(phId, realId) {
+    const d = S().dlg; mergePlaceholder(d.clientId, phId, realId);
     d.chosen.delete(String(phId)); d.matching = null;
     if (d.fromCloseOut) { S().dlg = null; OL._paintCloseOut(); } else OL._paintToFileDialog();
+};
+
+// Offered right after a resource is created anywhere in the app: pending placeholders in the same project that look
+// like it (same type plus some matching words in the name). Never matches by itself.
+OL.offerPlaceholderMatch = function(clientId, newResId) {
+    const client = state.clients?.[clientId]; const list = client?.projectData?.localResources || [];
+    const fresh = list.find((r) => String(r.id) === String(newResId)); if (!fresh || fresh.isPlaceholder) return;
+    const fw = new Set(words(fresh.name));
+    const cands = list.filter((r) => r && r.isPlaceholder && !r.isArchived && !r.archived && r.id !== fresh.id)
+        .map((r) => ({ r, overlap: words(r.workingName || r.name).filter((w) => fw.has(w)).length, same: r.type === fresh.type }))
+        .filter((c) => (c.same && c.overlap >= 1) || c.overlap >= 2)
+        .sort((a, b) => (b.same - a.same) || (b.overlap - a.overlap));
+    if (!cands.length) return;
+    S().offer = { clientId, newResId: String(newResId), pick: String(cands[0].r.id) };
+    const row = ({ r, overlap, same }) => `<label style="display:flex; gap:10px; align-items:flex-start; padding:8px; border:1px solid var(--line); border-radius:6px; cursor:pointer;">
+        <input type="radio" name="ph-offer" ${String(r.id) === S().offer.pick ? 'checked' : ''} onchange="OL.toFileOfferPick('${esc(r.id)}')" style="margin-top:3px;">
+        <span style="flex:1; min-width:0;"><span style="overflow-wrap:anywhere;">${esc(r.workingName || r.name)}</span> <span class="pill tiny soft">${esc(r.type || '')}</span>
+        <div class="muted tiny">Suggested: ${same ? 'same type' : 'different type'}, ${overlap} matching word${overlap === 1 ? '' : 's'} · ${(r.comments || []).length} note${(r.comments || []).length === 1 ? '' : 's'} filed</div></span></label>`;
+    OL.showOverlayModal(`<div style="width:100%; box-sizing:border-box;"><h3 style="margin:0 0 6px;">Match a pending placeholder?</h3>
+        <div class="muted tiny" style="margin-bottom:10px;">You created "${esc(fresh.name)}" (${esc(fresh.type || '')}). This project has pending placeholders that look like it. Matching moves the notes filed to the placeholder onto the new resource and removes the placeholder.</div>
+        <div style="display:grid; gap:6px;">${cands.map(row).join('')}</div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button class="btn soft" onclick="OL.toFileOfferSkip()">No, this is a new resource</button><button class="btn primary" onclick="OL.toFileOfferMatch()">Match selected</button></div></div>`, { wide: true });
+};
+OL.toFileOfferPick = (id) => { if (S().offer) S().offer.pick = String(id); };
+OL.toFileOfferSkip = () => { S().offer = null; OL.closeModal?.(); };
+OL.toFileOfferMatch = () => {
+    const o = S().offer; if (!o) return;
+    mergePlaceholder(o.clientId, o.pick, o.newResId); S().offer = null; OL.closeModal?.();
+    if (typeof OL.openResourceModal === 'function') OL.openResourceModal(o.newResId);
 };
 
 // "Pull from queue" on a resource page: opens the queue for that project with the resource pre-ticked in the filing dialog.

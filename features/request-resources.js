@@ -166,15 +166,19 @@ export async function rqAddShell(itemId) {
     const name = String(document.getElementById('rq-shell-name')?.value || '').trim();
     const type = document.getElementById('rq-shell-type')?.value || 'General';
     if (!name) { alert('Give the planned resource a name.'); return; }
-    return changeResources(itemId, (client, item) => {
+    let offer = null;
+    const done = await changeResources(itemId, (client, item) => {
         if (!client.projectData.localResources) client.projectData.localResources = [];
         const id = `local-prj-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        offer = { clientId: client.id, id };
         client.projectData.localResources.push({
             id, name, type, archetype: 'Base', integration: null, data: {}, steps: [], triggers: [],
             createdDate: new Date().toISOString(), isShell: true,
         });
         item.resourceIds = [...requestResourceIds(item), id];
     });
+    if (done && offer && typeof window !== 'undefined' && window.OL?.offerPlaceholderMatch) setTimeout(() => window.OL.offerPlaceholderMatch(offer.clientId, offer.id), 500);
+    return done;
 }
 
 export async function rqRemoveResource(itemId, resourceId) {

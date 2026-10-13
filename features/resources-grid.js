@@ -821,6 +821,8 @@ export async function universalCreate(type, options = {}) {
         renderResourceManager();
         OL.openResourceModal(newId);
     }
+    // Pending placeholders that look like this new resource are offered for matching (never matched automatically).
+    if (!context.isMaster && client && typeof OL.offerPlaceholderMatch === 'function') setTimeout(() => OL.offerPlaceholderMatch(client.id, newId), 350);
 
     return newId;
 };
