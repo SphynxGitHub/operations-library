@@ -872,7 +872,7 @@ export async function autoPullIntegrations(client) {
             const needsCatchUp = it.key === 'calendly' && (client.projectData.localResources || []).some((r) => r && r.source === 'calendly' && r.type === 'Event' && !r.isDeleted && (!r.flowSeeded || !(r.steps || []).some((st) => (st.callouts || []).length)));
             // Jotform forms are read a few at a time, so until every form has been read the next pull is not a day away (but not every open either)
             const moreToRead = it.key === 'jotform' && (!last.at || nowMs - Date.parse(last.at) > 3600 * 1000)
-                && (client.projectData.localResources || []).some((r) => r && r.source === 'jotform' && !r.isDeleted && !r.missingUpstream && !r.formDetails);
+                && (client.projectData.localResources || []).some((r) => r && r.source === 'jotform' && r.type === 'Form' && !r.isDeleted && !r.missingUpstream && !(r.formDetails && r.formDetails.v >= 2));
             if (!needsCatchUp && !moreToRead && last.at && nowMs - Date.parse(last.at) < everyMs) continue;  // pulled recently
             if (last.errorAt && nowMs - Date.parse(last.errorAt) < AUTO_RETRY_AFTER_ERROR_MS) continue;
             try { results.push(await runOneSync(client, it.key, { auto: true })); }
@@ -1211,6 +1211,7 @@ export async function importKeap(client, opts = {}) {
 // Reading one form's questions, logic and emails is two more calls to Jotform, so a pull does a limited number of forms at a
 // time (30 when pulled by hand, 10 when automatic): forms never read come first, then the oldest read. What was read stays on
 // the card (card.formDetails) until the next time that form is read.
+const JF_DETAILS_V = 2;
 const JF_SKIP = /^control_(head|button|text|pagebreak|divider|image|widget|collapse|captcha|spacer|pagebreak|fullname_hidden)$/;
 const JF_TYPE = {
     control_textbox: 'text', control_textarea: 'long text', control_email: 'email', control_phone: 'phone', control_fullname: 'name',
@@ -1272,7 +1273,7 @@ async function readJotformForm(client, creds, form) {
         key: `${/auto/i.test(e.type) ? 'auto' : 'notify'}${i}`, kind: /auto/i.test(e.type) ? 'Autoresponder' : 'Notification',
         name: e.name || '', subject: e.subject || '', body: cleanEmailHtml(e.body, keyMap), attachPdf: !!e.attachPdf,
     }));
-    return { at: new Date().toISOString(), fields, tagIds: tags.map((t) => t.id), emails, logic: { norm, fp: logicFingerprint(norm) } };
+    return { v: JF_DETAILS_V, at: new Date().toISOString(), fields, tagIds: tags.map((t) => t.id), emails, logic: { norm, fp: logicFingerprint(norm) } };
 }
 
 export async function importJotform(client, opts = {}) {
@@ -1288,7 +1289,8 @@ export async function importJotform(client, opts = {}) {
     // which forms to read this time: never read first, then the longest ago
     const cap = opts.auto ? 10 : 30;
     const pending = forms.filter((f) => f && f.id != null && !(f.status && /delet/i.test(String(f.status))))
-        .map((f) => ({ f, at: (cardOf(f.id)?.formDetails?.at) || '' }))
+        // details kept by an older version (before message text and attachments were read) count as never read, so they are read again
+        .map((f) => { const fd = cardOf(f.id)?.formDetails; return { f, at: fd && fd.v >= JF_DETAILS_V ? fd.at : '' }; })
         .sort((a, b) => String(a.at).localeCompare(String(b.at)))
         .slice(0, cap).map((x) => x.f);
     const fresh = new Map();   // form id -> details read now
@@ -1303,6 +1305,7 @@ export async function importJotform(client, opts = {}) {
         } catch (e) { console.warn(`Could not read the form "${f.title}":`, e); readErrors.push(String(e && e.message || e).slice(0, 140)); }
     }
     const detailsOf = (id) => fresh.get(String(id)) || cardOf(id)?.formDetails || null;
+    const isCurrent = (id) => fresh.has(String(id)) || (cardOf(id)?.formDetails?.v >= JF_DETAILS_V);
     const tagById = (id) => (client.projectData.localDatapoints || []).find((t) => t && t.id === id);
 
     const items = [];
@@ -1350,16 +1353,20 @@ export async function importJotform(client, opts = {}) {
     // keep what was read on each form's card (and its logic, for the "Form logic" callout)
     fresh.forEach((d, id) => {
         const card = cardOf(id); if (!card) return;
-        card.formDetails = { at: d.at, fields: d.fields, tagIds: d.tagIds, emails: d.emails };
+        card.formDetails = { v: d.v, at: d.at, fields: d.fields, tagIds: d.tagIds, emails: d.emails };
         card.formLogic = { at: d.at, fp: d.logic.fp, rules: d.logic.norm.rules.slice(0, 200), pages: d.logic.norm.pages.slice(0, 60), fieldCount: d.logic.norm.fieldCount };
     });
     if (logicChanged.length) {
         logicChanged.forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });
         logExternalPull(client.projectData, { ...summary, added: [], renamed: [], changed: logicChanged.map((n) => `${n} (form logic)`), missing: [], restored: [] });
     }
-    const unread = forms.length - [...forms].filter((f) => detailsOf(f.id)).length;
+    const unread = forms.length - [...forms].filter((f) => isCurrent(f.id)).length;
     const notes = [];
-    if (fresh.size) notes.push(`read ${fresh.size} form${fresh.size === 1 ? '' : 's'} in full`);
+    if (fresh.size) {
+        const allEmails = [...fresh.values()].flatMap((d) => d.emails || []);
+        notes.push(`read ${fresh.size} form${fresh.size === 1 ? '' : 's'} in full`);
+        if (allEmails.length) notes.push(`${allEmails.length} email${allEmails.length === 1 ? '' : 's'} found, ${allEmails.filter((e) => e.body).length} with message text`);
+    }
     if (readErrors.length) notes.push(`${readErrors.length} could not be read (${readErrors[0]})`);
     if (unread > 0) notes.push(`${unread} still to read`);
     if (notes.length) summary.note = notes.join('; ');
@@ -1956,4 +1963,4 @@ Object.assign(window.OL, {
 });
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.j' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.k' });
