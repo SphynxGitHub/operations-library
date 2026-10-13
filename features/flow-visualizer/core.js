@@ -4441,10 +4441,10 @@ export function _fvOpenStepsList(resId) {
           <select class="fvi-select" style="flex:1;"
                   onchange="OL.handleResourceSave('${res.id}','type',this.value)">
             <option value="General" ${res.type==='General'?'selected':''}>General</option>
-            ${(state.master?.resourceTypes||[]).map(t =>
-              `<option value="${esc(t.type)}"
-                       ${res.type===t.type?'selected':''}>
-                 ${esc(t.type)}
+            ${[...new Set([...(state.master?.resourceTypes||[]).map(t => t.type), res.type].filter(t => t && t !== 'General'))].map(t =>
+              `<option value="${esc(t)}"
+                       ${res.type===t?'selected':''}>
+                 ${esc(t)}
                </option>`
             ).join('')}
           </select>
@@ -9467,4 +9467,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.h' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.i' });
