@@ -5650,23 +5650,14 @@ export function renderFocusControls() {
         // 3. Update the URL (Silent)
         window.location.hash = savedPath;
 
-        // 4. THE "INSTANT SWAP": call the page's own render function
+        // 4. THE "INSTANT SWAP": draw the page we came from with its own render function. (The names this used to look for,
+        // renderResources and showResources, do not exist, so the old code fell through to a full page reload.) If a function
+        // is not found, the route change above draws the page; the page is never reloaded.
+        const call = (...names) => { for (const n of names) { const f = OL[n] || window[n]; if (typeof f === 'function') { f(); return true; } } return false; };
         if (savedPath.includes('scoping-sheet')) {
-            if (typeof OL.renderScopingSheet === 'function') {
-                OL.renderScopingSheet(); 
-            } else if (typeof OL.renderScope === 'function') {
-                OL.renderScope();
-            } else {
-                window.location.reload(); // Fallback if name is unknown
-            }
+            call('renderScopingSheet', 'renderScope');
         } else if (savedPath.includes('resources')) {
-            if (typeof OL.renderResources === 'function') {
-                OL.renderResources();
-            } else if (typeof OL.showResources === 'function') {
-                OL.showResources();
-            } else {
-                window.location.reload();
-            }
+            call('renderResourceManager', 'renderResources', 'showResources');
         }
 
         scopeBtn.remove();
@@ -9348,4 +9339,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.f' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.g' });
