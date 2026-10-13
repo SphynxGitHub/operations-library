@@ -44,6 +44,7 @@ const TRIGGERS = [
   { key: 'link',       label: 'Email link clicked',     icon: 'mouse-pointer-click', group: 'Something they do', asset: 'email',    assetLabel: 'email template' },
   { key: 'open',       label: 'Email opened',           icon: 'mail-open',           group: 'Something they do', asset: 'email',    assetLabel: 'email template' },
   { key: 'signed',     label: 'Document signed',        icon: 'pen-line',            group: 'Something they do', asset: 'document', assetLabel: 'document' },
+  { key: 'answer',     label: 'Form answer is...',      icon: 'list-checks',         group: 'Something they do' },
   { key: 'payment',    label: 'Payment received',       icon: 'credit-card',         group: 'Something they do' },
   { key: 'noresponse', label: 'No response',            icon: 'clock',               group: 'Time' },
   { key: 'segment',    label: 'Segment',                icon: 'users',               group: 'Who they are' },
@@ -70,11 +71,21 @@ function trigText(trig, step) {
   const t = trig || { kind: 'always' };
   if (t.kind === 'always') return '';
   if (t.kind === 'custom') return String(t.text || '').trim();
+  if (t.kind === 'answer') return t.field ? `${t.field} is ${t.value || '...'}` : 'Form answer';
   if (t.kind === 'segment') { const s = segById(t.segmentId); return s ? `Segment: ${s.name}` : 'Segment'; }
   const base = (TRIG[t.kind] || {}).label || '';
   const a = t.assetId ? calloutsOnStep(step).find((c) => String(c.id) === String(t.assetId)) : null;
   return a ? `${base}: ${a.name}` : base;
 }
+// ---- form answers: forms that know their fields (formFields, kept by the importers) --------------------------------
+const formsWithFields = () => allRes().filter((r) => Array.isArray(r.formFields) && r.formFields.length);
+function formsOnStep(step) {
+  const ids = new Set();
+  calloutsOnStep(step).forEach((c) => { if (c.libId) ids.add(String(c.libId)); });
+  (step.links || []).forEach((l) => { if (l && l.id) ids.add(String(l.id)); });
+  return ids;
+}
+const fieldOf = (trig) => { const f = resById(trig && trig.formId); const fld = f && (f.formFields || []).find((x) => String(x.tagId) === String(trig.tagId)); return { form: f || null, field: fld || null }; };
 const waitText = (v, u) => (Number(v) > 0 ? `after ${Number(v)} ${Number(v) === 1 ? String(u || 'days').replace(/s$/, '') : (u || 'days')}` : '');
 
 // a step's paths as one list: logic.out entries first (lines on the map), then jumps (rows on the card)
@@ -183,6 +194,15 @@ const setAsset = (resId, stepId, key, calloutId) => edit(resId, stepId, key, (p,
   p.ref.trig = { ...p.trig, assetId: a ? a.id : '', libId: a && a.libId ? a.libId : '' };
 });
 const setSegment = (resId, stepId, key, segId) => edit(resId, stepId, key, (p) => { p.ref.trig = { kind: 'segment', segmentId: segId }; });
+const setAnswerField = (resId, stepId, key, formId, idx) => edit(resId, stepId, key, (p) => {
+  const f = resById(formId); const fld = f && (f.formFields || [])[Number(idx)]; if (!fld) return;
+  p.ref.trig = { kind: 'answer', formId: String(formId), tagId: fld.tagId, field: fld.label, value: '' };
+});
+const setAnswerValue = (resId, stepId, key, value, idx) => edit(resId, stepId, key, (p) => {
+  const { field } = fieldOf(p.trig); const opts = (field && field.options) || [];
+  const v = idx !== '' && idx != null && opts[Number(idx)] != null ? opts[Number(idx)] : value;
+  p.ref.trig = { ...p.trig, kind: 'answer', value: String(v || '').trim().slice(0, 120) };
+});
 const setCustom = (resId, stepId, key, text) => edit(resId, stepId, key, (p) => { p.ref.trig = { kind: 'custom', text: String(text || '').trim().slice(0, 120) }; });
 function setWait(resId, stepId, key, v, u) {
   edit(resId, stepId, key, (p) => {
@@ -360,6 +380,26 @@ function pathRow(resId, step, p, n) {
     ab += fit.length ? fit.map((c) => item(c.kind === 'event' ? 'calendar' : (c.kind === 'form' ? 'file-text' : (c.kind === 'email' ? 'mail' : 'file')), c.name, `OL.fvPathAsset('${r}','${s}','${k}','${esc(c.id)}')`, { on: cur && cur.id === c.id })).join('') : `<div class="fvp-none">None on this step yet.</div>`;
     ab += `<div class="fvp-item fvp-add fvp-always" onclick="event.stopPropagation(); OL.fvEditStepCallout('${r}','${s}')">${icon('plus', 12)}<span class="fvp-item-t">Add a ${esc(t.assetLabel)} to this step</span></div>`;
     extra = menu(id('a'), cur ? esc(cur.name) : `Which ${esc(t.assetLabel)}?`, ab, { placeholder: cur ? '' : 'x' });
+  } else if (t.key === 'answer') {
+    const onStep = formsOnStep(step);
+    const forms = formsWithFields().sort((a, b) => (onStep.has(String(b.id)) ? 1 : 0) - (onStep.has(String(a.id)) ? 1 : 0));
+    const cur = fieldOf(p.trig);
+    let fb = '';
+    forms.forEach((f) => {
+      fb += group(`${f.name || 'Form'}${onStep.has(String(f.id)) ? '  ·  on this step' : ''}`);
+      fb += (f.formFields || []).map((fld, i) => item('list', fld.label, `OL.fvPathAnswerField('${r}','${s}','${k}','${esc(f.id)}',${i})`, { on: cur.form && String(cur.form.id) === String(f.id) && String(p.trig.tagId) === String(fld.tagId), right: (fld.options || []).length ? `${fld.options.length} options` : '', q: `${f.name || ''} ${fld.label}` })).join('');
+    });
+    if (!forms.length) fb = '<div class="fvp-none">No form with known fields yet. Pull a Calendly or Jotform form first.</div>';
+    extra = menu(id('f'), cur.field ? `${esc(cur.form && cur.form.name || 'Form')} › ${esc(cur.field.label)}` : 'Which form field?', fb, { search: true, placeholder: cur.field ? '' : 'x' });
+    if (cur.field) {
+      const opts = cur.field.options || [];
+      if (opts.length) {
+        const vb = group(`Answers to "${cur.field.label}"`) + opts.map((o, i) => item('check', o, `OL.fvPathAnswerValue('${r}','${s}','${k}','',${i})`, { on: p.trig.value === o })).join('');
+        extra += menu(id('v'), p.trig.value ? `is ${esc(p.trig.value)}` : 'is which answer?', vb, { placeholder: p.trig.value ? '' : 'x' });
+      } else {
+        extra += `<input type="text" class="modal-input tiny fvp-text" maxlength="120" placeholder="Answer, e.g. Yes" value="${esc(p.trig.value || '')}" onchange="OL.fvPathAnswerValue('${r}','${s}','${k}', this.value, '')">`;
+      }
+    }
   } else if (t.key === 'segment') {
     const cur = segById(p.trig.segmentId);
     let sb = group('Segments') + (segList().length ? segList().map((g) => item('users', g.name, `OL.fvPathSegment('${r}','${s}','${k}','${esc(g.id)}')`, { on: cur && cur.id === g.id, right: `${segUsage(g.id).length} paths` })).join('') : '<div class="fvp-none">No segments yet.</div>');
@@ -454,7 +494,7 @@ Object.assign(window.OL = window.OL || {}, {
   fvGroupEditor: groupEditor, fvGroupSet: setGroup, fvGroupRename: renameGroup,
   fvPathsEditor: pathsEditor, fvPathSummary: pathSummary,
   fvPathAdd: addPath, fvPathRemove: removePath, fvPathTrigger: setTrigger, fvPathAsset: setAsset, fvPathSegment: setSegment,
-  fvPathCustom: setCustom, fvPathWait: setWait, fvPathLimit: setLimit, fvPathDest: setDest, fvPathNewSegment: newSegmentFor,
+  fvPathCustom: setCustom, fvPathAnswerField: setAnswerField, fvPathAnswerValue: setAnswerValue, fvPathWait: setWait, fvPathLimit: setLimit, fvPathDest: setDest, fvPathNewSegment: newSegmentFor,
   fvpToggle: toggleMenu, fvpFilter: filterMenu,
   fvSegmentsManage: segmentsModal, fvSegCreate: segCreate, fvSegRename: segRename, fvSegDelete: segDelete, fvSegDescribe: segDescribe,
   fvSegmentsOf: segList, fvSegmentUsage: segUsage,
