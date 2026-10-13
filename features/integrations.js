@@ -617,8 +617,9 @@ function applyServiceApp(client, source) {
     const app = typeof OL.findAppByName === 'function' ? OL.findAppByName(client, label) : null;
     (client.projectData.localResources || []).forEach((r) => {
         if (!r || r.source !== source) return;
-        if (!r.appId && !r.appName) { r.appName = app ? app.name : label; if (app) r.appId = app.id; }
-        else if (!r.appId && app && String(r.appName).toLowerCase() === label.toLowerCase()) { r.appId = app.id; r.appName = app.name; }
+        // an app picked by hand (linked, with an id) is never changed; a name with no link, or nothing, becomes the service's app
+        if (!r.appId && app && (!r.appName || String(r.appName).toLowerCase() === label.toLowerCase() || r.autoApp)) { r.appId = app.id; r.appName = app.name; r.autoApp = true; }
+        else if (!r.appId && !r.appName) r.appName = label;
         if (typeof OL.autoLinkStepApps === 'function') OL.autoLinkStepApps(client, r);
     });
 }
