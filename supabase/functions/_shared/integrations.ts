@@ -12,6 +12,7 @@ export type Service = typeof SERVICES[number];
 
 export class UpstreamError extends Error {
   status: number;
+  url = "";
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
 export class BadRequest extends Error {}
@@ -28,7 +29,7 @@ export function redact(text: string, key: string): string {
 async function getJson(f: FetchFn, url: string, headers: Record<string, string>, key: string): Promise<any> {
   const res = await f(url, { headers: { Accept: "application/json", ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) });
   const text = await res.text();
-  if (!res.ok) throw new UpstreamError(res.status, redact(text, key));
+  if (!res.ok) { const e = new UpstreamError(res.status, redact(text, key)); e.url = url.split("?")[0].replace(/^https:\/\//, ""); throw e; }
   try { return JSON.parse(text); } catch { throw new UpstreamError(502, "The service did not return JSON."); }
 }
 
@@ -62,7 +63,7 @@ export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn)
   return { form_id: id, conditions, questions };
 }
 
-export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string }, f: FetchFn): Promise<any> {
+export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string; calendlyUser?: string }, f: FetchFn): Promise<any> {
   switch (service) {
     case "wealthbox": {
       let all: any[] = [];
@@ -87,8 +88,16 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       return { content: all };
     }
     case "calendly": {
-      const me = await getJson(f, "https://api.calendly.com/users/me", { Authorization: `Bearer ${key}` }, key);
-      const uri = me?.resource?.uri;
+      // A user ID entered with the key skips the /users/me call, which needs the "users" scope.
+      const given = String(opts.calendlyUser ?? "").trim().split("/").pop() || "";
+      let uri: string | undefined;
+      if (given) {
+        if (!/^[A-Za-z0-9_-]{8,64}$/.test(given)) throw new BadRequest("The Calendly user ID should be the ID from the user's address (api.calendly.com/users/<id>).");
+        uri = `https://api.calendly.com/users/${given}`;
+      } else {
+        const me = await getJson(f, "https://api.calendly.com/users/me", { Authorization: `Bearer ${key}` }, key);
+        uri = me?.resource?.uri;
+      }
       if (!uri) throw new UpstreamError(502, "Calendly did not return a user.");
       return await getJson(f, `https://api.calendly.com/event_types?user=${encodeURIComponent(uri)}`, { Authorization: `Bearer ${key}` }, key);
     }
