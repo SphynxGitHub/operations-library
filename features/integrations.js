@@ -1095,12 +1095,12 @@ export async function importCalendly(client, opts = {}) {
             formFields: fields,
         });
         items.push({
-            externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl,
+            externalId: `confirm-${id}`, name: `${name}: Confirmation Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl, defaults: { emailFrom: 'app', emailToType: 'Lead/Client' },
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-confirm-${id}-s0`, name: `${app} sends confirmation email`, appName: app }],
         });
         items.push({
-            externalId: `reminder-${id}`, name: `${name}: Reminder Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl,
+            externalId: `reminder-${id}`, name: `${name}: Reminder Email`, type: 'Email', archetype: 'Base', externalUrl: editUrl, defaults: { emailFrom: 'app', emailToType: 'Lead/Client' },
             serviceActive: active, keepSteps: true,
             steps: [{ id: `cal-reminder-${id}-s0`, name: `${app} sends meeting reminder email`, appName: app }],
         });
@@ -1223,32 +1223,54 @@ const jfOptions = (q) => String(q.options || '').split('|').map((o) => o.trim())
 
 function jotformFieldsOf(client, raw) {
     const questions = (raw.questions || []).filter((q) => q && !JF_SKIP.test(q.type)).sort((a, b) => (a.order || 0) - (b.order || 0));
-    const fields = []; const tags = [];
+    const fields = []; const tags = []; const keyMap = {};
     const add = (label, names, category, type, required, options) => {
         const tag = findOrMakeTag(client, names, category);
         if (options && options.length) tag.options = [...new Set([...(tag.options || []), ...options])];
         if (!tags.some((x) => x.id === tag.id)) tags.push(tag);
         if (!fields.some((f) => f.tagId === tag.id)) fields.push({ tagId: tag.id, label, type, required: !!required, options: options || [] });
+        return tag;
     };
     questions.forEach((q) => {
         const label = String(q.text || q.name || '').trim().slice(0, 80);
         if (!label) return;
         const type = JF_TYPE[q.type] || String(q.type || 'text').replace(/^control_/, '');
-        if (q.type === 'control_fullname') { add('First Name', ['First Name'], 'Contact', 'text', true); add('Last Name', ['Last Name'], 'Contact', 'text', true); }
-        else if (q.type === 'control_email') add(label, ['Email Address', 'Email'], 'Contact', 'email', true);
-        else if (q.type === 'control_phone') add(label, ['Phone Number', 'Phone'], 'Contact', 'phone', false);
-        else add(label, [label], 'Jotform Form', type, false, jfOptions(q));
+        if (q.type === 'control_fullname') {
+            const f = add('First Name', ['First Name'], 'Contact', 'text', true); const l = add('Last Name', ['Last Name'], 'Contact', 'text', true);
+            if (q.name) keyMap[q.name] = `${f.key || ''} ${l.key || ''}`.trim();
+        } else {
+            const t = q.type === 'control_email' ? add(label, ['Email Address', 'Email'], 'Contact', 'email', true)
+                : q.type === 'control_phone' ? add(label, ['Phone Number', 'Phone'], 'Contact', 'phone', false)
+                : add(label, [label], 'Jotform Form', type, false, jfOptions(q));
+            if (q.name && t.key) keyMap[q.name] = t.key;
+        }
     });
-    return { fields, tags };
+    return { fields, tags, keyMap };
+}
+
+// Imported message HTML is cleaned before it is kept: no scripts, frames or event handlers, no javascript: links. The form's own
+// {placeholders} become the data tags of the same questions.
+function cleanEmailHtml(html, keyMap) {
+    let out = String(html || '').trim();
+    if (!out) return '';
+    try {
+        const doc = new DOMParser().parseFromString(out, 'text/html');
+        doc.querySelectorAll('script, iframe, object, embed, link, meta, base, form, style').forEach((n) => n.remove());
+        doc.querySelectorAll('*').forEach((n) => Array.from(n.attributes).forEach((a) => {
+            if (/^on/i.test(a.name) || (/^(href|src|xlink:href)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) n.removeAttribute(a.name);
+        }));
+        out = doc.body ? doc.body.innerHTML : out;
+    } catch (e) { out = out.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+="[^"]*"/gi, ''); }
+    return out.replace(/\{([A-Za-z0-9_]+)\}/g, (m, name) => keyMap[name] || m).slice(0, 20000);
 }
 
 async function readJotformForm(client, creds, form) {
     const raw = await importFrom('jotform', client.id, creds.id, { formId: String(form.id) });
     const norm = normalizeJotformLogic({ conditions: raw.conditions, questions: raw.questions });
-    const { fields, tags } = jotformFieldsOf(client, raw);
+    const { fields, tags, keyMap } = jotformFieldsOf(client, raw);
     const emails = (raw.emails || []).map((e, i) => ({
         key: `${/auto/i.test(e.type) ? 'auto' : 'notify'}${i}`, kind: /auto/i.test(e.type) ? 'Autoresponder' : 'Notification',
-        name: e.name || '', subject: e.subject || '',
+        name: e.name || '', subject: e.subject || '', body: cleanEmailHtml(e.body, keyMap), attachPdf: !!e.attachPdf,
     }));
     return { at: new Date().toISOString(), fields, tagIds: tags.map((t) => t.id), emails, logic: { norm, fp: logicFingerprint(norm) } };
 }
@@ -1304,13 +1326,22 @@ export async function importJotform(client, opts = {}) {
         };
         if (d) item.formFields = d.fields;
         items.push(item);
+        // who the notification goes to: the team member marked as the designated contact, else the first one
+        const team = client.projectData.teamMembers || [];
+        const contact = team.find((m) => m.isPrimaryContact) || team[0];
         emails.forEach((e, i) => {
             const same = emails.filter((x) => x.kind === e.kind).length > 1 ? ` ${emails.filter((x) => x.kind === e.kind).indexOf(e) + 1}` : '';
+            const toAccount = e.kind !== 'Autoresponder';
             items.push({
                 externalId: `jfemail-${id}-${e.key}`, name: `${form.title}: ${e.kind} Email${same}`, type: 'Email', archetype: 'Base',
                 externalUrl: `${editUrl}/settings/emails`, keepSteps: true,
-                description: e.subject ? `Subject: ${e.subject}` : (e.name || ''),
-                steps: [{ id: `jf-email-${id}-${e.key}-s0`, name: e.kind === 'Autoresponder' ? 'Send confirmation email to lead/client' : 'Send confirmation email to account holder', appName: 'Jotform' }],
+                description: '',   // (an earlier pull put "Subject: ..." here; the subject now lives in its own field)
+                defaults: {
+                    emailSubject: e.subject || '', emailBody: e.body || '', emailFrom: 'app',
+                    emailToType: toAccount ? (contact ? `tm:${contact.id}` : '') : 'Lead/Client',
+                    emailAttachments: e.attachPdf ? [{ id: 'pdf-submission', kind: 'generated', name: 'Form submission (PDF generated by Jotform)' }] : [],
+                },
+                steps: [{ id: `jf-email-${id}-${e.key}-s0`, name: toAccount ? 'Send confirmation email to account holder' : 'Send confirmation email to lead/client', appName: 'Jotform' }],
             });
         });
     });
@@ -1925,4 +1956,4 @@ Object.assign(window.OL, {
 });
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.i' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.j' });

@@ -998,6 +998,29 @@ export function openResourceModal(targetId, draftObj = null) {
             </select>` : ''}
         </div>` : '';
 
+    // --- FORM LOGIC (forms read from Jotform keep their rules on the card) ---
+    const fl = res.formLogic;
+    const ruleLine = (r) => {
+        const cond = (r.when || []).length ? r.when.map((w) => `${w.fieldLabel} ${w.op}${w.value ? ` "${w.value}"` : ''}`).join(r.link === 'any' ? ' OR ' : ' AND ') : 'Always';
+        return `<div style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);font-size:10.5px;line-height:1.5;${r.disabled ? 'opacity:0.55;' : ''}">
+            <span style="color:var(--text-muted);font-weight:700;">IF</span> ${esc(cond)}
+            <span style="color:var(--text-muted);font-weight:700;margin-left:4px;">THEN</span> ${esc((r.then || []).map((t) => t.text).join('; '))}
+            ${r.disabled ? '<span class="pill tiny soft" style="font-size:9px;padding:0 6px;margin-left:4px;">off in Jotform</span>' : ''}
+        </div>`;
+    };
+    const formLogicHtml = fl ? `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="git-fork" style="width:14px;height:14px;"></i> FORM LOGIC
+                <span class="pill tiny soft">${(fl.rules || []).length}</span>
+            </label>
+            <div class="tiny muted" style="margin:4px 0 8px;">The form's conditional rules, as ${esc(res.source || 'the service')} has them. Edit them there; they refresh on each pull.</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;">
+                ${(fl.rules || []).length ? fl.rules.map(ruleLine).join('') : '<span class="tiny muted">No conditional logic: everyone sees every question.</span>'}
+            </div>
+            ${typeof OL.openJotformLogicMap === 'function' && (fl.rules || []).length ? `<button class="btn tiny soft" onclick="OL.openJotformLogicMap('${esc(res.id)}')">Open the logic map</button>` : ''}
+        </div>` : '';
+
     // --- STEPS (types without the inline editor) ---
     // Steps are edited on the flow map, where the full step editor is. Here they are listed, with a way across.
     const stepSummaryHtml = (!showWorkflowSteps && (res.steps || []).length) ? `
@@ -1054,24 +1077,36 @@ export function openResourceModal(targetId, draftObj = null) {
                             <label class="tiny muted bold" style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
                                 <i data-lucide="user-round" style="width:10px;height:10px;"></i> FROM
                             </label>
-                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value)">
+                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value); document.getElementById('email-from-custom-${res.id}').style.display = this.value === 'custom' ? 'block' : 'none';">
                                 <option value="">Select Sender...</option>
-                                ${(client?.projectData?.teamMembers || []).map(m => `
-                                    <option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>${esc(m.name)}</option>
-                                `).join('')}
+                                ${(client?.projectData?.teamMembers || []).length ? `<optgroup label="Team">${(client?.projectData?.teamMembers || []).map(m => `
+                                    <option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</optgroup>` : ''}
+                                <optgroup label="Application">
+                                    <option value="app" ${res.emailFrom === 'app' ? 'selected' : ''}>${esc(res.appName || 'The primary app')}${res.appName ? ' (sent by the app)' : ' (set a primary app first)'}</option>
+                                </optgroup>
+                                <option value="custom" ${res.emailFrom === 'custom' ? 'selected' : ''}>Custom...</option>
                             </select>
+                            <input type="text" id="email-from-custom-${res.id}" class="modal-input tiny" style="margin-top:6px;display:${res.emailFrom === 'custom' ? 'block' : 'none'};"
+                                   placeholder="Who or what sends it (e.g. the custodian's system)" value="${esc(res.emailFromCustom || '')}"
+                                   onblur="OL.handleResourceSave('${res.id}', 'emailFromCustom', this.value)">
                         </div>
                         <div>
                             <label class="tiny muted bold" style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
                                 <i data-lucide="users" style="width:10px;height:10px;"></i> TO
                             </label>
-                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value)">
+                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value); document.getElementById('email-to-custom-${res.id}').style.display = this.value === 'custom' ? 'block' : 'none';">
                                 <option value="">Select Recipient...</option>
-                                <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>Household</option>
-                                <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>Client 1</option>
-                                <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>Client 2</option>
-                                <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>COI (Professional)</option>
+                                <optgroup label="Clients">
+                                    ${['Lead/Client', 'Household', 'Client 1', 'Client 2'].map(v => `<option value="${v}" ${res.emailToType === v ? 'selected' : ''}>${v}</option>`).join('')}
+                                    <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>COI (Professional)</option>
+                                </optgroup>
+                                ${(client?.projectData?.teamMembers || []).length ? `<optgroup label="Team">${(client?.projectData?.teamMembers || []).map(m => `
+                                    <option value="tm:${m.id}" ${res.emailToType === 'tm:' + m.id ? 'selected' : ''}>${esc(m.name)}${m.isPrimaryContact ? ' (designated contact)' : ''}</option>`).join('')}</optgroup>` : ''}
+                                <option value="custom" ${res.emailToType === 'custom' ? 'selected' : ''}>Custom...</option>
                             </select>
+                            <input type="text" id="email-to-custom-${res.id}" class="modal-input tiny" style="margin-top:6px;display:${res.emailToType === 'custom' ? 'block' : 'none'};"
+                                   placeholder="Who receives it (e.g. the transfer agent)" value="${esc(res.emailToCustom || '')}"
+                                   onblur="OL.handleResourceSave('${res.id}', 'emailToCustom', this.value)">
                         </div>
                     </div>
         
@@ -1085,6 +1120,29 @@ export function openResourceModal(targetId, draftObj = null) {
                                onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'emailSubject', v);">
                     </div>
         
+                    <!-- ATTACHMENTS -->
+                    <div style="margin-bottom:12px;">
+                        <label class="tiny muted bold" style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                            <i data-lucide="paperclip" style="width:10px;height:10px;"></i> ATTACHMENTS
+                        </label>
+                        ${(res.emailAttachments || []).length ? `<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;">${(res.emailAttachments || []).map((a) => `
+                            <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);font-size:10.5px;">
+                                <i data-lucide="${a.kind === 'resource' ? 'file-text' : (a.kind === 'generated' ? 'file-cog' : 'paperclip')}" style="width:11px;height:11px;flex:0 0 auto;"></i>
+                                <span style="flex:1;min-width:0;overflow-wrap:anywhere;">${esc(a.name)}</span>
+                                <span class="pill tiny soft" style="font-size:9px;padding:0 6px;">${a.kind === 'resource' ? 'from library' : (a.kind === 'generated' ? 'generated' : 'custom')}</span>
+                                <b class="is-clickable" title="Remove" style="opacity:0.5;padding:0 4px;" onclick="OL.removeEmailAttachment('${res.id}','${esc(a.id)}')">×</b>
+                            </div>`).join('')}</div>` : '<div class="tiny muted" style="margin-bottom:6px;">No attachments.</div>'}
+                        <select class="modal-input tiny" onchange="if(this.value){ OL.addEmailAttachment('${res.id}', this.value); }">
+                            <option value="">Add an attachment...</option>
+                            <option value="generated">PDF generated by ${esc(res.appName || 'the app')} (submission or confirmation)</option>
+                            <option value="custom">Other file (name it)...</option>
+                            ${(() => {
+                                const lib = (client?.projectData?.localResources || []).filter((r) => r && r.id !== res.id && !r.isArchived && !r.isDeleted && /doc|pdf|agreement|contract|sheet|guide|form|brochure|letter|folder|file/i.test(String(r.type || '')));
+                                return lib.length ? `<optgroup label="From the library">${lib.slice(0, 200).map((r) => `<option value="res:${esc(r.id)}">${esc(r.name)} (${esc(r.type)})</option>`).join('')}</optgroup>` : '';
+                            })()}
+                        </select>
+                    </div>
+
                      <!-- BODY - preview by default, edit toggle -->
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                         <label class="tiny muted bold">EMAIL BODY</label>
@@ -1224,6 +1282,7 @@ export function openResourceModal(targetId, draftObj = null) {
                     </button>
                 </div>
                 ${dataTagsHtml}
+                ${formLogicHtml}
                 ${collateralHtml}
                 ${pathsHtml}
             `;
@@ -1386,6 +1445,7 @@ export function openResourceModal(targetId, draftObj = null) {
             </div>
         
             ${dataTagsHtml}
+            ${formLogicHtml}
 
             ${stepSummaryHtml}
 
@@ -2126,6 +2186,36 @@ export function handleTreeDragLeave(e) {
 };
 
 // Adds a data tag (or a bundle's tags) to a form. They go on the form's first step; a form with no steps gets one.
+export async function addEmailAttachment(resId, value) {
+    const res = OL.getResourceById(resId);
+    if (!res || !value) return;
+    const client = getActiveClient();
+    let entry = null;
+    if (value === 'generated') entry = { kind: 'generated', name: `PDF generated by ${res.appName || 'the app'}` };
+    else if (value === 'custom') {
+        const name = window.prompt('Name the attachment (for example: Account application, signed)');
+        if (!name || !name.trim()) { OL.openResourceModal(resId); return; }
+        entry = { kind: 'custom', name: name.trim().slice(0, 120) };
+    } else if (String(value).startsWith('res:')) {
+        const lib = OL.getResourceById(String(value).slice(4));
+        if (!lib) return;
+        entry = { kind: 'resource', name: lib.name, libId: lib.id };
+    }
+    if (!entry) return;
+    await OL.updateAndSync(() => {
+        if (!Array.isArray(res.emailAttachments)) res.emailAttachments = [];
+        if (!res.emailAttachments.some((a) => a.kind === entry.kind && a.name === entry.name)) res.emailAttachments.push({ id: 'att-' + Date.now(), ...entry });
+    }, client?.id);
+    OL.openResourceModal(resId);
+}
+
+export async function removeEmailAttachment(resId, attId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+    await OL.updateAndSync(() => { res.emailAttachments = (res.emailAttachments || []).filter((a) => String(a.id) !== String(attId)); }, getActiveClient()?.id);
+    OL.openResourceModal(resId);
+}
+
 export async function addResourceDataTag(resId, tagId) {
     const res = OL.getResourceById(resId);
     if (!res || !tagId) return;
@@ -2608,8 +2698,12 @@ export function previewEmailTemplate(resId) {
     const client = getActiveClient();
     
     // 🚀 NEW LOGIC: Pull signature from the selected Team Member
-    const sender = (client?.projectData?.teamMembers || []).find(m => m.id === res.emailFrom);
-    const signatureContent = sender?.signature 
+    const team = client?.projectData?.teamMembers || [];
+    const sender = team.find(m => m.id === res.emailFrom);
+    const fromLabel = sender ? sender.name : (res.emailFrom === 'app' ? (res.appName || 'The app') : (res.emailFrom === 'custom' ? (res.emailFromCustom || 'Custom sender') : ''));
+    const toMember = String(res.emailToType || '').startsWith('tm:') ? team.find(m => m.id === String(res.emailToType).slice(3)) : null;
+    const toLabel = toMember ? toMember.name : (res.emailToType === 'custom' ? (res.emailToCustom || 'Custom recipient') : (res.emailToType || 'Recipient'));
+    const signatureContent = !sender && fromLabel ? '' : sender?.signature 
         ? `<div style="margin-top:20px; border-top:1px solid #eee; padding-top:15px; color:#555; font-style: normal;">${esc(sender.signature).replace(/\n/g, '<br>')}</div>` 
         : `<div class="tiny muted italic" style="margin-top:20px; color:#999;">(No signature defined for ${sender?.name || 'this sender'})</div>`;
 
@@ -2619,7 +2713,9 @@ export function previewEmailTemplate(resId) {
         </div>
         <div class="modal-body" style="background: #fff; color: #333; padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border-radius: 0 0 8px 8px;">
             <div style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; font-size: 13px;">
-                <div style="margin-bottom:5px;"><b style="color:#888;">To:</b> [${res.emailToType || 'Recipient'}]</div>
+                ${fromLabel ? `<div style="margin-bottom:5px;"><b style="color:#888;">From:</b> ${esc(fromLabel)}</div>` : ''}
+                <div style="margin-bottom:5px;"><b style="color:#888;">To:</b> ${esc(toLabel)}</div>
+                ${(res.emailAttachments || []).length ? `<div style="margin-bottom:5px;"><b style="color:#888;">Attached:</b> ${(res.emailAttachments || []).map((a) => esc(a.name)).join(', ')}</div>` : ''}
                 <div><b style="color:#888;">Subject:</b> ${esc(res.emailSubject || '(No Subject)')}</div>
             </div>
             <div class="ol-email-body" style="line-height: 1.6; font-size: 15px; color:#222;">${res.emailBody || '...'}</div>
@@ -2704,7 +2800,7 @@ export function handleResourceSave(id, field, value) {
             
             if (modalOpen) {
                 // 🚀 Don't re-render modal for email body edits — it destroys the editor
-                const emailFields = ['emailBody', 'emailFrom', 'emailToType', 'emailSubject'];
+                const emailFields = ['emailBody', 'emailFrom', 'emailToType', 'emailSubject', 'emailFromCustom', 'emailToCustom'];
                 if (!emailFields.includes(field)) {
                     OL.openResourceModal(id);
                 }
@@ -3181,7 +3277,7 @@ Object.assign(window.OL, {
     _geInsertDataTag, _geSanitizeEmailHtml, _geSaveEmailBody, promptEditLink,
     getResourceDatapoints, renderHierarchyTree, addFolderNode, updateTreeNode,
     removeTreeNode, handleTreeDragStart, handleTreeDrop, handleTreeDragOver,
-    handleTreeDragLeave, handleConventionUpdate, addResourceDataTag, removeResourceDataTag, updateContainerFile,
+    handleTreeDragLeave, handleConventionUpdate, addResourceDataTag, removeResourceDataTag, addEmailAttachment, removeEmailAttachment, updateContainerFile,
     addFileToContainer, removeFileFromContainer, simulateUpload,
     addResourceComment, wrapCommentSelection, renderResourceMiniMaps, goToResourceInMap,
     navigateBack, trackNav, clearNavHistory, filterSignatureSearch,
@@ -3197,4 +3293,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.i' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.j' });
