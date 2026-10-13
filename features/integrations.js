@@ -783,7 +783,7 @@ function describeSummary(label, s) {
     if (s.missing.length) bits.push(`${s.missing.length} removed upstream`);
     if (s.restored.length) bits.push(`${s.restored.length} back`);
     if (s.emptyPull) bits.push('the service returned nothing, so nothing was flagged');
-    return `${label}: ${s.total} item${s.total === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(', ') : ' · no changes'}`;
+    return `${label}: ${s.total} item${s.total === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(', ') : ' · no changes'}${s.note ? ' · ' + s.note : ''}`;
 }
 
 function recordSyncError(client, key, e) {
@@ -1006,6 +1006,10 @@ function linkSeededFlow(library, source) {
         if (st.seedLink) {
             const target = cards.find((r) => String(r.externalId) === st.seedLink);
             if (target && attach(st, target)) delete st.seedLink;
+        }
+        if (Array.isArray(st.seedLinks)) {
+            st.seedLinks = st.seedLinks.filter((ext) => { const target = cards.find((r) => String(r.externalId) === ext); return !(target && attach(st, target)); });
+            if (!st.seedLinks.length) delete st.seedLinks;
         }
         if (Array.isArray(st.links)) {
             st.links = st.links.filter((l) => {
@@ -1267,13 +1271,14 @@ export async function importJotform(client, opts = {}) {
         .slice(0, cap).map((x) => x.f);
     const fresh = new Map();   // form id -> details read now
     const logicChanged = [];
+    const readErrors = [];
     for (const f of pending) {
         try {
             const d = await readJotformForm(client, creds, f);
             const had = cardOf(f.id)?.formLogic;
             if (had && had.fp !== d.logic.fp) logicChanged.push(f.title);
             fresh.set(String(f.id), d);
-        } catch (e) { console.warn(`Could not read the form "${f.title}":`, e); }
+        } catch (e) { console.warn(`Could not read the form "${f.title}":`, e); readErrors.push(String(e && e.message || e).slice(0, 140)); }
     }
     const detailsOf = (id) => fresh.get(String(id)) || cardOf(id)?.formDetails || null;
     const tagById = (id) => (client.projectData.localDatapoints || []).find((t) => t && t.id === id);
@@ -1286,16 +1291,18 @@ export async function importJotform(client, opts = {}) {
         const emails = d ? (d.emails || []) : [];
         const formUrl = `https://www.jotform.com/form/${id}`;
         const editUrl = `https://www.jotform.com/build/${id}`;
+        // every form starts with the same three steps; the emails it sends (once read) are attached as collateral to steps 2 and 3
+        const notify = emails.filter((e) => e.kind === 'Notification').map((e) => `jfemail-${id}-${e.key}`);
+        const auto = emails.filter((e) => e.kind === 'Autoresponder').map((e) => `jfemail-${id}-${e.key}`);
         const item = {
-            externalId: id, name: form.title, type: 'Form', externalUrl: formUrl,
-            steps: [{ id: `jf-${id}-s0`, name: "User Submits Form", appName: "Jotform", ...(tags.length ? { datapoints: tags } : {}) }],
+            externalId: id, name: form.title, type: 'Form', externalUrl: formUrl, keepSteps: true,
+            steps: [{ id: `jf-${id}-s0`, name: "Lead/Client submits form", appName: "Jotform", ...(tags.length ? { datapoints: tags } : {}) }],
+            seedSteps: [
+                { id: `jf-${id}-s1`, name: 'Send confirmation email to account holder', appName: 'Jotform', ...(notify.length ? { seedLinks: notify } : {}) },
+                { id: `jf-${id}-s2`, name: 'Send confirmation email to lead/client', appName: 'Jotform', ...(auto.length ? { seedLinks: auto } : {}) },
+            ],
         };
-        if (d) {
-            item.keepSteps = true;
-            item.formFields = d.fields;
-            item.seedSteps = emails.map((e, i) => ({ id: `jf-${id}-e${i}`, name: `Jotform sends ${e.kind.toLowerCase()} email`, appName: 'Jotform', seedLink: `jfemail-${id}-${e.key}` }));
-            if (!item.seedSteps.length) delete item.seedSteps;
-        }
+        if (d) item.formFields = d.fields;
         items.push(item);
         emails.forEach((e, i) => {
             const same = emails.filter((x) => x.kind === e.kind).length > 1 ? ` ${emails.filter((x) => x.kind === e.kind).indexOf(e) + 1}` : '';
@@ -1303,7 +1310,7 @@ export async function importJotform(client, opts = {}) {
                 externalId: `jfemail-${id}-${e.key}`, name: `${form.title}: ${e.kind} Email${same}`, type: 'Email', archetype: 'Base',
                 externalUrl: `${editUrl}/settings/emails`, keepSteps: true,
                 description: e.subject ? `Subject: ${e.subject}` : (e.name || ''),
-                steps: [{ id: `jf-email-${id}-${e.key}-s0`, name: `Jotform sends ${e.kind.toLowerCase()} email`, appName: 'Jotform' }],
+                steps: [{ id: `jf-email-${id}-${e.key}-s0`, name: e.kind === 'Autoresponder' ? 'Send confirmation email to lead/client' : 'Send confirmation email to account holder', appName: 'Jotform' }],
             });
         });
     });
@@ -1320,7 +1327,11 @@ export async function importJotform(client, opts = {}) {
         logExternalPull(client.projectData, { ...summary, added: [], renamed: [], changed: logicChanged.map((n) => `${n} (form logic)`), missing: [], restored: [] });
     }
     const unread = forms.length - [...forms].filter((f) => detailsOf(f.id)).length;
-    if (unread > 0) summary.note = `${unread} form${unread === 1 ? '' : 's'} still to read (the next pull continues)`;
+    const notes = [];
+    if (fresh.size) notes.push(`read ${fresh.size} form${fresh.size === 1 ? '' : 's'} in full`);
+    if (readErrors.length) notes.push(`${readErrors.length} could not be read (${readErrors[0]})`);
+    if (unread > 0) notes.push(`${unread} still to read`);
+    if (notes.length) summary.note = notes.join('; ');
     markClientDirty(client.id);
     return summary;
 };
@@ -1914,4 +1925,4 @@ Object.assign(window.OL, {
 });
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.h' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { integrations: '2026-10-13.i' });

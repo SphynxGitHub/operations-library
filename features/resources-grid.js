@@ -878,7 +878,12 @@ export async function universalCreate(type, options = {}) {
         name: name,
         type: type || "SOP",
         archetype: archetype,
-        steps: [],
+        // a form starts with the same three steps as an imported one
+        steps: /\b(forms?|questionnaires?)\b/i.test(String(type || '')) ? [
+            { id: `step_${timestamp}_1`, name: 'Lead/Client submits form', appName: '' },
+            { id: `step_${timestamp}_2`, name: 'Send confirmation email to account holder', appName: '' },
+            { id: `step_${timestamp}_3`, name: 'Send confirmation email to lead/client', appName: '' },
+        ] : [],
         triggers: [],
         data: {},
         description: options.description || "",

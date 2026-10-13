@@ -981,12 +981,12 @@ export function openResourceModal(targetId, draftObj = null) {
                         return `<div style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);">
                             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                 <i data-lucide="tag" style="width:11px;height:11px;color:#a78bfa;flex:0 0 auto;"></i>
-                                <span style="font-size:11px;font-weight:600;line-height:1.35;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(f ? f.label : d.name)}</span>
-                                ${f ? `<span class="pill tiny soft">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>` : ''}
-                                ${f && f.required ? '<span class="pill tiny" style="color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
+                                <span style="font-size:10.5px;font-weight:500;line-height:1.35;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(f ? f.label : d.name)}</span>
+                                ${f ? `<span class="pill tiny soft" style="font-size:9px;padding:0 6px;">${esc(String(f.type || 'text').replace(/_/g, ' '))}</span>` : ''}
+                                ${f && f.required ? '<span class="pill tiny" style="font-size:9px;padding:0 6px;color:#f5b800;border:1px solid rgba(245,184,0,0.3);">required</span>' : ''}
                                 <b class="is-clickable" title="Remove this tag" style="opacity:0.5;padding:0 4px;font-size:14px;" onclick="OL.removeResourceDataTag('${esc(res.id)}','${esc(d.id)}')">×</b>
                             </div>
-                            ${f && (f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding-left:17px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);font-size:9.5px;padding:1px 6px;">${esc(o)}</span>`).join('')}</div>` : ''}
+                            ${f && (f.options || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding-left:16px;">${f.options.map((o) => `<span class="pill tiny" style="border:1px solid var(--line);font-size:9px;padding:0 6px;">${esc(o)}</span>`).join('')}</div>` : ''}
                         </div>`;
                     }).join('');
                 })()}
@@ -3197,4 +3197,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.h' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.i' });
