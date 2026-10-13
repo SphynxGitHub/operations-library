@@ -5567,7 +5567,29 @@ export function renderFocusControls() {
     
     scopeBtn.onclick = () => {
         const savedPath = sessionStorage.getItem('map_return_path') || "/scoping-sheet";
-        
+
+        // Came from a resource's modal ("Edit on flow map"): once the page has drawn again, put the scroll back and reopen it.
+        // This is scheduled first so it still happens if the page redraw below throws.
+        const backToRes = sessionStorage.getItem('map_return_resource');
+        const backScroll = Number(sessionStorage.getItem('map_return_scroll') || 0);
+        const backWinScroll = Number(sessionStorage.getItem('map_return_winscroll') || 0);
+        ['map_return_resource', 'map_return_scroll', 'map_return_winscroll'].forEach((k) => sessionStorage.removeItem(k));
+        if (backToRes) {
+            let tries = 0;
+            const reopen = () => {
+                const host = document.getElementById('mainContent');
+                const drawn = host && host.children.length > 0 && !document.getElementById('fv-canvas-wrap') && !host.querySelector('.fv-spinner');
+                if (!drawn && tries++ < 40) return setTimeout(reopen, 100);
+                const restore = () => { const h = document.getElementById('mainContent'); if (h) h.scrollTop = backScroll; window.scrollTo(0, backWinScroll); };
+                restore();
+                if (typeof OL.openResourceModal === 'function') OL.openResourceModal(backToRes);
+                setTimeout(restore, 60); setTimeout(restore, 300);
+                // the route may redraw the page once more after this; if that wiped the modal, open it again
+                setTimeout(() => { const l = document.getElementById('modal-layer'); if (l && !l.innerHTML.trim() && typeof OL.openResourceModal === 'function') { OL.openResourceModal(backToRes); restore(); } }, 1000);
+            };
+            setTimeout(reopen, 200);
+        }
+
         // 1. Reset Focus State
         OL.focusedResourceId = null;
         sessionStorage.removeItem('active_resource_id');
@@ -5580,8 +5602,7 @@ export function renderFocusControls() {
         // 3. Update the URL (Silent)
         window.location.hash = savedPath;
 
-        // 4. 🚀 THE "INSTANT SWAP"
-        // We check the path and call the specific "Render" function for that page
+        // 4. THE "INSTANT SWAP": call the page's own render function
         if (savedPath.includes('scoping-sheet')) {
             if (typeof OL.renderScopingSheet === 'function') {
                 OL.renderScopingSheet(); 
@@ -5601,11 +5622,6 @@ export function renderFocusControls() {
         }
 
         scopeBtn.remove();
-
-        // came from a resource's modal ("Edit on flow map"): open it again where it was left
-        const backToRes = sessionStorage.getItem('map_return_resource');
-        sessionStorage.removeItem('map_return_resource');
-        if (backToRes && typeof OL.openResourceModal === 'function') setTimeout(() => OL.openResourceModal(backToRes), 150);
     };
         
     // 🛑 REMOVED: The self-calling line that was causing the crash
@@ -9282,3 +9298,6 @@ window.renderVisualizer = renderVisualizer;
 // calls OL.renderWorkbenchItemsOnly() and that isn't attached to OL
 // until the Object.assign block runs.
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
+
+// build stamp: type OL.build in the browser console to see which version of each file is running
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.d' });
