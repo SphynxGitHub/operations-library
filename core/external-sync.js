@@ -15,14 +15,14 @@
 // Used by features/integrations.js (the importers), features/zap-import-ui.js and zap-import-core.js (the Zap import).
 
 export const EXTERNAL_SOURCES = {
-  wealthbox:      { label: 'Wealthbox',      idPrefix: 'wb',   legacyPrefixes: ['wb-'],             stepName: 'Workflow Template',   global: true },
+  wealthbox:      { label: 'Wealthbox',      idPrefix: 'wb',   legacyPrefixes: ['wb-'],             stepName: 'Workflow Template',   global: false },
   redtail:        { label: 'Redtail',        idPrefix: 'rt',   legacyPrefixes: ['rt-'],             stepName: 'Workflow Template',   global: false },
-  calendly:       { label: 'Calendly',       idPrefix: 'cal',  legacyPrefixes: ['cal-'],            stepName: 'Client Schedules Appointment', global: true },
-  ycbm:           { label: 'YouCanBook.me',  idPrefix: 'ycbm', legacyPrefixes: [],                  stepName: 'Customer Schedules via YCBM', global: true },
-  jotform:        { label: 'Jotform',        idPrefix: 'jf',   legacyPrefixes: ['jf-'],             stepName: 'User Submits Form',   global: true },
-  activecampaign: { label: 'ActiveCampaign', idPrefix: 'ac',   legacyPrefixes: ['ac-'],             stepName: 'Automation Flow',     global: true },
-  mailerlite:     { label: 'MailerLite',     idPrefix: 'ml',   legacyPrefixes: [],                  stepName: 'Automation Flow',     global: true },
-  keap:           { label: 'Keap',           idPrefix: 'kp',   legacyPrefixes: [],                  stepName: 'Campaign Sequence',   global: true },
+  calendly:       { label: 'Calendly',       idPrefix: 'cal',  legacyPrefixes: ['cal-'],            stepName: 'Client Schedules Appointment', global: false },
+  ycbm:           { label: 'YouCanBook.me',  idPrefix: 'ycbm', legacyPrefixes: [],                  stepName: 'Customer Schedules via YCBM', global: false },
+  jotform:        { label: 'Jotform',        idPrefix: 'jf',   legacyPrefixes: ['jf-'],             stepName: 'User Submits Form',   global: false },
+  activecampaign: { label: 'ActiveCampaign', idPrefix: 'ac',   legacyPrefixes: ['ac-'],             stepName: 'Automation Flow',     global: false },
+  mailerlite:     { label: 'MailerLite',     idPrefix: 'ml',   legacyPrefixes: [],                  stepName: 'Automation Flow',     global: false },
+  keap:           { label: 'Keap',           idPrefix: 'kp',   legacyPrefixes: [],                  stepName: 'Campaign Sequence',   global: false },
   processstreet:  { label: 'Process Street', idPrefix: 'ps',   legacyPrefixes: ['ps-'],             stepName: 'Checklist Template',  global: false },
 };
 
@@ -69,7 +69,7 @@ const IMPORT_OWNED = ['name', 'type', 'source', 'externalId', 'externalUrl', 'ar
 // library = the project's localResources array (changed in place). items = what the service returned, each already shaped as a
 // card: { externalId, name, type, externalUrl?, description?, steps: [{id, name, appName}], ...extra new-card fields }.
 export function reconcileExternal(library, source, items, opts = {}) {
-  const cfg = EXTERNAL_SOURCES[source] || { idPrefix: 'ext', legacyPrefixes: [], global: true };
+  const cfg = EXTERNAL_SOURCES[source] || { idPrefix: 'ext', legacyPrefixes: [], global: false };
   const now = opts.now || new Date().toISOString();
   const summary = { source, total: (items || []).length, added: [], renamed: [], changed: [], missing: [], restored: [], emptyPull: false };
 
