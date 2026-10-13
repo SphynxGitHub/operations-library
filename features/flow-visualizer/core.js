@@ -5544,45 +5544,69 @@ state.draggingStepIdx = null;
 // "Edit on flow map" in a resource's modal leaves a note (which resource, how far the page was scrolled). However the map is left,
 // the page it came from is drawn again and the modal is opened on top of it. The page is redrawn more than once by the route, so
 // this keeps checking for a few seconds and reopens the modal whenever it is not showing, once the page has stopped changing.
+let _fvReturning = false;
+const PENDING_KEY = 'ol_pending_reopen';
 export function _fvReturnToResource() {
-    const resId = sessionStorage.getItem('map_return_resource');
-    if (!resId) return;
-    const scroll = Number(sessionStorage.getItem('map_return_scroll') || 0);
-    const winScroll = Number(sessionStorage.getItem('map_return_winscroll') || 0);
-    ['map_return_resource', 'map_return_scroll', 'map_return_winscroll'].forEach((k) => sessionStorage.removeItem(k));
+    // move the note into a pending record that survives a full page reload (the fallback redraw of a page can reload it)
+    const resNote = sessionStorage.getItem('map_return_resource');
+    if (resNote) {
+        sessionStorage.setItem(PENDING_KEY, JSON.stringify({
+            resId: resNote, at: Date.now(),
+            scroll: Number(sessionStorage.getItem('map_return_scroll') || 0),
+            winScroll: Number(sessionStorage.getItem('map_return_winscroll') || 0),
+        }));
+        ['map_return_resource', 'map_return_scroll', 'map_return_winscroll'].forEach((k) => sessionStorage.removeItem(k));
+    }
+    let pending = null;
+    try { pending = JSON.parse(sessionStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { pending = null; }
+    if (!pending || !pending.resId || Date.now() - pending.at > 60000) { sessionStorage.removeItem(PENDING_KEY); return; }
+    if (_fvReturning) return;
+    _fvReturning = true;
 
+    const { resId, scroll, winScroll } = pending;
     const host = () => document.getElementById('mainContent');
     const modalShowing = () => { const l = document.getElementById('modal-layer'); return !!(l && l.style.display !== 'none' && l.innerHTML.trim()); };
     const restore = () => { const h = host(); if (h) h.scrollTop = scroll; window.scrollTo(0, winScroll); };
+    const dataReady = () => { try { const pd = OL.getCurrentProjectData ? OL.getCurrentProjectData() : null; return !!pd && [...(pd.resources || []), ...(pd.localResources || [])].some((r) => String(r.id) === String(resId)); } catch (e) { return false; } };
     let lastChange = Date.now();
     let opened = 0;
+    let shownSince = 0;
     const startedAt = Date.now();
     let observer = null;
     if (typeof MutationObserver === 'function' && host()) {
         observer = new MutationObserver(() => { lastChange = Date.now(); });
         observer.observe(host(), { childList: true, subtree: true });
     }
+    const finish = (why) => {
+        clearInterval(timer);
+        if (observer) observer.disconnect();
+        _fvReturning = false;
+        sessionStorage.removeItem(PENDING_KEY);
+        console.info('[return to resource]', why);
+    };
     const timer = setInterval(() => {
         const h = host();
-        const onPage = h && h.children.length > 0 && !document.getElementById('fv-canvas-wrap') && !h.querySelector('.fv-spinner')
+        const onPage = !!h && h.children.length > 0 && !document.getElementById('fv-canvas-wrap') && !h.querySelector('.fv-spinner')
             && !window.location.hash.includes('visualizer');
         const settled = Date.now() - lastChange > 400;
-        if (onPage && settled && !modalShowing() && opened < 4 && typeof OL.openResourceModal === 'function') {
-            opened++;
-            restore();
+        const ready = dataReady();
+        if (onPage && settled && ready && !modalShowing() && opened < 4 && typeof OL.openResourceModal === 'function') {
+            opened++; restore(); shownSince = 0;
+            console.info('[return to resource] opening the modal', { resId, attempt: opened });
             OL.openResourceModal(resId);
-            setTimeout(restore, 80);
+            setTimeout(restore, 80); setTimeout(restore, 400);
             lastChange = Date.now();
         }
-        if (Date.now() - startedAt > 8000 || (opened && settled && modalShowing() && Date.now() - startedAt > 2500)) {
-            clearInterval(timer);
-            if (observer) observer.disconnect();
-        }
+        if (modalShowing() && opened) { if (!shownSince) shownSince = Date.now(); else if (Date.now() - shownSince > 2500) return finish('done'); }
+        else shownSince = 0;
+        if (Date.now() - startedAt > 45000) finish(`gave up (page ${onPage ? 'drawn' : 'not drawn'}, settled ${settled}, data ${ready ? 'ready' : 'not ready'}, modal opened ${opened}x)`);
     }, 150);
 }
 window.addEventListener('hashchange', () => {
     if (!window.location.hash.includes('visualizer') && sessionStorage.getItem('map_return_resource')) OL._fvReturnToResource();
 });
+// a page reload in between (leaving the map can fall back to one) picks the pending reopen up again on the other side
+if (sessionStorage.getItem(PENDING_KEY) && !window.location.hash.includes('visualizer')) setTimeout(() => OL._fvReturnToResource(), 0);
 
 export function renderFocusControls() {
     let scopeBtn = document.getElementById('exit-focus-btn');
@@ -9324,4 +9348,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.e' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.f' });
