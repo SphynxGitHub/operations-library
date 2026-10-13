@@ -2494,7 +2494,7 @@ export function goToResourceInMap(resId) {
     let returnPath = "/scoping-sheet"; // Default fallback
 
     if (currentHash.includes('resources')) {
-        returnPath = "/resources";
+        returnPath = currentHash.replace(/^#/, '').split('?')[0] || "/resources";   // keeps /vault/resources when in the master library
     } else if (currentHash.includes('scoping-sheet')) {
         returnPath = "/scoping-sheet";
     }
@@ -3196,4 +3196,4 @@ window.renderResourceCard = renderResourceCard;
 window.renderVaultRatesPage = renderVaultRatesPage;
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.f' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { resourcesModal: '2026-10-13.g' });
