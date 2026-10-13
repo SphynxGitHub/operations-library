@@ -60,7 +60,15 @@ export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn)
     qid: String(q?.qid ?? ""), type: String(q?.type ?? ""), text: String(q?.text ?? "").slice(0, 200), name: String(q?.name ?? "").slice(0, 80),
     order: Number(q?.order) || 0, options: typeof q?.options === "string" ? q.options.slice(0, 400) : "",
   })).filter((q: any) => q.qid);
-  return { form_id: id, conditions, questions };
+  // The emails the form sends (notifications to the team, autoresponders to the person who filled it in). Only what each one is
+  // called and its subject are handed on, not the addresses or the body.
+  let emailsRaw: any = props?.content?.emails ?? props?.content?.properties?.emails ?? [];
+  if (typeof emailsRaw === "string") { try { emailsRaw = JSON.parse(emailsRaw); } catch { emailsRaw = []; } }
+  if (!Array.isArray(emailsRaw)) emailsRaw = Object.values(emailsRaw || {});
+  const emails = emailsRaw.filter((e: any) => e && typeof e === "object").slice(0, 12).map((e: any, i: number) => ({
+    id: String(e?.id ?? i), type: String(e?.type ?? "").toLowerCase().slice(0, 30), name: String(e?.name ?? "").slice(0, 80), subject: String(e?.subject ?? "").slice(0, 160),
+  }));
+  return { form_id: id, conditions, questions, emails };
 }
 
 export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string; calendlyUser?: string }, f: FetchFn): Promise<any> {
