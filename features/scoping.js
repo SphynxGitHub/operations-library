@@ -137,6 +137,44 @@ function ensurePendingTasks(client, sheet) {
     })).finally(() => { pendingSyncBusy = false; renderScopingSheet(); });
 }
 
+// Requests whose round is approved (and Do Now) are activated automatically: their prepared tasks become real tasks,
+// with no review screen. Requests that already have tasks linked and nothing prepared are only marked activated.
+let autoActivating = false;
+async function autoActivateRequests(client) {
+    if (autoActivating || !isStaffUser() || typeof OL.pendingRequestActivations !== 'function' || typeof OL.openActivationReview !== 'function') return;
+    const tried = (autoActivateRequests.tried = autoActivateRequests.tried || new Set());
+    const waiting = OL.pendingRequestActivations(client, state.master?.resources || []).filter(({ item }) => !tried.has(item.id));
+    if (!waiting.length) return;
+    autoActivating = true;
+    try {
+        for (const { item } of waiting) tried.add(item.id);
+        for (const { item } of waiting) await OL.openActivationReview(client.id, item.id, { silent: true });
+    } catch (e) { console.warn('Automatic activation failed:', e); }
+    finally { autoActivating = false; }
+    renderScopingSheet();
+}
+
+function renderPendingTotals(sheet) {
+    const area = document.getElementById('pending-totals-area');
+    if (!area) return;
+    const items = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog');
+    if (!items.length) { area.innerHTML = ''; return; }
+    let gross = 0, net = 0;
+    items.forEach((item) => {
+        const res = OL.getResourceById(item.resourceId);
+        if (!res) return;
+        gross += OL.calculateBaseFeeWithMultiplier(item, res);
+        const party = String(item.responsibleParty || '').toLowerCase();
+        if (party === 'sphynx' || party === 'joint') net += OL.calculateRowFee(item, res);
+    });
+    area.innerHTML = `
+    <div class="grand-totals-bar" style="border-style:dashed; opacity:0.92;">
+      <div class="grand-actions"><span class="tiny muted uppercase bold">Pending requests total</span></div>
+      <div class="total-item-gross"><div class="tiny muted uppercase bold">Gross Value</div><div style="font-size:14px; font-weight:600;">$${gross.toLocaleString()}</div></div>
+      <div class="total-item-net"><div class="tiny muted uppercase bold">If all added</div><div style="font-size:22px; font-weight:900; line-height:1;">$${net.toLocaleString()}</div></div>
+    </div>`;
+}
+
 function pendingTaskRowHtml(item, p, all) {
     const waits = (p.blockedBy || []).map((d) => all.find((x) => x.id === d.id)).filter(Boolean);
     const options = all.filter((x) => x.id !== p.id && !(p.blockedBy || []).some((d) => d.id === x.id));
@@ -158,13 +196,11 @@ function renderBacklogSection(client, sheet, showUnits) {
     const open = state.ui?.pendingOpen || {};
     return `
         <div style="margin-top:34px; border:1.5px dashed var(--muted); border-radius:8px; overflow:hidden;">
-            <div class="grid-row round-header-row" style="background:rgba(148,163,184,0.1); border-bottom:1px dashed var(--muted);">
-                <div class="col-expand" style="display:flex; align-items:center; gap:10px;">
-                    <i data-lucide="inbox" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <strong style="text-transform:uppercase; font-size:11px; color:var(--muted);">Pending Requests</strong>
-                    <span class="pill tiny soft">Round 0</span>
-                    <span class="tiny muted">${items.length} request${items.length === 1 ? '' : 's'} · tasks are prepared but not scheduled</span>
-                </div>
+            <div style="display:flex; align-items:center; gap:10px; width:100%; padding:10px 16px; background:rgba(148,163,184,0.1); border-bottom:1px dashed var(--muted);">
+                <i data-lucide="inbox" style="width:14px;height:14px;color:var(--muted);"></i>
+                <strong style="text-transform:uppercase; font-size:11px; color:var(--muted);">Pending Requests</strong>
+                <span class="pill tiny soft">Round 0</span>
+                <span class="tiny muted">${items.length} request${items.length === 1 ? '' : 's'} · tasks are prepared but not scheduled</span>
             </div>
             ${items.map((item, idx) => {
                 const tasks = Array.isArray(item.pendingTasks) ? item.pendingTasks : [];
@@ -425,8 +461,6 @@ export function renderScopingSheet() {
         </div>
     </div>
 
-    ${renderPendingActivationsBanner(client)}
-
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
             <button class="btn primary" style="display:flex; align-items:center; gap:6px;"
@@ -518,12 +552,15 @@ export function renderScopingSheet() {
         }
     </div>
 
-    ${renderBacklogSection(client, sheet, showUnits)}
-
     <div id="grand-totals-area"></div>
+
+    ${renderBacklogSection(client, sheet, showUnits)}
+    <div id="pending-totals-area"></div>
     `;
 
     ensurePendingTasks(client, sheet);
+    autoActivateRequests(client);
+    renderPendingTotals(sheet);
     // Pending requests aren't in a round yet, so they are not part of the sheet's totals.
     renderGrandTotals(sheet.lineItems.filter((i) => String(i?.status || '') !== 'Backlog'), baseRate);
     
@@ -858,12 +895,12 @@ function renderScopingRowBase(item, idx, showUnits) {
         </div>
       
         <div class="col-status">
-            <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
+            ${String(item.status || '') === 'Backlog' ? '' : `<select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
             <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
             <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
             <option value="Don't Do" ${item.status === "Don't Do" ? "selected" : ""}>Don't Do</option>
             <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
-            </select>
+            </select>`}
             <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
             <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
             <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
