@@ -441,7 +441,7 @@ export function pathSummary(res, step) {
     const when = trigText(p.trig, step) || 'Always';
     const to = destText(res.id, step.id, p) || 'no destination yet';
     const w = waitText(p.wait.v, p.wait.u);
-    return `<div class="fvp-sum">${icon(ic, 11)}<span class="fvp-sum-when">${esc(when)}</span><span class="fvp-sum-to">${esc(to)}</span>${w ? `<span class="fvp-sum-w">${esc(w)}</span>` : ''}</div>`;
+    return `<div class="fvp-sum">${icon(ic, 11)}<span class="fvp-sum-when">${esc(when)}</span><span class="fvp-sum-to">${esc(to)}</span>${w ? `<span class="fvp-sum-w">${esc(w)}</span>` : ''}${p.ref && p.ref.reviewFrom ? `<span class="pill tiny soft" title="Moved here from ${esc(p.ref.reviewFrom.resName)} \u203a ${esc(p.ref.reviewFrom.stepName)}. Approve or remove it on the new resource.">Needs review</span>` : ''}</div>`;
   });
   if (!lines.length && !step.noAutoNext) {
     const steps = (res.steps || []).filter((x) => x && !x.isArchived); const i = steps.indexOf(step);
