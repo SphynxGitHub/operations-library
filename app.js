@@ -49,6 +49,7 @@ import './features/rollup.js';
 import './core/live-refresh.js';
 import './core/contact-email-backfill.js';
 import './core/step-app-link.js';
+import './features/resources-filter-memory.js';
 
 window.isMatrixActive = false;
 
