@@ -156,14 +156,16 @@ export async function loadRollupPieces(clientId, kind, id) {
         .order('date', { ascending: false })
         .limit(200);
     let rows = data;
-    if (error || !rows || !rows.length) {
+    {
         // The filter above depends on how the database matches inside the links. If it was refused, or found nothing, read the
         // emails that have any links at all (not just this project's: an email with excerpts linked may not be linked to the
         // project itself) and pick this item's links out here.
         if (error) console.warn('Rollup excerpt filter failed, falling back:', error.message);
         const fb = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').not('piece_links', 'is', null).order('date', { ascending: false }).limit(400);
         if (fb.error) { console.error('Rollup excerpt load failed:', fb.error.message); return []; }
-        rows = fb.data;
+        // Merge, so a filter that matched only some of the emails can't hide the rest.
+        const seen = new Set((rows || []).map((r) => r.id));
+        rows = [...(rows || []), ...(fb.data || []).filter((r) => !seen.has(r.id))];
     }
     const out = [];
     (rows || []).forEach((m) => {
