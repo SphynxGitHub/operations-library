@@ -39,6 +39,33 @@ const VERBS = {
   enable: 'enable', disable: 'disable', enablemultiple: 'enable', disablemultiple: 'disable',
 };
 
+
+// ---- turning an action Jotform sent in its own words into a sentence --------------------------------------------------
+// Calculation rules and anything not understood used to be shown as raw JSON. Settings that only switch options on or off
+// (read-only, allow zero, commas for decimals ...) are left out; "{12}" in a formula becomes the question's name.
+const NOISE_KEYS = new Set(['id', 'readonly', 'allowzerocopy', 'newcalculationtype', 'usecommasfordecimal', 'usecommasfordecimals', 'replacetext', 'decimalplaces', 'ignorehiddenfields', 'type', 'index']);
+const words = (k) => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+const withNames = (text, labelOf) => String(text).replace(/\{(\d+)[^}]*\}/g, (m, id) => `[${labelOf(id)}]`);
+export function describeRawAction(a, labelOf = (id) => `Question ${id}`) {
+  if (a == null) return 'An action Jotform did not describe';
+  if (typeof a !== 'object') return clip(withNames(a, labelOf), 100);
+  const get = (keys) => first(a, keys);
+  const eq = get(['equation', 'formula', 'expression']);
+  const rf = get(['resultField', 'result', 'target']);
+  if (eq !== undefined || rf !== undefined) {
+    const target = rf !== undefined && /^\d+$/.test(String(rf)) ? labelOf(rf) : (rf !== undefined ? String(rf) : 'a field');
+    return eq !== undefined && String(eq).trim() ? `Calculate ${target} = ${clip(withNames(eq, labelOf), 90)}` : `Calculate ${target}`;
+  }
+  const parts = [];
+  Object.keys(a).forEach((k) => {
+    if (NOISE_KEYS.has(String(k).toLowerCase())) return;
+    const v = a[k];
+    if (v === '' || v === null || v === undefined || v === false || v === true || typeof v === 'object') return;
+    parts.push(`${words(k)}: ${/^\d+$/.test(String(v)) && /field|question|qid/i.test(k) ? labelOf(v) : clip(withNames(v, labelOf), 60)}`);
+  });
+  return parts.length ? clip(parts.slice(0, 3).join(' · '), 120) : 'A setting change Jotform did not describe';
+}
+
 // questions: [{qid, type, text, name, order, options}] as the server sends them.
 export function normalizeJotformLogic(raw) {
   const questions = Array.isArray(raw?.questions) ? raw.questions : [];
@@ -65,7 +92,7 @@ export function normalizeJotformLogic(raw) {
 
   const rules = asList(raw?.conditions).map((c, i) => {
     const type = String(c?.type || 'field').toLowerCase();
-    const kind = ['field', 'page', 'email', 'url', 'message'].includes(type) ? type : 'other';
+    let kind = ['field', 'page', 'email', 'url', 'message'].includes(type) ? type : (/calc/.test(type) ? 'calculation' : 'other');
     const link = String(c?.link || 'All').toLowerCase() === 'any' ? 'any' : 'all';
 
     const when = asList(c?.terms).map((t) => {
@@ -78,6 +105,11 @@ export function normalizeJotformLogic(raw) {
 
     const then = [];
     asList(c?.action).forEach((a) => {
+      if (kind !== 'page' && kind !== 'email' && kind !== 'url' && kind !== 'message' && a && typeof a === 'object' && (first(a, ['equation', 'formula', 'expression']) !== undefined || first(a, ['resultField']) !== undefined)) {
+        if (kind === 'field' || kind === 'other') kind = 'calculation';
+        then.push({ verb: 'calculate', targets: [], text: describeRawAction(a, fieldLabel) });
+        return;
+      }
       if (kind === 'page') {
         const target = first(a, ['skipTo', 'skip', 'page', 'target']);
         then.push({ verb: 'skip', targets: [], targetPage: target !== undefined ? targetPageOf(target) : null, text: target !== undefined ? `Go to ${pageLabel(target)}` : 'Skip ahead' });
@@ -102,7 +134,7 @@ export function normalizeJotformLogic(raw) {
       else if (typeof many === 'string') many.split(',').map((x) => x.trim()).filter(Boolean).forEach((x) => ids.push(x));
       const targets = [...new Set(ids)].map(fieldLabel);
       if (targets.length) then.push({ verb, targets, text: `${verb} ${targets.length > 3 ? targets.slice(0, 3).join(', ') + ` and ${targets.length - 3} more` : targets.join(', ')}` });
-      else then.push({ verb: 'other', targets: [], text: clip(JSON.stringify(a), 100) });
+      else then.push({ verb: 'other', targets: [], text: describeRawAction(a, fieldLabel) });
     });
     if (!then.length) then.push({ verb: 'other', targets: [], text: 'An action Jotform did not describe' });
 
@@ -121,13 +153,14 @@ export function logicFingerprint(norm) {
 }
 
 export function summarizeLogic(norm) {
-  const n = { field: 0, page: 0, email: 0, url: 0, message: 0, other: 0 };
+  const n = { field: 0, page: 0, email: 0, url: 0, message: 0, calculation: 0, other: 0 };
   (norm?.rules || []).forEach((r) => { n[r.kind] = (n[r.kind] || 0) + 1; });
   const parts = [];
   if (n.field) parts.push(`${n.field} show/hide`);
   if (n.page) parts.push(`${n.page} page skip${n.page === 1 ? '' : 's'}`);
   if (n.email) parts.push(`${n.email} email${n.email === 1 ? '' : 's'}`);
   if (n.url || n.message) parts.push(`${n.url + n.message} thank-you change${n.url + n.message === 1 ? '' : 's'}`);
+  if (n.calculation) parts.push(`${n.calculation} calculation${n.calculation === 1 ? '' : 's'}`);
   if (n.other) parts.push(`${n.other} other`);
   return parts.join(' · ');
 }
