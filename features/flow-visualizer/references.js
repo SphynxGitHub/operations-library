@@ -89,7 +89,7 @@ export function usersOf(resId, stepId) {
 // the processes a step may point at: every process that has steps, grouped by workflow
 export function targetsFor(resId) {
   // this process is a valid target too, because a jump can land on another step of the same process
-  return allRes().filter((r) => (r.steps || []).length && !r.isArchived)
+  return allRes().filter((r) => (r.steps || []).length && (!r.isArchived || String(r.id) === String(resId)))
     .map((r) => ({ id: String(r.id), name: String(r.id) === String(resId) ? `${r.name || 'Untitled'} (this process)` : (r.name || 'Untitled'), workflow: workflowName(r) }))
     .sort((a, b) => (a.workflow || '').localeCompare(b.workflow || '') || a.name.localeCompare(b.name));
 }

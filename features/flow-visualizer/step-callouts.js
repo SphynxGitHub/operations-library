@@ -72,7 +72,7 @@ export function calloutsOf(step) {
 // library items a step could point at, grouped by kind
 function libraryChoices() {
   const guides = guideList().map((g) => ({ r: { ...g, type: 'Guide', _guide: true }, kind: 'guide' }));
-  return allRes().map((r) => ({ r, kind: kindForType(r.type) })).concat(guides).filter((x) => x.kind && !x.r.isArchived)
+  return allRes().map((r) => ({ r, kind: kindForType(r.type) })).concat(guides).filter((x) => x.kind && !x.r.isArchived && !x.r.archived)
     .sort((a, b) => a.kind.localeCompare(b.kind) || String(a.r.name || '').localeCompare(String(b.r.name || '')));
 }
 
