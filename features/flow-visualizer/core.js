@@ -418,6 +418,11 @@ export function _refSplitIdx(ref) {
     return fallback;
 }
 
+// Empty entries in a resource's steps list (a hole left by an old sync or edit) crash every screen that reads steps; drop them as data is read.
+function healEmptySteps(list) {
+    (list || []).forEach((r) => { if (r && Array.isArray(r.steps) && r.steps.some((s) => !s)) r.steps = r.steps.filter(Boolean); });
+}
+
 export function getCurrentProjectData() {
     const hash = window.location.hash || "#/";
     const isVault = hash.startsWith('#/vault');
@@ -426,6 +431,7 @@ export function getCurrentProjectData() {
         if (!state.master.stages) state.master.stages = [];
         if (!state.master.resources) state.master.resources = [];
         if (!state.master.workflows) state.master.workflows = [];
+        healEmptySteps(state.master.resources);
         return state.master; 
     } else {
         const client = getActiveClient();
@@ -436,6 +442,7 @@ export function getCurrentProjectData() {
         // 🩺 AUTOMATIC SANITIZATION: Force proper arrays on the LIVE reference
         if (!pd.stages) pd.stages = [];
         if (!pd.localResources) pd.localResources = [];
+        healEmptySteps(pd.localResources);
         
         // 🚑 THE TYPO BRIDGE: Heal 'workfows' vs 'workflows' on the fly
         if (pd.workfows && !pd.workflows) {
