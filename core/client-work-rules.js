@@ -109,9 +109,25 @@ export function relatedClientTasks(client, task, ctx) {
         return linksForTask(t).some((theirs) => mine.some((m) => {
             if (m.requestId !== theirs.requestId) return false;
             const mr = m.resourceIds || [], tr = theirs.resourceIds || [];
-            if (!mr.length || !tr.length) return true;
+            // A request-level ask (no resources named) holds up nothing by itself: it is queued until it is applied
+            // to particular tasks (queuedRequestAsks, applied as a Dependency). Only resource-scoped asks block here.
+            if (!mr.length || !tr.length) return false;
             return mr.some((id) => tr.includes(id));
         }));
+    });
+}
+
+// Open client asks on the same request as this task that are NOT blocking it yet: request-level asks (no
+// resource named on one side or the other) waiting to be applied to the individual task(s) they really hold up.
+export function queuedRequestAsks(client, task, ctx) {
+    const tasks = client?.projectData?.clientTasks || [];
+    const mine = linksForTask(task);
+    const applied = new Set((task.blockedBy || []).filter((d) => d && d.kind === 'task').map((d) => String(d.id)));
+    const blocking = new Set(relatedClientTasks(client, task, ctx).map((t) => String(t.id)));
+    return tasks.filter((t) => {
+        if (!t || t.id === task.id || !isOpen(t, ctx) || !isClientFacing(t, ctx)) return false;
+        if (applied.has(String(t.id)) || blocking.has(String(t.id))) return false;
+        return linksForTask(t).some((theirs) => mine.some((m) => m.requestId === theirs.requestId));
     });
 }
 
@@ -1090,4 +1106,11 @@ export function openClientTasksForId(clientId, taskId) {
     return openClientTasksFor(client, t, contextNow());
 }
 
-Object.assign(window.OL, { snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, syncHoursAlerts, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
+export function queuedRequestAsksForId(clientId, taskId) {
+    const client = state.clients?.[clientId];
+    const t = client?.projectData?.clientTasks?.find((x) => x && String(x.id) === String(taskId));
+    if (!client || !t) return [];
+    return queuedRequestAsks(client, t, contextNow());
+}
+
+Object.assign(window.OL, { queuedRequestAsksForId, snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, syncHoursAlerts, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
