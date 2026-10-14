@@ -144,18 +144,24 @@ export async function loadRollupPieces(clientId, kind, id) {
     requestIds.forEach((r) => wanted.set(String(r), 'request'));
     taskIds.forEach((t) => wanted.set(String(t), 'task'));
     if (!wanted.size) return [];
-    const ors = [...wanted.keys()].map((tid) => `piece_links.cs.${JSON.stringify([{ targetId: tid }])}`);
+    // Matching inside the links is type-sensitive (a stored id of 12 is not "12"), so numeric-looking ids are tried both ways.
+    const ors = [];
+    [...wanted.keys()].forEach((tid) => {
+        ors.push(`piece_links.cs.${JSON.stringify([{ targetId: tid }])}`);
+        if (/^\d+$/.test(tid)) ors.push(`piece_links.cs.${JSON.stringify([{ targetId: Number(tid) }])}`);
+    });
     const { data, error } = await db.from('gmail_messages')
         .select('id, sender, subject, date, piece_links')
         .or(ors.join(','))
         .order('date', { ascending: false })
         .limit(200);
     let rows = data;
-    if (error) {
-        // The filter above depends on how the database matches inside the links; if it is refused, fall back to
-        // this project's emails and pick the links out here.
-        console.warn('Rollup excerpt filter failed, falling back:', error.message);
-        const fb = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').eq('linked_client_id', clientId).order('date', { ascending: false }).limit(500);
+    if (error || !rows || !rows.length) {
+        // The filter above depends on how the database matches inside the links. If it was refused, or found nothing, read the
+        // emails that have any links at all (not just this project's: an email with excerpts linked may not be linked to the
+        // project itself) and pick this item's links out here.
+        if (error) console.warn('Rollup excerpt filter failed, falling back:', error.message);
+        const fb = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').not('piece_links', 'is', null).order('date', { ascending: false }).limit(400);
         if (fb.error) { console.error('Rollup excerpt load failed:', fb.error.message); return []; }
         rows = fb.data;
     }
@@ -298,7 +304,17 @@ const fromPill = (clientId, r) => r.taskId
 // Placeholder section; call hydrateRollupSection() after it's in the DOM.
 export function renderRollupSection(clientId, kind, id) {
     const { taskIds, comments, files } = collectRollup(clientId, kind, id);
-    if (!taskIds.length && kind !== 'request' && kind !== 'resource') return '';
+    // A task with no subtasks has nothing to roll up, but excerpts and attachments linked straight to it still need somewhere to
+    // show (the task's "Linked Emails" list only shows whole emails), so it gets just the linked-emails block.
+    if (!taskIds.length && kind !== 'request' && kind !== 'resource') {
+        return `
+    <div id="rollup-${kind}-${esc(String(id))}" style="margin-bottom:20px; min-width:0; max-width:100%; box-sizing:border-box;">
+        <label class="bold tiny uppercase muted" style="display:block; margin-bottom:8px;">
+            <i data-lucide="quote" style="width:12px;height:12px;vertical-align:sub;"></i> Linked excerpts and attachments
+        </label>
+        <div class="rollup-emails" style="display:grid; grid-template-columns:minmax(0,1fr); gap:4px; min-width:0;"><span class="tiny muted">Loading…</span></div>
+    </div>`;
+    }
     const label = kind === 'task' ? 'subtasks' : 'linked tasks';
     return `
     <div id="rollup-${kind}-${esc(String(id))}" style="margin-bottom:20px; padding:14px; min-width:0; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere; border:1px dashed rgba(100,198,162,0.4); border-radius:6px; background:rgba(100,198,162,0.03);">
