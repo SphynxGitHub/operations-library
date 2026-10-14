@@ -1794,7 +1794,7 @@ OL.renderExcerptLinkPicker = function() {
                         : 'Created in the Backlog (round 0): it waits on the scoping sheet until someone gives it a round.'}</div>
                 </div>
             ` : `
-                <input type="text" class="modal-input tiny" placeholder="Search requests, tasks, events, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
+                <input type="text" id="excerpt-picker-search" class="modal-input tiny" placeholder="Search requests, tasks, events, resources..." value="${esc(st.query)}" style="width:100%; margin-bottom:10px;"
                        oninput="OL._excerptLinkState.query=this.value; OL.reRenderPreservingFocus(() => OL.renderExcerptLinkPicker()); clearTimeout(OL._excerptEventTimer); OL._excerptEventTimer = setTimeout(() => OL._loadExcerptPickerEvents(), 300);">
                 ${pickedChips}
                 ${pickedRequestIds.length ? `
