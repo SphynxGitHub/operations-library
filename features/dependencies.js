@@ -154,6 +154,23 @@ export function renderDependencySection(clientId, kind, id) {
             </select>`;
     }
 
+    // On a Sphynx task: open client asks on the same request that aren't holding it up yet (request-level asks are
+    // queued until applied to the task(s) they really block).
+    let queuedHtml = '';
+    if (kind === 'task' && !isClientFacing(item, sphynxCtx) && OL.queuedRequestAsksForId) {
+        const queued = OL.queuedRequestAsksForId(clientId, id);
+        if (queued.length) queuedHtml = `
+            <div class="tiny muted" style="margin:10px 0 4px;">Queued client asks on this request (not blocking this task yet)</div>
+            <div style="display:grid; gap:3px;">
+                ${queued.map((t) => `
+                <div class="tiny" style="display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:4px; background:rgba(255,255,255,0.02); min-width:0;">
+                    <i data-lucide="clock" style="width:11px;height:11px;flex-shrink:0;"></i>
+                    <span style="flex:1; min-width:0; overflow-wrap:anywhere;">${esc(t.title || t.name || 'Client task')}</span>
+                    <button type="button" class="btn tiny soft" style="flex-shrink:0;" onclick="OL.addBlockedBy('${esc(clientId)}', 'task', '${esc(String(id))}', 'task', '${esc(String(t.id))}')">Apply to this task</button>
+                </div>`).join('')}
+            </div>`;
+    }
+
     return `
     <div id="deps-${esc(key)}" style="margin-bottom:20px; background:rgba(255,255,255,0.02); padding:14px; border-radius:6px; border:1px solid ${blocked ? '#f59e0b' : 'var(--line)'};">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -185,6 +202,7 @@ export function renderDependencySection(clientId, kind, id) {
         </div>` : ''}
         </div>
         ${holdsUpHtml}
+        ${queuedHtml}
         ${blocking.length ? `
             <div class="tiny muted" style="margin:10px 0 4px;">Blocking</div>
             <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:3px;">${blocking.map((d) => row(d, false)).join('')}</div>` : ''}
