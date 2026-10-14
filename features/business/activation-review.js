@@ -13,6 +13,7 @@
 // in memory, so backing out of the modal with no changes made is a no-op.
 
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
+import { taskAppliesToRequest } from '../../core/task-links.js';
 import { requestResourceIds, priceRequest, teamMultiplier } from '../../core/request-pricing.js';
 import { applyPendingToPlan, syncPendingTasks } from '../../core/pending-tasks.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
@@ -27,7 +28,7 @@ const resourceLookup = (client) => (id) =>
 
 // Entry point — called from wherever pending activations are surfaced (a
 // badge on the scoping sheet, a list of "N requests awaiting activation").
-OL.openActivationReview = async function(clientId, itemId) {
+OL.openActivationReview = async function(clientId, itemId, opts = {}) {
     if (clientId) await loadFullClient(clientId).catch(() => null);
     const client = state.clients?.[clientId];
     if (!client) return;
@@ -82,6 +83,12 @@ OL.openActivationReview = async function(clientId, itemId) {
     }
 
     OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan: finalPlan, calendarEvents, existingTasks };
+    if (opts.silent) {
+        // No review screen: a request that already has tasks linked and nothing prepared is only marked activated.
+        const hasTasks = (client.projectData?.clientTasks || []).some((t) => t && taskAppliesToRequest(t, item.id));
+        if (hasTasks && !(item.pendingTasks && item.pendingTasks.length)) OL._activationReviewState.plan = [];
+        return OL._commitActivationReview([], { silent: true });
+    }
     OL.renderActivationReviewStep();
 };
 
@@ -387,13 +394,13 @@ OL.finishActivationWithSopChoices = function() {
 
 // Creates the tasks, then applies any "future requests" choices to the SOP's ask templates (after the commit,
 // so the commit still logs what differed from the SOP as it was).
-OL._commitActivationReview = function(decisions) {
+OL._commitActivationReview = function(decisions, { silent = false } = {}) {
     const st = OL._activationReviewState;
     if (!st) return;
     const clientId = st.clientId;
 
     let buildTasks = [];
-    updateAndSync(() => {
+    const done = updateAndSync(() => {
         const client = state.clients?.[clientId];
         const item = OL.findRequestItem ? OL.findRequestItem(client, st.itemId) : null;
         if (!client || !item) return;
@@ -410,8 +417,9 @@ OL._commitActivationReview = function(decisions) {
         // Anything already linked to the request from email rolls down onto the new build tasks.
         if (buildTasks.length && typeof OL.rollDownRequestLinks === 'function') return OL.rollDownRequestLinks(clientId, st.itemId, buildTasks);
     }).catch((e) => console.warn('Rolling links down failed:', e))
-      .then(() => { try { OL.openNextQueuedActivation(clientId, st.itemId); } catch (e) { console.warn('Next activation did not open:', e); } });
+      .then(() => { if (silent) return; try { OL.openNextQueuedActivation(clientId, st.itemId); } catch (e) { console.warn('Next activation did not open:', e); } });
 
     OL._activationReviewState = null;
-    OL.closeModal();
+    if (!silent) OL.closeModal();
+    return done;
 };
