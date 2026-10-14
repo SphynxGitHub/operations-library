@@ -14,6 +14,8 @@ import { requestResourceIds, teamMultiplier, priceRequest } from '../core/reques
 import { backfillClientRequests } from '../core/request-backfill.js';
 import { syncResourceStatuses } from '../core/resource-status.js';
 import { isClientFacing } from '../core/request-tasks.js';
+import { syncPendingTasks } from '../core/pending-tasks.js';
+import { DEFAULT_ASK_TEMPLATES } from '../core/activation.js';
 
 // Names of task statuses that count as finished (falls back to Done).
 function closedStatusNames() {
@@ -106,40 +108,135 @@ function renderPendingActivationsBanner(client) {
 // math as if already scheduled. See core/requests.js's buildDesired and
 // nextOpenRound.
 const tasksLinked = (client, item) => (client?.projectData?.clientTasks || []).filter((t) => t && taskAppliesToRequest(t, item.id)).length;
-function renderBacklogSection(client, sheet) {
+// ---- Pending requests (round 0): tasks prepared ahead of time --------------------------------------------------
+// Each pending request carries item.pendingTasks (core/pending-tasks.js): the template tasks, kept current with the
+// templates, plus any custom tasks and client asks added by hand, with dependencies between them. They are not real
+// tasks until the request is activated, so nothing else in the app sees them.
+function pendingCtx(client, item) {
+    const lookup = (id) => (client?.projectData?.localResources || []).find((r) => r.id === id) || (state.master?.resources || []).find((r) => r.id === id) || null;
+    const resources = requestResourceIds(item).map(lookup).filter(Boolean);
+    const askTemplates = (state.master?.askTemplates && state.master.askTemplates.length) ? state.master.askTemplates : DEFAULT_ASK_TEMPLATES;
+    return { resources, requestType: item.requestType || 'build', resourceType: resources[0]?.type || '', askTemplates };
+}
+
+// Brings every pending request's prepared tasks up to date with the templates. Cheap to call on every render: it only
+// writes (and re-renders once) when something actually differs.
+let pendingSyncBusy = false;
+function ensurePendingTasks(client, sheet) {
+    if (pendingSyncBusy || !client || !sheet || !isStaffUser()) return;
+    const items = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog' && !i.activatedAt);
+    const stale = items.filter((i) => {
+        const copy = JSON.parse(JSON.stringify(i));
+        let n = 0;
+        return syncPendingTasks(copy, pendingCtx(client, i), () => 'probe-' + (++n));
+    });
+    if (!stale.length) return;
+    pendingSyncBusy = true;
+    Promise.resolve(OL.updateAndSync(() => {
+        stale.forEach((i) => syncPendingTasks(i, pendingCtx(client, i), uid));
+    })).finally(() => { pendingSyncBusy = false; renderScopingSheet(); });
+}
+
+function pendingTaskRowHtml(item, p, all) {
+    const waits = (p.blockedBy || []).map((d) => all.find((x) => x.id === d.id)).filter(Boolean);
+    const options = all.filter((x) => x.id !== p.id && !(p.blockedBy || []).some((d) => d.id === x.id));
+    const isAsk = p.kind === 'ask';
+    return `
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:4px 0; min-width:0;">
+            <i data-lucide="${isAsk ? 'user-round' : 'wrench'}" style="width:11px;height:11px;flex-shrink:0;color:${isAsk ? '#f59e0b' : 'var(--muted)'};"></i>
+            <span class="tiny" style="flex:1 1 220px; min-width:0; overflow-wrap:anywhere;">${esc(p.title)}</span>
+            <span class="pill tiny soft" style="font-size:9px;">${isAsk ? 'Client ask' : 'Sphynx task'}${p.custom ? ' · custom' : ' · template'}</span>
+            ${waits.map((w) => `<span class="pill tiny" style="font-size:9px; color:#f59e0b; border:1px solid #f59e0b;">waits on: ${esc(String(w.title).slice(0, 40))} <a style="cursor:pointer;" title="Remove" onclick="OL.removePendingDep('${esc(item.id)}','${esc(p.id)}','${esc(w.id)}')">&times;</a></span>`).join('')}
+            ${options.length ? `<select class="tiny-select" style="max-width:150px;" onchange="if(this.value){OL.addPendingDep('${esc(item.id)}','${esc(p.id)}',this.value);}"><option value="">+ waits on…</option>${options.map((o) => `<option value="${esc(o.id)}">${esc(String(o.title).slice(0, 50))}</option>`).join('')}</select>` : ''}
+            ${p.custom ? `<button class="btn tiny soft" style="padding:1px 6px; color:#ef4444;" title="Remove" onclick="OL.removePendingTask('${esc(item.id)}','${esc(p.id)}')">&times;</button>` : ''}
+        </div>`;
+}
+
+function renderBacklogSection(client, sheet, showUnits) {
     const items = (sheet.lineItems || []).filter((i) => i && String(i.status || '') === 'Backlog');
     if (!items.length) return '';
-    const isAdmin = state.adminMode === true;
-
+    const open = state.ui?.pendingOpen || {};
     return `
-        <div class="card-section" style="margin-bottom:20px; border:1px solid var(--line); border-radius:8px; overflow:hidden;">
-            <div style="padding:10px 14px; background:rgba(148,163,184,0.08); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px;">
-                <i data-lucide="inbox" style="width:14px; height:14px; color:var(--muted);"></i>
-                <span class="tiny bold uppercase muted">Pending</span>
-                <span class="tiny muted">(${items.length})</span>
+        <div style="margin-top:34px; border:1.5px dashed var(--muted); border-radius:8px; overflow:hidden;">
+            <div class="grid-row round-header-row" style="background:rgba(148,163,184,0.1); border-bottom:1px dashed var(--muted);">
+                <div class="col-expand" style="display:flex; align-items:center; gap:10px;">
+                    <i data-lucide="inbox" style="width:14px;height:14px;color:var(--muted);"></i>
+                    <strong style="text-transform:uppercase; font-size:11px; color:var(--muted);">Pending Requests</strong>
+                    <span class="pill tiny soft">Round 0</span>
+                    <span class="tiny muted">${items.length} request${items.length === 1 ? '' : 's'} · tasks are prepared but not scheduled</span>
+                </div>
             </div>
-            <div>
-                ${items.map((item, i) => {
-                    const res = OL.getResourceById(item.resourceId);
-                    const title = (item.name && String(item.name).trim()) || res?.name || 'Request';
-                    const typeLabel = (getRequestTypes().find((t) => t.key === (item.requestType || 'build')) || {}).label || (item.requestType || 'Build');
-                    return `
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; ${i < items.length - 1 ? 'border-bottom:1px solid var(--line);' : ''}">
-                            <div class="tiny is-clickable" style="cursor:pointer; min-width:0;" onclick="OL.openRequestLineModal('${esc(item.id)}')">
-                                <strong>${esc(title)}</strong> <span class="muted">· ${esc(typeLabel)}</span>
-                                ${item.notes ? `<div class="tiny muted" style="margin-top:2px;">${esc(item.notes)}</div>` : ''}
-                            </div>
-                            <div style="display:flex; gap:6px; flex-shrink:0;">
-                                <button class="btn tiny soft" title="Link existing tasks (including client tasks) to this request" onclick="OL.openLinkTasksModal('${esc(item.id)}')">Link tasks${tasksLinked(client, item) ? ` (${tasksLinked(client, item)})` : ''}</button>
-                                ${isStaffUser() ? `<button class="btn tiny primary" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
-                            </div>
+            ${items.map((item, idx) => {
+                const tasks = Array.isArray(item.pendingTasks) ? item.pendingTasks : [];
+                const asks = tasks.filter((t) => t.kind === 'ask').length;
+                const isOpen = !!open[item.id] && isStaffUser();
+                return `
+                <div style="border-bottom:1px solid var(--line);">
+                    ${renderScopingRow(item, idx, showUnits)}
+                    <div style="display:flex; align-items:center; gap:8px; padding:4px 14px 8px 34px; flex-wrap:wrap;">
+                        ${isStaffUser() ? `<button class="btn tiny soft" onclick="OL.togglePendingTasks('${esc(item.id)}')"><i data-lucide="${isOpen ? 'chevron-down' : 'chevron-right'}" style="width:11px;height:11px;"></i> Prepared tasks (${tasks.length - asks} + ${asks} client ask${asks === 1 ? '' : 's'})</button>` : ''}
+                        <button class="btn tiny soft" title="Link existing tasks (including client tasks) to this request" onclick="OL.openLinkTasksModal('${esc(item.id)}')">Link tasks${tasksLinked(client, item) ? ` (${tasksLinked(client, item)})` : ''}</button>
+                        ${isStaffUser() ? `<button class="btn tiny primary" style="margin-left:auto;" onclick="OL.addBacklogItemToSheet('${esc(item.id)}')">Add to scoping sheet</button>` : ''}
+                    </div>
+                    ${isOpen ? `
+                    <div style="padding:6px 14px 12px 34px; background:rgba(148,163,184,0.04);">
+                        <div class="tiny muted" style="margin-bottom:4px;">Template tasks follow the templates automatically. Add anything specific to this request below.</div>
+                        ${tasks.length ? tasks.map((p) => pendingTaskRowHtml(item, p, tasks)).join('') : '<span class="tiny muted">No prepared tasks.</span>'}
+                        <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                            <input id="pending-new-${esc(item.id)}" class="modal-input tiny" style="flex:1 1 260px;" placeholder="New task or client ask title…" onkeydown="if(event.key==='Enter'){OL.addPendingTask('${esc(item.id)}','task');}">
+                            <button class="btn tiny soft" onclick="OL.addPendingTask('${esc(item.id)}','ask')">+ Client ask</button>
+                            <button class="btn tiny soft" onclick="OL.addPendingTask('${esc(item.id)}','task')">+ Custom task</button>
                         </div>
-                    `;
-                }).join('')}
-            </div>
+                    </div>` : ''}
+                </div>`;
+            }).join('')}
         </div>
     `;
 }
+
+OL.togglePendingTasks = function (itemId) {
+    if (!state.ui) state.ui = {};
+    state.ui.pendingOpen = { ...(state.ui.pendingOpen || {}), [itemId]: !(state.ui.pendingOpen || {})[itemId] };
+    renderScopingSheet();
+};
+function pendingItem(itemId) {
+    return getActiveClient()?.projectData?.scopingSheets?.[0]?.lineItems?.find((i) => String(i.id) === String(itemId));
+}
+OL.addPendingTask = async function (itemId, kind) {
+    const input = document.getElementById(`pending-new-${itemId}`);
+    const title = (input?.value || '').trim();
+    if (!title) { input?.focus(); return; }
+    await OL.updateAndSync(() => {
+        const item = pendingItem(itemId);
+        if (!item) return;
+        if (!Array.isArray(item.pendingTasks)) item.pendingTasks = [];
+        item.pendingTasks.push({ id: uid(), key: '', kind: kind === 'ask' ? 'ask' : 'implementation', templateId: null, custom: true, title, instructions: '', askKind: kind === 'ask' ? 'document' : null, resourceId: null, resourceName: '', blockedBy: [] });
+    });
+    renderScopingSheet();
+};
+OL.removePendingTask = async function (itemId, taskId) {
+    await OL.updateAndSync(() => {
+        const item = pendingItem(itemId);
+        if (!item?.pendingTasks) return;
+        item.pendingTasks = item.pendingTasks.filter((p) => p.id !== taskId);
+        item.pendingTasks.forEach((p) => { p.blockedBy = (p.blockedBy || []).filter((d) => d.id !== taskId); });
+    });
+    renderScopingSheet();
+};
+OL.addPendingDep = async function (itemId, taskId, depId) {
+    await OL.updateAndSync(() => {
+        const p = pendingItem(itemId)?.pendingTasks?.find((x) => x.id === taskId);
+        if (p && !(p.blockedBy || []).some((d) => d.id === depId)) p.blockedBy = [...(p.blockedBy || []), { id: depId }];
+    });
+    renderScopingSheet();
+};
+OL.removePendingDep = async function (itemId, taskId, depId) {
+    await OL.updateAndSync(() => {
+        const p = pendingItem(itemId)?.pendingTasks?.find((x) => x.id === taskId);
+        if (p) p.blockedBy = (p.blockedBy || []).filter((d) => d.id !== depId);
+    });
+    renderScopingSheet();
+};
 
 // Pulls a backlog item onto the sheet: gives it the next open round
 // (core/requests.js nextOpenRound — the current draft round, or a new one
@@ -329,7 +426,6 @@ export function renderScopingSheet() {
     </div>
 
     ${renderPendingActivationsBanner(client)}
-    ${renderBacklogSection(client, sheet)}
 
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -422,9 +518,12 @@ export function renderScopingSheet() {
         }
     </div>
 
+    ${renderBacklogSection(client, sheet, showUnits)}
+
     <div id="grand-totals-area"></div>
     `;
 
+    ensurePendingTasks(client, sheet);
     // Pending requests aren't in a round yet, so they are not part of the sheet's totals.
     renderGrandTotals(sheet.lineItems.filter((i) => String(i?.status || '') !== 'Backlog'), baseRate);
     
