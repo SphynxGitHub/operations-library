@@ -2249,7 +2249,17 @@ export function printFlowDiagram(orientation) {
 function fvInstanceOf(res, wfId) {
   const inst = Object.create(res);
   Object.defineProperty(inst, '_inst', { value: String(wfId), enumerable: true });
-  Object.defineProperty(inst, 'steps', { value: (res.steps || []).map(st => Object.create(st)), enumerable: true, writable: true });
+  // per-copy group assignments (set from the step panel while a copy's step is selected) override the step's own group
+  const pl = (typeof getPlacements === 'function' ? getPlacements(res) : (res.placements || [])).find(p => String(p.workflowId) === String(wfId));
+  const over = (pl && pl.stepGroups) || {};
+  Object.defineProperty(inst, 'steps', { value: (res.steps || []).map(st => {
+    const c = Object.create(st);
+    if (Object.prototype.hasOwnProperty.call(over, String(st.id))) {
+      const g = String(over[String(st.id)] || '').trim();
+      Object.defineProperty(c, 'stepGroup', { value: g || undefined, enumerable: true, writable: true, configurable: true });
+    }
+    return c;
+  }), enumerable: true, writable: true });
   return inst;
 }
 const fvDomKey = (res) => (res && res._inst ? `${res.id}~${res._inst}` : String(res.id));
@@ -4012,6 +4022,7 @@ export function _fvHandleCanvasClick(e) {
 
 export function closeInspectorPanel() {
     OL._fv._lastInspectorResId = null;
+    OL._fv._instCtx = null;
 
     const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     if (panel) {
@@ -4048,6 +4059,7 @@ export function _fvSelectStep(resId, stepId, inst) {
   document.querySelectorAll('.fv-step-card.selected').forEach(el => el.classList.remove('selected'));
   const card = document.getElementById(`fv-step-${resId}${inst ? '~' + inst : ''}-${stepId}`);
   if (card) card.classList.add('selected');
+  OL._fv._instCtx = { resId: String(resId), stepId: String(stepId), inst: inst ? String(inst) : '' };   // which copy the side panel is editing
   OL.openInspector(resId, stepId);
 };
 
@@ -4630,7 +4642,7 @@ export function setPlacements(resId, list) {
   const res = (data.resources || []).find((r) => String(r.id) === String(resId));
   if (!res) return;
   const wfs = data.workflows || [];
-  let next = (list || []).map((p) => ({ id: p.id || plcId(), workflowId: String(p.workflowId || ''), stageId: String(p.stageId || ''), label: String(p.label || ''), when: p.when && p.when.formId ? p.when : null }));
+  let next = (list || []).map((p) => ({ id: p.id || plcId(), workflowId: String(p.workflowId || ''), stageId: String(p.stageId || ''), label: String(p.label || ''), when: p.when && p.when.formId ? p.when : null, stepGroups: p.stepGroups && typeof p.stepGroups === 'object' ? p.stepGroups : undefined }));
   // several placements must each be in a workflow, and each workflow holds the resource once
   if (next.length > 1) {
     const seen = new Set();
@@ -9546,4 +9558,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.m' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.n' });

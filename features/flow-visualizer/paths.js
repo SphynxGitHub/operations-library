@@ -452,32 +452,64 @@ export function pathSummary(res, step) {
 
 
 // ---- consolidation groups: pick an existing group, or start a new one ---------------------------------------------
+// A resource placed in several workflows is drawn once per workflow (see fvInstanceOf in core.js). While the side panel is editing
+// one of those copies, a group choice is kept on that placement only: placement.stepGroups = { stepId: groupName }, '' = no group.
+function instOf(resId, stepId) {
+  const c = window.OL && window.OL._fv && window.OL._fv._instCtx;
+  return c && c.inst && String(c.resId) === String(resId) && String(c.stepId) === String(stepId) ? String(c.inst) : '';
+}
+function placementOf(res, inst, create) {
+  if (!res || !inst) return null;
+  let list = res.placements;
+  if (!Array.isArray(list) && create && typeof window.OL.getPlacements === 'function') list = res.placements = window.OL.getPlacements(res).map((p) => ({ ...p }));
+  return (list || []).find((p) => String(p.workflowId) === inst) || null;
+}
+function effectiveGroup(resId, step) {
+  const inst = instOf(resId, step.id);
+  const pl = inst ? placementOf(resById(resId), inst, false) : null;
+  if (pl && pl.stepGroups && Object.prototype.hasOwnProperty.call(pl.stepGroups, String(step.id))) return String(pl.stepGroups[String(step.id)] || '').trim();
+  return step.stepGroup ? String(step.stepGroup).trim() : '';
+}
 function groupsInUse() {
   const m = new Map();
+  const bump = (g, r) => { const e = m.get(g) || { name: g, count: 0, procs: new Set() }; e.count += 1; e.procs.add(r.name || 'Process'); m.set(g, e); };
   allRes().forEach((r) => (r.steps || []).forEach((st) => {
     const g = st && !st.isArchived && st.stepGroup && String(st.stepGroup).trim(); if (!g) return;
-    const e = m.get(g) || { name: g, count: 0, procs: new Set() }; e.count += 1; e.procs.add(r.name || 'Process'); m.set(g, e);
+    bump(g, r);
   }));
+  allRes().forEach((r) => (r.placements || []).forEach((p) => Object.values(p.stepGroups || {}).forEach((v) => { const g = String(v || '').trim(); if (g) bump(g, r); })));
   return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 function setGroup(resId, stepId, name) {
   const c = ctx(resId, stepId); if (!c) return;
   const n = String(name || '').trim().slice(0, 80);
-  if (n) c.step.stepGroup = n; else delete c.step.stepGroup;
+  const inst = instOf(resId, stepId);
+  const pl = inst ? placementOf(c.res, inst, true) : null;
+  if (pl) {
+    // only this copy: remember the choice on the placement ('' = deliberately no group)
+    pl.stepGroups = pl.stepGroups || {};
+    pl.stepGroups[String(stepId)] = n;
+    if (window.OL.persist) window.OL.persist();
+  } else if (n) c.step.stepGroup = n; else delete c.step.stepGroup;
   redrawAfterRefEdit(resId, stepId);
 }
 function renameGroup(resId, stepId) {
-  const c = ctx(resId, stepId); if (!c || !c.step.stepGroup) return;
-  const old = c.step.stepGroup; const hits = [];
-  allRes().forEach((r) => (r.steps || []).forEach((st) => { if (st && st.stepGroup === old) hits.push(st); }));
+  const c = ctx(resId, stepId); if (!c) return;
+  const old = effectiveGroup(resId, c.step); if (!old) return;
+  const hits = [];
+  allRes().forEach((r) => (r.steps || []).forEach((st) => { if (st && st.stepGroup === old) hits.push({ set: (v) => { st.stepGroup = v; } }); }));
+  allRes().forEach((r) => (r.placements || []).forEach((p) => Object.keys(p.stepGroups || {}).forEach((k) => { if (String(p.stepGroups[k]).trim() === old) hits.push({ set: (v) => { p.stepGroups[k] = v; } }); })));
   const name = window.prompt(`Rename "${old}" (changes all ${hits.length} step${hits.length === 1 ? '' : 's'} in this group)`, old);
   if (name == null || !name.trim()) return;
-  hits.forEach((st) => { st.stepGroup = name.trim().slice(0, 80); });
+  hits.forEach((h) => h.set(name.trim().slice(0, 80)));
+  if (window.OL.persist) window.OL.persist();
   redrawAfterRefEdit(resId, stepId);
 }
 export function groupEditor(resId, step) {
   const r = esc(resId), s = esc(step.id);
-  const groups = groupsInUse(); const cur = step.stepGroup ? String(step.stepGroup) : '';
+  const groups = groupsInUse(); const cur = effectiveGroup(resId, step);
+  const inst = instOf(resId, step.id);
+  const instWf = inst ? ((window.OL.getWorkflows && window.OL.getWorkflows()) || []).find((w) => String(w.id) === inst) : null;
   const curInfo = groups.find((g) => g.name === cur);
   let body = groups.length ? group('Existing groups') + groups.map((g) => item('git-merge', g.name, `OL.fvGroupSet('${r}','${s}','${esc(g.name).replace(/'/g, '&#39;')}')`, { on: g.name === cur, right: `${g.count} step${g.count === 1 ? '' : 's'}`, q: g.name })).join('') : '<div class="fvp-none">No groups yet. Type a name below to start one.</div>';
   body += `<div class="fvp-newgroup fvp-always" onclick="event.stopPropagation()">${group('Start a new group')}<div style="padding:6px;"><input type="text" class="modal-input tiny" maxlength="80" placeholder="New group name, then Enter" onkeydown="if(event.key==='Enter'){event.preventDefault(); OL.fvGroupSet('${r}','${s}', this.value);}"></div></div>`;
@@ -487,7 +519,10 @@ export function groupEditor(resId, step) {
       <button type="button" class="btn tiny soft" onclick="OL.fvGroupRename('${r}','${s}')">Rename group</button>
       <button type="button" class="btn tiny soft" onclick="OL.fvGroupSet('${r}','${s}','')">Remove from group</button></div>`
     : '<div class="tiny muted" style="margin-bottom:6px;">Not grouped</div>';
-  return `${chip}${pick}<div class="tiny muted" style="margin-top:6px;">Steps with the same group name, in any process, are shown as one card on the map.</div>`;
+  const note = inst
+    ? `<div class="tiny" style="margin-top:6px;color:#7c3aed;">This is the copy in ${esc(instWf ? instWf.name : 'another workflow')}. A group you choose here applies to this copy only; the original and other copies keep theirs.</div>`
+    : '';
+  return `${chip}${pick}${note}<div class="tiny muted" style="margin-top:6px;">Steps with the same group name, in any process, are shown as one card on the map.</div>`;
 }
 
 Object.assign(window.OL = window.OL || {}, {
