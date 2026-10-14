@@ -485,7 +485,7 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
 .scoping-grid, .grid-row, .round-header-row, .grid-header { width: 100% !important; }
 .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
     display: grid !important;
-    grid-template-columns: minmax(260px,3fr) minmax(120px,0.8fr) 130px 60px 55px 80px 30px !important;
+    grid-template-columns: minmax(200px,1.5fr) minmax(240px,1.9fr) minmax(150px,0.9fr) 150px 30px !important;
     gap: 8px 12px !important; align-items: start !important; padding: 10px 16px !important;
 }
 .col-multiplier, .col-gross, .col-discount { text-align: center !important; }
@@ -521,17 +521,34 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
     background: rgba(0,0,0,0.05); border-top: 2px solid var(--accent); margin-top: 10px;
     padding: 20px 16px !important; align-items: center !important;
 }
-.total-item-gross { grid-column: 4; text-align: center; }
-.total-item-disc { grid-column: 5; text-align: center; }
-.total-item-net { grid-column: 6; text-align: right; }
-.grand-actions { grid-column: 1 / span 2; display: flex; gap: 10px; }
+.grand-totals-bar { grid-template-columns: 1fr auto auto auto !important; gap: 8px 28px !important; }
+.total-item-gross, .total-item-disc { grid-column: auto; text-align: right; }
+.total-item-net { grid-column: auto; text-align: right; }
+.grand-actions { grid-column: auto; display: flex; gap: 10px; }
+.col-price { text-align: right; font-variant-numeric: tabular-nums; }
+.col-price .price-net { font-size: 15px; font-weight: 700; }
+.col-price .price-sub { font-size: 10px; color: var(--muted); }
+.col-sub-label { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 2px; }
+.col-requested { min-width: 0; }
+.req-words { border-left: 2px solid var(--line); padding-left: 9px; margin-top: 4px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.req-src { margin-top: 5px; font-size: 10px; color: var(--muted); }
+.need-strip { grid-column: 1 / -1; margin-top: 2px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid #f59e0b; border-radius: 6px; background: rgba(245,158,11,.05); }
+.need-strip > summary { list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #f59e0b; font-weight: 700; }
+.need-strip > summary::-webkit-details-marker { display: none; }
+.need-strip[open] > summary { margin-bottom: 4px; }
+.need-item { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 12px; border-top: 1px dashed var(--line); }
+.need-item .nbox { width: 11px; height: 11px; border: 1.5px solid var(--muted); border-radius: 3px; flex-shrink: 0; }
+.need-item.done .nbox { background: #64c6a2; border-color: #64c6a2; }
+.need-item.done .ntitle { text-decoration: line-through; color: var(--muted); }
+.need-item .ntitle { flex: 1; min-width: 0; cursor: pointer; overflow-wrap: anywhere; }
+.need-tag { font-size: 10px; color: #f59e0b; border: 1px solid #f59e0b; border-radius: 99px; padding: 0 7px; white-space: nowrap; }
 
 @media screen and (max-width: 768px) {
     .scoping-grid { min-width: 0 !important; }
     .grid-header { display: none !important; }
     .grid-row, .round-header-row {
-        grid-template-columns: 2fr 1fr 1fr 30px !important;
-        grid-template-areas: "title status team x" "prices prices prices prices" !important;
+        grid-template-columns: 1fr 1fr !important;
+        grid-template-areas: none !important;
     }
     .col-expand { grid-column: 1; }
     .col-status { grid-column: 2; }
