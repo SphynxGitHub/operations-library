@@ -2161,6 +2161,7 @@ OL.markLinkedExcerpts = function(m, frame) {
             byText.get(key).push(l);
         });
         const TYPE = { task: 'Task', request: 'Request', event: 'Event', resource: 'Resource' };
+        const fold = (c) => c.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
         byText.forEach((group, needle) => {
             // Flatten the text, collapsing runs of whitespace the way the selection did, remembering where each character lives.
             const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
@@ -2172,17 +2173,21 @@ OL.markLinkedExcerpts = function(m, frame) {
                 if (tag === 'SCRIPT' || tag === 'STYLE' || node.parentElement?.closest?.('[data-ol-callout]')) continue;
                 const t = node.data;
                 for (let i = 0; i < t.length; i++) {
-                    if (/\s/.test(t[i])) { if (norm.endsWith(' ')) continue; norm += ' '; } else norm += t[i];
+                    // Whitespace is ignored on both sides: text split across paragraphs/lines has no space between the nodes
+                    // in the page but a space or newline in the saved selection, which made the passage impossible to find.
+                    if (/[\s\u200b\u200c\u200d\ufeff]/.test(t[i])) continue;
+                    norm += fold(t[i]);
                     map.push([node, i]);
                 }
             }
-            const at = norm.indexOf(needle);
+            const want = [...needle].map(fold).filter((c) => !/[\s\u200b\u200c\u200d\ufeff]/.test(c)).join('');
+            const at = want ? norm.indexOf(want) : -1;
             if (at < 0) return;
-            const first = map[at], last = map[at + needle.length - 1];
+            const first = map[at], last = map[at + want.length - 1];
             if (!first || !last) return;
             // The text nodes the passage covers, each with the part of it that is inside the passage.
             const segs = [];
-            const ordered = [...new Set(map.slice(at, at + needle.length).map((x) => x[0]))];
+            const ordered = [...new Set(map.slice(at, at + want.length).map((x) => x[0]))];
             ordered.forEach((n) => {
                 const s0 = n === first[0] ? first[1] : 0;
                 const e0 = n === last[0] ? last[1] + 1 : n.data.length;
