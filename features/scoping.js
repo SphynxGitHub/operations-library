@@ -6,7 +6,7 @@
 // discounts), the pricing-rate "folder" modal, and scoping-item
 // dependency management.
 
-import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync } from '../core/data.js';
+import { state, esc, uid, getActiveClient, persist, loadFullClient, updateAndSync, db } from '../core/data.js';
 import { addLink, taskAppliesToRequest } from '../core/task-links.js';
 import { applyDecisionAndRound, moveOutOfBacklog, decisionAndRoundOf, getRequestTypes, getCurrentRound, isActiveItem, isRoundApproved, nextOpenRound, SHEET_STATUSES, CONSOLIDATED_REQUEST_TYPES, CONSOLIDATED_SHEET_STATUSES } from '../core/requests.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS, ASK_KINDS } from '../core/work-status.js';
@@ -108,6 +108,76 @@ function renderPendingActivationsBanner(client) {
 // math as if already scheduled. See core/requests.js's buildDesired and
 // nextOpenRound.
 const tasksLinked = (client, item) => (client?.projectData?.clientTasks || []).filter((t) => t && taskAppliesToRequest(t, item.id)).length;
+// ---- Client-facing parts of a scoping row ------------------------------------------------------------------------
+// "What you requested" shows the excerpt linked to the request straight from the email (read live, so an updated
+// excerpt shows its latest text), or the wording edited on the request ("Client's words"), else its Notes.
+const requestedCache = {};   // request id -> { text, source }
+let requestedLoadedAt = 0;
+async function loadRequestedWords(sheet) {
+    if (!sheet || Date.now() - requestedLoadedAt < 30000) return;
+    requestedLoadedAt = Date.now();
+    const ids = (sheet.lineItems || []).filter((i) => i && i.id != null).map((i) => String(i.id));
+    if (!ids.length) return;
+    try {
+        const ors = [];
+        ids.forEach((id) => {
+            ors.push(`piece_links.cs.${JSON.stringify([{ targetId: id }])}`);
+            if (/^\d+$/.test(id)) ors.push(`piece_links.cs.${JSON.stringify([{ targetId: Number(id) }])}`);
+        });
+        let { data, error } = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').or(ors.join(',')).order('date', { ascending: false }).limit(300);
+        if (error || !data || !data.length) {
+            const fb = await db.from('gmail_messages').select('id, sender, subject, date, piece_links').not('piece_links', 'is', null).order('date', { ascending: false }).limit(400);
+            data = fb.data || [];
+        }
+        const found = {};
+        (data || []).forEach((m) => (Array.isArray(m.piece_links) ? m.piece_links : []).forEach((l) => {
+            if (!l || l.targetType !== 'request' || l.kind === 'attachment' || l.kind === 'email' || !String(l.text || '').trim()) return;
+            const id = String(l.targetId);
+            if (!ids.includes(id)) return;
+            (found[id] = found[id] || []).push({ text: String(l.text).trim(), at: l.createdAt || m.date || '', source: `${(m.sender || '').replace(/<.*>/, '').trim() || 'Email'}${m.date ? ' · ' + new Date(m.date).toLocaleDateString() : ''}` });
+        }));
+        Object.keys(found).forEach((id) => {
+            const list = found[id].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+            requestedCache[id] = { text: list.map((x) => x.text).join('\n\n'), source: `Linked excerpt from email · ${list[list.length - 1].source}` };
+            const words = document.querySelector(`[data-req-words="${CSS.escape(id)}"]`);
+            const src = document.querySelector(`[data-req-src="${CSS.escape(id)}"]`);
+            const item = (sheet.lineItems || []).find((i) => String(i.id) === id);
+            if (words && !String(item?.clientWords || '').trim()) { words.textContent = requestedCache[id].text; words.style.display = ''; }
+            if (src && !String(item?.clientWords || '').trim()) { src.textContent = requestedCache[id].source; src.style.display = ''; }
+        });
+    } catch (e) { console.warn('Could not load the linked excerpts for the sheet:', e); }
+}
+
+// "Items needed from you": the client asks that complete a request, closed by default. Done ones stay, struck through.
+function needStripHtml(client, item, isAdmin) {
+    const sphynxCtx = { sphynxNames: (state.master?.sphynxTeam || []).map((m) => m.name).concat(OL.thirdPartyAssignees || []) };
+    const closed = closedStatusNames();
+    const all = client?.projectData?.clientTasks || [];
+    const asks = all.filter((t) => t && taskAppliesToRequest(t, item.id) && isClientFacing(t, sphynxCtx));
+    if (!asks.length && !isAdmin) return '';
+    const isDone = (t) => closed.includes(t.status);
+    const open = asks.filter((t) => !isDone(t));
+    const blocks = (t) => all.some((x) => x && !isDone(x) && ((x.blockedBy || []).some((d) => d && d.kind === 'task' && String(d.id) === String(t.id)) || (x.blockedOn?.taskIds || []).map(String).includes(String(t.id))));
+    const blocking = open.filter(blocks).length;
+    const ordered = [...open, ...asks.filter(isDone)];
+    return `
+        <details class="need-strip" onclick="event.stopPropagation()">
+            <summary>
+                Items needed from you
+                ${blocking ? `<span class="need-tag">${blocking} block${blocking === 1 ? 's' : ''} work</span>` : ''}
+                <span style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted); margin-left:auto;">${asks.length ? `${open.length} open${asks.length - open.length ? ` · ${asks.length - open.length} done` : ''}` : 'None yet'}</span>
+                ${isAdmin ? `<button type="button" class="btn tiny soft" style="margin-left:8px;" onclick="event.preventDefault(); event.stopPropagation(); OL.openAskModal('${esc(String(item.id))}')">+ Add new</button>` : ''}
+            </summary>
+            ${ordered.map((t) => `
+                <div class="need-item ${isDone(t) ? 'done' : ''}">
+                    <span class="nbox"></span>
+                    <span class="ntitle" onclick="OL.openTaskInContext('${esc(client.id)}','${esc(String(t.id))}')">${esc(t.title || t.name || 'Item')}</span>
+                    ${!isDone(t) && blocks(t) ? '<span class="need-tag">blocks build</span>' : ''}
+                    ${t.dueDate ? `<span class="tiny muted">${isDone(t) ? 'done' : 'due'} ${esc(String(t.dueDate).slice(0, 10))}</span>` : ''}
+                </div>`).join('') || '<div class="tiny muted" style="padding:3px 0;">Nothing is needed from the client yet.</div>'}
+        </details>`;
+}
+
 // ---- Pending requests (round 0): tasks prepared ahead of time --------------------------------------------------
 // Each pending request carries item.pendingTasks (core/pending-tasks.js): the template tasks, kept current with the
 // templates, plus any custom tasks and client asks added by hand, with dependencies between them. They are not real
@@ -526,12 +596,10 @@ export function renderScopingSheet() {
 
     <div class="scoping-grid">
         <div class="grid-row grid-header">
-            <div class="col-expand">Deliverable</div>
-            <div class="col-status">Status</div>
-            <div class="col-team">Multiplier</div>
-            <div class="col-gross" style="text-align:center;">Gross</div>
-            <div class="col-discount" style="text-align:center;">Disc</div> 
-            <div class="col-numeric" style="text-align:right;">Net</div>
+            <div class="col-requested">What you requested</div>
+            <div class="col-expand">What we will deliver</div>
+            <div class="col-status">Status / Responsible party</div>
+            <div class="col-price" style="text-align:right;">Price</div>
             <div class="col-actions"></div>
         </div>
     </div>
@@ -561,6 +629,7 @@ export function renderScopingSheet() {
     ensurePendingTasks(client, sheet);
     autoActivateRequests(client);
     renderPendingTotals(sheet);
+    loadRequestedWords(sheet);
     // Pending requests aren't in a round yet, so they are not part of the sheet's totals.
     renderGrandTotals(sheet.lineItems.filter((i) => String(i?.status || '') !== 'Backlog'), baseRate);
     
@@ -627,14 +696,14 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
             </div>
             <div class="round-section" style="border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
-                <div class="col-expand">
-                    <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                <div class="col-requested">
+                    <div style="display:flex; align-items:center; gap:8px;">
                         <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
                         ${isCurrentRound ? '<span class="pill tiny accent">Current</span>' : ''}
                     </div>
-                    ${collapsed ? `<span class="tiny muted" style="margin-top:2px;">${items.length} item${items.length === 1 ? '' : 's'}</span>` : ''}
                     ${typeof OL.roundStatusHtml === 'function' ? `<div style="margin-top:2px;">${OL.roundStatusHtml(client, sheet, roundNum, isCurrentRound)}</div>` : ''}
                 </div>
+                <div class="col-expand tiny muted">${items.length} request${items.length === 1 ? '' : 's'}</div>
                 <div class="col-status">
                     ${roundIsAdmin ? `
                         <select class="tiny-select" title="Approval status for this round"
@@ -644,18 +713,9 @@ export function renderRoundGroup(roundName, items, baseRate, showUnits, clientNa
                         </select>
                     ` : (roundApprovalStatus ? `<span class="pill tiny ${roundApprovalStatus === 'Approved' ? 'accent' : 'soft'}">${esc(roundApprovalStatus)}</span>` : '')}
                 </div>
-                <div class="col-team"></div>
-                
-                <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
-                    $${roundGrossValue.toLocaleString()}
-                </div>
-                
-                <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
-                    -$${totalRoundSavings.toLocaleString()}
-                </div>
-                
-                <div class="col-numeric bold" style="font-size: 12px; text-align:right; line-height: 1.1;">
-                    $${finalRoundNet.toLocaleString()}
+                <div class="col-price">
+                    <div class="price-net">$${finalRoundNet.toLocaleString()}</div>
+                    <div class="price-sub">Gross $${roundGrossValue.toLocaleString()}${totalRoundSavings > 0 ? ` · -$${totalRoundSavings.toLocaleString()}` : ''}</div>
                 </div>
                 <div class="col-actions">
                     <button class="btn tiny soft" onclick="OL.openRoundRoleAssignmentsModal('${client.id}', '${sheet.id}', ${Number(roundNum)})" title="Role Assignments & Comp for this round">
@@ -728,9 +788,9 @@ export function calculateBaseFeeWithMultiplier(item, resource) {
 };
 
 export function renderScopingRow(item, idx, showUnits) {
-    const base = renderScopingRowBase(item, idx, showUnits);
-    const extra = typeof OL.requestTasksRowHtml === 'function' ? OL.requestTasksRowHtml(getActiveClient(), item) : '';
-    return base + extra;
+    // Internal tasks aren't shown on the scoping sheet (they live on the Tasks page); only the client-facing
+    // "Items needed from you" strip is, inside the row itself.
+    return renderScopingRowBase(item, idx, showUnits);
 }
 
 function renderScopingRowBase(item, idx, showUnits) {
@@ -741,6 +801,7 @@ function renderScopingRowBase(item, idx, showUnits) {
     if (!res) {
         return `
             <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05); padding: 8px 10px;">
+                <div class="col-requested"></div>
                 <div class="col-expand">
                     <div class="row-title text-danger" style="display:flex; align-items:center; gap:6px;">
                         <i data-lucide="alert-triangle" style="width:14px; height:14px; color:#ef4444;"></i>
@@ -749,10 +810,7 @@ function renderScopingRowBase(item, idx, showUnits) {
                     <div class="tiny muted">Item: ${item.id}</div>
                 </div>
                 <div class="col-status">N/A</div>
-                <div class="col-team">N/A</div>
-                <div class="col-gross">N/A</div>
-                <div class="col-discount">—</div>
-                <div class="col-numeric">$0</div>
+                <div class="col-price"><div class="price-net">$0</div></div>
                 <div class="col-actions">
                     ${isAdmin ? `
                         <button class="card-delete-btn" style="opacity: 0.3; display:flex; align-items:center; justify-center;" onclick="OL.removeFromScopeByID('${item.id}')">
@@ -882,72 +940,60 @@ function renderScopingRowBase(item, idx, showUnits) {
 
     setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 0);
 
+    const isBacklogRow = String(item.status || '') === 'Backlog';
+    const deliverHtml = (res.description || coveredHtml || unitsHtml)
+        ? `${res.description ? `<div class="row-note" style="margin-top:0;">${OL.resourceDescriptionHtml(res.description)}</div>` : ''}${coveredHtml}${unitsHtml}`
+        : '<div class="tiny muted">Scope to be confirmed.</div>';
+    const wordsText = String(item.clientWords || '').trim() || (requestedCache[item.id]?.text || '') || String(item.notes || '').trim();
+    const wordsSrc = String(item.clientWords || '').trim() ? 'Edited wording' : (requestedCache[item.id]?.source || '');
+
     return `
         <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
-        <div class="col-expand">
+        <div class="col-requested">
             <div class="row-title is-clickable" style="display:flex; align-items:center; gap:6px;" onclick="${titleClick}">
                 <span style="display:inline-flex; flex-shrink:0;">${OL.getLucideSVG(OL.getRegistryIcon(res.type), 13, 'var(--accent)')}</span>
                 ${esc(res.name || "Manual Item")}
             </div>
-            ${res.description ? `<div class="row-note">${OL.resourceDescriptionHtml(res.description)}</div>` : ""}
-            ${coveredHtml}
-            ${unitsHtml}
+            <div class="req-words" data-req-words="${esc(String(item.id))}" ${wordsText ? '' : 'style="display:none;"'}>${esc(wordsText)}</div>
+            <div class="req-src" data-req-src="${esc(String(item.id))}" ${wordsSrc ? '' : 'style="display:none;"'}>${esc(wordsSrc)}</div>
         </div>
-      
+
+        <div class="col-expand">
+            ${deliverHtml}
+        </div>
+
         <div class="col-status">
-            ${String(item.status || '') === 'Backlog' ? '' : `<select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
+            ${isBacklogRow ? '' : `<div class="col-sub-label">When</div>
+            <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
             <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
             <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
             <option value="Don't Do" ${item.status === "Don't Do" ? "selected" : ""}>Don't Do</option>
             <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
             </select>`}
-            <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
+            <div class="col-sub-label" style="margin-top:4px;">Who</div>
+            <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
             <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
             <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
             <option value="Joint" ${item.responsibleParty === "Joint" ? "selected" : ""}>Joint</option>
             </select>
         </div>
 
-        <div class="col-team">
-            <div style="display:flex; flex-direction:column; gap:4px;" title="${esc(hoverText)}">
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <button ${teamBtnAttr}>
-                        ${btnIcon}
-                    </button>
-                    
-                    <div class="pills-row" 
-                        ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                        ${teamLabel}
-                    </div>
-                </div>
-                <div style="padding-left: 34px;">
-                    ${multiplierHtml}
-                </div>
+        <div class="col-price" title="${esc(hoverText)}">
+            <div class="price-net">$${net.toLocaleString()}</div>
+            <div class="price-sub">Gross $${gross.toLocaleString()}${discountAmt > 0 ? ` · <span class="is-clickable" style="cursor:pointer;" onclick="OL.openDiscountManager()">-$${discountAmt.toLocaleString()}</span>` : ''}</div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-top:4px;">
+                <div class="pills-row" ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>${teamLabel}</div>
+                <button ${teamBtnAttr}>${btnIcon}</button>
             </div>
-        </div>
-        
-        <div class="col-gross tiny muted" style="text-align:center;">
-            $${gross.toLocaleString()}
-        </div>
-
-        <div class="col-discount">
-            ${discountAmt > 0 ? `
-                <span class="tiny muted" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
-                    -$${discountAmt.toLocaleString()}
-                </span>
-            ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
-        </div>
-
-        <div class="col-numeric">
-            <div class="bold" style="font-size: 13px;">$${net.toLocaleString()}</div>
+            <div style="margin-top:2px;">${multiplierHtml}</div>
         </div>
 
         <div class="col-actions">
             ${isAdmin ? `
-                <button class="card-delete-btn" style="opacity:${upBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${currentRoundNum <= 1 ? "Already in the first round" : upBlocked ? "Can't move into an already-approved round" : 'Move to an earlier round'}" ${upBlocked ? 'disabled' : ''} onclick="OL.moveItemRound('${item.id}', -1)">
+                <button class="card-delete-btn" style="opacity:${upBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${currentRoundNum <= 1 ? "Already in the first round" : upBlocked ? "Can't move into an already-approved round" : 'Move to the previous round'}" ${upBlocked ? 'disabled' : `onclick="OL.moveItemRound('${item.id}', -1)"`}>
                     <i data-lucide="chevron-up" style="width:12px; height:12px;"></i>
                 </button>
-                <button class="card-delete-btn" style="opacity:${downBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${downBlocked ? "Can't move into an already-approved round" : 'Move to a later round'}" ${downBlocked ? 'disabled' : ''} onclick="OL.moveItemRound('${item.id}', 1)">
+                <button class="card-delete-btn" style="opacity:${downBlocked ? '0.15' : '0.6'}; display:flex; align-items:center; justify-content:center;" title="${downBlocked ? "Can't move into an already-approved round" : 'Move to the next round'}" ${downBlocked ? 'disabled' : `onclick="OL.moveItemRound('${item.id}', 1)"`}>
                     <i data-lucide="chevron-down" style="width:12px; height:12px;"></i>
                 </button>
                 <button class="card-delete-btn" style="opacity: 0.3; display:flex; align-items:center; justify-content:center;" onclick="OL.removeFromScopeByID('${item.id}')">
@@ -956,12 +1002,13 @@ function renderScopingRowBase(item, idx, showUnits) {
             ` : ''}
         </div>
 
+        ${needStripHtml(client, item, isAdmin)}
+
         ${isAdmin ? `
             <div class="col-staff-row tiny" style="grid-column: 1 / -1; margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
                 ${typeSelectHtml}
                 ${requestHoursHtml}
-                ${staffWorkHtml}
-                ${clientTestHtml}
+                ${askButtonHtml}
             </div>
         ` : ''}
     </div>
@@ -2122,6 +2169,10 @@ export function openRequestLineModal(itemId) {
             ${requestRolesSectionHtml(client, item)}
 
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
+                <label class="tiny muted" style="font-size:10px; font-weight:600;">What the client requested <span style="font-weight:400;">(shown on the scoping sheet; leave blank to use the excerpt linked from their email)</span></label>
+                <textarea id="rq-words" class="modal-input" rows="3">${esc(item?.clientWords || '')}</textarea>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
                 <label class="tiny muted" style="font-size:10px; font-weight:600;">Notes (optional)</label>
                 <textarea id="rq-notes" class="modal-input" rows="3">${esc(item?.notes || '')}</textarea>
             </div>
@@ -2226,6 +2277,7 @@ export function applyRequestFormToItem(item) {
         ...(title ? { name: title } : {}),
         requestType: read('rq-type') || item.requestType || 'build',
         notes: read('rq-notes').trim(),
+        clientWords: read('rq-words').trim(),
         responsibleParty: read('rq-party') || item.responsibleParty || 'Sphynx',
         manualHours: Math.max(0, parseFloat(read('rq-hours')) || 0),
     });
