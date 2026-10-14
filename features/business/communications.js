@@ -4,6 +4,7 @@ import { getRequestTypes, nextOpenRound } from '../../core/requests.js';
 import { isMaintenanceClient, ensureMaintenanceSheet, buildMaintenanceRequest } from '../../core/maintenance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
 import { linksForTask } from '../../core/task-links.js';
+import { removePieceLink } from '../../core/roll-down.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
 
 const GMAIL_FEED_LIMIT = 150;
@@ -2030,7 +2031,7 @@ OL.confirmExcerptLink = async function() {
             id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
             targetType: t.type, targetId: t.id, targetLabel: t.label,
             attachmentPath: st.attachmentPath || null,
-            ...(t.type === 'request' && narrowedRequests.has(String(t.id)) ? { noRollDown: true } : {}),
+            ...(t.type === 'request' ? { noRollDown: true } : {}),   // a request link stays on the request; tasks get it only when picked
             createdAt,
         });
     });
@@ -2051,7 +2052,7 @@ OL.confirmExcerptLink = async function() {
     if (typeof OL.rollDownForRequest === 'function') {
         const clientId = OL._gmailLinkState?.clientId;
         if (clientId) {
-            for (const t of st.selected.filter((x) => x.type === 'request' && !narrowedRequests.has(String(x.id)))) {
+            for (const t of []) {
                 try { await OL.rollDownForRequest(clientId, t.id); } catch (e) { console.warn('Roll-down failed:', e); }
             }
         }
@@ -2125,7 +2126,7 @@ OL.renderGmailPieceLinks = function(m) {
                 <div style="padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:rgba(var(--accent-rgb),0.04);">
                     <div class="tiny muted" style="margin-bottom:4px;">"${esc(l.text.length > 100 ? l.text.slice(0, 100) + '…' : l.text)}"</div>
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                        <span class="tiny bold">${esc(l.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(l.targetType)}</span></span>
+                        <span class="tiny bold">${esc(l.targetLabel)} <span class="pill tiny soft" style="font-size:9px;">${esc(l.targetType)}</span>${l.rolledDownFrom ? ' <span class="pill tiny soft" style="font-size:9px;">copied from request</span>' : ''}</span>
                         <div style="display:flex; gap:4px; flex-shrink:0;">
                             <button class="btn tiny soft" onclick="OL.jumpToGmailPieceTarget('${esc(l.targetType)}', '${esc(l.targetId)}', '${esc(m.linked_client_id || '')}')">Jump to ${esc(l.targetType)}</button>
                             <button class="btn tiny soft" style="color:#ef4444;" onclick="OL.unlinkGmailPiece('${m.id}', '${l.id}')">Unlink</button>
@@ -2223,7 +2224,7 @@ OL.jumpToGmailPieceTarget = function(type, id, clientId) {
 OL.unlinkGmailPiece = async function(messageId, pieceLinkId) {
     const { data: m, error: fetchErr } = await db.from('gmail_messages').select('piece_links').eq('id', messageId).single();
     if (fetchErr) return;
-    const pieceLinks = (Array.isArray(m.piece_links) ? m.piece_links : []).filter((l) => l.id !== pieceLinkId);
+    const pieceLinks = removePieceLink(m.piece_links, pieceLinkId);   // also drops copies rolled down from it
     await db.from('gmail_messages').update({ piece_links: pieceLinks }).eq('id', messageId);
     OL.openGmailMessageModal(messageId);
 };
