@@ -2243,6 +2243,16 @@ export function printFlowDiagram(orientation) {
   return _printFlowDiagram({ OL, document, window }, { orientation, title: (client && client.meta && client.meta.name) || 'Flow map' });
 }
 
+// A resource placed in several workflows is drawn once per workflow. The extra copies are lightweight views of the real resource
+// (they read everything through the prototype, so edits to the real one show in every copy) with their own step objects, so each
+// copy keeps its own position on the map. Their DOM ids carry the workflow id so the copies never collide.
+function fvInstanceOf(res, wfId) {
+  const inst = Object.create(res);
+  Object.defineProperty(inst, '_inst', { value: String(wfId), enumerable: true });
+  Object.defineProperty(inst, 'steps', { value: (res.steps || []).map(st => Object.create(st)), enumerable: true, writable: true });
+  return inst;
+}
+const fvDomKey = (res) => (res && res._inst ? `${res.id}~${res._inst}` : String(res.id));
 // The workflow a multi-placement resource is drawn in on the steps map: its first placement, else the first workflow that holds it.
 function fvFirstHome(res, workflows) {
   const first = (res.placements || []).find(p => p.workflowId && workflows.some(w => String(w.id) === String(p.workflowId)));
@@ -2279,9 +2289,9 @@ export function _fvRenderSteps(resources) {
     stageWfs.forEach(wf => {
       const wfRes = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
-        // A resource placed in several workflows has one set of step cards (they share ids and positions), so it is drawn in
-        // its first placement; its other placements show as a note on that card's heading.
-        .filter(r => r && (r.steps || []).length > 0 && (!r.isGlobal || fvFirstHome(r, wfAll) === String(wf.id)));
+        // A resource placed in several workflows is drawn in each of them (see fvInstanceOf).
+        .filter(r => r && (r.steps || []).length > 0)
+        .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
       if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: fvOrderColumns(wfRes) });
     });
@@ -2307,7 +2317,14 @@ export function _fvRenderSteps(resources) {
   const HDR_LINE_H = 13;
   const _hdrLines = (name) => { let lines = 1, cur = 0; String(name || '').split(/\s+/).filter(Boolean).forEach((w) => { if (cur && cur + 1 + w.length > 21) { lines++; cur = w.length; } else cur += (cur ? 1 : 0) + w.length; }); return lines; };
   const EXTRA_HDR = (Math.min(3, Math.max(1, ...(resources || []).filter((r) => r && (r.steps || []).length).map((r) => _hdrLines(r.name)))) - 1) * HDR_LINE_H;
-  const RES_HDR   = EXTRA_HDR + (PRINTING ? 30 + (_hasCallouts ? 26 : 0) : ((resources || []).some((r) => r && r.isDraft) ? 70 : 50))
+  // a multi-placement resource also has its label / condition text and a link chip per other placement under its title
+  const _plcRows = Math.min(4, Math.max(0, ...(resources || []).filter((r) => r && r.isGlobal && (r.steps || []).length).map((r) => {
+    const pl = typeof OL.getPlacements === 'function' ? OL.getPlacements(r) : (r.placements || []);
+    const txt = Math.max(0, ...pl.map((p) => String([p.label, typeof OL.placementWhenText === 'function' ? OL.placementWhenText(r, p) : ''].filter(Boolean).join(' · ')).length));
+    return Math.ceil(txt / 34) + Math.max(0, pl.filter((p) => p.workflowId).length - 1);
+  })));
+  const EXTRA_PLC = _plcRows * 12;
+  const RES_HDR   = EXTRA_HDR + EXTRA_PLC + (PRINTING ? 30 + (_hasCallouts ? 26 : 0) : ((resources || []).some((r) => r && r.isDraft) ? 70 : 50))
     + (typeof OL.fvRefUsers === 'function' && (resources || []).some((r) => r && OL.fvRefUsers(r.id).length) ? 22 : 0);
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
@@ -2616,7 +2633,7 @@ export function _fvRenderSteps(resources) {
         const colX = resBaseX.get(res);
         const hdrEl = document.createElement('div');
         hdrEl.className = 'fv-callout-host fv-steps-res-head';
-        hdrEl.id = `fv-reshead-${res.id}`;
+        hdrEl.id = `fv-reshead-${fvDomKey(res)}`;
         hdrEl.dataset.resId = res.id;
         const _lay = resLayouts.get(res) || {};
         const _maxOff = Math.max(0, ...Object.values(_lay).map(l => l.colOffset));
@@ -2631,16 +2648,16 @@ export function _fvRenderSteps(resources) {
                          letter-spacing:0.06em;white-space:normal;overflow-wrap:anywhere;line-height:1.25;
                          max-width:${headW - 20}px;">${esc(res.name)}</span>${(() => {
               if (!res.isGlobal) return '';
-              const pl = (res.placements || []);
+              const pl = typeof OL.getPlacements === 'function' ? OL.getPlacements(res) : (res.placements || []);
               const mine = pl.find(p => String(p.workflowId) === String(workflow.id)) || {};
-              const others = pl.filter(p => p.workflowId && String(p.workflowId) !== String(workflow.id)).map(p => {
-                const w = wfAll.find(x => String(x.id) === String(p.workflowId));
-                return (w ? w.name : 'a workflow') + (p.label ? ` (${p.label})` : '');
-              });
               const when = typeof OL.placementWhenText === 'function' ? OL.placementWhenText(res, mine) : '';
               const bits = [mine.label, when].filter(Boolean).join(' · ');
-              return (bits ? `<span style="font-size:9px;color:var(--text-muted);white-space:nowrap;">· ${esc(bits)}</span>` : '')
-                + (others.length ? `<span title="Also placed in: ${esc(others.join(', '))}" style="font-size:9px;color:#7c3aed;white-space:nowrap;border:1px solid #7c3aed55;border-radius:99px;padding:0 5px;">+${others.length} more</span>` : '');
+              const chip = (w, label, p) => `<span role="button" tabindex="0" title="Jump to this resource in ${esc(w ? w.name : 'that workflow')}" onclick="event.stopPropagation();OL.fvJumpToPlacement('${esc(String(res.id))}','${esc(String(p.workflowId))}')" style="cursor:pointer;font-size:9px;line-height:1.3;color:#7c3aed;white-space:normal;overflow-wrap:anywhere;border:1px solid #7c3aed55;border-radius:10px;padding:0 6px;">${esc(label)}</span>`;
+              return (bits ? `<span style="flex:1 1 100%;font-size:9px;line-height:1.3;color:var(--text-muted);white-space:normal;overflow-wrap:anywhere;">${esc(bits)}</span>` : '')
+                + pl.filter(p => p.workflowId && String(p.workflowId) !== String(workflow.id)).map(p => {
+                  const w = wfAll.find(x => String(x.id) === String(p.workflowId));
+                  return chip(w, `↗ ${w ? w.name : 'workflow'}${p.label ? ' · ' + p.label : ''}`, p);
+                }).join('');
             })()}
           </div>
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
@@ -2681,7 +2698,8 @@ export function _fvRenderSteps(resources) {
 
               const div = document.createElement('div');
               div.className = 'fv-step-card';
-              div.id = `fv-step-${res.id}-${step.id}`;
+              div.id = `fv-step-${fvDomKey(res)}-${step.id}`;
+              if (res._inst) div.dataset.inst = res._inst;
               div.dataset.resId  = res.id;
               div.dataset.stepId = step.id;
               div.style.left = x + 'px';
@@ -2691,7 +2709,7 @@ export function _fvRenderSteps(resources) {
                 ${typeof OL.fvFlagHtml === 'function' ? OL.fvFlagHtml(step, res) : ''}
                 <div class="fv-step-card-accent" style="background:${tc.color};"></div>
                 ${typeof OL.fvJumpRowsIn === 'function' ? OL.fvJumpRowsIn(step, res) : ''}
-                <div class="fv-step-card-body" onclick="event.stopPropagation();OL._fvSelectStep('${res.id}','${step.id}')">
+                <div class="fv-step-card-body" onclick="event.stopPropagation();OL._fvSelectStep('${res.id}','${step.id}','${res._inst || ''}')">
                   <div style="display:flex;align-items:flex-start;gap:7px;">
                     <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
                                  background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
@@ -2707,7 +2725,7 @@ export function _fvRenderSteps(resources) {
                 ${typeof OL.fvJumpRowsOut === 'function' ? OL.fvJumpRowsOut(step, res) : ''}
                 <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
                      showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
-              OL._fvSetupCardDrag(div, res.id, step.id);
+              if (!res._inst) OL._fvSetupCardDrag(div, res.id, step.id);   // copies are placed by the layout; moving one would move the real step
               frag.appendChild(div);
               sectionCards.push({ res, step, el: div, idx });
             });
@@ -2784,7 +2802,8 @@ export function _fvRenderSteps(resources) {
           const consolAnchors = [];
           members.forEach(m => {
             const anchor = document.createElement('div');
-            anchor.id = `fv-step-${m.res.id}-${m.step.id}`;
+            anchor.id = `fv-step-${fvDomKey(m.res)}-${m.step.id}`;
+            if (m.res._inst) anchor.dataset.inst = m.res._inst;
             anchor.dataset.consolCardId = consolEl.id;
             anchor.style.cssText = `position:absolute;left:${Math.round(consolCenterX - 1)}px;top:${cardY}px;width:2px;height:1px;pointer-events:none;opacity:0;`;
             frag.appendChild(anchor);
@@ -3059,7 +3078,18 @@ export function _fvDrawStepConnections(resources) {
   const elById = new Map();
   canvas.querySelectorAll('[id^="fv-step-"], [id^="fv-consol-"]').forEach(el => elById.set(el.id, el));
 
+  // A resource placed in several workflows has a copy in each (see fvInstanceOf). A copy draws its own arrows; a link to another
+  // resource is drawn from the copy that sits in the same workflow as that resource.
+  const _wfs = OL.getWorkflows() || [];
+  const copiesOf = new Map();
+  resources.forEach(r => { const k = String(r.id); if (!copiesOf.has(k)) copiesOf.set(k, []); copiesOf.get(k).push(r); });
+  const wfsHolding = new Map();
+  _wfs.forEach(w => (w.resourceIds || []).forEach(id => { const k = String(id); if (!wfsHolding.has(k)) wfsHolding.set(k, new Set()); wfsHolding.get(k).add(String(w.id)); }));
+  const copyWf = (r) => (r._inst ? String(r._inst) : fvFirstHome(r, _wfs));
+
   resources.forEach(sourceRes => {
+    const _myKey = fvDomKey(sourceRes);
+    const _myCopies = copiesOf.get(String(sourceRes.id)) || [sourceRes];
     (sourceRes.steps || []).forEach((sourceStep, sourceIdx) => {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
@@ -3072,10 +3102,18 @@ export function _fvDrawStepConnections(resources) {
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
 
-        const fromElRaw = elById.get(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        let _toKey = String(tResId);
+        if (String(tResId) === String(sourceRes.id)) _toKey = _myKey;
+        else if (_myCopies.length > 1 || (copiesOf.get(String(tResId)) || []).length > 1) {
+          const tw = wfsHolding.get(String(tResId)) || new Set();
+          if (_myCopies.length > 1 && _myCopies.some(c => tw.has(copyWf(c))) && !tw.has(copyWf(sourceRes))) return;   // another copy of this resource leads there
+          const tc2 = (copiesOf.get(String(tResId)) || []).find(c => copyWf(c) === copyWf(sourceRes));
+          if (tc2) _toKey = fvDomKey(tc2);
+        }
+        const fromElRaw = elById.get(`fv-step-${_myKey}-${sourceStep.id}`);
         // If fromEl is a consolidated anchor (tiny proxy div), use the real card for exit coords
         const fromEl = (fromElRaw?.dataset.consolCardId && elById.get(fromElRaw.dataset.consolCardId)) || fromElRaw;
-        const toEl   = elById.get(`fv-step-${tResId}-${tStepId}`);
+        const toEl   = elById.get(`fv-step-${_toKey}-${tStepId}`);
 
         if (!fromEl || !toEl) return;
 
@@ -3140,7 +3178,7 @@ export function _fvDrawStepConnections(resources) {
         let draftRoute = null;
         if (!isCrossResource && sourceRes.isDraft && sourceRes.source === 'frameout') try {
           const others = (sourceRes.steps || []).filter((x) => x.id !== sourceStep.id && String(x.id) !== String(tStepId))
-            .map((x) => elById.get(`fv-step-${sourceRes.id}-${x.id}`)).filter(Boolean).map((el) => { const r = rectOf(el); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
+            .map((x) => elById.get(`fv-step-${_myKey}-${x.id}`)).filter(Boolean).map((el) => { const r = rectOf(el); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
           draftRoute = routeDraftLink(
             { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
             { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 28, others,
@@ -3991,9 +4029,24 @@ export function closeInspectorPanel() {
     }
 };
 
-export function _fvSelectStep(resId, stepId) {
+// Scroll the map to a resource's copy in another workflow and flash its heading.
+export function fvJumpToPlacement(resId, wfId) {
+  const res = (OL.getCurrentProjectData().resources || []).find(r => String(r.id) === String(resId));
+  if (!res) return;
+  const first = fvFirstHome(res, OL.getWorkflows() || []);
+  const key = String(wfId) === first ? String(resId) : `${resId}~${wfId}`;
+  const el = document.getElementById(`fv-reshead-${key}`);
+  const wrap = document.getElementById('fv-canvas-wrap');
+  if (!el || !wrap) return;
+  const z = (OL._fv && OL._fv.zoom) || 1;
+  wrap.scrollTo({ left: Math.max(0, (parseFloat(el.style.left) || 0) * z - 120), top: Math.max(0, (parseFloat(el.style.top) || 0) * z - 120), behavior: 'smooth' });
+  el.style.transition = 'box-shadow .3s'; el.style.boxShadow = '0 0 0 3px #7c3aed88';
+  setTimeout(() => { el.style.boxShadow = ''; }, 1600);
+}
+
+export function _fvSelectStep(resId, stepId, inst) {
   document.querySelectorAll('.fv-step-card.selected').forEach(el => el.classList.remove('selected'));
-  const card = document.getElementById(`fv-step-${resId}-${stepId}`);
+  const card = document.getElementById(`fv-step-${resId}${inst ? '~' + inst : ''}-${stepId}`);
   if (card) card.classList.add('selected');
   OL.openInspector(resId, stepId);
 };
@@ -9452,7 +9505,7 @@ Object.assign(window.OL, {
     _fvShowTidyMenu, _fvTogglePin, _fvToggleWb, _fvPopulateWb,
     _fvRenderWbItems, _fvFilterWb, _fvWbDragStart, _fvSetupRailScroll,
     _fvUnmapResource, _fvHandleCanvasClick, closeInspectorPanel, _fvSelectStep,
-    _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas, placementsEditor, placementSet, placementAdd, placementRemove, placementLabel, placementWhen, placementPlace, placementWhenText, getPlacements,
+    _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas, fvJumpToPlacement, placementsEditor, placementSet, placementAdd, placementRemove, placementLabel, placementWhen, placementPlace, placementWhenText, getPlacements,
     _fvToggleStepsPanel, _fvRenderListStep, fvSearch, fvNextMatch,
     fvPrevMatch, fvActivateMatch, fvClearSearch, fvToggleConnections,
     _fvSetupZoom, fvZoom, handleSidebarSearch, getStepIcon,
@@ -9493,4 +9546,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.k' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.m' });

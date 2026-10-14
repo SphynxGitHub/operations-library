@@ -53,20 +53,8 @@ export function calloutsFor(res, lookup = (id) => (window.OL?.getResourceById ? 
   const out = [];
   const seen = new Set();
 
-  (res.steps || []).forEach((step) => {
-    (step.links || []).forEach((l) => {
-      const kind = calloutKindForType(l.type);
-      if (!kind || seen.has(l.id)) return;
-      seen.add(l.id);
-      let lib = null; try { lib = lookup(l.id); } catch { /* the linked resource may have been deleted */ }
-      const usedIn = (res.steps || []).filter((s) => (s.links || []).some((x) => x.id === l.id)).map((s) => s.name || 'Step');
-      out.push({
-        key: `l:${l.id}`, source: 'link', kind, linkId: l.id, name: (lib && lib.name) || l.name || 'Untitled',
-        url: safeUrl(lib && (lib.externalUrl || lib.url)), note: String((lib && (lib.description || lib.notes)) || ''), usedIn,
-        missing: !lib,
-      });
-    });
-  });
+  // Only collateral that belongs to the resource itself is listed here (the manual callouts below, and a Jotform form's logic).
+  // Collateral on a step shows on that step's own card, not again at the top.
 
   // A pulled Jotform form: its conditional logic (loaded on request, features/jotform-logic.js).
   if (res.source === 'jotform' && res.externalId != null) {
