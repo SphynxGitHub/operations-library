@@ -814,7 +814,8 @@ export function openResourceModal(targetId, draftObj = null) {
         </div>`;
     const subLabel = (text, n) => `<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);margin:14px 0 8px;">${text}${n === undefined ? '' : ` <span class="pill tiny soft">${n}</span>`}</div>`;
 
-    const collateralHtml = `
+    const mergeReviewHtml = typeof OL.rmReviewSectionHtml === 'function' ? OL.rmReviewSectionHtml(res.id) : '';
+    const collateralHtml = mergeReviewHtml + `
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
         <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
             <i data-lucide="paperclip" style="width:14px; height:14px;"></i> COLLATERAL
