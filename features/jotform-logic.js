@@ -38,7 +38,7 @@ async function fetchLogic(client, card) {
 }
 
 function store(card, norm, fp) {
-  card.formLogic = { at: new Date().toISOString(), fp, rules: norm.rules.slice(0, 200), pages: norm.pages.slice(0, 60), fieldCount: norm.fieldCount };
+  card.formLogic = { at: new Date().toISOString(), fp, rules: norm.rules.slice(0, 200), pages: norm.pages.slice(0, 60), fieldCount: norm.fieldCount, questions: (norm.questions || []).slice(0, 300) };
 }
 
 // ---- load one form's logic (the "Load form logic" button) ---------------------------------------------------
@@ -179,7 +179,109 @@ function drawFlowArcs() {
   svg.innerHTML = out;
 }
 
-let jlView = 'flow';
+
+// ---- by question: click a question, see what its answers lead to and what sets it ----------------------------------------
+//   [ what controls it ] -> [ the question ] -> [ each answer -> what happens next: another question, a page, a calculation, an email ]
+let jlSel = '';
+const verbWord = { show: 'Shown', hide: 'Hidden', require: 'Required', 'make optional': 'Optional', enable: 'Enabled', disable: 'Disabled', calculate: 'Calculated' };
+
+function qIndex(fl) {
+  const qs = fl.questions || [];
+  const byId = new Map(qs.map((q) => [String(q.id), q]));
+  const byLabel = new Map(qs.map((q) => [String(q.label || '').toLowerCase(), q]));
+  const trig = {}; const tgt = {};
+  (fl.rules || []).forEach((r) => {
+    (r.when || []).forEach((w) => { if (w.field) (trig[w.field] = trig[w.field] || []).push({ r, w }); });
+    (r.then || []).forEach((t) => {
+      let ids = (t.targetIds || []).map(String);
+      if (!ids.length && (t.targets || []).length) ids = t.targets.map((l) => { const q = byLabel.get(String(l).toLowerCase()); return q ? String(q.id) : ''; }).filter(Boolean);   // older loads: match by name
+      ids.forEach((id) => (tgt[id] = tgt[id] || []).push({ r, t }));
+    });
+  });
+  return { qs, byId, trig, tgt };
+}
+const qBtn = (cardId, q, fallback) => q ? `<a href="#" class="jl-qlink" style="color:var(--accent);text-decoration:underline;" onclick="event.preventDefault();OL.jlPickQ('${esc(cardId)}','${esc(q.id)}')">${esc(q.label)}</a>` : esc(fallback || 'a question');
+
+function outcomeHtml(cardId, ix, t) {
+  if (t.verb === 'skip') return `<div class="jl-chip jl-chip-then jl-v-skip" style="margin-top:4px;">${esc(t.text)}</div>`;
+  if (t.verb === 'calculate') {
+    const tgts = (t.targetIds || []).map((id) => qBtn(cardId, ix.byId.get(String(id)), `Question ${id}`)).join(', ') || esc((t.targets || [])[0] || 'a value');
+    const src = (t.sources || []).map((id) => qBtn(cardId, ix.byId.get(String(id)), `Question ${id}`)).join(', ');
+    const eq = String(t.text || '').split(' = ')[1];
+    return `<div class="jl-chip jl-chip-then jl-v-msg" style="margin-top:4px;">Calculate ${tgts}${eq ? ` = ${esc(eq)}` : ''}${src ? `<div class="muted" style="font-size:10px;margin-top:2px;">from ${src}</div>` : ''}</div>`;
+  }
+  if (t.targets && t.targets.length) {
+    const ids = (t.targetIds && t.targetIds.length) ? t.targetIds : t.targets.map((l) => { const q = (ix.qs || []).find((x) => String(x.label).toLowerCase() === String(l).toLowerCase()); return q ? q.id : ''; });
+    const links = t.targets.map((l, i) => qBtn(cardId, ix.byId.get(String(ids[i])), l)).join(', ');
+    return `<div class="jl-chip jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}" style="margin-top:4px;">${esc(t.verb)} ${links}</div>`;
+  }
+  return `<div class="jl-chip jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}" style="margin-top:4px;">${esc(tidy(t))}</div>`;
+}
+
+function questionPanelHtml(card, qid) {
+  const fl = card.formLogic; const ix = qIndex(fl); const q = ix.byId.get(String(qid));
+  if (!q) return '<div class="tiny muted" style="padding:12px;">Pick a question on the left.</div>';
+  const cid = card.id;
+  // leads to: group by the answer being tested
+  const groups = new Map();
+  (ix.trig[q.id] || []).forEach(({ r, w }) => {
+    const key = `${w.op}${w.value ? ' ' + w.value : ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  });
+  const right = groups.size ? [...groups.entries()].map(([ans, rs]) => `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:600;">If the answer ${esc(ans)}</div>
+      ${rs.map((r) => {
+        const others = (r.when || []).filter((x) => x.field !== q.id);
+        return `<div style="margin-top:6px;display:flex;gap:8px;align-items:flex-start;${r.disabled ? 'opacity:.5;' : ''}"><span style="flex:0 0 auto;margin-top:6px;">${ARROW}</span><div style="min-width:0;">
+          ${others.length ? `<div class="muted" style="font-size:10px;margin-top:4px;">${r.link === 'any' ? 'or' : 'and'} ${others.map((x) => `${qBtn(cid, ix.byId.get(String(x.field)), x.fieldLabel)} ${esc(x.op)}${x.value ? ' ' + esc(x.value) : ''}`).join(r.link === 'any' ? ' or ' : ' and ')}</div>` : ''}
+          ${r.then.map((t) => outcomeHtml(cid, ix, t)).join('')}${r.disabled ? '<div class="muted" style="font-size:10px;">Turned off in Jotform</div>' : ''}</div></div>`;
+      }).join('')}</div>`).join('') : '<div class="tiny muted" style="padding:6px 0;">Nothing happens based on how this question is answered.</div>';
+  // set by: rules that show, hide or calculate this question
+  const left = (ix.tgt[q.id] || []).length ? ix.tgt[q.id].map(({ r, t }) => `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;${r.disabled ? 'opacity:.5;' : ''}">
+      <div style="font-size:12px;font-weight:600;">${esc(verbWord[t.verb] || t.verb)}${t.verb === 'calculate' ? '' : ' when'}</div>
+      ${t.verb === 'calculate' ? `<div style="font-size:12px;margin-top:4px;">${esc(String(t.text || '').split(' = ')[1] || '')}${(t.sources || []).length ? `<div class="muted" style="font-size:10px;margin-top:2px;">from ${t.sources.map((id) => qBtn(cid, ix.byId.get(String(id)), `Question ${id}`)).join(', ')}</div>` : ''}</div>` : ''}
+      ${(r.when || []).length ? `<div style="font-size:12px;margin-top:4px;">${r.when.map((x) => `${qBtn(cid, ix.byId.get(String(x.field)), x.fieldLabel)} ${esc(x.op)}${x.value ? ' <span class="jl-val">' + esc(x.value) + '</span>' : ''}`).join(r.link === 'any' ? ' <b>or</b> ' : ' <b>and</b> ')}</div>` : '<div class="muted" style="font-size:11px;margin-top:4px;">Always</div>'}
+      </div>`).join('') : '<div class="tiny muted" style="padding:6px 0;">Nothing changes this question. It is always shown as it is.</div>';
+  const opts = String(q.options || '').split('|').map((x) => x.trim()).filter(Boolean).slice(0, 12);
+  return `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+      <div style="flex:1 1 220px;min-width:0;"><div class="jl-lbl" style="margin-bottom:6px;">SET BY</div>${left}</div>
+      <div style="flex:0 0 auto;align-self:flex-start;margin-top:26px;">${ARROW}</div>
+      <div style="flex:0 1 240px;min-width:0;"><div class="jl-lbl" style="margin-bottom:6px;">QUESTION</div>
+        <div style="border:2px solid var(--accent);border-radius:12px;padding:12px;background:var(--panel-soft);">
+          <div style="font-weight:700;font-size:13px;">${esc(q.label)}</div>
+          <div class="muted" style="font-size:11px;margin-top:2px;">${esc(q.type || 'question')}${q.page ? ` · page ${esc(q.page)}` : ''}</div>
+          ${opts.length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${opts.map((o) => `<span class="pill tiny soft">${esc(o)}</span>`).join('')}</div>` : ''}</div></div>
+      <div style="flex:0 0 auto;align-self:flex-start;margin-top:26px;">${ARROW}</div>
+      <div style="flex:1 1 280px;min-width:0;"><div class="jl-lbl" style="margin-bottom:6px;">THEN, DEPENDING ON THE ANSWER</div>${right}</div></div>`;
+}
+
+function questionsViewHtml(card) {
+  const fl = card.formLogic; const ix = qIndex(fl);
+  if (!ix.qs.length) return '<div class="jl-empty">This form was loaded before its questions were kept. Press Refresh from Jotform to see them here.</div>';
+  if (!jlSel || !ix.byId.has(String(jlSel))) { const first = ix.qs.find((q) => (ix.trig[q.id] || []).length || (ix.tgt[q.id] || []).length) || ix.qs[0]; jlSel = String(first.id); }
+  let lastPage = null;
+  const list = ix.qs.map((q) => {
+    const n = (ix.trig[q.id] || []).length + (ix.tgt[q.id] || []).length;
+    const head = q.page !== lastPage ? `<div class="tiny muted" style="margin:10px 0 4px;font-weight:700;">${q.page ? `PAGE ${esc(q.page)}` : 'QUESTIONS'}</div>` : ''; lastPage = q.page;
+    return `${head}<div class="jl-qrow" data-q="${esc(q.id)}" onclick="OL.jlPickQ('${esc(card.id)}','${esc(q.id)}')" style="display:flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid ${String(q.id) === String(jlSel) ? 'var(--accent)' : 'transparent'};border-radius:8px;cursor:pointer;${n ? '' : 'opacity:.55;'}background:${String(q.id) === String(jlSel) ? 'var(--panel-soft)' : 'transparent'};">
+      <span style="flex:1;min-width:0;font-size:12px;">${esc(q.label)}</span>${n ? `<span class="pill tiny soft">${n}</span>` : ''}</div>`;
+  }).join('');
+  return `<div style="display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:20px;align-items:start;">
+      <div id="jl-qlist" style="max-height:64vh;overflow:auto;padding-right:6px;">${list}</div>
+      <div id="jl-qpanel" style="min-width:0;">${questionPanelHtml(card, jlSel)}</div></div>`;
+}
+
+function jlPickQ(cardId, qid) {
+  const card = findCard(cardId); if (!card || !card.formLogic) return;
+  jlSel = String(qid);
+  const panel = document.getElementById('jl-qpanel'); const listEl = document.getElementById('jl-qlist');
+  if (!panel || !listEl) { openJotformLogicMap(cardId, 'questions'); return; }
+  panel.innerHTML = questionPanelHtml(card, jlSel);
+  listEl.querySelectorAll('.jl-qrow').forEach((row) => { const on = row.getAttribute('data-q') === jlSel; row.style.borderColor = on ? 'var(--accent)' : 'transparent'; row.style.background = on ? 'var(--panel-soft)' : 'transparent'; if (on) row.scrollIntoView({ block: 'nearest' }); });
+}
+
+let jlView = 'questions';
 function openJotformLogicMap(resId, view) {
   if (view) jlView = view;
   const card = findCard(resId);
@@ -200,10 +302,11 @@ function openJotformLogicMap(resId, view) {
         · ${fl.fieldCount || 0} questions${(fl.pages || []).length > 1 ? ` · ${(fl.pages || []).length} pages` : ''} · loaded ${esc(ago(fl.at))}
       </div>
       ${fl.rules.length ? `<div style="display:flex;gap:6px;margin:10px 0;">
+        <button class="btn tiny ${jlView === 'questions' ? 'primary' : 'soft'}" onclick="OL.openJotformLogicMap('${esc(card.id)}','questions')">By question</button>
         <button class="btn tiny ${jlView === 'flow' ? 'primary' : 'soft'}" onclick="OL.openJotformLogicMap('${esc(card.id)}','flow')">Flow map</button>
         <button class="btn tiny ${jlView === 'list' ? 'primary' : 'soft'}" onclick="OL.openJotformLogicMap('${esc(card.id)}','list')">Rule list</button></div>` : ''}
       ${!fl.rules.length ? '<div class="jl-empty">This form has no conditional logic. Everyone sees every question and the same thank-you step.</div>'
-        : (jlView === 'flow' ? flowHtml(fl) : fl.rules.map(ruleHtml).join(''))}
+        : (jlView === 'questions' ? questionsViewHtml(card) : (jlView === 'flow' ? flowHtml(fl) : fl.rules.map(ruleHtml).join('')))}
       <div class="tiny muted" style="margin-top:12px;">Read-only. The rules are edited in Jotform; this map is a reading of them, refreshed whenever Jotform is pulled.</div>
     </div>`;
   if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(`<div style="width:100%;">${html}</div>`, { wide: true }); else window.openModal(html);
@@ -212,5 +315,5 @@ function openJotformLogicMap(resId, view) {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { loadJotformLogic, openJotformLogicMap, refreshLoadedFormLogic, logicAgo: ago });
+Object.assign(window.OL, { jlPickQ, loadJotformLogic, openJotformLogicMap, refreshLoadedFormLogic, logicAgo: ago });
 export { loadJotformLogic, openJotformLogicMap, refreshLoadedFormLogic, ago as logicAgo };
