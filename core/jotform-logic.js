@@ -90,6 +90,12 @@ export function normalizeJotformLogic(raw) {
   const pageOfField = (id) => { const q = byQid[String(id)]; if (!q || q.order === undefined || q.order === null || q.order === '') return null; return 1 + pageBreaks.filter((pb) => Number(pb.order) < Number(q.order)).length; };
   const targetPageOf = (target) => { const t = String(target ?? '').toLowerCase(); if (!t) return null; if (t === 'end' || t === 'thankyou' || t === 'submit') return 'end'; const m = t.match(/(\d+)/); return m ? Number(m[1]) : null; };
 
+  // the questions a person fills in, in form order, for the "by question" view
+  const SKIP_TYPES = /pagebreak|control_head|control_text$|control_button|control_image|control_collapse|control_divider|control_widget$/i;
+  const questionList = questions.filter((q) => q && q.qid !== undefined && !SKIP_TYPES.test(q.type || '')).slice()
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+    .map((q) => ({ id: String(q.qid), label: fieldLabel(q.qid), type: String(q.type || '').replace(/^control_/, ''), page: pageOfField(q.qid), options: clip(q.options || '', 400) }));
+
   const rules = asList(raw?.conditions).map((c, i) => {
     const type = String(c?.type || 'field').toLowerCase();
     let kind = ['field', 'page', 'email', 'url', 'message'].includes(type) ? type : (/calc/.test(type) ? 'calculation' : 'other');
@@ -107,7 +113,9 @@ export function normalizeJotformLogic(raw) {
     asList(c?.action).forEach((a) => {
       if (kind !== 'page' && kind !== 'email' && kind !== 'url' && kind !== 'message' && a && typeof a === 'object' && (first(a, ['equation', 'formula', 'expression']) !== undefined || first(a, ['resultField']) !== undefined)) {
         if (kind === 'field' || kind === 'other') kind = 'calculation';
-        then.push({ verb: 'calculate', targets: [], text: describeRawAction(a, fieldLabel) });
+        const eqv = first(a, ['equation', 'formula', 'expression']); const rfv = first(a, ['resultField', 'result', 'target']);
+        then.push({ verb: 'calculate', targets: rfv !== undefined ? [fieldLabel(rfv)] : [], targetIds: rfv !== undefined && /^\d+$/.test(String(rfv)) ? [String(rfv)] : [],
+          sources: eqv !== undefined ? [...new Set([...String(eqv).matchAll(/\{(\d+)/g)].map((m) => m[1]))] : [], text: describeRawAction(a, fieldLabel) });
         return;
       }
       if (kind === 'page') {
@@ -133,7 +141,7 @@ export function normalizeJotformLogic(raw) {
       if (Array.isArray(many)) many.forEach((x) => ids.push(String(x)));
       else if (typeof many === 'string') many.split(',').map((x) => x.trim()).filter(Boolean).forEach((x) => ids.push(x));
       const targets = [...new Set(ids)].map(fieldLabel);
-      if (targets.length) then.push({ verb, targets, text: `${verb} ${targets.length > 3 ? targets.slice(0, 3).join(', ') + ` and ${targets.length - 3} more` : targets.join(', ')}` });
+      if (targets.length) then.push({ verb, targets, targetIds: [...new Set(ids)], text: `${verb} ${targets.length > 3 ? targets.slice(0, 3).join(', ') + ` and ${targets.length - 3} more` : targets.join(', ')}` });
       else then.push({ verb: 'other', targets: [], text: describeRawAction(a, fieldLabel) });
     });
     if (!then.length) then.push({ verb: 'other', targets: [], text: 'An action Jotform did not describe' });
@@ -141,7 +149,7 @@ export function normalizeJotformLogic(raw) {
     return { id: String(c?.id ?? i + 1), index: Number(c?.index) || i + 1, kind, link, disabled: String(c?.disabled || '') === '1', when, then };
   }).sort((a, b) => a.index - b.index);
 
-  return { rules, pages, fieldCount: Object.keys(fields).length };
+  return { rules, pages, fieldCount: Object.keys(fields).length, questions: questionList };
 }
 
 // A short stable fingerprint of the rules, so a re-pull can tell whether the logic changed.
