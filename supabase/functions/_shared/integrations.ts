@@ -45,13 +45,23 @@ export function cleanActiveCampaignBase(raw: unknown): string {
 // A form's conditional logic: the rules (show/hide, skip to a page, send an email...) and the questions they refer to.
 // Jotform returns each rule's "terms" and "action" as JSON text, and the whole list as text on some accounts; they are
 // handed on as they come and read by the app (core/jotform-logic.js). Only the form id and the key are sent to Jotform.
-export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn): Promise<any> {
+// Jotform keeps HIPAA and EU accounts on their own API addresses (jotform.com/apidocs); a key only works on its own.
+export function jotformApiBase(region: unknown): string {
+  const r = String(region ?? "").trim().toLowerCase();
+  if (r === "" || r === "standard" || r === "us") return "https://api.jotform.com";
+  if (r === "hipaa") return "https://hipaa-api.jotform.com";
+  if (r === "eu") return "https://eu-api.jotform.com";
+  throw new BadRequest("The Jotform account type should be left blank (standard), or be HIPAA or EU.");
+}
+
+export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn, region: unknown = ""): Promise<any> {
   const id = String(formId ?? "").trim();
   if (!/^\d{6,20}$/.test(id)) throw new BadRequest("The form id must be the number from the form's address.");
   const k = encodeURIComponent(key);
+  const base = jotformApiBase(region);
   const [props, qs] = await Promise.all([
-    getJson(f, `https://api.jotform.com/form/${id}/properties?apiKey=${k}`, {}, key),
-    getJson(f, `https://api.jotform.com/form/${id}/questions?apiKey=${k}`, {}, key),
+    getJson(f, `${base}/form/${id}/properties?apiKey=${k}`, {}, key),
+    getJson(f, `${base}/form/${id}/questions?apiKey=${k}`, {}, key),
   ]);
   let conditions: any = props?.content?.conditions ?? props?.content?.properties?.conditions ?? [];
   if (typeof conditions === "string") { try { conditions = JSON.parse(conditions); } catch { conditions = []; } }
@@ -74,7 +84,7 @@ export async function jotformFormLogic(formId: unknown, key: string, f: FetchFn)
   return { form_id: id, conditions, questions, emails };
 }
 
-export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string; calendlyUser?: string }, f: FetchFn): Promise<any> {
+export async function runImport(service: Service, key: string, opts: { baseUrl?: string; page?: number; email?: string; formId?: string; calendlyUser?: string; region?: string }, f: FetchFn): Promise<any> {
   switch (service) {
     case "wealthbox": {
       let all: any[] = [];
@@ -87,11 +97,11 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       return { workflow_templates: all };
     }
     case "jotform": {
-      if (opts.formId !== undefined && opts.formId !== null && opts.formId !== "") return await jotformFormLogic(opts.formId, key, f);
+      if (opts.formId !== undefined && opts.formId !== null && opts.formId !== "") return await jotformFormLogic(opts.formId, key, f, opts.region);
       let all: any[] = [];
       const limit = 50;
       for (let offset = 0; offset < 500; offset += limit) {
-        const data = await getJson(f, `https://api.jotform.com/user/forms?apiKey=${encodeURIComponent(key)}&offset=${offset}&limit=${limit}&orderby=id`, {}, key);
+        const data = await getJson(f, `${jotformApiBase(opts.region)}/user/forms?apiKey=${encodeURIComponent(key)}&offset=${offset}&limit=${limit}&orderby=id`, {}, key);
         const content = data.content || [];
         all = all.concat(content);
         if (content.length !== limit) break;
