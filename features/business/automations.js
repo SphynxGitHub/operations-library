@@ -280,6 +280,7 @@ OL.commitRequestActivation = function(client, item, plan, { requestType, resourc
     });
 
     item.activatedAt = now;
+    delete item.pendingTasks;   // the prepared tasks became real tasks above
 
     if (result.overrides.length) {
         if (!state.master.askTemplateOverrides) state.master.askTemplateOverrides = [];

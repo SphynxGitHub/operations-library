@@ -14,6 +14,7 @@
 
 import { esc, uid, state, updateAndSync, loadFullClient } from '../../core/data.js';
 import { requestResourceIds, priceRequest, teamMultiplier } from '../../core/request-pricing.js';
+import { applyPendingToPlan, syncPendingTasks } from '../../core/pending-tasks.js';
 import { buildActivationPlan, DEFAULT_ASK_TEMPLATES, computeActivationOverrides, applySopUpdates } from '../../core/activation.js';
 import { findFirstAvailableDate, estimateHoursFromFee, taskDaySlots, loadTierFor, memberDayHours, dailyLoadHours, dayLoadTier, loadTier, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
 import { getOlSettings } from '../../core/ol-settings.js';
@@ -73,7 +74,14 @@ OL.openActivationReview = async function(clientId, itemId) {
         feeByResourceId, requestFee: breakdown.gross,
     });
 
-    OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan, calendarEvents, existingTasks };
+    // Tasks prepared while the request was pending (round 0) drive the plan: brought up to date with the templates first.
+    let finalPlan = plan;
+    if (Array.isArray(item.pendingTasks) && item.pendingTasks.length) {
+        syncPendingTasks(item, { resources, requestType, resourceType: resources[0]?.type || '', askTemplates }, uid);
+        finalPlan = applyPendingToPlan(plan, item.pendingTasks);
+    }
+
+    OL._activationReviewState = { clientId, itemId, requestType, resourceType: resources[0]?.type || '', askTemplates, plan: finalPlan, calendarEvents, existingTasks };
     OL.renderActivationReviewStep();
 };
 
