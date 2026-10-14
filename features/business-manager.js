@@ -685,10 +685,11 @@ OL.renderBusinessTimeReports = function() {
                 <div style="display: flex; gap: 8px; flex: 1; min-width: 240px; align-items:center;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
                     <input type="text" 
+                           id="global-task-filter-search"
                            class="modal-input tiny" 
                            placeholder="Filter time entries, deliverables, or assignees..." 
                            value="${esc(OL.globalTaskFilterState.query)}"
-                           oninput="OL.setGlobalTaskFilter('query', this.value); OL.renderBusinessTimeReports();">
+                           oninput="OL.setGlobalTaskFilter('query', this.value); OL.reRenderPreservingFocus(() => OL.renderBusinessTimeReports());">
                 </div>
 
                 <div style="display: flex; gap: 8px; align-items: center;">
