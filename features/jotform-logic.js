@@ -15,7 +15,7 @@
 
 import { esc, getActiveClient, persist, markClientDirty } from '../core/data.js';
 import { importFrom } from '../core/secrets.js';
-import { normalizeJotformLogic, logicFingerprint, summarizeLogic } from '../core/jotform-logic.js';
+import { normalizeJotformLogic, logicFingerprint, summarizeLogic, describeRawAction } from '../core/jotform-logic.js';
 
 const projectCards = () => (window.OL?.getCurrentProjectData ? window.OL.getCurrentProjectData().resources || [] : []);
 const findCard = (id) => projectCards().find((r) => String(r.id) === String(id));
@@ -78,8 +78,8 @@ async function refreshLoadedFormLogic(client, cap = 10) {
 }
 
 // ---- the map -------------------------------------------------------------------------------------------------
-const KIND_LABEL = { field: 'Show or hide questions', page: 'Skip to a page', email: 'Send an email', url: 'Change the thank-you address', message: 'Change the thank-you message', other: 'Other rule' };
-const VERB_CLASS = { show: 'show', hide: 'hide', require: 'show', 'make optional': 'hide', enable: 'show', disable: 'hide', skip: 'skip', email: 'email', url: 'msg', message: 'msg', other: 'other' };
+const KIND_LABEL = { calculation: 'Calculate a value', field: 'Show or hide questions', page: 'Skip to a page', email: 'Send an email', url: 'Change the thank-you address', message: 'Change the thank-you message', other: 'Other rule' };
+const VERB_CLASS = { calculate: 'msg', show: 'show', hide: 'hide', require: 'show', 'make optional': 'hide', enable: 'show', disable: 'hide', skip: 'skip', email: 'email', url: 'msg', message: 'msg', other: 'other' };
 const ARROW = '<svg class="jl-arrow-svg" viewBox="0 0 28 12" width="28" height="12" aria-hidden="true"><path d="M1 6h24M20 1.5 26 6l-6 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function ruleHtml(r) {
@@ -87,7 +87,7 @@ function ruleHtml(r) {
     ? r.when.map((w, i) => `${i ? `<div class="jl-join">${r.link === 'any' ? 'OR' : 'AND'}</div>` : ''}
         <div class="jl-chip jl-chip-if"><strong>${esc(w.fieldLabel)}</strong> ${esc(w.op)}${w.value ? ` <span class="jl-val">${esc(w.value)}</span>` : ''}</div>`).join('')
     : '<div class="jl-chip jl-chip-if">Always</div>';
-  const thenChips = r.then.map((t) => `<div class="jl-chip jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}">${esc(t.text)}</div>`).join('');
+  const thenChips = r.then.map((t) => `<div class="jl-chip jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}">${esc(tidy(t))}</div>`).join('');
   return `
     <div class="jl-rule jl-k-${r.kind}${r.disabled ? ' is-off' : ''}">
       <div class="jl-rule-head"><span class="jl-n">Rule ${esc(r.index)}</span><span class="jl-kind">${esc(KIND_LABEL[r.kind] || KIND_LABEL.other)}</span>${r.disabled ? '<span class="jl-off">Turned off in Jotform</span>' : ''}</div>
@@ -104,6 +104,13 @@ function ruleHtml(r) {
 // Start -> Page 1 -> Page 2 ... -> Submit -> Thank-you. A "skip to a page" rule is an arc from the page its question is on to the page
 // it jumps to; show/hide rules sit under the page of the question they watch; emails hang off Submit; thank-you changes hang off the
 // Thank-you step. Rules read from an older load carry no page numbers, so they sit under Start ("Any page") until Refresh from Jotform.
+
+// rules loaded before the wording was improved may still hold raw JSON as their text; read it as a sentence
+const tidy = (t) => {
+  const x = String((t && t.text) || '');
+  if (x.charAt(0) !== '{') return x;
+  try { return describeRawAction(JSON.parse(x)); } catch (e) { return x.length > 100 ? x.slice(0, 99) + '…' : x; }
+};
 const condText = (r) => (r.when.length ? r.when.map((w) => `${w.fieldLabel} ${w.op}${w.value ? ' ' + w.value : ''}`).join(r.link === 'any' ? ' or ' : ' and ') : 'Always');
 const clipT = (t, n) => { const x = String(t || ''); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
 const targetOf = (r) => {
@@ -120,7 +127,7 @@ function flowHtml(fl) {
   const nodeStyle = 'min-width:130px;max-width:190px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);font-size:12px;font-weight:600;text-align:center;';
   const chip = (r) => `<div class="jl-fchip${r.disabled ? ' is-off' : ''}" style="margin-top:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:11px;line-height:1.4;max-width:190px;${r.disabled ? 'opacity:.5;' : ''}">
       <div class="muted" style="font-size:10px;">IF ${esc(clipT(condText(r), 90))}</div>
-      ${r.then.map((t) => `<div class="jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}" style="margin-top:3px;">${esc(clipT(t.text, 90))}</div>`).join('')}
+      ${r.then.map((t) => `<div class="jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}" style="margin-top:3px;">${esc(clipT(tidy(t), 90))}</div>`).join('')}
       ${r.disabled ? '<div class="muted" style="font-size:10px;">Turned off in Jotform</div>' : ''}</div>`;
   const under = { start: [], submit: [], thanks: [] }; const pageRules = {};
   const arcs = [];
