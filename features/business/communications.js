@@ -2031,7 +2031,7 @@ OL.confirmExcerptLink = async function() {
             id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
             targetType: t.type, targetId: t.id, targetLabel: t.label,
             attachmentPath: st.attachmentPath || null,
-            ...(t.type === 'request' ? { noRollDown: true } : {}),   // a request link stays on the request; tasks get it only when picked
+            ...(t.type === 'request' && narrowedRequests.has(String(t.id)) ? { noRollDown: true } : {}),   // only when a specific task was picked too
             createdAt,
         });
     });
@@ -2052,7 +2052,7 @@ OL.confirmExcerptLink = async function() {
     if (typeof OL.rollDownForRequest === 'function') {
         const clientId = OL._gmailLinkState?.clientId;
         if (clientId) {
-            for (const t of []) {
+            for (const t of st.selected.filter((x) => x.type === 'request' && !narrowedRequests.has(String(x.id)))) {
                 try { await OL.rollDownForRequest(clientId, t.id); } catch (e) { console.warn('Roll-down failed:', e); }
             }
         }
