@@ -58,6 +58,10 @@ export function normalizeJotformLogic(raw) {
     return String(target);
   };
   const fieldLabel = (id) => (fields[String(id)] ? fields[String(id)].label : `Question ${id}`);
+  // the page a question sits on: 1 + the page breaks that come before it
+  const byQid = {}; questions.forEach((q) => { byQid[String(q.qid)] = q; });
+  const pageOfField = (id) => { const q = byQid[String(id)]; if (!q || q.order === undefined || q.order === null || q.order === '') return null; return 1 + pageBreaks.filter((pb) => Number(pb.order) < Number(q.order)).length; };
+  const targetPageOf = (target) => { const t = String(target ?? '').toLowerCase(); if (!t) return null; if (t === 'end' || t === 'thankyou' || t === 'submit') return 'end'; const m = t.match(/(\d+)/); return m ? Number(m[1]) : null; };
 
   const rules = asList(raw?.conditions).map((c, i) => {
     const type = String(c?.type || 'field').toLowerCase();
@@ -69,14 +73,14 @@ export function normalizeJotformLogic(raw) {
       const op = first(t, ['operator', 'op']);
       const value = first(t, ['value', 'val', 'term']);
       const o = opText(op);
-      return { field: fid != null ? String(fid) : '', fieldLabel: fid != null ? fieldLabel(fid) : 'A question', op: o, value: NO_VALUE_OPS.has(o) || value === undefined ? '' : clip(value, 60) };
+      return { page: fid != null ? pageOfField(fid) : null, field: fid != null ? String(fid) : '', fieldLabel: fid != null ? fieldLabel(fid) : 'A question', op: o, value: NO_VALUE_OPS.has(o) || value === undefined ? '' : clip(value, 60) };
     });
 
     const then = [];
     asList(c?.action).forEach((a) => {
       if (kind === 'page') {
         const target = first(a, ['skipTo', 'skip', 'page', 'target']);
-        then.push({ verb: 'skip', targets: [], text: target !== undefined ? `Go to ${pageLabel(target)}` : 'Skip ahead' });
+        then.push({ verb: 'skip', targets: [], targetPage: target !== undefined ? targetPageOf(target) : null, text: target !== undefined ? `Go to ${pageLabel(target)}` : 'Skip ahead' });
         return;
       }
       if (kind === 'email') {
