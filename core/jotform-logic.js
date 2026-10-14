@@ -22,7 +22,7 @@ const asList = (v) => {
   return [];
 };
 const first = (o, keys) => { for (const k of keys) { if (o && o[k] !== undefined && o[k] !== null && o[k] !== '') return o[k]; } return undefined; };
-const clip = (s, n) => { const t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+const clip = (s, n) => { const t = String(s == null ? '' : s).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
 const OPERATORS = {
   equals: 'is', equal: 'is', is: 'is', notequals: 'is not', notequal: 'is not', isnot: 'is not',
