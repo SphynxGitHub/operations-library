@@ -1265,8 +1265,16 @@ function cleanEmailHtml(html, keyMap) {
     return out.replace(/\{([A-Za-z0-9_]+)\}/g, (m, name) => keyMap[name] || m).slice(0, 20000);
 }
 
+// Jotform HIPAA and EU accounts run on their own addresses. The account type is kept in the credential's username
+// box: blank for a standard account, or HIPAA / EU.
+export function jotformRegionOf(creds) {
+    const r = String(creds?.username || '').trim().toLowerCase();
+    return r === 'hipaa' || r === 'eu' ? r : '';
+}
+const jotformSiteOf = (region) => (region === 'hipaa' ? 'https://hipaa.jotform.com' : region === 'eu' ? 'https://eu.jotform.com' : 'https://www.jotform.com');
+
 async function readJotformForm(client, creds, form) {
-    const raw = await importFrom('jotform', client.id, creds.id, { formId: String(form.id) });
+    const raw = await importFrom('jotform', client.id, creds.id, { formId: String(form.id), region: jotformRegionOf(creds) });
     const norm = normalizeJotformLogic({ conditions: raw.conditions, questions: raw.questions });
     const { fields, tags, keyMap } = jotformFieldsOf(client, raw);
     const emails = (raw.emails || []).map((e, i) => ({
@@ -1281,7 +1289,8 @@ export async function importJotform(client, opts = {}) {
     if (!hasKey(creds)) throw new Error("Jotform API Key missing.");
     await secureEntry(client, creds);
 
-    const data = await importFrom('jotform', client.id, creds.id);
+    const jfRegion = jotformRegionOf(creds);
+    const data = await importFrom('jotform', client.id, creds.id, { region: jfRegion });
     const forms = data.content || data.data || (Array.isArray(data) ? data : []);
     const library = client.projectData.localResources || (client.projectData.localResources = []);
     const cardOf = (id) => library.find((r) => r && r.source === 'jotform' && String(r.externalId) === String(id));
@@ -1314,8 +1323,8 @@ export async function importJotform(client, opts = {}) {
         const d = detailsOf(id);
         const tags = d ? (d.tagIds || []).map(tagById).filter(Boolean) : [];
         const emails = d ? (d.emails || []) : [];
-        const formUrl = `https://www.jotform.com/form/${id}`;
-        const editUrl = `https://www.jotform.com/build/${id}`;
+        const formUrl = `${jotformSiteOf(jfRegion)}/form/${id}`;
+        const editUrl = `${jotformSiteOf(jfRegion)}/build/${id}`;
         // every form starts with the same three steps; the emails it sends (once read) are attached as collateral to steps 2 and 3
         const notify = emails.filter((e) => e.kind === 'Notification').map((e) => `jfemail-${id}-${e.key}`);
         const auto = emails.filter((e) => e.kind === 'Autoresponder').map((e) => `jfemail-${id}-${e.key}`);
@@ -1956,7 +1965,7 @@ Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
-    importYCBM, importActiveCampaign, importMailerLite, importKeap, importJotform,
+    importYCBM, importActiveCampaign, importMailerLite, importKeap, importJotform, jotformRegionOf,
     syncProcessStreet, syncRedtail, syncAllIntegrations, autoPullIntegrations, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
     openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,

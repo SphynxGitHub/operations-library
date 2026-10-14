@@ -32,7 +32,7 @@ const toast = (t) => { if (typeof OL.showToast === 'function') OL.showToast(t); 
 async function fetchLogic(client, card) {
   const creds = OL.getCredsForApp ? OL.getCredsForApp(client, 'jotform') : null;
   if (!creds || !(creds.secretSet || String(creds.secret || '').trim())) throw new Error('Add the Jotform API key in Credentials first.');
-  const raw = await importFrom('jotform', client.id, creds.id, { formId: String(card.externalId) });
+  const raw = await importFrom('jotform', client.id, creds.id, { formId: String(card.externalId), region: (typeof OL.jotformRegionOf === 'function' ? OL.jotformRegionOf(creds) : '') });
   const norm = normalizeJotformLogic({ conditions: raw.conditions, questions: raw.questions });
   return { norm, fp: logicFingerprint(norm) };
 }

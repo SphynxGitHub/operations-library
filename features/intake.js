@@ -40,7 +40,7 @@ const SYNC_SYSTEMS = [
     { id: 'redtail', name: 'Redtail', hints: ['redtail'], crm: true, pulls: 'your workflow templates' },
     { id: 'wealthbox', name: 'Wealthbox', hints: ['wealthbox'], crm: true, pulls: 'your workflow templates' },
     { id: 'calendly', name: 'Calendly', hints: ['calendly'], pulls: 'your event types' },
-    { id: 'jotform', name: 'Jotform', hints: ['jotform'], pulls: 'your forms' },
+    { id: 'jotform', name: 'Jotform', hints: ['jotform'], pulls: 'your forms', extra: { label: 'Jotform account type (HIPAA or EU; leave blank for standard)', placeholder: 'HIPAA' } },
     { id: 'activecampaign', name: 'ActiveCampaign', hints: ['activecampaign', 'active campaign'], pulls: 'your automations', extra: { label: 'ActiveCampaign API URL', placeholder: 'https://youraccount.api-us1.com' } },
     { id: 'mailerlite', name: 'MailerLite', hints: ['mailerlite'], pulls: 'your automations' },
     { id: 'keap', name: 'Keap', hints: ['keap', 'infusionsoft'], pulls: 'your campaigns and sequences' },
