@@ -99,7 +99,82 @@ function ruleHtml(r) {
     </div>`;
 }
 
-function openJotformLogicMap(resId) {
+
+// ---- the flow map: the form's pages as a line, with each rule hung where it happens ---------------------------------
+// Start -> Page 1 -> Page 2 ... -> Submit -> Thank-you. A "skip to a page" rule is an arc from the page its question is on to the page
+// it jumps to; show/hide rules sit under the page of the question they watch; emails hang off Submit; thank-you changes hang off the
+// Thank-you step. Rules read from an older load carry no page numbers, so they sit under Start ("Any page") until Refresh from Jotform.
+const condText = (r) => (r.when.length ? r.when.map((w) => `${w.fieldLabel} ${w.op}${w.value ? ' ' + w.value : ''}`).join(r.link === 'any' ? ' or ' : ' and ') : 'Always');
+const clipT = (t, n) => { const x = String(t || ''); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
+const targetOf = (r) => {
+  const t = (r.then || []).find((x) => x.verb === 'skip'); if (!t) return null;
+  if (t.targetPage !== undefined && t.targetPage !== null) return t.targetPage;
+  if (/end of the form/i.test(t.text || '')) return 'end';
+  const m = String(t.text || '').match(/Page (\d+)/i); return m ? Number(m[1]) : null;
+};
+const srcPage = (r) => { const w = r.when.find((x) => x.page); return w ? w.page : null; };
+
+function flowHtml(fl) {
+  const rules = fl.rules || [];
+  const pageCount = Math.max(1, (fl.pages || []).length);
+  const nodeStyle = 'min-width:130px;max-width:190px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);font-size:12px;font-weight:600;text-align:center;';
+  const chip = (r) => `<div class="jl-fchip${r.disabled ? ' is-off' : ''}" style="margin-top:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:11px;line-height:1.4;max-width:190px;${r.disabled ? 'opacity:.5;' : ''}">
+      <div class="muted" style="font-size:10px;">IF ${esc(clipT(condText(r), 90))}</div>
+      ${r.then.map((t) => `<div class="jl-chip-then jl-v-${VERB_CLASS[t.verb] || 'other'}" style="margin-top:3px;">${esc(clipT(t.text, 90))}</div>`).join('')}
+      ${r.disabled ? '<div class="muted" style="font-size:10px;">Turned off in Jotform</div>' : ''}</div>`;
+  const under = { start: [], submit: [], thanks: [] }; const pageRules = {};
+  const arcs = [];
+  rules.forEach((r) => {
+    if (r.kind === 'page') {
+      const to = targetOf(r); const from = srcPage(r);
+      if (to !== null && from) { arcs.push({ from, to, label: condText(r), off: r.disabled }); return; }
+      (from ? (pageRules[from] = pageRules[from] || []) : under.start).push(r); return;
+    }
+    if (r.kind === 'email') { under.submit.push(r); return; }
+    if (r.kind === 'url' || r.kind === 'message') { under.thanks.push(r); return; }
+    const pg = srcPage(r);
+    if (pg) (pageRules[pg] = pageRules[pg] || []).push(r); else under.start.push(r);
+  });
+  const col = (id, title, items, sub) => `<div class="jl-fcol" style="display:flex;flex-direction:column;align-items:center;flex:0 0 auto;">
+      <div id="${id}" class="jl-fnode" style="${nodeStyle}">${esc(title)}${sub ? `<div class="muted" style="font-weight:400;font-size:10px;margin-top:2px;">${esc(sub)}</div>` : ''}</div>
+      ${items.map(chip).join('')}</div>`;
+  const arrow = '<div style="flex:0 0 auto;align-self:flex-start;margin-top:11px;opacity:.6;">' + ARROW + '</div>';
+  const cols = [col('jlf-start', 'Form opened', under.start, under.start.length ? 'Any page' : '')];
+  for (let n = 1; n <= pageCount; n++) cols.push(col(`jlf-p${n}`, ((fl.pages || [])[n - 1] || {}).label || `Page ${n}`, pageRules[n] || []));
+  cols.push(col('jlf-submit', 'Submitted', under.submit, under.submit.length ? 'Emails sent' : ''));
+  cols.push(col('jlf-end', 'Thank-you', under.thanks));
+  const space = 34 + arcs.length * 0 + Math.min(arcs.length, 6) * 24;
+  return `<div class="jl-flowmap" data-arcs='${esc(JSON.stringify(arcs))}' style="position:relative;overflow:auto;padding:${space}px 8px 12px;">
+      <svg class="jl-farcs" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible;" width="0" height="0"></svg>
+      <div style="display:flex;gap:14px;align-items:flex-start;width:max-content;">${cols.join(arrow)}</div>
+      ${arcs.length ? '' : '<div class="tiny muted" style="margin-top:12px;">No page skips in this form, so the pages run in order.</div>'}
+    </div>`;
+}
+
+function drawFlowArcs() {
+  const root = document.querySelector('.jl-flowmap'); if (!root) return;
+  const svg = root.querySelector('.jl-farcs'); if (!svg) return;
+  let arcs = []; try { arcs = JSON.parse(root.getAttribute('data-arcs') || '[]'); } catch (e) { arcs = []; }
+  const rb = root.getBoundingClientRect();
+  const topOf = (id) => { const el = document.getElementById(id); if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.left - rb.left + root.scrollLeft + b.width / 2, y: b.top - rb.top + root.scrollTop }; };
+  const w = root.scrollWidth, h = root.scrollHeight;
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  let out = '<defs><marker id="jlf-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>';
+  arcs.forEach((a, i) => {
+    const p0 = topOf(`jlf-p${a.from}`); const p1 = topOf(a.to === 'end' ? 'jlf-end' : `jlf-p${a.to}`);
+    if (!p0 || !p1) return;
+    const lift = 26 + (i % 6) * 22;
+    const mx = (p0.x + p1.x) / 2; const cy = Math.min(p0.y, p1.y) - lift * 2;
+    out += `<g style="color:var(--accent);${a.off ? 'opacity:.4;' : ''}"><path d="M${p0.x},${p0.y} Q${mx},${cy} ${p1.x},${p1.y}" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#jlf-ah)"/>`;
+    const ly = (p0.y + 2 * cy + p1.y) / 4; const t = clipT(a.label, 46);
+    out += `<rect x="${mx - t.length * 3.1 - 6}" y="${ly - 9}" width="${t.length * 6.2 + 12}" height="16" rx="8" fill="var(--panel)" stroke="currentColor" stroke-width=".8"/><text x="${mx}" y="${ly + 3}" text-anchor="middle" font-size="10" fill="currentColor" style="fill:var(--text-main,currentColor)">${esc(t)}</text></g>`;
+  });
+  svg.innerHTML = out;
+}
+
+let jlView = 'flow';
+function openJotformLogicMap(resId, view) {
+  if (view) jlView = view;
   const card = findCard(resId);
   if (!card || !card.formLogic) { loadJotformLogic(resId); return; }
   const fl = card.formLogic;
@@ -117,11 +192,16 @@ function openJotformLogicMap(resId) {
         <strong>${fl.rules.length} rule${fl.rules.length === 1 ? '' : 's'}</strong>${fl.rules.length ? ` · ${esc(summarizeLogic(norm))}` : ''}
         · ${fl.fieldCount || 0} questions${(fl.pages || []).length > 1 ? ` · ${(fl.pages || []).length} pages` : ''} · loaded ${esc(ago(fl.at))}
       </div>
-      ${fl.rules.length ? fl.rules.map(ruleHtml).join('') : '<div class="jl-empty">This form has no conditional logic. Everyone sees every question and the same thank-you step.</div>'}
+      ${fl.rules.length ? `<div style="display:flex;gap:6px;margin:10px 0;">
+        <button class="btn tiny ${jlView === 'flow' ? 'primary' : 'soft'}" onclick="OL.openJotformLogicMap('${esc(card.id)}','flow')">Flow map</button>
+        <button class="btn tiny ${jlView === 'list' ? 'primary' : 'soft'}" onclick="OL.openJotformLogicMap('${esc(card.id)}','list')">Rule list</button></div>` : ''}
+      ${!fl.rules.length ? '<div class="jl-empty">This form has no conditional logic. Everyone sees every question and the same thank-you step.</div>'
+        : (jlView === 'flow' ? flowHtml(fl) : fl.rules.map(ruleHtml).join(''))}
       <div class="tiny muted" style="margin-top:12px;">Read-only. The rules are edited in Jotform; this map is a reading of them, refreshed whenever Jotform is pulled.</div>
     </div>`;
-  window.openModal(html);
+  if (typeof OL.showOverlayModal === 'function') OL.showOverlayModal(`<div style="width:100%;">${html}</div>`, { wide: true }); else window.openModal(html);
   if (window.lucide) window.lucide.createIcons();
+  if (jlView === 'flow') requestAnimationFrame(() => requestAnimationFrame(drawFlowArcs));
 }
 
 window.OL = window.OL || {};
