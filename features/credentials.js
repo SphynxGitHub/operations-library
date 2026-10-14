@@ -92,6 +92,11 @@ export function renderAccessSection(ownerId, type) {
                                        placeholder="Calendly user ID (optional; lets a scheduling-only key work)"
                                        value="${esc(conn.calendlyUser || '')}"
                                        onchange="OL.updateAccessValue('${conn.id}', 'calendlyUser', this.value.trim())">` : ''}
+                                ${/jotform/i.test((allApps.find((a) => a.id === conn.appId) || {}).name || '') ? `
+                                <select class="tiny-select" style="width:100%; margin-top:4px;" title="HIPAA and EU Jotform accounts use a different address"
+                                        onchange="OL.updateAccessValue('${conn.id}', 'username', this.value)">
+                                    ${[['', 'Standard Jotform account'], ['hipaa', 'HIPAA Jotform account'], ['eu', 'EU Jotform account']].map(([v, l]) => `<option value="${v}" ${String(conn.username || '').trim().toLowerCase() === v ? 'selected' : ''}>${l}</option>`).join('')}
+                                </select>` : ''}
                             </div>
 
                             <div style="display:flex; align-items:center; gap:8px; padding: 5px;">
