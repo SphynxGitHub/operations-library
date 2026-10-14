@@ -169,7 +169,7 @@ const summaryLine = (s) => {
 };
 
 function candidates() {
-    return cards().filter((r) => !same(r.id, dlg.oldId) && !r.isArchived && !String(r.id).startsWith('reqline-'));
+    return cards().filter((r) => !same(r.id, dlg.oldId) && !r.isArchived && !r.archived && !String(r.id).startsWith('reqline-'));
 }
 
 function paintList() {

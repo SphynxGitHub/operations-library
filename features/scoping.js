@@ -1725,7 +1725,7 @@ export function filterDependencySearch(currentResId, mode, query) {
     } else {
         const data = OL.getCurrentProjectData();
         matches = (data.resources || []).filter(r => 
-            String(r.id) !== String(currentResId) && !existingIds.includes(r.id) && r.name.toLowerCase().includes(q)
+            r && !r.isArchived && !r.archived && !r.isDeleted && String(r.id) !== String(currentResId) && !existingIds.includes(r.id) && String(r.name || '').toLowerCase().includes(q)
         );
         html = matches.map(r => `
             <div class="search-result-item" onmousedown="OL.addDependency('${currentResId}', '${r.id}', 'resource')">
