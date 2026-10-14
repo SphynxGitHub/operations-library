@@ -1899,6 +1899,12 @@ OL.confirmExcerptCreateTask = async function() {
     }, clientId);
     if (!newTaskId) return;
 
+    // A request is also selected: the new task is the ONLY task this link goes to (the request keeps its own link and
+    // nothing is copied onto its other tasks). The full task settings open afterwards, where the request, status,
+    // assignee and due date are set.
+    const pickedReqs = st.selected.filter((x) => x.type === 'request');
+    if (pickedReqs.length) st.noRollDownRequests = pickedReqs.map((r) => String(r.id));
+    if (!st.afterLink) st.afterLink = async () => { await OL.openTaskInContext(clientId, newTaskId); };
     st.selected.push({ type: 'task', id: newTaskId, label: title });
     st.creatingNewTask = false;
     await OL.confirmExcerptLink();
@@ -2024,7 +2030,7 @@ OL.confirmExcerptLink = async function() {
             const task = taskRows.find((tk) => String(tk.id) === String(pt.id));
             return task && linksForTask(task).some((l) => String(l.requestId) === String(r.id));
         });
-        if (hasOwnTask) narrowedRequests.add(String(r.id));
+        if (hasOwnTask || (st.noRollDownRequests || []).includes(String(r.id))) narrowedRequests.add(String(r.id));
     });
     st.selected.forEach((t) => {
         pieceLinks.push({
@@ -3886,6 +3892,8 @@ OL.createAndLinkGmailTask = async function() {
         });
     }, st.clientId);
 
+    st.openTaskAfter = { clientId: st.clientId, taskId: newTaskId };   // full task settings open once linked
+    if (st.requestId) st.skipRollDown = true;   // the new task is the only task this email goes to
     st.taskId = newTaskId;
     st.creatingTask = false;
     await OL.saveGmailLink();
@@ -3934,7 +3942,7 @@ OL.saveGmailLink = async function({ skipArchive = false } = {}) {
 
     // Linking the whole email to a request rolls it down onto that request's existing build tasks right away —
     // same as an excerpt or attachment link does (see confirmExcerptLink above).
-    if (st.requestId && typeof OL.rollDownForRequest === 'function') {
+    if (st.requestId && !st.skipRollDown && typeof OL.rollDownForRequest === 'function') {
         try { await OL.rollDownForRequest(st.clientId, st.requestId); } catch (e) { console.warn('Roll-down failed:', e); }
     }
 
@@ -3957,6 +3965,7 @@ OL.saveGmailLink = async function({ skipArchive = false } = {}) {
     OL.closeModal();
     await OL.loadGmailFeed();
     OL._refreshAfterGmailAction();
+    if (st.openTaskAfter) { try { await OL.openTaskInContext(st.openTaskAfter.clientId, st.openTaskAfter.taskId); } catch (e) { console.warn('Could not open the new task:', e); } }
     // 4. If the link is specific enough (a project AND another item) and this wasn't a quick, partial link
     // (skipArchive — see the "This answers it" button, and the suggested-items rule above), ASK whether to archive
     // THIS email. Nothing is archived unless it's confirmed, and the rest of the conversation is never touched.
