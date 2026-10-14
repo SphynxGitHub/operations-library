@@ -2302,7 +2302,12 @@ export function _fvRenderSteps(resources) {
   const WF_HDR    = 26;   // workflow sub-zone label height
   // resource column header height: the name, then (for a draft) its Open chip, then the callout chips
   const _hasCallouts = typeof OL.fvCalloutsFor === 'function' && (resources || []).some((r) => { try { return OL.fvCalloutsFor(r).some((c) => c.source !== 'logic'); } catch (e) { return false; } });
-  const RES_HDR   = (PRINTING ? 30 + (_hasCallouts ? 26 : 0) : ((resources || []).some((r) => r && r.isDraft) ? 70 : 50))
+  // Resource titles wrap instead of being cut off (they print in full). Room for the longest one is reserved under every
+  // heading so the rows stay level: lines are counted greedily at roughly 21 characters across a one-column heading.
+  const HDR_LINE_H = 13;
+  const _hdrLines = (name) => { let lines = 1, cur = 0; String(name || '').split(/\s+/).filter(Boolean).forEach((w) => { if (cur && cur + 1 + w.length > 21) { lines++; cur = w.length; } else cur += (cur ? 1 : 0) + w.length; }); return lines; };
+  const EXTRA_HDR = (Math.min(3, Math.max(1, ...(resources || []).filter((r) => r && (r.steps || []).length).map((r) => _hdrLines(r.name)))) - 1) * HDR_LINE_H;
+  const RES_HDR   = EXTRA_HDR + (PRINTING ? 30 + (_hasCallouts ? 26 : 0) : ((resources || []).some((r) => r && r.isDraft) ? 70 : 50))
     + (typeof OL.fvRefUsers === 'function' && (resources || []).some((r) => r && OL.fvRefUsers(r.id).length) ? 22 : 0);
   const STAGE_GAP = 48;
   const WF_GAP    = 20;
@@ -2619,12 +2624,12 @@ export function _fvRenderSteps(resources) {
         hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
           width:${headW}px;z-index:6;`;
         hdrEl.innerHTML = `
-          <div style="display:flex;align-items:center;gap:5px;">
-            <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
+          <div style="display:flex;align-items:flex-start;gap:5px;flex-wrap:wrap;">
+            <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;margin-top:3px;"></div>
             <span title="${esc(res.name)} (double-click to rename)" class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}"
                   style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
-                         letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
-                         text-overflow:ellipsis;max-width:${headW - 20}px;">${esc(res.name)}</span>${(() => {
+                         letter-spacing:0.06em;white-space:normal;overflow-wrap:anywhere;line-height:1.25;
+                         max-width:${headW - 20}px;">${esc(res.name)}</span>${(() => {
               if (!res.isGlobal) return '';
               const pl = (res.placements || []);
               const mine = pl.find(p => String(p.workflowId) === String(workflow.id)) || {};
@@ -9488,4 +9493,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.j' });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-13.k' });
