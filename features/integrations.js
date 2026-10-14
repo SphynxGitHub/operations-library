@@ -1356,7 +1356,7 @@ export async function importJotform(client, opts = {}) {
     fresh.forEach((d, id) => {
         const card = cardOf(id); if (!card) return;
         card.formDetails = { v: d.v, at: d.at, fields: d.fields, tagIds: d.tagIds, emails: d.emails };
-        card.formLogic = { at: d.at, fp: d.logic.fp, rules: d.logic.norm.rules.slice(0, 200), pages: d.logic.norm.pages.slice(0, 60), fieldCount: d.logic.norm.fieldCount };
+        card.formLogic = { at: d.at, fp: d.logic.fp, rules: d.logic.norm.rules.slice(0, 200), pages: d.logic.norm.pages.slice(0, 60), fieldCount: d.logic.norm.fieldCount, questions: (d.logic.norm.questions || []).slice(0, 300) };
     });
     if (logicChanged.length) {
         logicChanged.forEach((n) => { if (!summary.changed.includes(n)) summary.changed.push(n); });
