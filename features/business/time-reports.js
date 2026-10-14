@@ -130,7 +130,7 @@ OL.renderBusinessTimeReports = function() {
                            id="time-report-search"
                            style="width: 100%; box-sizing: border-box;"
                            value="${esc(OL.timeReportFilterState.query || '')}"
-                           oninput="OL.timeReportFilterState.query = this.value; OL.renderBusinessTimeReports();">
+                           oninput="OL.timeReportFilterState.query = this.value; OL.reRenderPreservingFocus(() => OL.renderBusinessTimeReports());">
                 </div>
 
                 <!-- Billable Filters -->
