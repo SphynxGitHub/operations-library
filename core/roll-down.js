@@ -22,7 +22,7 @@ export function rollDownPieceLinks(pieceLinks, message, requestId, tasks, ctx) {
     };
 
     (Array.isArray(pieceLinks) ? pieceLinks : []).forEach((l) => {
-        if (!l || l.rolledDownFrom || l.targetType !== 'request' || String(l.targetId) !== rid) return;
+        if (!l || l.rolledDownFrom || l.noRollDown || l.targetType !== 'request' || String(l.targetId) !== rid) return;   // noRollDown: picked together with specific tasks, so it stays on those
         const base = { kind: l.kind || 'excerpt', text: l.text || '', note: l.note || '' };
         if (l.attachmentPath) base.attachmentPath = l.attachmentPath;
         if (l.attachmentName) base.attachmentName = l.attachmentName;
