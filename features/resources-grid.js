@@ -59,9 +59,9 @@ function _renderResourceManagerImpl() {
     const types = [...new Set(source.map(r => r.type).filter(t => t && t !== 'Workflow'))].sort();
     const apps = [...new Set([
         // Direct app on resource
-        ...source.map(r => r.appName).filter(Boolean),
+        ...source.map(r => r && r.appName).filter(Boolean),
         // Apps on steps within each resource
-        ...source.flatMap(r => (r.steps || []).map(s => s.appName).filter(Boolean))
+        ...source.flatMap(r => (r.steps || []).map(s => s && s.appName).filter(Boolean))
     ])].sort();
     const dataTags = state.master.datapoints?.filter(d => !d.isBundle) || [];
     const team = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || []), { name: 'Client 1' }, { name: 'Client 2' }];
