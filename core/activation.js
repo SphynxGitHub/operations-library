@@ -203,9 +203,10 @@ export function applySopUpdates(templates, decisions, ctx) {
 // core/requests.js, that's the caller's job, done once the commit actually succeeds.
 export function commitActivationPlan(plan, ctx) {
     const created = [];
+    const includedIds = new Set((plan || []).filter((r) => r.included && r.fromPending).map((r) => r.id));
     (plan || []).filter((row) => row.included).forEach((row) => {
         const task = {
-            id: ctx.uid(), title: row.title, status: 'Open', createdAt: ctx.now,
+            id: row.fromPending ? row.id : ctx.uid(), title: row.title, status: 'Open', createdAt: ctx.now,
             phase: row.kind === 'ask' ? 'before' : 'implementation',
             askKind: row.kind === 'ask' ? row.askKind : null,
             instructions: row.instructions || '',
@@ -214,6 +215,9 @@ export function commitActivationPlan(plan, ctx) {
             ...(row.workSlots && row.workSlots.length > 1 ? { workSlots: row.workSlots } : {}),
             dueDate: row.dueDate || '',
             links: [],
+            // Dependencies set while the request was pending, kept where the task they point at was also created.
+            ...(row.fromPending && (row.blockedBy || []).some((d) => includedIds.has(d.id))
+                ? { blockedBy: row.blockedBy.filter((d) => includedIds.has(d.id)).map((d) => ({ kind: 'task', id: d.id, addedDate: ctx.now })) } : {}),
         };
         addLink(task, ctx.requestId, row.resourceId ? [row.resourceId] : []);
         ctx.clientTasks.push(task);
