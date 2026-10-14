@@ -771,7 +771,7 @@ export function openResourceModal(targetId, draftObj = null) {
             if (!ref.id || key === String(res.id) || collateralSeen.has(key)) return;
             collateralSeen.add(key);
             const target = findRes(ref.id);
-            collateralRows.push({ id: ref.id, name: (target && target.name) || ref.name || 'Resource', type: (target && target.type) || ref.type || 'Resource', note: `Step ${i + 1}: ${st.name || 'Unnamed step'}`, open: !!target });
+            collateralRows.push({ id: ref.id, name: (target && target.name) || ref.name || 'Resource', type: (target && target.type) || ref.type || 'Resource', note: `Step ${i + 1}: ${st.name || 'Unnamed step'}`, open: !!target, replaceable: !((st.links || []).some((l) => l && String(l.id) === key && /^(sop|guide)$/i.test(l.type || '')) ) });
         });
     });
     const collateralRowHtml = (r) => `
@@ -783,6 +783,9 @@ export function openResourceModal(targetId, draftObj = null) {
                 <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(r.note)}</div>
             </div>
             <span class="pill tiny soft" style="flex:0 0 auto;">${esc(String(r.type).toUpperCase())}</span>
+            ${r.replaceable ? `<button class="btn tiny soft" style="flex:0 0 auto;display:flex;align-items:center;gap:6px;" title="Swap this collateral for another resource on this card" onclick="event.stopPropagation();OL.openReplaceCollateral('${esc(r.id)}','${esc(res.id)}')">
+                <i data-lucide="replace" style="width:12px;height:12px;"></i> Replace
+            </button>` : ''}
         </div>`;
     const guideRows = linkedSOPs.map((sop) => ({ id: sop.id, name: sop.name, type: 'Guide', note: 'Master guide', open: false }));
 
@@ -816,7 +819,12 @@ export function openResourceModal(targetId, draftObj = null) {
         <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
             <i data-lucide="paperclip" style="width:14px; height:14px;"></i> COLLATERAL
         </label>
-        <div class="tiny muted" style="margin:4px 0 0;">What this resource uses, and where it is used.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:4px 0 0;">
+            <div class="tiny muted" style="flex:1;">What this resource uses, and where it is used.</div>
+            <button class="btn tiny soft" style="display:flex;align-items:center;gap:6px;" title="Use another resource everywhere this one is used" onclick="OL.openMergeResource('${esc(res.id)}')">
+                <i data-lucide="merge" style="width:12px;height:12px;"></i> Merge into another resource
+            </button>
+        </div>
         ${subLabel('USES', resDeps.length + collateralRows.length + guideRows.length)}
         <div class="dp-manager-list" id="res-dependency-list">
             ${resDeps.map((dep) => renderDependencyRow(dep, res.id)).join('')}

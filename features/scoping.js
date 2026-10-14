@@ -1636,6 +1636,7 @@ export function renderDependencyRow(dep, parentId) {
                     <span style="font-size:8px; opacity:0.5; text-transform:uppercase;">${isTask ? (obj?.status || 'Pending') : (obj?.type || 'Resource')}</span>
                 </div>
             </div>
+            ${isTask ? '' : `<button class="btn tiny soft" style="margin-right:8px; display:flex; align-items:center; gap:6px;" title="Swap this for another resource" onclick="OL.openReplaceCollateral('${dep.id}', '${parentId}')"><i data-lucide="replace" style="width:12px;height:12px;"></i> Replace</button>`}
             <button class="card-delete-btn" style="position:static; opacity:0.4;" onclick="OL.removeDependencyById('${parentId}', '${dep.id}')">×</button>
         </div>
     `;
