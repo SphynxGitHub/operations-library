@@ -2012,11 +2012,25 @@ OL.confirmExcerptLink = async function() {
     // One link per pick, all pointing at the same excerpt.
     const pieceLinks = Array.isArray(m.piece_links) ? m.piece_links.slice() : [];
     const createdAt = new Date().toISOString();
+    // A request picked together with specific tasks of that request means "this part is about THOSE tasks": the request link
+    // is kept as the parent, but it must not roll down onto every build task of the request (core/roll-down.js skips noRollDown).
+    const pickedTasks = st.selected.filter((x) => x.type === 'task');
+    const clientForPick = state.clients?.[OL._gmailLinkState?.clientId];
+    const taskRows = clientForPick?.projectData?.clientTasks || [];
+    const narrowedRequests = new Set();
+    st.selected.filter((x) => x.type === 'request').forEach((r) => {
+        const hasOwnTask = pickedTasks.some((pt) => {
+            const task = taskRows.find((tk) => String(tk.id) === String(pt.id));
+            return task && linksForTask(task).some((l) => String(l.requestId) === String(r.id));
+        });
+        if (hasOwnTask) narrowedRequests.add(String(r.id));
+    });
     st.selected.forEach((t) => {
         pieceLinks.push({
             id: 'pl-' + uid(), kind: st.kind, text: st.excerptText, note: st.note || '',
             targetType: t.type, targetId: t.id, targetLabel: t.label,
             attachmentPath: st.attachmentPath || null,
+            ...(t.type === 'request' && narrowedRequests.has(String(t.id)) ? { noRollDown: true } : {}),
             createdAt,
         });
     });
@@ -2037,7 +2051,7 @@ OL.confirmExcerptLink = async function() {
     if (typeof OL.rollDownForRequest === 'function') {
         const clientId = OL._gmailLinkState?.clientId;
         if (clientId) {
-            for (const t of st.selected.filter((x) => x.type === 'request')) {
+            for (const t of st.selected.filter((x) => x.type === 'request' && !narrowedRequests.has(String(x.id)))) {
                 try { await OL.rollDownForRequest(clientId, t.id); } catch (e) { console.warn('Roll-down failed:', e); }
             }
         }
