@@ -499,6 +499,17 @@ OL.bulkArchiveResources = function(archive) {
     if (typeof OL.showToast === 'function') OL.showToast(`${archive ? 'Archived' : 'Unarchived'} ${list.length} resource${list.length === 1 ? '' : 's'}.`);
 };
 
+// The Archive / Unarchive button on a single resource row (it was wired up but never defined).
+OL.toggleArchiveResource = function(resId) {
+    const res = libraryResources().find(r => String(r.id) === String(resId));
+    if (!res) return;
+    res.isArchived = !(res.isArchived || res.archived);
+    res.archived = res.isArchived;   // the row reads either flag
+    OL.persist();
+    renderResourceManager();
+    if (typeof OL.showToast === 'function') OL.showToast(res.isArchived ? 'Archived.' : 'Unarchived.');
+};
+
 // ── GROUPING ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The Resources tab used to be one flat list of types. Now that the Swimlanes view is gone there was no way to see
 // resources by where they sit in the process, so the tab can group by Type (the default), Process stage, Parent
