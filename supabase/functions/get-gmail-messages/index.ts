@@ -738,11 +738,11 @@ serve(async (req) => {
           recipient_bcc: bccHeader,
           subject,
           snippet: detail.snippet || "",
-          body: body.slice(0, 20000),
+          body: body.slice(0, 200000),
           // Capped well above what any real email needs (most are under a
           // few KB), just guarding against a pathological inline-everything
           // marketing email blowing up row size.
-          body_html: bodyHtml ? bodyHtml.slice(0, 100000) : null,
+          body_html: bodyHtml ? bodyHtml.slice(0, 500000) : null,
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
           participants: Array.from(participantEmails),
           linked_client_id: primaryLinkedClientId,
