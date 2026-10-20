@@ -3,7 +3,7 @@ import { esc, decodeEntities, uid, state, db, updateAndSync, getBusinessScopedCl
 import { getRequestTypes, nextOpenRound } from '../../core/requests.js';
 import { isMaintenanceClient, ensureMaintenanceSheet, buildMaintenanceRequest } from '../../core/maintenance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
-import { linksForTask } from '../../core/task-links.js';
+import { linksForTask, requestIdsForTask } from '../../core/task-links.js';
 import { removePieceLink } from '../../core/roll-down.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
 
@@ -1285,7 +1285,7 @@ OL.openGmailThreadMessageLink = async function(id) {
 };
 
 OL.openGmailMessageModal = async function(id, opts = {}) {
-    if (!opts.keepQuoted) OL._gmailShowQuoted = false;
+    if (!opts.keepQuoted) OL._gmailShowQuoted = true;   // show the FULL email by default; quote-stripping was cutting off forwards and inline replies
     const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
 
@@ -1410,9 +1410,9 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
                          below) rather than inlined here, since embedding
                          arbitrary email HTML into this template string would
                          be extremely fragile to escape correctly. -->
-                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:120px; max-height:70vh; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
+                    <iframe id="gmail-body-html-frame" sandbox="allow-same-origin allow-popups" style="width:100%; height:120px; border:1px solid var(--line); border-radius:6px; background:#fff;"></iframe>
                 ` : `
-                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; max-height:70vh; overflow:auto; overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
+                    <div id="gmail-body-plain" style="position:relative; white-space:pre-wrap; line-height:1.6; font-size:13px; overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:14px; min-width:0;">
                         ${esc(latestPlain.text || 'No preview available for this message.')}
                     </div>
                 `}
@@ -1456,7 +1456,7 @@ OL.openGmailMessageModal = async function(id, opts = {}) {
             // this is the parent's trusted code, not anything from the
             // email's own HTML (which still can't execute, no allow-scripts).
             // That's what makes excerpt selection possible here at all.
-            frame.addEventListener('load', () => { OL.markLinkedExcerpts(m, frame); OL._fitEmailFrame(frame, 70); OL.attachExcerptSelectionHandler(id, frame); }, { once: true });
+            frame.addEventListener('load', () => { OL.markLinkedExcerpts(m, frame); OL._fitEmailFrame(frame, 2000); OL.attachExcerptSelectionHandler(id, frame); }, { once: true });
         }
     }
 
@@ -1525,6 +1525,19 @@ OL.renderGmailOpenClientAsks = async function(m) {
     const buckets = { client: [], thirdparty: [], sphynx: [] };
     open.forEach((t) => buckets[groupOf(t)].push(t));
 
+    // Within each group the tasks are grouped by the request they belong to (tasks on no request go last).
+    const requestLabelOf = (t) => {
+        const id = requestIdsForTask(t)[0];
+        if (id == null) return null;
+        const item = (client?.projectData?.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => i && String(i.id) === String(id));
+        return (item?.name && String(item.name).trim()) || (typeof OL.getResourceById === 'function' ? OL.getResourceById(item?.resourceId)?.name : '') || 'Request';
+    };
+    const byRequest = (tasks) => {
+        const map = new Map();
+        tasks.forEach((t) => { const k = requestLabelOf(t) || '\u0000none'; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
+        return [...map.entries()].sort(([a], [b]) => (a === '\u0000none') - (b === '\u0000none') || a.localeCompare(b))
+            .map(([k, list]) => ({ label: k === '\u0000none' ? 'No request' : k, tasks: list }));
+    };
     const row = (t) => {
         const linked = String(m.linked_task_id) === String(t.id);
         return `
@@ -1555,7 +1568,11 @@ OL.renderGmailOpenClientAsks = async function(m) {
                 ${GROUPS.filter((g) => buckets[g.key].length).map((g) => `
                     <details open>
                         <summary class="tiny bold muted" style="cursor:pointer; margin-bottom:6px;">${g.label} (${buckets[g.key].length})</summary>
-                        <div style="display:grid; gap:6px; margin-top:6px;">${buckets[g.key].map(row).join('')}</div>
+                        <div style="display:grid; gap:10px; margin-top:6px;">${byRequest(buckets[g.key]).map((grp) => `
+                            <div style="display:grid; gap:6px;">
+                                <div class="tiny bold" style="display:flex; align-items:center; gap:6px; color:var(--text-dim);"><i data-lucide="git-pull-request" style="width:11px;height:11px;"></i>${esc(grp.label)} <span class="muted">(${grp.tasks.length})</span></div>
+                                ${grp.tasks.map(row).join('')}
+                            </div>`).join('')}</div>
                     </details>`).join('')}
             </div>
             <div class="tiny muted" style="border-top:1px solid var(--line); margin-top:12px; padding-top:10px;">Addressing a task links this email to it. Nothing is closed or changed on the task.</div>
