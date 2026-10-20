@@ -1514,12 +1514,120 @@ OL.renderBulkTaskToolbar = function() {
             <input type="date" id="bulk-set-duedate" class="modal-input tiny" style="width:auto;">
 
             <button class="btn tiny primary" onclick="OL.applyBulkTaskEdit()">Apply to Selected</button>
+            ${ids.length === 2 && clientIds.length === 1 ? `<button class="btn tiny soft" onclick="OL.openMergeTasksModal()" style="display:flex; align-items:center; gap:4px;"><i data-lucide="git-merge" style="width:12px;height:12px;"></i> Merge</button>` : ''}
             <button class="btn tiny danger soft" onclick="OL.bulkDeleteTasks()" style="display:flex; align-items:center; gap:4px;">
                 <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete
             </button>
             <button class="btn tiny soft" onclick="OL.clearBulkTaskSelection()">Clear Selection</button>
         </div>
     `;
+};
+
+// ---------------------------------------------------------------
+// MERGE TWO TASKS
+// Select exactly two tasks on the same project, press Merge, pick the one to keep. Everything on the other one is
+// folded into it: comments, time log and hours, request/resource links, assignees, description, and anything else
+// that pointed at it (parent / dependency / status-note references, and emails linked to it). Then it is removed.
+// ---------------------------------------------------------------
+OL.openMergeTasksModal = function() {
+    const entries = Object.entries(OL.bulkTaskSelection || {});
+    if (entries.length !== 2 || new Set(entries.map(([, c]) => c)).size !== 1) { alert('Select exactly two tasks on the same project to merge.'); return; }
+    const clientId = entries[0][1];
+    const tasks = state.clients?.[clientId]?.projectData?.clientTasks || [];
+    const pair = entries.map(([id]) => tasks.find(t => String(t.id) === String(id))).filter(Boolean);
+    if (pair.length !== 2) { alert('Could not find both tasks.'); return; }
+    OL._mergeTasksState = { clientId, ids: pair.map(t => String(t.id)), keep: String(pair[0].id) };
+    OL.renderMergeTasksModal();
+};
+
+OL.setMergeKeep = function(id) { OL._mergeTasksState.keep = String(id); OL.renderMergeTasksModal(); };
+
+OL.renderMergeTasksModal = function() {
+    const st = OL._mergeTasksState; if (!st) return;
+    const tasks = state.clients?.[st.clientId]?.projectData?.clientTasks || [];
+    const card = (id) => {
+        const t = tasks.find(x => String(x.id) === id) || {};
+        const on = st.keep === id;
+        return `
+        <label style="display:block; cursor:pointer; padding:12px; border-radius:8px; border:1px solid ${on ? 'var(--accent)' : 'var(--line)'}; ${on ? 'background:rgba(56,189,248,0.08);' : ''}">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input type="radio" name="merge-keep" ${on ? 'checked' : ''} onchange="OL.setMergeKeep('${esc(id)}')">
+                <strong class="small">${on ? 'Keep this one' : 'Merge into the other'}</strong>
+            </div>
+            <div class="small bold" style="overflow-wrap:anywhere;">${esc(t.title || t.name || 'Untitled')}</div>
+            <div class="tiny muted" style="margin-top:4px;">${esc(t.status || '')} · ${esc(t.assignee || 'Unassigned')} · ${t.dueDate ? 'Due ' + esc(String(t.dueDate).slice(0, 10)) : 'No due date'}</div>
+            <div class="tiny muted" style="margin-top:4px;">${(t.comments || []).length} comment(s) · ${Number(t.loggedHours || 0)}h logged</div>
+            ${t.description ? `<div class="tiny" style="margin-top:6px; white-space:pre-wrap; max-height:90px; overflow:auto;">${esc(String(t.description).slice(0, 400))}</div>` : ''}
+        </label>`;
+    };
+    openModal(`
+        <div class="modal-head">
+            <div class="modal-title-text"><i data-lucide="git-merge" style="width:16px;height:16px;vertical-align:sub;margin-right:6px;"></i>Merge tasks</div>
+            <button class="btn small soft" onclick="OL.closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="width:100%; max-width:none; box-sizing:border-box;">
+            <div class="tiny muted" style="margin-bottom:12px;">Pick the task to keep. The other one's comments, time, links, assignees and description are added to it, then it is deleted. This cannot be undone.</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">${st.ids.map(card).join('')}</div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                <button class="btn tiny soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn tiny primary" onclick="OL.confirmMergeTasks()">Merge</button>
+            </div>
+        </div>`);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.confirmMergeTasks = async function() {
+    const st = OL._mergeTasksState; if (!st) return;
+    const keepId = st.keep, dropId = st.ids.find(i => i !== keepId);
+    const idKeys = /^(parentTaskId|statusNoteFor|taskId|blockedBy|dependsOn|predecessorTaskId)$/;
+    const idListKeys = /^(taskIds|blockedBy|dependsOn)$/;
+    updateAndSync(() => {
+        const client = state.clients?.[st.clientId];
+        const list = client?.projectData?.clientTasks || [];
+        const keep = list.find(t => String(t.id) === keepId), drop = list.find(t => String(t.id) === dropId);
+        if (!keep || !drop) return;
+        const now = new Date().toISOString();
+        const dropTitle = drop.title || drop.name || 'Untitled';
+        // description: keep both when they differ
+        const kd = String(keep.description || '').trim(), dd = String(drop.description || '').trim();
+        if (dd && dd !== kd) keep.description = kd ? `${kd}\n\n--- Merged from "${dropTitle}" ---\n${dd}` : dd;
+        // comments, oldest first, with a note of the merge
+        const seen = new Set((keep.comments || []).map(c => c.id));
+        const extra = (drop.comments || []).filter(c => !seen.has(c.id));
+        keep.comments = [...(keep.comments || []), ...extra].sort((a, b) => String(a.createdAt || a.timestamp || a.at || '').localeCompare(String(b.createdAt || b.timestamp || b.at || '')));
+        keep.comments.push({ id: uid(), text: `Merged with task "${dropTitle}".`, createdAt: now, timestamp: now, author: 'System', system: true });
+        // time
+        if (Array.isArray(drop.timeLog) && drop.timeLog.length) keep.timeLog = [...(keep.timeLog || []), ...drop.timeLog];
+        keep.loggedHours = Math.round(((Number(keep.loggedHours) || 0) + (Number(drop.loggedHours) || 0)) * 100) / 100;
+        // request / resource links
+        linksForTask(drop).forEach(l => addLink(keep, l.requestId, l.resourceIds || []));
+        // people
+        const people = [...new Set([...taskAssignees(keep), ...taskAssignees(drop)].filter(a => a && !isGenericAssignee(a)))];
+        if (people.length > 1) { keep.assignees = people; }
+        // files and anything else list-like the kept task lacks
+        ['files', 'attachments'].forEach(k => { if (Array.isArray(drop[k]) && drop[k].length) keep[k] = [...(keep[k] || []), ...drop[k]]; });
+        if (!keep.dueDate && drop.dueDate) keep.dueDate = drop.dueDate;
+        else if (keep.dueDate && drop.dueDate && String(drop.dueDate) < String(keep.dueDate)) keep.dueDate = drop.dueDate;   // the earlier deadline wins
+        // everything else that pointed at the removed task now points at the kept one
+        const repoint = (o, depth = 0) => {
+            if (!o || typeof o !== 'object' || depth > 4) return;
+            Object.keys(o).forEach(k => {
+                const v = o[k];
+                if (typeof v === 'string' || typeof v === 'number') { if (idKeys.test(k) && String(v) === dropId) o[k] = keepId; }
+                else if (Array.isArray(v)) { if (idListKeys.test(k)) { const m = v.map(x => (typeof x === 'string' || typeof x === 'number') && String(x) === dropId ? keepId : x); o[k] = [...new Set(m)]; } else v.forEach(x => repoint(x, depth + 1)); }
+                else repoint(v, depth + 1);
+            });
+        };
+        list.forEach(t => { if (t !== drop) repoint(t); });
+        keep.mergedFrom = [...(keep.mergedFrom || []), { id: dropId, title: dropTitle, at: now }];
+        client.projectData.clientTasks = list.filter(t => t !== drop);
+    }, st.clientId);
+    try { await db.from('gmail_messages').update({ linked_task_id: keepId }).eq('linked_task_id', dropId); } catch (e) { console.warn('Could not move email links to the merged task:', e); }
+    delete OL.bulkTaskSelection[dropId];
+    OL.bulkTaskSelection = {};
+    OL._mergeTasksState = null;
+    OL.closeModal();
+    OL.refreshTaskView();
 };
 
 OL.applyBulkTaskEdit = function() {
