@@ -1074,9 +1074,10 @@ OL._splitQuotedText = function(text) {
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i], next = (lines[i + 1] || '').trim();
         const isWrote = /^\s*On\s.{5,300}$/i.test(l) && (/wrote:\s*$/i.test(l) || /^wrote:\s*$/i.test(next));
-        const isOrig = /^\s*-{2,}\s*(Original|Forwarded) Message\s*-{2,}/i.test(l) || /^\s*_{8,}\s*$/.test(l);
+        const isOrig = /^\s*-{2,}\s*Original Message\s*-{2,}/i.test(l) || /^\s*_{8,}\s*$/.test(l);   // a forwarded message IS the content, so it is not cut
         const isFromBlock = /^\s*From:\s.+/i.test(l) && lines.slice(i + 1, i + 5).some((x) => /^\s*(Sent|Date):\s/i.test(x));
-        if (isWrote || isOrig || isFromBlock || /^\s*>/.test(l)) { cut = i; break; }
+        const isQuoteLine = /^\s*>/.test(l) && lines.slice(i).every((x) => !x.trim() || /^\s*>/.test(x));   // only a trailing quote block
+        if (isWrote || isOrig || isFromBlock || isQuoteLine) { cut = i; break; }
     }
     if (cut <= 0) return { latest: lines.join('\n').trim(), quoted: '', hasQuoted: false };
     const latest = lines.slice(0, cut).join('\n').trim();
@@ -1087,20 +1088,30 @@ OL._splitQuotedText = function(text) {
 OL._splitQuotedHtml = function(html) {
     try {
         const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+        const body = doc.body;
+        if (!body) return { latest: html, hasQuoted: false };
+        const textBefore = (el) => { const r = doc.createRange(); r.setStart(body, 0); r.setEndBefore(el); return r.toString().trim(); };
+        const textAfter = (el) => { const r = doc.createRange(); r.setStartAfter(el); r.setEndAfter(body.lastChild || body); return r.toString().trim(); };
         let removed = 0;
-        // Outlook: everything from the reply marker on is the quoted chain.
+        // Outlook: the reply marker starts the quoted chain; everything from it on goes (only if the new text is above it).
         doc.querySelectorAll('#appendonsend, #divRplyFwdMsg').forEach((el) => {
-            if (!el.isConnected) return;
+            if (!el.isConnected || !textBefore(el)) return;
             const prev = el.previousElementSibling;
-            while (el.nextSibling) { el.nextSibling.remove(); }
+            let n = el;
+            while (n) { const next = n.nextSibling; if (n !== el || true) n.remove(); n = next; }
             if (prev && prev.tagName === 'HR') prev.remove();
-            el.remove(); removed++;
+            removed++;
         });
+        // Quoted blocks are removed only when they are the trailing reply chain: not a forward (that is the email's
+        // content) and not an inline reply with the sender's own text after it.
         doc.querySelectorAll('.gmail_quote, .gmail_extra, blockquote[type="cite"], .yahoo_quoted, #mail-app-auto-quote, .moz-cite-prefix').forEach((el) => {
             if (!el.isConnected) return;
+            if (/forwarded message|begin forwarded/i.test(el.textContent.slice(0, 300))) return;
+            if (textAfter(el)) return;
+            if (!textBefore(el)) return;
             el.remove(); removed++;
         });
-        if (!removed || !(doc.body?.textContent || '').trim()) return { latest: html, hasQuoted: false };
+        if (!removed || !(body.textContent || '').trim()) return { latest: html, hasQuoted: false };
         return { latest: doc.documentElement.outerHTML, hasQuoted: true };
     } catch (e) { return { latest: html, hasQuoted: false }; }
 };
@@ -1285,7 +1296,7 @@ OL.openGmailThreadMessageLink = async function(id) {
 };
 
 OL.openGmailMessageModal = async function(id, opts = {}) {
-    if (!opts.keepQuoted) OL._gmailShowQuoted = true;   // show the FULL email by default; quote-stripping was cutting off forwards and inline replies
+    if (!opts.keepQuoted) OL._gmailShowQuoted = false;   // latest email only; the quote trimming below only removes a trailing reply chain, never real content
     const { data: m, error } = await db.from('gmail_messages').select('*').eq('id', id).single();
     if (error || !m) { alert('Could not load that email.'); return; }
 
