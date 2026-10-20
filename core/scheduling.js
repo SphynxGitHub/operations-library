@@ -118,7 +118,9 @@ export function spreadBackFrom(dueKey, hours, cap, isWorkday) {
 }
 
 export function taskDaySlots(task, cfg) {
-    const due = String(task?.dueDate || '').slice(0, 10);
+    // A task whose date was removed while it waits on something (client, developer, third party) keeps a blocker on its
+    // original day, so that time is not given to other work. It is only a hold: nothing moves or rewrites the task.
+    const due = String(task?.dueDate || task?.blockedOn?.dueDate || '').slice(0, 10);
     if (!due) return [];
     const hours = taskEstimatedHours(task, cfg);
     const cap = maxPerDay(cfg);

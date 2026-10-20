@@ -385,6 +385,12 @@ export function reconcileClientFollowUp(client, ctx) {
         const target = pd.clientTasks.find((x) => x.id === p.statusNoteFor);
         if (!target || !isOpen(target, ctx) || !staleIds.has(target.id)) { p.status = closed[0]; p.cancelledAt = ctx.now; }   // it moved on: no note needed
     });
+    // Never more than one open note per task: cancel any extra copies left over from earlier runs or merged saves.
+    const seenNoteTargets = new Set();
+    pd.clientTasks.filter((t) => t && t.statusNoteFor && isOpen(t, ctx)).forEach((p) => {
+        if (seenNoteTargets.has(p.statusNoteFor)) { p.status = closed[0]; p.cancelledAt = ctx.now; p.duplicateOfNote = true; }
+        else seenNoteTargets.add(p.statusNoteFor);
+    });
     const noteDue = (() => { const d = addDays(fu && isOpen(fu, ctx) && fu.dueDate ? day(fu.dueDate) : nextDue, -1); return d < ctx.today ? ctx.today : d; })();
     stale.forEach((t) => {
         const existing = pd.clientTasks.find((p) => p && p.statusNoteFor === t.id && isOpen(p, ctx));
@@ -404,6 +410,7 @@ export function reconcileClientFollowUp(client, ctx) {
         };
         linksForTask(t).forEach((l) => addLink(p, l.requestId, l.resourceIds || []));
         pd.clientTasks.unshift(p);
+        t.statusNoteAt = day(ctx.now);   // asked now: deleting or finishing the note must not make the next run create it again
         out.notePrompts.push(p.id);
     });
     // Notes that were written (prompt task done with a comment) for tasks still open and stale feed the follow-up.

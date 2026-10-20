@@ -1293,7 +1293,7 @@ OL.promptCreateClientFromUnrecognizedEmail = function(email) {
                 </div>
 
                 <div id="contact-new-project-input-container">
-                    <input type="text" id="contact-new-project-name" class="modal-input tiny" placeholder="New Project / Client Name..." value="${esc(defaultName)}" style="width:100%;">
+                    <input type="text" id="contact-new-project-name" class="modal-input tiny" placeholder="New project name (not the contact's name)..." value="" style="width:100%;">
                 </div>
             </div>
 
@@ -1400,6 +1400,7 @@ OL._onContactProjectSelectChange = function(selectedVal, email) {
             <div class="tiny muted" style="padding:8px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:6px;">
                 Will create a new primary contact card on the new project.
             </div>
+            <input type="text" id="contact-new-member-name" class="modal-input tiny" placeholder="Contact person name..." value="${esc(String(email || '').split('@')[0])}" style="width:100%; margin-top:8px;">
         `;
         return;
     }
@@ -1439,7 +1440,9 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
     // 1. Create new project if selected
     if (projectVal === '__new__') {
         const newProjectInput = document.getElementById('contact-new-project-name');
-        const projectName = (newProjectInput?.value || '').trim() || email.split('@')[0];
+        const projectName = (newProjectInput?.value || '').trim();
+        if (!projectName) { alert('Enter the project name first. It is separate from the contact person\'s name.'); newProjectInput?.focus(); return; }
+        const contactName = (document.getElementById('contact-new-member-name')?.value || '').trim() || email.split('@')[0];
 
         targetClientId = 'c-' + uid();
         // Same starting point as Add Client (onboardNewClient in features/client-dashboard.js): a
@@ -1454,7 +1457,8 @@ OL._saveContactFromUnrecognizedModal = async function(email) {
             modules: { checklist: true, apps: false, functions: false, resources: false, scoping: false, analysis: false, 'how-to': false, team: false },
             permissions: { apps: 'full', functions: 'full', resources: 'full', scoping: 'full', checklist: 'full', team: 'full', 'how-to': 'full', analysis: 'full' },
             projectData: {
-                teamMembers: [{ id: uid(), name: projectName, email: email, isPrimaryContact: true, roles: [] }],
+                teamMembers: [{ id: uid(), name: contactName, email: email, isPrimaryContact: true, roles: [] }],
+                backfilledContactEmails: [],   // empty on purpose: persist() then treats this first address as new and links the existing emails
                 localResources: [], localApps: [], localAnalyses: [], localFunctions: [], localHowTo: [],
                 clientTasks: [], stages: [], workflows: [],
                 scopingSheets: [{ id: 'initial', lineItems: [] }]
