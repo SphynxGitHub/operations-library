@@ -392,6 +392,13 @@ export function reconcileClientFollowUp(client, ctx) {
         else seenNoteTargets.add(p.statusNoteFor);
     });
     const noteDue = (() => { const d = addDays(fu && isOpen(fu, ctx) && fu.dueDate ? day(fu.dueDate) : nextDue, -1); return d < ctx.today ? ctx.today : d; })();
+    // A note that was finished (not cancelled by the rules) counts as "asked" BEFORE new notes are made. Stamping it
+    // after, as this used to, made a fresh note the same run the old one was marked done, which is the loop.
+    pd.clientTasks.filter((p) => p && p.statusNoteFor && !isOpen(p, ctx) && !p.cancelledAt).forEach((p) => {
+        const target = pd.clientTasks.find((x) => x.id === p.statusNoteFor);
+        const when = day(p.completedAt || ctx.now);
+        if (target && (!target.statusNoteAt || day(target.statusNoteAt) < when)) target.statusNoteAt = when;
+    });
     stale.forEach((t) => {
         const existing = pd.clientTasks.find((p) => p && p.statusNoteFor === t.id && isOpen(p, ctx));
         if (existing) return;
