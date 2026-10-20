@@ -267,6 +267,12 @@ OL.deleteTask = function(clientId, taskId, skipConfirm = false) {
         const doomed = client.projectData.clientTasks.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
         if (doomed?.consolidatedFollowUp && typeof OL.snoozeClientFollowUp === 'function') OL.snoozeClientFollowUp(client);
 
+        // Deleting a status note counts as "asked": otherwise the rules make a new one on the very next save.
+        if (doomed?.statusNoteFor) {
+            const target = client.projectData.clientTasks.find(t => String(t.id) === String(doomed.statusNoteFor));
+            if (target) target.statusNoteAt = new Date().toISOString().slice(0, 10);
+        }
+
         client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
             String(t.id) !== String(taskId) && String(t.key) !== String(taskId)
         );
@@ -304,6 +310,10 @@ OL.bulkDeleteTasks = function() {
             if (client.projectData.clientTasks.some(t => t.consolidatedFollowUp && (idSet.has(String(t.id)) || idSet.has(String(t.key)))) && typeof OL.snoozeClientFollowUp === 'function') {
                 OL.snoozeClientFollowUp(client);   // see deleteTask
             }
+            client.projectData.clientTasks.filter(t => t.statusNoteFor && (idSet.has(String(t.id)) || idSet.has(String(t.key)))).forEach(n => {
+                const target = client.projectData.clientTasks.find(t => String(t.id) === String(n.statusNoteFor));
+                if (target) target.statusNoteAt = new Date().toISOString().slice(0, 10);   // deleted = asked, see deleteTask
+            });
             client.projectData.clientTasks = client.projectData.clientTasks.filter(t => 
                 !idSet.has(String(t.id)) && !idSet.has(String(t.key))
             );
