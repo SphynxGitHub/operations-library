@@ -240,10 +240,6 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .apx-lines i { display: block; height: 26px; border-bottom: 1px solid #cbd5e1; }
 /* the "See another process" callouts print in colour-safe teal with the page number */
 .fv-ref-chip { color: #0f766e !important; border: 1.2px solid #0f766e !important; background: #f0fdfa !important; }
-.fv-jump-rows .fv-jump-row { border: 0 !important; border-top: 1px solid #99d6cf !important; border-radius: 0 !important; background: #f0fdfa !important; }
-.fv-jump-rows .fv-jump-in { color: #475569 !important; background: #fff !important; border-top-style: dashed !important; }
-.fv-jump-rows .fv-jump-row:not(.fv-jump-in) { flex-direction: row-reverse !important; align-items: center !important; }
-.fv-jump-rows-in .fv-jump-in { color: #0f766e !important; border-top: 0 !important; border-bottom: 1px dashed #99d6cf !important; }
 .fv-used-chip { color: #0f766e !important; border: 1.2px dashed #0f766e !important; background: #fff !important; }
 .fv-used-pg { color: #0f766e !important; font-weight: 700; }
 .fv-step-card { box-shadow: none !important; break-inside: avoid; }
@@ -256,6 +252,7 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* collateral chips print as numbered tags; the list at the end carries the names and links */
 .fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 1px 6px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
 .fv-co-no { font-weight: 800; color: #0f766e; }
+.fv-co-print span { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; max-width: none !important; }
 .apx-ctype { width: 96px; font-size: 11px; color: #475569; }
 .apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }
 .apx-none { color: #94a3b8; }

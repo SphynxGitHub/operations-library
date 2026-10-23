@@ -406,12 +406,12 @@ export function collectCollateral(pd = project()) {
     if (res.isArchived) return;
     const wf = wfOf(res); const base = [wf && wf.name, res.name].filter(Boolean).join(' \u203a ');
     calloutsFor(res).filter((c) => c.source !== 'logic').forEach((c) => {
-      out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, resId: String(res.id), stepId: '', key: c.key, where: `${base} (whole process)` });
+      out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, libId: c.linkId || '', resId: String(res.id), stepId: '', key: c.key, where: `${base} (whole process)` });
     });
     (res.steps || []).forEach((step, idx) => {
       if (step.isArchived) return;
       calloutsOf(step).forEach((c) => {
-        out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, resId: String(res.id), stepId: String(step.id), key: c.id, where: `${base} \u203a Step ${idx + 1}: ${step.name || 'Unnamed step'}` });
+        out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, libId: c.libId || '', resId: String(res.id), stepId: String(step.id), key: c.id, where: `${base} \u203a Step ${idx + 1}: ${step.name || 'Unnamed step'}` });
       });
     });
   });
@@ -434,7 +434,11 @@ export function annotateCollateral(el, numbers) {
       if (!label) { chip.remove(); return; }
       const tag = chip.ownerDocument.createElement('span');
       tag.className = chip.className.replace('is-open', '').trim() + ' fv-co-print';
-      tag.innerHTML = `<b class="fv-co-no">${label}</b>${chip.innerHTML}`;
+      // the screen chip cuts a long name short; the printed tag carries all of it (the title is "Type: Full name")
+      const full = String(chip.getAttribute('title') || '').replace(/^[^:]*:\s*/, '');
+      const inner = chip.ownerDocument.createElement('div'); inner.innerHTML = chip.innerHTML;
+      const sp = inner.querySelector('span'); if (sp && full) sp.textContent = full;
+      tag.innerHTML = `<b class="fv-co-no">${label}</b>${inner.innerHTML}`;
       chip.replaceWith(tag); kept++;
     });
     if (!kept) strip.remove();
@@ -444,12 +448,23 @@ export function annotateCollateral(el, numbers) {
 export function collateralAppendixHtml(entries, { title = 'Collateral and Templates', sub = '' } = {}) {
   if (!entries || !entries.length) return '';
   const e2 = (s) => esc(s);
+  const plain = (h) => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+  // what the library item itself says: type, description, and for an email its subject and the start of its text
+  const detail = (e) => {
+    const lib = e.libId ? libById(e.libId) : null; if (!lib) return '';
+    const bits = [];
+    if (lib.type && lib.type !== 'Guide') bits.push(`<div class="apx-where">Type: ${e2(lib.type)}</div>`);
+    const d = lib.description || lib.notes; if (d) bits.push(`<div class="apx-where">${e2(clip(plain(d), 300))}</div>`);
+    if (lib.emailSubject) bits.push(`<div class="apx-where"><b>Subject:</b> ${e2(lib.emailSubject)}</div>`);
+    if (lib.emailBody) bits.push(`<div class="apx-where" style="white-space:pre-line;"><b>Email:</b> ${e2(clip(plain(lib.emailBody), 700))}</div>`);
+    return bits.join('');
+  };
   const rows = entries.map((e) => {
     const k = KIND[e.kind] || KIND.other;
     return `<tr class="apx-row">
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(k.label)}</td>
-      <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}<div class="apx-where">${e2(e.where)}</div></td>
+      <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
       <td class="apx-link">${e.url ? e2(e.url) : '<span class="apx-none">No link</span>'}</td></tr>`;
   }).join('');
   return `<section class="apx apx-collateral">

@@ -7855,6 +7855,8 @@ export function updateAtomicStep(resId, stepId, field, value) {
         // Update card in flowchart if visible
         const cardStep = document.querySelector(`.fv-card-step-name[data-step-id="${stepId}"]`);
         if (cardStep) cardStep.textContent = value;
+        // The map's step cards have no hook for the surgical update above: redraw the map (and come back to this step)
+        if (window.location.hash.includes('visualizer')) refreshFlowMap(resId, stepId);
     }
     // For all other fields, refresh just the inspector content
     // preserving scroll position
