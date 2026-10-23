@@ -2351,6 +2351,13 @@ OL.closeModal = function() {
         overlay.style.display = "none";
         overlay.innerHTML = "";
     }
+    // The flow map is not redrawn by the automatic page refresh, so anything changed in a window opened from it
+    // (an email or resource edited in full, roles, a tag) is drawn when that window closes.
+    if (String(window.location.hash).includes('visualizer') && typeof OL.renderVisualizer === 'function') {
+        const host = document.getElementById('mainContent'); const top = host ? host.scrollTop : 0;
+        try { OL.renderVisualizer(); } catch (e) { console.warn('Could not redraw the flow map:', e); }
+        requestAnimationFrame(() => { const h = document.getElementById('mainContent'); if (h) h.scrollTop = top; });
+    }
 };
 
 // 🔍 In-Context Task Launcher
