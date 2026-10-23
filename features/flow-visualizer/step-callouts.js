@@ -472,12 +472,16 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     if (lib.type && lib.type !== 'Guide') bits.push(`<div class="apx-where">Type: ${e2(lib.type)}</div>`);
     const d = lib.description || lib.notes; if (d) bits.push(`<div class="apx-where">${e2(clip(plain(d), 300))}</div>`);
     if (lib.emailSubject) bits.push(`<div class="apx-where"><b>Subject:</b> ${e2(lib.emailSubject)}</div>`);
-    if (lib.emailBody) bits.push(`<div class="apx-where" style="white-space:pre-line;"><b>Email:</b> ${e2(clip(plain(lib.emailBody), 700))}</div>`);
+    // the email as written, with its formatting (cleaned the same way the app cleans other pasted HTML)
+    if (lib.emailBody) {
+      const clean = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(String(lib.emailBody), { images: true }) : esc(plain(lib.emailBody)).replace(/\n/g, '<br>');
+      bits.push(`<div class="apx-email">${clean}</div>`);
+    }
     return bits.join('');
   };
   const rows = entries.map((e) => {
     const k = KIND[e.kind] || KIND.other;
-    return `<tr class="apx-row">
+    return `<tr class="apx-row${e.libId && (libById(e.libId) || {}).emailBody ? ' apx-row-long' : ''}">
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>

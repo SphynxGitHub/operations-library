@@ -256,6 +256,11 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .apx-ctype { width: 96px; font-size: 11px; color: #475569; }
 .apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }
 .apx-none { color: #94a3b8; }
+.apx-email { margin: 6px 0; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0f172a; font-size: 11px; line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }
+.apx-email img, .apx-email table { max-width: 100% !important; height: auto; }
+.apx-email p { margin: 0 0 8px; } .apx-email a { color: #0f766e; text-decoration: underline; }
+.apx-email, .apx-email * { white-space: normal; }
+.apx-row.apx-row-long { break-inside: auto; page-break-inside: auto; }
 </style></head>
 <body class="light-mode">
 ${sheets}
