@@ -98,7 +98,7 @@ function panelHtml(res, c) {
         ${c.source === 'logic' ? `
           ${c.loaded ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); OL.openJotformLogicMap('${rid}')">Open logic map</button>` : ''}
           <button type="button" class="btn tiny ${c.loaded ? 'soft' : 'primary'}" onclick="event.stopPropagation(); OL.loadJotformLogic('${rid}', { open: ${c.loaded ? 'false' : 'true'} })">${c.loaded ? 'Refresh' : 'Load form logic'}</button>` : ''}
-        ${c.source === 'link' && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.linkId)}', null, 'cards')">In library</button>` : ''}
+        ${c.source === 'link' && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openResourceModal('${esc(c.linkId)}')">Edit</button>` : ''}
         ${c.source === 'manual' ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditCallout('${rid}','${esc(c.id)}')">Edit</button>
           <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvRemoveCallout('${rid}','${esc(c.id)}')">Remove</button>` : ''}
       </div>

@@ -3292,6 +3292,28 @@ export function _fvDrawStepConnections(resources) {
           });
           if (tipParts.length) { const tt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); tt.textContent = tipParts.join(' | '); g.appendChild(tt); }
           frag.appendChild(g);
+
+          // The condition itself, in words beside the icon (like Yes / No on a decision), cut short on the map;
+          // hovering the pill or the icon shows all of it.
+          if (hasRule) {
+            const full = String(outRule.rule).trim();
+            const shown = full.length > 34 ? full.slice(0, 33) + '\u2026' : full;
+            const lw = shown.length * 5.8 + 14, lx = mx + w / 2 + 4, ly = my;
+            const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            cg.style.cursor = 'help';
+            const cp = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            cp.setAttribute('x', lx); cp.setAttribute('y', ly - 8); cp.setAttribute('width', lw); cp.setAttribute('height', 16); cp.setAttribute('rx', 8);
+            cp.style.fill = 'var(--panel)'; cp.setAttribute('stroke', color); cp.setAttribute('stroke-width', '1');
+            cg.appendChild(cp);
+            const ct = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            ct.setAttribute('x', lx + lw / 2); ct.setAttribute('y', ly + 3.5); ct.setAttribute('text-anchor', 'middle');
+            ct.setAttribute('font-size', '9.5'); ct.setAttribute('font-weight', '600'); ct.setAttribute('fill', color);
+            ct.setAttribute('font-family', 'DM Sans, sans-serif'); ct.setAttribute('pointer-events', 'none');
+            ct.textContent = shown;
+            cg.appendChild(ct);
+            const ctt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); ctt.textContent = full; cg.appendChild(ctt);
+            frag.appendChild(cg);
+          }
         }
       });
     });
@@ -3765,6 +3787,12 @@ export function _fvPopulateWb(tab, resources) {
                           border-radius:6px;background:rgba(0,0,0,0.2);color:#fff;
                           font-size:11px;outline:none;box-sizing:border-box;font-family:inherit;">
         </div>
+        ${tab === 'data' ? `<div style="display:flex;gap:6px;padding:0 8px 6px;">
+            <input type="text" id="fv-wb-newtag" placeholder="New data tag name"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();OL.fvCreateDataTag(this.value).then(()=>{const i=document.getElementById('fv-wb-newtag');if(i)i.value='';});}"
+                   style="flex:1;min-width:0;padding:6px 8px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.2);color:#fff;font-size:11px;outline:none;box-sizing:border-box;font-family:inherit;">
+            <button type="button" class="btn tiny primary" onclick="OL.fvCreateDataTag(document.getElementById('fv-wb-newtag').value).then(()=>{const i=document.getElementById('fv-wb-newtag');if(i)i.value='';})">Create</button>
+        </div>` : ''}
         <div id="${listId}">
             ${OL._fvRenderWbItems(allItems, tab)}
         </div>
@@ -5745,6 +5773,34 @@ export async function handleUniversalDropOnStep(e, resId, stepId) {
     }
 };
 
+// Make a data tag from the flow map. With a step (resId + stepId) the new tag is also mapped to that step.
+// Goes into the same list the Data screen shows (dataPool): the shared list in the vault, this project's own list in a project.
+export async function fvCreateDataTag(name, resId = null, stepId = null) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const pool = OL.dataPool ? OL.dataPool(true) : null;
+    if (!pool) return null;
+    let tag = pool.find(d => !d.isBundle && String(d.name || '').toLowerCase() === clean.toLowerCase());
+    if (!tag) {
+        tag = { id: 'dp-' + Date.now(), name: clean, key: `{${clean.replace(/\s+/g, '').toLowerCase()}}`, isBundle: false, childIds: null, category: 'General' };
+        pool.push(tag);
+    }
+    await OL.updateAndSync(() => {
+        const data = OL.getCurrentProjectData();
+        const step = resId && stepId ? (data.resources || []).find(r => String(r.id) === String(resId))?.steps?.find(x => String(x.id) === String(stepId)) : null;
+        if (step) {
+            if (!step.datapoints) step.datapoints = [];
+            if (!step.datapoints.some(d => String(d.id) === String(tag.id))) step.datapoints.push(tag);
+        }
+    });
+    if (OL._fv && OL._fv._wbTab === 'data') OL._fvFilterWb('data');
+    OL.renderVisualizer();
+    if (resId && stepId && document.querySelector('.inspector-scroll-content') && typeof OL._fvRefreshInspector === 'function') {
+        requestAnimationFrame(() => requestAnimationFrame(() => OL._fvRefreshInspector(resId, stepId)));
+    }
+    return tag;
+};
+
 export function renderTrayContent(isVault, query = "", typeFilter = "All") {
 };
 
@@ -7541,6 +7597,13 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         ondrop="OL.handleUniversalDropOnStep(event, '${resId}', '${step.id}')"
                         style="border: 1px dashed transparent; border-radius: 4px; padding: 5px; text-align: center; transition: 0.2s;">
                         <small class="tiny muted" style="font-size: 8px;">Drop tags here to map</small>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <input type="text" id="fvi-newtag-${step.id}" class="modal-input" placeholder="New data tag name"
+                               style="flex:1; min-width:0; font-size:11px;"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();OL.fvCreateDataTag(this.value,'${resId}','${step.id}');}">
+                        <button type="button" class="btn tiny primary"
+                                onclick="OL.fvCreateDataTag(document.getElementById('fvi-newtag-${step.id}').value,'${resId}','${step.id}')">Create &amp; add</button>
                     </div>
                 </div>
 
@@ -9529,7 +9592,7 @@ Object.assign(window.OL, {
     fvPrevMatch, fvActivateMatch, fvClearSearch, fvToggleConnections,
     _fvSetupZoom, fvZoom, handleSidebarSearch, getStepIcon,
     renderWorkbenchTabs, renderSidebarTypeFilter, renderWorkbenchItemsOnly, switchWorkbenchTab,
-    handleAssetDragStart, handleDataDragStart, handleUniversalDropOnStep, renderTrayContent,
+    handleAssetDragStart, handleDataDragStart, handleUniversalDropOnStep, fvCreateDataTag, renderTrayContent,
     renderFocusControls, exitVisualFocus, addNewResourceToCanvas, toggleLogicMenu,
     setTraceMode, handleStepDragStart, handleStepDragOver, handleStepDragLeave,
     handleStepDrop, save, getPartNumberHtml, toggleMasterExpand,

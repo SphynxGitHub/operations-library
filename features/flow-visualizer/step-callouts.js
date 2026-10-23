@@ -128,7 +128,8 @@ function panelHtml(resId, stepId, c) {
       ${c.url ? `<a class="btn tiny primary" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${c.kind === 'event' ? 'Open scheduling page' : 'Open'} ${icon('external-link', 11)}</a>` : ''}
       ${c.kind === 'email' && c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.previewEmailTemplate('${esc(c.libId)}')">Full preview</button>` : ''}
       ${c.kind === 'guide' && !c.missing ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); OL.openGuideEditor('${esc(c.libId)}')">Open guide</button>` : (c.libId && !c.missing ? `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.openInspector('${esc(c.libId)}', null, 'cards')">In library</button>` : '')}
-      ${c.derived ? '' : `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">Edit</button>`}
+      ${c.libId && !c.missing && c.kind !== 'guide' ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); OL.fvEditLibItem('${esc(c.libId)}')">${icon('pencil', 11)} Edit</button>` : ''}
+      ${c.derived ? '' : `<button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">${c.libId && !c.missing ? 'Step note' : 'Edit'}</button>`}
       <button type="button" class="btn tiny soft" onclick="event.stopPropagation(); OL.fvRemoveStepCallout('${r}','${s}','${esc(c.id)}')">Remove</button>
     </div></div>`;
 }
@@ -173,7 +174,8 @@ export function stepCalloutInspector(resId, step) {
       <span style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.name)}">${esc(c.name)}${c.missing ? ' (removed from library)' : ''}</span>
       ${c.url ? `<a class="btn tiny soft" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">Open</a>` : ''}
       ${c.kind === 'guide' && !c.missing ? `<button type="button" class="btn tiny soft" onclick="OL.openGuideEditor('${esc(c.libId)}')">Open</button>` : ''}
-      ${c.derived ? '' : `<button type="button" class="btn tiny soft" onclick="OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">Edit</button>`}
+      ${c.libId && !c.missing && c.kind !== 'guide' ? `<button type="button" class="btn tiny primary" onclick="OL.fvEditLibItem('${esc(c.libId)}')">Edit</button>` : ''}
+      ${c.derived ? '' : `<button type="button" class="btn tiny soft" onclick="OL.fvEditStepCallout('${r}','${s}','${esc(c.id)}')">${c.libId && !c.missing ? 'Step note' : 'Edit'}</button>`}
       <button type="button" class="btn tiny soft" onclick="OL.fvRemoveStepCallout('${r}','${s}','${esc(c.id)}')">Remove</button></div>`;
   }).join('') : '<div class="tiny muted">Nothing attached yet.</div>';
   return `<div class="inspector-section">
@@ -461,6 +463,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvCollectCollateral: collectCollateral, fvCollateralNumbers: collateralNumbers, fvAnnotateCollateral: annotateCollateral, fvCollateralAppendixHtml: collateralAppendixHtml,
   fvStepCalloutStrip: stepCalloutStrip, fvStepCalloutInspector: stepCalloutInspector, fvStepCalloutsOf: calloutsOf,
+  fvEditLibItem: (id) => { const O = OL(); if (!id) return; if (guideById(id) && !resById(id) && O.openGuideEditor) return O.openGuideEditor(id); O.openResourceModal(id); },
   fvToggleStepCallout: toggle, fvEditStepCallout: edit, fvStepCalloutPick: pick, fvSaveStepCallout: save, fvRemoveStepCallout: remove,
   fvStepCalloutFilter: renderPickList, fvStepCalloutCreateNew: createNew, fvStepCalloutUnlink: unlink, fvStepCalloutKindChanged: renderPickStatus,
 });
