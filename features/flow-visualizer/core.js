@@ -7998,8 +7998,8 @@ export function getFilteredAssigneeOptions(query) {
     ];
 
     // 2. Gather Dynamic Data
-    const masterRoles = (state.master.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: 'users' }));
-    const clientRoles = (client?.projectData?.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: 'users' }));
+    const masterRoles = [];   // the company's default Sphynx team roles are not offered on client projects; roles are managed per project (Team Members tab)
+    const clientRoles = (OL.roleRows && client ? OL.roleRows(client) : (client?.projectData?.roles || [])).map(r => ({ id: r.id, name: r.name, type: 'role', icon: 'users' }));
     
     // Extract roles defined within the team member objects themselves
     const teamList = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || [])];
