@@ -522,8 +522,7 @@ export function removeRoleFromMember(memberId, roleName) {
 
 // ---------------------------------------------------------------
 // ROLES — one list for the Team Members tab and the flow map's assignments.
-//   company roles   state.master.roles          (Comp Roles; read-only here)
-//   project roles   client.projectData.roles    [{ id, name }]  (managed here)
+//   project roles   client.projectData.roles    [{ id, name }]  (managed here; not the company's default Sphynx team roles)
 //   roles people already hold (member.roles, typed in the member window) are adopted as project roles
 // The flow map's assignee search reads the same lists, so a role made here can be assigned to a step or resource,
 // and the map shows who holds it.
@@ -534,20 +533,26 @@ function ensureProjectRole(client, name) {
     const pd = client.projectData || (client.projectData = {});
     if (!Array.isArray(pd.roles)) pd.roles = [];
     const key = clean.toLowerCase();
-    const hit = (state.master?.roles || []).find(r => String(r.name).toLowerCase() === key) || pd.roles.find(r => String(r.name).toLowerCase() === key);
+    const hit = pd.roles.find(r => String(r.name).toLowerCase() === key);
     if (hit) return hit;
     const role = { id: 'role-' + clean, name: clean };   // same id the flow map already gives a role typed on a member
     pd.roles.push(role);
     return role;
 }
 
+// Roles every client project starts with. Added once per project, so one that is deleted stays deleted.
+export const DEFAULT_CLIENT_ROLES = ['Advisor', 'Lead Advisor', 'Servicing Advisor', 'Associate Advisor', 'Client Service Manager', 'Paraplanner', 'CPA', 'Tax Manager'];
+
 export function roleRows(client = getActiveClient()) {
     if (!client) return [];
+    if (client.projectData && !client.projectData.rolesSeeded) {
+        client.projectData.rolesSeeded = true;
+        DEFAULT_CLIENT_ROLES.forEach(n => ensureProjectRole(client, n));
+        persist();
+    }
     (client.projectData?.teamMembers || []).forEach(m => (m.roles || []).forEach(r => ensureProjectRole(client, r)));
-    const company = (state.master?.roles || []).map(r => ({ id: r.id, name: r.name, source: 'company' }));
-    const own = (client.projectData?.roles || []).filter(r => !company.some(c => c.name.toLowerCase() === String(r.name).toLowerCase()))
-        .map(r => ({ id: r.id, name: r.name, source: 'project' }));
-    return [...company, ...own];
+    // This project's own roles only: the company's default roles (Sales, Scoping...) are for the Sphynx team, not client projects
+    return (client.projectData?.roles || []).map(r => ({ id: r.id, name: r.name, source: 'project' }));
 }
 
 export function roleHolders(name, client = getActiveClient()) {
@@ -582,7 +587,7 @@ export function openRolesManager() {
         <div style="display:grid; grid-template-columns: minmax(180px,1.2fr) 3fr 110px 70px; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);">
             <div>
                 ${mine ? `<input type="text" class="modal-input" value="${esc(r.name)}" onchange="OL.renameProjectRole(${i}, this.value)">`
-                       : `<div style="font-weight:600; font-size:13px;">${esc(r.name)}</div><div class="tiny muted">Company role</div>`}
+                       : `<div style="font-weight:600; font-size:13px;">${esc(r.name)}</div>`}
             </div>
             <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                 ${held.map(m => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">${esc(m.name)}
@@ -602,8 +607,7 @@ export function openRolesManager() {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <p class="tiny muted" style="margin-bottom:12px;">Roles for ${esc(client.meta?.name || 'this project')}. Anyone holding a role shows on the Team Members tab, and the role can be assigned to steps and resources on the flow map. Renaming a role updates its assignments.
-                Company roles are set in <a href="#" onclick="event.preventDefault(); OL.openRolesManagerModal && OL.openRolesManagerModal()">Comp Roles</a>.</p>
+            <p class="tiny muted" style="margin-bottom:12px;">Roles for ${esc(client.meta?.name || 'this project')}. Anyone holding a role shows on the Team Members tab, and the role can be assigned to steps and resources on the flow map. Renaming a role updates its assignments.</p>
             <div style="display:flex; gap:8px; margin-bottom:8px;">
                 <input type="text" id="new-project-role" class="modal-input" style="flex:1;" placeholder="New role name"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();OL.addProjectRole(this.value);}">
@@ -758,7 +762,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
     openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
-    removeRoleFromMember, openRolesManager, addProjectRole, renameProjectRole, deleteProjectRole, toggleRoleMember, roleHolders, roleRows,
+    removeRoleFromMember, openRolesManager, addProjectRole, renameProjectRole, deleteProjectRole, toggleRoleMember, roleHolders, roleRows, DEFAULT_CLIENT_ROLES,
     toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap,
     copyMemberSetupLink, removeMemberLogin, setFollowUpContact
 });
