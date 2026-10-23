@@ -661,6 +661,39 @@ export function _fvLayoutResource(res) {
         pending = rest;
     }
 
+    // A decision: a step that leaves for two or more LATER steps of this process (say "New Client" / "Existing Client").
+    // The path that carries on furthest stays in the main column; each of the others runs down a column of its own beside
+    // it until the two meet, so the paths have room to breathe instead of all stacking in one flat column.
+    const fwdTargets = (step) => {
+        const seen = new Set(); const found = [];
+        _fvGetEffectiveOut(step, res).forEach(l => {
+            if (!l.targetId || l._implicit) return;
+            const k = OL._refSplitIdx(l.targetId);
+            if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
+            const id = String(l.targetId.substring(k + 1));
+            const ti = stepIdx.get(id);
+            if (ti === undefined || ti <= stepIdx.get(String(step.id)) || seen.has(id)) return;
+            seen.add(id); found.push(ti);
+        });
+        return found.sort((a, b) => a - b);
+    };
+    steps.forEach(d => {
+        const targets = fwdTargets(d);
+        if (targets.length < 2) return;
+        const mainIdx = targets[targets.length - 1];
+        targets.slice(0, -1).forEach((ti, n) => {
+            const seen = new Set();
+            let cur = steps[ti];
+            while (cur && !seen.has(String(cur.id)) && stepIdx.get(String(cur.id)) < mainIdx) {
+                seen.add(String(cur.id));
+                const lay = layout[cur.id];
+                if (lay && lay.colOffset === 0) layout[cur.id] = { ...lay, colOffset: 1 + n };
+                const nexts = fwdTargets(cur);
+                cur = nexts.length === 1 ? steps[nexts[0]] : null;   // a decision inside a path is laid out by its own turn
+            }
+        });
+    });
+
     return layout;
 };
 
