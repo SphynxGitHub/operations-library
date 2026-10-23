@@ -1,385 +1,459 @@
-// ================================================================================================
-// FILE: features/frameout.js
+//======================= CORE / FRAME-OUT =======================//
+// The logic behind Frame-out: framing a process out quickly, in plain language, before anything is built. A process is a
+// "Process" card on the flow map whose steps are DRAFT steps: just a sentence, plus (all optional) who does it, a flag for
+// "to confirm with the client", and a yes / no decision. Pure functions on the card's steps: no database, no page.
 //
-// WHAT IT DOES:   Frame-out: a full-screen way to frame a process out quickly, live on a call or afterwards from notes. One
-//                 line to type in; each Enter adds a step to a chain that draws itself. Who does a step (@client, @us...),
-//                 a question to confirm (a ? after the step) and a yes / no decision (/if) are typed in the same line. The
-//                 steps are saved as a draft Process card on the flow map as they are added, so nothing is lost if the call
-//                 ends or the tab closes. "By who" lays the same steps out in a lane for each person, which shows the handoffs.
-//                 The same one-line add is available inside a draft card on the map and in the list view (foInlineAdd).
+//   parseFrameLine()   one typed line -> a step, a decision, or a command (/no, /join).
+//   applyFrameLine()   adds it to the steps, keeping track of which decision path a step belongs to.
+//   deriveLinks()      draws the lines between steps. Written in the same shape the map and the list view already read
+//                      (step.logic.out, "Yes" and "No" as conditions), so a draft process shows up everywhere a built one does.
+//   layoutChain()      puts the steps on a canvas by themselves (left to right, or in a lane for each person).
+//   questionsOf(), handoffsOf(), followUpText()   what is left to ask the client.
 //
-// WHERE THE DATA GOES:  a resource { type: 'Process', isDraft: true, steps: [...] } in the project's library. Its steps are
-//                 ordinary steps (core/frameout.js has the exact shape), so the map, the list and every other tool already read them.
+// The steps array is the single source of truth: its ORDER is the order the steps were framed, and each step says which
+// decision path (if any) it sits on. Links are derived from that, never hand-kept, so reordering or deleting a step cannot
+// leave a broken line behind. Only links marked _draft are ever rewritten; anything drawn by hand stays.
 //
-// LOGIC: core/frameout.js (parsing, branching, links, layout). This file is the screen only.
-// USED BY: the "Frame out" button on the flow map (features/flow-visualizer/core.js).
-// ================================================================================================
+// Used by features/frameout.js (the screen) and features/flow-visualizer/core.js (how a draft card is drawn).
 
-import { esc, getActiveClient, persist, markClientDirty } from '../core/data.js';
-import {
-  OWNERS, OWNER_ORDER, parseFrameLine, applyFrameLine, deriveLinks, layoutChain, questionsOf, handoffsOf, unassignedCount,
-  followUpText, repairBranches, placeProcessCard, assigneesFor, contextOf,
-} from '../core/frameout.js';
+export const OWNERS = {
+  client:  { label: 'Client',      short: 'CLIENT',      color: '#F5B800', words: ['client', 'them', 'customer'] },
+  sphynx:  { label: 'Sphynx',      short: 'SPHYNX',      color: '#3DD9C5', words: ['us', 'sphynx', 'we', 'team'] },
+  system:  { label: 'System',      short: 'SYSTEM',      color: '#9fb0c4', words: ['system', 'auto', 'automation', 'zap', 'zapier'] },
+  third:   { label: 'Third party', short: 'THIRD PARTY', color: '#a78bfa', words: ['3p', 'third', 'vendor', 'custodian'] },
+};
+export const OWNER_ORDER = ['client', 'sphynx', 'system', 'third'];
 
-const OVERLAY_ID = 'frameout-overlay';
-const rand = () => Math.random().toString(36).slice(2, 10);
-const PANEL_W = 360;
+const OWNER_ASSIGNEE = {
+  client: { id: 'all-client', name: 'Any Client', type: 'role' },
+  sphynx: { id: 'role-sphynx', name: 'Sphynx', type: 'role' },
+  system: { id: 'frameout-system', name: 'System', type: 'app' },
+  third:  { id: 'frameout-third', name: 'Third party', type: 'role' },
+};
+export const assigneesFor = (owner) => (OWNER_ASSIGNEE[owner] ? [{ ...OWNER_ASSIGNEE[owner] }] : []);
 
-const PROMPTS = ['What kicks this off?', 'What happens next?', 'Who does that?', 'Any exceptions?', 'Who needs to be told?', 'What is the end result?'];
+const ownerFromWord = (w) => {
+  const k = String(w || '').toLowerCase();
+  return OWNER_ORDER.find((o) => OWNERS[o].words.includes(k) || o === k) || null;
+};
 
-const pd = () => (OL.getCurrentProjectData ? OL.getCurrentProjectData() : null);
-const library = () => { const d = pd(); return d ? (d.localResources = d.localResources || []) : []; };
-const cardOf = (id) => library().find((r) => String(r.id) === String(id));
-const toast = (t) => { if (typeof OL.showToast === 'function') OL.showToast(t); else console.info(t); };
+const clean = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+const clip = (s, n) => { const t = clean(s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
-OL._foSessions = OL._foSessions || {};         // { cardId: { ctx } }: where the next step goes (a decision's Yes / No path, or the main line)
-const sessionOf = (resId) => (OL._foSessions[resId] = OL._foSessions[resId] || {});
+// ---- one typed line ----------------------------------------------------------------------------------------
+//   "Advisor reviews the packet @client"          a step, done by the client
+//   "Prepares the packet @us ? who signs off"     a step to confirm, with the question to ask
+//   "/if Joint account?"                          a decision (the next steps are on its Yes path)
+//   "Send the form -> Completed Form"             the step points at another process (it shows a link on the map)
+//   "/yes"  "/no"  "/join"                        switch to the Yes path / the No path / back to the main line
+// Returns { kind: 'step'|'decision'|'command'|'empty', ... }.
+export function parseFrameLine(input) {
+  let text = clean(input);
+  if (!text) return { kind: 'empty' };
 
-// ---- saving: every change is written to the card, derived lines included, then saved ----------------------------
-function commit(card, { redraw = true } = {}) {
-  repairBranches(card.steps);
-  deriveLinks(card.steps, card.id);
-  const client = getActiveClient();
-  if (client) markClientDirty(client.id);
-  persist();
-  if (redraw) render();
+  const cmd = text.match(/^\/(\w+)\s*(.*)$/);
+  if (cmd) {
+    const c = cmd[1].toLowerCase();
+    if (c === 'no' || c === 'else' || c === 'otherwise') return { kind: 'command', command: 'no' };
+    if (c === 'yes') return { kind: 'command', command: 'yes' };
+    if (c === 'join' || c === 'end' || c === 'then' || c === 'merge') return { kind: 'command', command: 'join' };
+    if (c === 'if' || c === 'decision' || c === 'when') { text = cmd[2]; if (!clean(text)) return { kind: 'empty', hint: 'Type the question after /if, like /if Joint account?' }; return { ...parseBody(text), kind: 'decision' }; }
+    return { kind: 'empty', hint: `Not a command I know: /${c}. Try /if, /yes, /no or /join.` };
+  }
+  return { ...parseBody(text), kind: 'step' };
 }
 
-function createCard(name) {
-  const d = pd();
-  const card = {
-    id: `local-prj-proc-${rand()}`, type: 'Process', archetype: 'Multi-Step', name: name || 'New process', source: 'frameout',
-    isDraft: true, status: 'Pending', isExpanded: true, visible: true, steps: [], createdDate: new Date().toISOString(),
+function parseBody(text) {
+  text = clean(text);
+  // "name ? question": a question mark followed by text is the thing to confirm; "??" at the end flags it with no text
+  let question = null;
+  const q = text.match(/^(.*?)\s*\?\s+(\S.*)$/);
+  if (q && q[1]) { text = q[1]; question = q[2]; }
+  else if (/\?\?$/.test(text)) { text = text.replace(/\?\?$/, ''); question = ''; }
+
+  let owner = null;
+  let ref = null;
+  // in the name: at the start or the end of the line it is a tag and goes; in the middle ("Email the @client a copy") it stays as the word
+  text = text.replace(/(^|\s)@(\w+)(?=\s|$)/g, (m, sp, w, off, whole) => {
+    const o = ownerFromWord(w); if (!o) return m;
+    owner = o;
+    const atEdge = !clean(whole.slice(0, off)) || !clean(whole.slice(off + m.length));
+    return atEdge ? sp : `${sp}${w}`;
+  });
+  // an owner typed after the question ("x ? who signs off @us") counts and is not part of the question
+  if (question) question = question.replace(/(^|\s)@(\w+)(?=\s|$)/g, (m, sp, w) => { const o = ownerFromWord(w); if (!o) return m; if (!owner) owner = o; return sp; });
+  // "Send the form -> Completed Form": the step points at another process by name (the app finds it)
+  const rf = text.match(/^(.*?)\s*->\s*(\S.*)$/);
+  if (rf && clean(rf[1])) { text = rf[1]; ref = clean(rf[2]); }
+  return { name: clean(text), owner, question: question === null ? null : clean(question), ref };
+}
+
+const stepId = (rand) => `id_${rand()}`;
+
+export function newDraftStep(parsed, rand = () => Math.random().toString(36).slice(2, 10)) {
+  const isDecision = parsed.kind === 'decision';
+  let name = parsed.name;
+  if (isDecision && !/\?$/.test(name)) name = `${name}?`;
+  const step = {
+    id: stepId(rand), name, appName: '', draft: true, kind: isDecision ? 'decision' : 'step',
+    owner: parsed.owner || '', assignees: parsed.owner ? assigneesFor(parsed.owner) : [],
+    logic: { in: [], out: [] }, links: [], datapoints: [],
   };
-  library().push(card);
-  placeProcessCard(d, card, { makeId: rand });
-  return card;
+  if (parsed.question !== null && parsed.question !== undefined) step.question = { text: parsed.question || `Confirm: ${parsed.name}`, done: false };
+  if (parsed.ref) step.refName = parsed.ref;       // the app swaps this for refResId once it finds the process
+  return step;
 }
 
-// ---- open / close ----------------------------------------------------------------------------------------------
-function openFrameOut(resId) {
-  if (window.location.hash.includes('vault')) { alert('Frame-out works inside a client project. Open a project first.'); return; }
-  const client = getActiveClient();
-  if (!client) { alert('Open a project first.'); return; }
-  let card = resId ? cardOf(resId) : null;
-  const created = !card;
-  if (!card) { card = createCard('New process'); if (client) markClientDirty(client.id); }
-  OL._fo = { resId: card.id, mode: 'chain', selectedId: null, msg: '', prompt: '', created, input: '' };
-  OL._foSessions[card.id] = {};                 // reopening starts from where the last step left off
-  document.getElementById(OVERLAY_ID)?.remove();
-  const el = document.createElement('div');
-  el.id = OVERLAY_ID; el.className = 'fo-overlay';
-  document.body.appendChild(el);
-  document.addEventListener('keydown', onKey, true);
-  window.addEventListener('resize', onResize);
-  render({ focus: true });
+// Where the next step goes, from the steps so far: on a decision's Yes or No path, or on the main line.
+export function contextOf(steps) {
+  const last = (steps || [])[(steps || []).length - 1];
+  if (!last) return null;
+  if (last.kind === 'decision') return { decisionId: last.id, path: 'yes' };
+  if (last.branchOf) return { decisionId: last.branchOf, path: last.path || 'yes' };
+  return null;
 }
 
-function closeFrameOut({ keep = true } = {}) {
-  const fo = OL._fo; if (!fo) return;
-  const card = cardOf(fo.resId);
-  // a process that was opened and never given a step leaves nothing behind
-  if (card && fo.created && !card.steps.length && keep) { removeCard(card); }
-  document.getElementById(OVERLAY_ID)?.remove();
-  document.removeEventListener('keydown', onKey, true);
-  window.removeEventListener('resize', onResize);
-  OL._fo = null;
-  if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') OL.renderVisualizer(false);
-}
+// Adds a parsed line. `state` is the open session ({ ctx }): /no and /join change where the NEXT step goes, so they live
+// there, not in the steps. Returns { ok, step?, message? }. `steps` is changed in place.
+export function applyFrameLine(steps, parsed, rand, state = {}) {
+  const ctx = state.ctx !== undefined ? state.ctx : contextOf(steps);
+  if (parsed.kind === 'empty') return { ok: false, message: parsed.hint || '' };
 
-function removeCard(card) {
-  const d = pd();
-  const i = library().indexOf(card); if (i >= 0) library().splice(i, 1);
-  (d.workflows || []).forEach((w) => { w.resourceIds = (w.resourceIds || []).filter((x) => String(x) !== String(card.id)); });
-  const client = getActiveClient(); if (client) markClientDirty(client.id);
-  persist();
-}
-
-async function saveAndShow() {
-  const fo = OL._fo; const card = fo && cardOf(fo.resId); if (!card) return;
-  if (!card.steps.length) { toast('Add at least one step first.'); return; }
-  commit(card, { redraw: false });
-  OL._fv = OL._fv || {};
-  (OL._fv._expandedCards = OL._fv._expandedCards instanceof Set ? OL._fv._expandedCards : new Set()).add(card.id);
-  const wasOnMap = window.location.hash.includes('visualizer');
-  closeFrameOut({ keep: false });
-  toast(`“${card.name}” is on the flow map as a draft.`);
-  if (!wasOnMap) window.location.hash = '#/visualizer';
-  else if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
-}
-
-function onKey(e) {
-  if (e.key === 'Escape' && OL._fo) {
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) { t.blur(); e.stopPropagation(); }
-    else if (OL._fo.selectedId) { OL._fo.selectedId = null; render(); }
+  if (parsed.kind === 'command') {
+    if (parsed.command === 'no') {
+      if (!ctx) return { ok: false, message: 'There is no decision open. Start one with /if.' };
+      if (ctx.path === 'no') return { ok: false, message: 'You are already on the No path. /join goes back to the main line.' };
+      state.ctx = { decisionId: ctx.decisionId, path: 'no' };
+      return { ok: true, message: 'Now adding the No path. /join goes back to the main line.' };
+    }
+    if (parsed.command === 'yes') {
+      if (!ctx) return { ok: false, message: 'There is no decision open. Start one with /if.' };
+      if (ctx.path !== 'no') return { ok: false, message: 'You are already on the Yes path. /no switches to the No path.' };
+      state.ctx = { decisionId: ctx.decisionId, path: 'yes' };
+      return { ok: true, message: 'Now adding the Yes path. New steps go before the No path steps. /join goes back to the main line.' };
+    }
+    if (!ctx) return { ok: false, message: 'There is no decision open.' };
+    state.ctx = null;
+    return { ok: true, message: 'Back on the main line.' };
   }
-}
-let resizeTimer = null;
-function onResize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => OL._fo && render(), 150); }
 
-// ---- the line you type ------------------------------------------------------------------------------------------
-function submit() {
-  const fo = OL._fo; const card = cardOf(fo.resId); if (!card) return;
-  const input = document.getElementById('fo-input');
-  const text = input ? input.value : '';
-  const res = applyFrameLine(card.steps, parseFrameLine(text), rand, sessionOf(card.id));
-  if (res.ok && res.step) { const note = resolveRef(res.step, card); if (note) res.message = note; }
-  fo.msg = res.message || '';
-  if (!res.ok) { fo.input = text; render({ focus: true }); return; }
-  fo.input = ''; fo.prompt = '';
-  commit(card, { redraw: false });
-  render({ focus: true, scrollToEnd: !!res.step });
-}
+  if (parsed.kind === 'decision' && ctx) return { ok: false, message: 'Finish the open decision first: /join gets you back to the main line.' };
 
-function setPrompt(text) { if (!OL._fo) return; OL._fo.prompt = text; const i = document.getElementById('fo-input'); if (i) { i.placeholder = text; i.focus(); } }
-function setMode(mode) { if (!OL._fo) return; OL._fo.mode = mode; OL._fo.selectedId = null; render({ focus: true }); }
-function select(id) { if (!OL._fo) return; OL._fo.selectedId = OL._fo.selectedId === id ? null : id; render({ keepInput: true }); }
-function rename(value) { const card = cardOf(OL._fo?.resId); if (!card) return; card.name = String(value || '').trim() || 'New process'; commit(card, { redraw: false }); }
-
-// ---- editing the selected step ------------------------------------------------------------------------------------
-const selectedStep = () => { const fo = OL._fo; const card = fo && cardOf(fo.resId); return card ? card.steps.find((s) => s.id === fo.selectedId) : null; };
-// "-> Completed Form" typed after a step: find the process by name and point the step at it
-function resolveRef(step, card) {
-  if (!step.refName) return '';
-  const name = String(step.refName).trim().toLowerCase(); delete step.refName;
-  const pool = library().filter((r) => r && !r.isDeleted && String(r.id) !== String(card.id) && (r.steps || []).length);
-  const exact = pool.filter((r) => String(r.name || '').trim().toLowerCase() === name);
-  const near = exact.length ? exact : pool.filter((r) => String(r.name || '').trim().toLowerCase().startsWith(name));
-  if (near.length === 1) { step.refResId = String(near[0].id); return `Linked to "${near[0].name}".`; }
-  return near.length > 1 ? `More than one process starts with "${name}". Pick the one you mean in the panel.` : `No process named "${name}" yet. Pick one in the panel when it exists.`;
-}
-
-function editStep(field, value) {
-  const card = cardOf(OL._fo?.resId); const s = selectedStep(); if (!card || !s) return;
-  if (field === 'ref') { if (value) s.refResId = String(value); else delete s.refResId; commit(card, { redraw: true }); return; }
-  if (field === 'name') { const v = String(value || '').trim(); if (v) s.name = v; }
-  else if (field === 'owner') { s.owner = value || ''; s.assignees = value ? assigneesFor(value) : []; }
-  else if (field === 'tool') { s.appName = String(value || '').trim(); }
-  else if (field === 'question') {
-    const v = String(value || '').trim();
-    if (v) s.question = { text: v, done: false }; else delete s.question;
-  } else if (field === 'toggleQuestion') { if (s.question) delete s.question; else s.question = { text: `Confirm: ${s.name}`, done: false }; }
-  commit(card, { redraw: true });
-}
-function markAnswered(id) { const card = cardOf(OL._fo?.resId); const s = card && card.steps.find((x) => x.id === id); if (!s || !s.question) return; s.question.done = true; commit(card); }
-
-function moveStep(dir) {
-  const card = cardOf(OL._fo?.resId); const s = selectedStep(); if (!card || !s) return;
-  const i = card.steps.indexOf(s); const j = i + dir;
-  if (j < 0 || j >= card.steps.length) return;
-  const before = card.steps.map((x) => `${x.id}:${x.branchOf || ''}:${x.path || ''}`).join('|');
-  const next = card.steps.slice(); [next[i], next[j]] = [next[j], next[i]];
-  const probe = next.map((x) => ({ ...x }));
-  repairBranches(probe);
-  const changed = probe.some((x, k) => (x.branchOf || '') !== (next[k].branchOf || ''));
-  if (changed) { OL._fo.msg = 'That step belongs to the decision above it, so it cannot move above it.'; render({ keepInput: true }); return; }
-  card.steps = next;
-  void before;
-  commit(card);
-}
-
-function deleteStep() {
-  const card = cardOf(OL._fo?.resId); const s = selectedStep(); if (!card || !s) return;
-  const wasDecision = s.kind === 'decision';
-  card.steps = card.steps.filter((x) => x.id !== s.id);
-  OL._fo.selectedId = null;
-  if (wasDecision) OL._fo.msg = 'Decision removed. Its steps are now on the main line.';
-  sessionOf(card.id).ctx = undefined;
-  commit(card);
-}
-
-function deleteProcess() {
-  const card = cardOf(OL._fo?.resId); if (!card) return;
-  if (!confirm(`Delete “${card.name}” and its ${card.steps.length} draft step${card.steps.length === 1 ? '' : 's'}?`)) return;
-  removeCard(card); OL._fo.created = false; closeFrameOut({ keep: false });
-}
-
-async function copyFollowUp() {
-  const card = cardOf(OL._fo?.resId); if (!card) return;
-  const client = getActiveClient();
-  const text = followUpText(card.name, card.steps, '');
-  if (!text) { toast('No open questions.'); return; }
-  try { await navigator.clipboard.writeText(text); toast('Questions copied. Paste them into an email.'); }
-  catch (e) { window.prompt('Copy these questions:', text); }
-  void client;
-}
-
-// ---- drawing -------------------------------------------------------------------------------------------------------
-const ownerTag = (o) => (o && OWNERS[o] ? `<b class="fo-owner" style="color:${OWNERS[o].color}">${OWNERS[o].short}</b>` : '<b class="fo-owner fo-owner-none">NO OWNER YET</b>');
-
-function nodeHtml(n, s, sel) {
-  const q = s.question && !s.question.done ? '<span class="fo-qbadge" title="To confirm">?</span>' : '';
-  const refTarget = s.refResId ? library().find((r) => String(r.id) === String(s.refResId)) : null;
-  const refBadge = s.refResId ? `<span class="fo-refbadge" title="${esc(refTarget ? `See ${refTarget.name}` : 'Points at a process that was removed')}">&#8599;</span>` : '';
-  const tool = s.appName ? `<span class="fo-tool">${esc(s.appName)}</span>` : '';
-  const cls = ['fo-node', s.kind === 'decision' ? 'is-decision' : '', sel ? 'is-sel' : '', s.question && !s.question.done ? 'has-q' : ''].filter(Boolean).join(' ');
-  const inner = s.kind === 'decision' ? `<span class="fo-text">${esc(s.name)}</span>` : `<span class="fo-text">${ownerTag(s.owner)}<br>${esc(s.name)}</span>${tool}`;
-  return `<div class="${cls}" data-id="${esc(s.id)}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;" onclick="OL.foSelect('${esc(s.id)}')" tabindex="0" role="button" aria-label="${esc(s.name)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();OL.foSelect('${esc(s.id)}')}">${inner}${q}${refBadge}</div>`;
-}
-
-function pathD(points, r = 10) {
-  // a polyline with softly rounded corners
-  if (points.length < 2) return '';
-  let d = `M ${points[0][0]} ${points[0][1]}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const [x0, y0] = points[i - 1]; const [x1, y1] = points[i]; const [x2, y2] = points[i + 1];
-    const l1 = Math.hypot(x1 - x0, y1 - y0); const l2 = Math.hypot(x2 - x1, y2 - y1);
-    const rr = Math.min(r, l1 / 2, l2 / 2);
-    const ax = x1 - ((x1 - x0) / l1) * rr, ay = y1 - ((y1 - y0) / l1) * rr;
-    const bx = x1 + ((x2 - x1) / l2) * rr, by = y1 + ((y2 - y1) / l2) * rr;
-    d += ` L ${ax} ${ay} Q ${x1} ${y1} ${bx} ${by}`;
+  const step = newDraftStep(parsed, rand);
+  if (parsed.kind === 'step' && ctx) { step.branchOf = ctx.decisionId; step.path = ctx.path; }
+  // A Yes step added after the No path was started goes in right after the decision's last Yes step, ahead of the No
+  // steps: the lines are drawn from the order of the steps, and the Yes path always comes first.
+  let at = steps.length;
+  if (parsed.kind === 'step' && ctx && ctx.path !== 'no') {
+    const di = steps.findIndex((s) => s.id === ctx.decisionId);
+    let last = di;
+    steps.forEach((s, i) => { if (s.branchOf === ctx.decisionId && s.path !== 'no') last = i; });
+    if (di >= 0) at = last + 1;
   }
-  const last = points[points.length - 1]; d += ` L ${last[0]} ${last[1]}`;
-  return d;
+  steps.splice(at, 0, step);
+  state.ctx = at < steps.length - 1 ? ctx : contextOf(steps);       // stays on the Yes path when the step went in ahead of the No path
+  return { ok: true, step, message: parsed.kind === 'decision' ? 'Decision added. The next steps go on its Yes path. /no switches to No, /join goes back.' : '' };
 }
 
-function canvasHtml(card, fo, availW) {
-  const steps = card.steps;
-  if (!steps.length) {
-    return `<div class="fo-empty"><div class="fo-empty-title">Start with what kicks this process off</div><div class="fo-empty-sub">Type a step below and press Enter. Add <code>@client</code> or <code>@us</code> to say who does it, a <code>?</code> to flag something to confirm, and <code>/if</code> for a decision.</div></div>`;
-  }
-  const colW = 216 + 56;
-  const maxCols = Math.max(2, Math.min(6, Math.floor((availW - 80 + 56) / colW)));
-  const L = layoutChain(steps, fo.mode, { maxCols });
-  const scale = fo.mode === 'who' ? Math.max(0.62, Math.min(1, availW / L.width)) : Math.min(1, availW / L.width);
-  const byId = new Map(steps.map((s) => [s.id, s]));
-  const lanesHtml = fo.mode === 'who' ? L.lanes.map((lane, i) => {
-    const o = OWNERS[lane]; const label = o ? o.short : 'NO OWNER YET'; const col = o ? o.color : '#9fb0c4';
-    return `<div class="fo-lane ${i % 2 ? 'odd' : ''}" style="top:${L.laneTop(i)}px;height:${L.laneH}px;width:${L.width}px"><span class="fo-lane-label" style="color:${col}">${label}</span></div>`;
-  }).join('') : '';
-  const lines = L.lines.map((l) => `<path d="${pathD(l.points)}" class="fo-line ${l.crossLane ? 'handoff' : ''}" marker-end="url(#fo-arrow)"></path>`).join('');
-  const labels = L.lines.filter((l) => l.rule).map((l) => {
-    const [x, y] = l.points[0]; const [x1, y1] = l.points[1];
-    const vertical = Math.abs(x1 - x) < 1;
-    const lx = vertical ? x + 10 : x + 8; const ly = vertical ? y + 6 : y - 22;
-    return `<span class="fo-rule" style="left:${lx}px;top:${ly}px">${esc(l.rule)}</span>`;
-  }).join('');
-  const nodes = L.nodes.map((n) => nodeHtml(n, byId.get(n.id), fo.selectedId === n.id)).join('');
-  return `<div class="fo-canvas-sizer" style="width:${L.width * scale}px;height:${L.height * scale}px"><div class="fo-canvas" style="width:${L.width}px;height:${L.height}px;transform:scale(${scale});transform-origin:0 0">
-    ${lanesHtml}
-    <svg class="fo-lines" width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" aria-hidden="true"><defs><marker id="fo-arrow" orient="auto" markerWidth="6" markerHeight="6" refX="4" refY="2.5" overflow="visible"><path d="M0 0 L5 2.5 L0 5 Z" fill="context-stroke"/></marker></defs>${lines}</svg>
-    ${labels}${nodes}</div></div>`;
-}
-
-function panelHtml(card, fo) {
-  const qs = questionsOf(card.steps);
-  const s = selectedStep();
-  let editor = '';
-  if (s) {
-    const ownerBtns = OWNER_ORDER.map((o) => `<button type="button" class="fo-pill ${s.owner === o ? 'on' : ''}" style="--c:${OWNERS[o].color}" onclick="OL.foEdit('owner','${o}')">${OWNERS[o].label}</button>`).join('')
-      + `<button type="button" class="fo-pill ${!s.owner ? 'on' : ''}" onclick="OL.foEdit('owner','')">None</button>`;
-    editor = `<div class="fo-panel-card">
-      <div class="fo-panel-head"><span>${s.kind === 'decision' ? 'Decision' : 'Step'}</span><button type="button" class="fo-x" aria-label="Close" onclick="OL.foSelect('${esc(s.id)}')">Close</button></div>
-      <label class="fo-lbl" for="fo-edit-name">What happens</label>
-      <input id="fo-edit-name" class="fo-field" type="text" value="${esc(s.name)}" onchange="OL.foEdit('name', this.value)">
-      ${s.kind === 'decision' ? '' : `<div class="fo-lbl">Who does it</div><div class="fo-pills">${ownerBtns}</div>
-      <label class="fo-lbl" for="fo-edit-tool">Tool (a guess is fine)</label>
-      <input id="fo-edit-tool" class="fo-field" type="text" value="${esc(s.appName || '')}" placeholder="e.g. Redtail, Jotform" onchange="OL.foEdit('tool', this.value)">`}
-      ${s.kind === 'decision' || typeof OL.fvRefPicker !== 'function' ? '' : `<div class="fo-lbl">See another process</div>${OL.fvRefPicker(card.id, s, "OL.foEdit('ref', this.value)")}`}
-      <label class="fo-lbl" for="fo-edit-q">To confirm with the client</label>
-      <input id="fo-edit-q" class="fo-field" type="text" value="${esc(s.question ? s.question.text : '')}" placeholder="Leave empty if there is nothing to confirm" onchange="OL.foEdit('question', this.value)">
-      <div class="fo-row"><button type="button" class="fo-btn" onclick="OL.foMove(-1)">Move earlier</button><button type="button" class="fo-btn" onclick="OL.foMove(1)">Move later</button><button type="button" class="fo-btn danger" onclick="OL.foDeleteStep()">Delete</button></div>
-    </div>`;
-  }
-  const items = qs.length ? qs.map((q) => `<div class="fo-q"><button type="button" class="fo-q-dot" title="Mark as answered" aria-label="Mark as answered" onclick="OL.foAnswered('${esc(q.id)}')"></button>
-      <div><div class="fo-q-text">${esc(q.text)}</div><div class="fo-q-from">From: ${esc(q.step)}</div></div></div>`).join('') : '<div class="fo-muted">Nothing to confirm yet. Put a <b>?</b> after a step, like <code>Prepares the packet ? who signs off</code>.</div>';
-  const none = unassignedCount(card.steps);
-  const hand = handoffsOf(card.steps);
-  const stats = `<div class="fo-stats">${hand ? `<span class="fo-chip">${hand} handoff${hand === 1 ? '' : 's'}</span>` : ''}${none ? `<span class="fo-chip warn">${none} step${none === 1 ? '' : 's'} with no owner</span>` : ''}</div>`;
-  return `<aside class="fo-panel" aria-label="Details">
-    ${editor}
-    <div class="fo-panel-card">
-      <div class="fo-panel-head"><span>To confirm</span><span class="fo-count">${qs.length}</span></div>
-      ${items}
-      ${qs.length ? '<button type="button" class="fo-btn wide" onclick="OL.foCopyFollowUp()">Copy as a follow-up email</button>' : ''}
-    </div>
-    ${stats}
-    <div class="fo-panel-foot"><button type="button" class="fo-link" onclick="OL.foDeleteProcess()">Delete this process</button></div>
-  </aside>`;
-}
-
-function render(opts = {}) {
-  const el = document.getElementById(OVERLAY_ID); const fo = OL._fo;
-  if (!el || !fo) return;
-  const card = cardOf(fo.resId); if (!card) { closeFrameOut({ keep: false }); return; }
-  const prevInput = document.getElementById('fo-input');
-  const typed = opts.keepInput && prevInput ? prevInput.value : fo.input;
-  const availW = Math.max(480, window.innerWidth - PANEL_W - 64);
-  const qs = questionsOf(card.steps);
-  const ctx = (OL._foSessions[card.id] || {}).ctx !== undefined ? OL._foSessions[card.id].ctx : contextOf(card.steps);
-  const openDecision = ctx ? card.steps.find((x) => x.id === ctx.decisionId) : null;
-  const seg = (t, m) => `<button type="button" class="fo-seg ${fo.mode === m ? 'on' : ''}" onclick="OL.foSetMode('${m}')" aria-pressed="${fo.mode === m}">${t}</button>`;
-  const banner = fo.msg ? `<div class="fo-msg" role="status">${esc(fo.msg)}</div>` : '';
-  const pathBar = openDecision ? `<div class="fo-pathbar">Adding the <b>${ctx.path === 'no' ? 'No' : 'Yes'}</b> path of “${esc(openDecision.name)}”
-      ${ctx.path === 'yes' ? '<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/no\')">Switch to No</button>' : '<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/yes\')">Switch to Yes</button>'}<button type="button" class="fo-btn small" onclick="OL.foCommand(\'/join\')">Back to the main line</button></div>` : '';
-  el.innerHTML = `
-    <div class="fo-top">
-      <div class="fo-top-l"><button type="button" class="fo-btn" onclick="OL.foClose()">Exit</button>
-        <input class="fo-title" type="text" value="${esc(card.name)}" aria-label="Process name" onchange="OL.foRename(this.value)">
-        <span class="fo-draft">DRAFT</span></div>
-      <div class="fo-segs" role="group" aria-label="Layout">${seg('Chain', 'chain')}${seg('By who', 'who')}</div>
-      <div class="fo-top-r"><span class="fo-note">${qs.length ? `${qs.length} to confirm` : `${card.steps.length} step${card.steps.length === 1 ? '' : 's'}`}</span>
-        <button type="button" class="fo-btn primary" onclick="OL.foSave()">Save to flow map</button></div>
-    </div>
-    <div class="fo-main">
-      <div class="fo-stage" id="fo-stage">${canvasHtml(card, fo, availW)}</div>
-      ${panelHtml(card, fo)}
-    </div>
-    <div class="fo-bottom">
-      ${banner}${pathBar}
-      <div class="fo-prompts"><span class="fo-ask">ASK NEXT</span>${PROMPTS.map((p) => `<button type="button" class="fo-prompt" onclick="OL.foPrompt(${JSON.stringify(p).replace(/"/g, '&quot;')})">${esc(p)}</button>`).join('')}</div>
-      <div class="fo-inputrow">
-        <label for="fo-input" class="fo-sr">Add a step</label>
-        <input id="fo-input" class="fo-input" type="text" autocomplete="off" placeholder="${esc(fo.prompt || (card.steps.length ? 'What happens next?' : 'What kicks this process off?'))}" value="${esc(typed)}" onkeydown="if(event.key==='Enter'){event.preventDefault();OL.foSubmit()}">
-        <button type="button" class="fo-btn primary big" onclick="OL.foSubmit()">Add step</button>
-      </div>
-      <div class="fo-keys"><span><kbd>@client</kbd> <kbd>@us</kbd> <kbd>@system</kbd> who does it</span><span><kbd>?</kbd> flag a question</span><span><kbd>/if</kbd> yes / no decision</span><span><kbd>/yes</kbd> <kbd>/no</kbd> <kbd>/join</kbd> switch path</span><span><kbd>Esc</kbd> stop typing</span></div>
-    </div>`;
-  if (window.lucide) window.lucide.createIcons();
-  const input = document.getElementById('fo-input');
-  if (opts.focus && input) { input.focus(); const n = input.value.length; try { input.setSelectionRange(n, n); } catch (e) { /* not all inputs */ } }
-  if (opts.scrollToEnd) { const stage = document.getElementById('fo-stage'); if (stage) stage.scrollTo({ top: stage.scrollHeight, left: stage.scrollWidth, behavior: 'smooth' }); }
-}
-
-// ---- adding a step from inside a draft card on the map or in the list view --------------------------------------------
-function inlineAddRowHtml(resId) {
-  const id = `fo-inline-${resId}`;
-  return `<div class="fo-inline" onclick="event.stopPropagation()">
-    <input id="${esc(id)}" class="fo-inline-input" type="text" autocomplete="off" aria-label="Add a draft step" placeholder="Add a step. Enter adds, @client sets who, ? flags a question"
-           onclick="event.stopPropagation()" onkeydown="event.stopPropagation(); if(event.key==='Enter'){event.preventDefault();OL.foInlineAdd('${esc(resId)}', this.value)}">
-    <button type="button" class="fo-open-btn" onclick="event.stopPropagation(); OL.openFrameOut('${esc(resId)}')">Open in Frame-out</button>
-  </div>`;
-}
-
-function inlineAdd(resId, text) {
-  const card = cardOf(resId); if (!card) return;
-  const res = applyFrameLine(card.steps, parseFrameLine(text), rand, sessionOf(card.id));
-  if (!res.ok) { if (res.message) toast(res.message); return; }
-  if (res.step) { const note = resolveRef(res.step, card); if (note) res.message = note; }
-  if (res.message) toast(res.message);
-  repairBranches(card.steps); deriveLinks(card.steps, card.id);
-  const client = getActiveClient(); if (client) markClientDirty(client.id);
-  persist();
-  OL._fv = OL._fv || {};
-  (OL._fv._expandedCards = OL._fv._expandedCards instanceof Set ? OL._fv._expandedCards : new Set()).add(card.id);
-  if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer(false);
-  requestAnimationFrame(() => { const i = document.getElementById(`fo-inline-${resId}`); if (i) i.focus(); });
-}
-
-// A step of a draft card, as one row inside the card on the map.
-function draftStepBadges(s) {
-  const o = s.owner && OWNERS[s.owner] ? `<span class="fo-mini-owner" style="color:${OWNERS[s.owner].color}">${OWNERS[s.owner].short}</span>` : '';
-  const q = s.question && !s.question.done ? '<span class="fo-mini-q" title="To confirm">?</span>' : '';
-  const d = s.kind === 'decision' ? '<span class="fo-mini-dec">DECISION</span>' : '';
-  return d + o + q;
-}
-
-window.OL = window.OL || {};
-Object.assign(window.OL, {
-  openFrameOut, foClose: () => closeFrameOut(), foSave: saveAndShow, foSubmit: submit, foSetMode: setMode, foSelect: select, foRename: rename,
-  foEdit: editStep, foMove: moveStep, foDeleteStep: deleteStep, foDeleteProcess: deleteProcess, foAnswered: markAnswered, foCopyFollowUp: copyFollowUp,
-  foPrompt: setPrompt, foCommand: (c) => { const i = document.getElementById('fo-input'); if (i) i.value = c; submit(); },
-  foInlineAddRow: inlineAddRowHtml, foInlineAdd: inlineAdd, foDraftStepBadges: draftStepBadges,
+// ---- the lines between steps -------------------------------------------------------------------------------
+const mkLink = (resId, to, rule) => ({
+  type: rule ? 'condition' : 'next', types: [rule ? 'condition' : 'next'], targetId: `${resId}-${to.id}`, rule: rule || '',
+  loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _draft: true,
 });
-export { openFrameOut };
+
+// Edges as a plain list, in the order of the steps: [{from, to, rule}]
+export function edgesOf(steps) {
+  const edges = [];
+  let tails = [];                 // steps whose line continues to the next step: [{id, rule}]
+  let open = null;                // the decision being built: { d, phase: null|'yes'|'no', yesEnd }
+  const link = (to) => tails.forEach((t) => edges.push({ from: t.id, to: to.id, rule: t.rule || '' }));
+
+  (steps || []).forEach((s) => {
+    if (!s) return;
+    const onBranch = !!(open && s.branchOf && s.branchOf === open.d.id);
+    if (onBranch) {
+      if (s.path === 'no' && open.phase !== 'no') {
+        // the No path starts: whatever the Yes path ended on is remembered (a Yes path with no steps just goes straight on)
+        open.yesEnd = open.phase === 'yes' ? tails : [{ id: open.d.id, rule: 'Yes' }];
+        open.phase = 'no'; tails = [{ id: open.d.id, rule: 'No' }];
+      } else if (s.path !== 'no' && open.phase === null) {
+        open.phase = 'yes'; tails = [{ id: open.d.id, rule: 'Yes' }];
+      }
+      link(s);
+      tails = [{ id: s.id, rule: '' }];
+      return;
+    }
+    // back on the main line: close an open decision, joining whatever its paths ended on
+    if (open) {
+      if (open.phase === 'yes') tails = [...tails, { id: open.d.id, rule: 'No' }];             // only a Yes path: No goes straight on
+      else if (open.phase === 'no') tails = [...(open.yesEnd || []), ...tails];                 // both paths join here
+      open = null;
+    }
+    link(s);
+    tails = [{ id: s.id, rule: '' }];
+    if (s.kind === 'decision') open = { d: s, phase: null, yesEnd: null };
+  });
+  return edges;
+}
+
+// Writes the lines into the steps (logic.out), leaving anything drawn by hand alone. resId = the card's id.
+export function deriveLinks(steps, resId) {
+  (steps || []).forEach((s) => { if (s.logic && Array.isArray(s.logic.out)) s.logic.out = s.logic.out.filter((l) => !l._draft); else s.logic = { in: [], out: [] }; });
+  const byId = new Map((steps || []).map((s) => [s.id, s]));
+  edgesOf(steps).forEach((e) => {
+    const from = byId.get(e.from); const to = byId.get(e.to);
+    if (from && to) from.logic.out.push(mkLink(resId, to, e.rule));
+  });
+  return steps;
+}
+
+// ---- the Steps view on the flow map ----------------------------------------------------------------------------
+// Where each step of a draft process sits on the flow map's Steps view, in the same shape the Zap lane layout uses, so the
+// map's own stacking (stackColumns in features/zap-layout.js) turns it into real positions once card heights are known.
+//   * the main line runs down column 0, and a decision's Yes steps carry straight on down it
+//   * the No steps run down column 1, starting level with the first Yes step
+//   * when only one path has steps, those steps go to column 1 and the empty path's line runs straight down column 0 past them
+//   * the step after a decision (where the paths join) waits until every step of both paths is placed above it
+//   * opts.maxCols = 1 (the One column arrangement, or a narrow window or page): everything stays in column 0, the No steps
+//     below the Yes steps, and the lines that would run through a card go round it down the right-hand side instead
+// Returns { [stepId]: { colOffset, row, parentId, laneMode: true, parentGap?, after?, extraGap? } }
+export function layoutDraft(allSteps, opts = {}) {
+  const steps = (allSteps || []).filter(Boolean);
+  const oneCol = Number.isFinite(opts.maxCols) && opts.maxCols < 2;
+  const layout = {};
+  const main = steps.filter((s) => !s.branchOf);
+  main.forEach((s, i) => { layout[s.id] = { colOffset: 0, row: i, parentId: null, laneMode: true }; });
+  main.forEach((d, i) => {
+    if (d.kind !== 'decision') return;
+    const yes = steps.filter((s) => s.branchOf === d.id && s.path !== 'no');
+    const no = steps.filter((s) => s.branchOf === d.id && s.path === 'no');
+    // (the map gives a draft process's cards enough room between them for the Yes / No word to sit on the line)
+    const place = (lane, col) => lane.forEach((s, j) => { layout[s.id] = { colOffset: col, row: i + 1 + j, parentId: j === 0 ? d.id : null, parentGap: 0, laneMode: true }; });
+    if (oneCol) { place(yes, 0); place(no, 0); }
+    else if (yes.length && no.length) { place(yes, 0); place(no, 1); }
+    else if (yes.length) place(yes, 1);
+    else if (no.length) place(no, 1);
+    const next = main[i + 1];
+    if (next && !oneCol && (yes.length || no.length)) { layout[next.id].after = yes.concat(no).map((x) => x.id); layout[next.id].extraGap = 26; }   // room for the lines from the ends of the paths to run across
+  });
+  steps.forEach((s, i) => { if (!layout[s.id]) layout[s.id] = { colOffset: 0, row: steps.length + i, parentId: null, laneMode: true }; });
+
+  // Forks drawn by hand (a step whose lines, with their own wording such as "Segment: New Client", leave for two or more
+  // later steps) get the same room as a Yes / No decision: the path that carries on furthest stays in the main column and
+  // each other path runs down a column of its own beside it, until the two meet.
+  if (!oneCol) {
+    const idx = new Map(steps.map((s, i) => [String(s.id), i]));
+    const ids = steps.map((s) => String(s.id)).sort((a, b) => b.length - a.length);
+    const fwd = (st) => {
+      const found = new Set();
+      ((st.logic && st.logic.out) || []).forEach((l) => {
+        if (!l || !l.targetId || l._implicit) return;
+        const id = ids.find((x) => String(l.targetId) === x || String(l.targetId).endsWith('-' + x));
+        const ti = id === undefined ? undefined : idx.get(id);
+        if (ti !== undefined && ti > idx.get(String(st.id))) found.add(ti);
+      });
+      return [...found].sort((a, b) => a - b);
+    };
+    steps.forEach((d) => {
+      if (d.kind === 'decision' || d.branchOf) return;                 // those are laid out above, from their Yes / No steps
+      const targets = fwd(d);
+      if (targets.length < 2) return;
+      const mainIdx = targets[targets.length - 1];
+      const chainIds = [];
+      targets.slice(0, -1).forEach((ti, n) => {
+        const seen = new Set();
+        let cur = steps[ti]; let first = true;
+        while (cur && !seen.has(String(cur.id)) && idx.get(String(cur.id)) < mainIdx) {
+          seen.add(String(cur.id));
+          const lay = layout[cur.id];
+          if (lay && lay.colOffset === 0 && !cur.branchOf) {
+            layout[cur.id] = { ...lay, colOffset: 1 + n, parentId: first ? d.id : null, parentGap: 0 };
+            chainIds.push(String(cur.id));
+            first = false;
+          }
+          const nexts = fwd(cur);
+          cur = nexts.length === 1 ? steps[nexts[0]] : null;
+        }
+      });
+      const m = steps[mainIdx];
+      if (chainIds.length && m && layout[m.id] && layout[m.id].colOffset === 0) {
+        layout[m.id] = { ...layout[m.id], after: [...(layout[m.id].after || []), ...chainIds], extraGap: Math.max(layout[m.id].extraGap || 0, 26) };   // the step where the paths meet waits for every step of the paths
+      }
+    });
+  }
+  return layout;
+}
+
+// The route of one line between two cards of a draft process, as straight pieces that stay in the gaps between cards.
+// f and t are { left, top, right, bottom }. Returns { points: [[x, y], ...], kind, label: [x, y] | null } or null when the
+// cards aren't arranged the way draft processes are (the caller then draws its usual curve).
+//   down              same column: straight down; the Yes / No word sits just under the card it leaves
+//   right-down        out of the right side of a decision, then down into the top of a path in the next column
+//   down-across-down  from the end of a path, down below every card, across, then down into the step where the paths join
+//   round-the-side    same column but a card sits between them (the One column arrangement): out of the right side, down the
+//                     gutter beside the cards, and in at the right side of the target. fromDecision picks the gutter
+//                     (nearer for a decision's line, further out for the end of a path) so two lines never share one.
+// others: the rest of the cards of the process, to tell whether a straight line down would run through one.
+export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false) {
+  const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2, tcy = (t.top + t.bottom) / 2;
+  if (Math.abs(fcx - tcx) < 2) {
+    if (t.top < f.bottom - 1) return null;
+    const blocked = (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
+    if (blocked) {
+      const gx = Math.max(f.right, t.right) + (fromDecision ? 22 : 38);
+      return { points: [[f.right, fcy], [gx, fcy], [gx, tcy], [t.right, tcy]], kind: 'round-the-side', label: [f.right + 24, fcy - 10] };
+    }
+    const room = t.top - f.bottom;
+    return { points: [[fcx, f.bottom], [tcx, t.top]], kind: 'down', label: room >= 26 ? [fcx + 24, f.bottom + 14] : null };
+  }
+  if (tcx > fcx && t.top >= f.bottom - 1) {
+    return { points: [[f.right, fcy], [tcx, fcy], [tcx, t.top]], kind: 'right-down', label: [f.right + 24, fcy - 10] };
+  }
+  if (tcx < fcx && t.top >= f.bottom - 1) {
+    const chY = t.top - (gap + 6);                     // the step that joins the paths sits low enough (extraGap) to leave this channel
+    if (chY < f.bottom + 6) return null;
+    return { points: [[fcx, f.bottom], [fcx, chY], [tcx, chY], [tcx, t.top]], kind: 'down-across-down', label: null };
+  }
+  return null;
+}
+
+// ---- layout ------------------------------------------------------------------------------------------------
+const BOX = { step: { w: 192, h: 84 }, decision: { w: 216, h: 120 } };
+const GAP_X = 56, GAP_Y = 44, PAD = 40, LANE_PAD = 18;
+
+// mode: 'chain' (the No path on its own row) | 'who' (a lane for each person).
+// opts.maxCols: how many columns fit across before the chain wraps onto a new band (default 5; 'who' never wraps, a lane
+// has to read straight across). Returns the nodes, the lines and the canvas size.
+export function layoutChain(allSteps, mode = 'chain', opts = {}) {
+  const steps = (allSteps || []).filter(Boolean);
+  const edges = edgesOf(allSteps);
+  const preds = new Map(steps.map((s) => [s.id, []]));
+  edges.forEach((e) => { if (preds.has(e.to)) preds.get(e.to).push(e.from); });
+
+  const rank = new Map();
+  steps.forEach((s) => { const p = preds.get(s.id) || []; rank.set(s.id, p.length ? Math.max(...p.map((x) => rank.get(x) ?? 0)) + 1 : 0); });
+  const maxRank = steps.length ? Math.max(...steps.map((s) => rank.get(s.id))) : 0;
+
+  const maxCols = mode === 'who' ? Infinity : Math.max(2, Math.floor(opts.maxCols || 5));
+  const bandOf = (r) => (Number.isFinite(maxCols) ? Math.floor(r / maxCols) : 0);
+  const colOf = (r) => (Number.isFinite(maxCols) ? r % maxCols : r);
+  const bands = bandOf(maxRank) + 1;
+
+  let rowOf; let lanes = null; let rowsPer;
+  if (mode === 'who') {
+    // a decision sits in the lane of whoever asks the question: the step before it
+    const byId = new Map(steps.map((s) => [s.id, s]));
+    const laneOwner = (s, depth = 0) => {
+      if (s.owner) return s.owner;
+      if (s.kind !== 'decision' || depth > 8) return '';
+      const p = (preds.get(s.id) || []).map((id) => byId.get(id)).find(Boolean);
+      return p ? laneOwner(p, depth + 1) : '';
+    };
+    const owners = new Map(steps.map((s) => [s.id, laneOwner(s)]));
+    const present = OWNER_ORDER.filter((o) => steps.some((s) => owners.get(s.id) === o));
+    lanes = [...present, ...(steps.some((s) => !owners.get(s.id)) ? ['none'] : [])];
+    if (!lanes.length) lanes = ['none'];
+    rowOf = (s) => lanes.indexOf(owners.get(s.id) || 'none'); rowsPer = lanes.length;
+  } else {
+    rowOf = (s) => (s.path === 'no' ? 1 : 0); rowsPer = steps.some((s) => s.path === 'no') ? 2 : 1;
+  }
+
+  const colW = Math.max(BOX.step.w, BOX.decision.w);
+  const laneH = Math.max(BOX.decision.h, BOX.step.h) + LANE_PAD * 2;
+  const BAND_GAP = 64;
+  // each band is only as tall as its rows: a No path only costs room in the band it is in
+  const rowsIn = Array.from({ length: bands }, () => 1);
+  if (mode === 'who') rowsIn.fill(rowsPer);
+  else steps.forEach((s) => { if (rowOf(s) === 1) rowsIn[bandOf(rank.get(s.id))] = 2; });
+  const bandHs = rowsIn.map((r) => (mode === 'who' ? r * laneH : r * BOX.decision.h + (r - 1) * GAP_Y));
+  const bandTops = []; bandHs.reduce((y, h, i) => { bandTops[i] = y; return y + h + BAND_GAP; }, PAD);
+  const colsUsed = Number.isFinite(maxCols) ? Math.min(maxCols, maxRank + 1) : maxRank + 1;
+  const left = (c) => PAD + c * (colW + GAP_X);
+  const bandTop = (b) => bandTops[b];
+  const bandH = Math.max(...bandHs);
+  const centerY = (b, row) => bandTop(b) + (mode === 'who' ? row * laneH + laneH / 2 : row * (BOX.decision.h + GAP_Y) + BOX.decision.h / 2);
+
+  const nodes = steps.map((s) => {
+    const bx = BOX[s.kind === 'decision' ? 'decision' : 'step'];
+    const r = rank.get(s.id); const row = rowOf(s); const band = bandOf(r); const col = colOf(r);
+    return { id: s.id, kind: s.kind, rank: r, band, col, row, w: bx.w, h: bx.h, x: left(col) + (colW - bx.w) / 2, y: centerY(band, row) - bx.h / 2 };
+  });
+  const node = new Map(nodes.map((n) => [n.id, n]));
+
+  const width = PAD * 2 + colsUsed * colW + (colsUsed - 1) * GAP_X;
+  const height = bandTop(bands - 1) + bandHs[bands - 1] + PAD;
+
+  const lines = edges.map((e) => {
+    const a = node.get(e.from); const b = node.get(e.to);
+    if (!a || !b) return null;
+    const x1 = a.x + a.w; const y1 = a.y + a.h / 2; const x2 = b.x; const y2 = b.y + b.h / 2;
+    let pts;
+    if (b.band > a.band) {
+      // onto the next band: out of the source's bottom, along the gap between the bands, down the left of the target
+      const gapY = bandTop(a.band) + bandHs[a.band] + BAND_GAP / 2;
+      const cx = x2 - GAP_X / 2;
+      pts = [[a.x + a.w / 2, a.y + a.h], [a.x + a.w / 2, gapY], [cx, gapY], [cx, y2], [x2, y2]];
+    } else if (b.rank - a.rank > 1 && nodes.some((n) => n.band === a.band && n.rank > a.rank && n.rank < b.rank && n.row === a.row)) {
+      // jumps over cards in its own row: goes under them
+      const underY = bandTop(a.band) + bandHs[a.band] + 14;
+      const bx2 = a.x + a.w / 2;
+      pts = [[bx2, a.y + a.h], [bx2, underY], [x2 - GAP_X / 2, underY], [x2 - GAP_X / 2, y2], [x2, y2]];
+    } else if (Math.abs(y1 - y2) < 1) {
+      pts = [[x1, y1], [x2, y2]];
+    } else {
+      const mx = x2 - GAP_X / 2;
+      pts = [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
+    }
+    return { from: e.from, to: e.to, rule: e.rule, points: pts, crossLane: mode === 'who' && a.row !== b.row };
+  }).filter(Boolean);
+
+  return { nodes, lines, width: Math.max(width, 2 * PAD + colW), height: Math.max(height, bandHs[0] + 2 * PAD), lanes, laneH, bandH, bandHs, laneTop: (row) => PAD + row * laneH, mode, bands, maxCols };
+}
+
+// ---- what is left to ask ---------------------------------------------------------------------------------
+export const questionsOf = (steps) => (steps || []).filter((s) => s.question && !s.question.done).map((s) => ({ id: s.id, step: s.name, text: s.question.text }));
+
+// A line between two steps with different owners (both set) is a handoff.
+export function handoffsOf(steps) {
+  const byId = new Map((steps || []).map((s) => [s.id, s]));
+  return edgesOf(steps).filter((e) => { const a = byId.get(e.from); const b = byId.get(e.to); return a && b && a.owner && b.owner && a.owner !== b.owner; }).length;
+}
+
+export const unassignedCount = (steps) => (steps || []).filter((s) => !s.owner && s.kind !== 'decision').length;
+
+export function followUpText(processName, steps, clientName = '') {
+  const qs = questionsOf(steps);
+  if (!qs.length) return '';
+  const cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
+  const lines = qs.map((q, i) => `${i + 1}. ${cap(q.text)}${/[?.]$/.test(q.text) ? '' : '?'}  (about: ${clip(q.step, 60)})`);
+  return `${clientName ? `Hi ${clientName},\n\n` : ''}A few things to confirm about "${processName}":\n\n${lines.join('\n')}\n`;
+}
+
+// ---- keeping the order tidy after an edit ------------------------------------------------------------------
+// A step cannot stay on a decision path if its decision is gone or no longer sits before it.
+export function repairBranches(steps) {
+  const seen = new Set();
+  (steps || []).forEach((s) => {
+    if (s.kind === 'decision') seen.add(s.id);
+    if (s.branchOf && !seen.has(s.branchOf)) { delete s.branchOf; delete s.path; }
+  });
+  return steps;
+}
+
+// ---- placing the card on the map -------------------------------------------------------------------------
+export function placeProcessCard(pd, card, opts = {}) {
+  const makeId = opts.makeId || (() => Math.random().toString(36).slice(2, 9));
+  pd.stages = pd.stages || []; pd.workflows = pd.workflows || [];
+  if (card.stageId) return { placed: false, stageId: card.stageId };
+  let stage = opts.stageId ? pd.stages.find((s) => s.id === opts.stageId) : null;
+  if (!stage) {
+    const name = opts.stageName || 'Process mapping';
+    stage = pd.stages.find((s) => s.name === name);
+    if (!stage) { stage = { id: `stage-${makeId()}`, name, width: 400 }; pd.stages.push(stage); }
+  }
+  let wf = pd.workflows.find((w) => w.stageId === stage.id && w.name === (opts.workflowName || 'Draft processes'));
+  if (!wf) { wf = { id: `wf-${makeId()}`, name: opts.workflowName || 'Draft processes', stageId: stage.id, color: '#e8a83a', resourceIds: [] }; pd.workflows.push(wf); }
+  card.stageId = stage.id; card.workflowId = wf.id; card.isGlobal = false;
+  if (!wf.resourceIds.includes(String(card.id))) wf.resourceIds.push(String(card.id));
+  return { placed: true, stageId: stage.id, workflowId: wf.id };
+}
