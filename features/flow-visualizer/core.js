@@ -8082,7 +8082,8 @@ export async function executeAssignment(parentId, stepId, isResource, assigneeId
         // Clear search and refresh
         const overlay = document.getElementById('assignment-search-results');
         if (overlay) overlay.style.display = 'none';
-        OL.openInspector(parentId, stepId);
+        if (window.location.hash.includes('visualizer')) refreshFlowMap(parentId, stepId);   // the badges on the map's cards
+        else OL.openInspector(parentId, stepId);
     }
     // Add this line to the end of window.OL.executeAssignment
     const searchInput = document.querySelector('.inspector-section input[placeholder*="Add Person"]');
@@ -8135,7 +8136,8 @@ export async function removeAssignee(parentId, stepId, index) {
     if (step && step.assignees) {
         step.assignees.splice(index, 1);
         await OL.persist();
-        OL.openInspector(parentId, stepId);
+        if (window.location.hash.includes('visualizer')) refreshFlowMap(parentId, stepId);
+        else OL.openInspector(parentId, stepId);
     }
 };
 
