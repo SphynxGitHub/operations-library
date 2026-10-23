@@ -61,12 +61,13 @@ export function calloutsOf(step) {
     const lib = c.libId ? libById(c.libId) : null;
     return {
       id: c.id, libId: c.libId || '', kind: KIND[c.kind] ? c.kind : (lib && kindForType(lib.type)) || 'other',
+      typeLabel: (lib && (lib._guide ? 'How-to guide' : lib.type)) || c.typeLabel || '',
       name: (lib && lib.name) || c.name || 'Untitled',
       url: safeUrl((lib && (lib.externalUrl || lib.url)) || c.url),
       note: c.note || (lib && String(lib.description || lib.notes || '')) || '',
       missing: !!(c.libId && !lib),
     };
-  }).concat(old.map((o) => { const lib = libById(o.libId); return lib ? { ...o, name: lib.name || o.name, kind: lib._guide ? 'guide' : o.kind, url: safeUrl(lib.externalUrl || lib.url) } : { ...o, missing: true }; }));
+  }).concat(old.map((o) => { const lib = libById(o.libId); return lib ? { ...o, name: lib.name || o.name, kind: lib._guide ? 'guide' : o.kind, typeLabel: lib._guide ? 'How-to guide' : (lib.type || ''), url: safeUrl(lib.externalUrl || lib.url) } : { ...o, missing: true }; }));
 }
 
 // library items a step could point at, grouped by kind
@@ -75,6 +76,19 @@ function libraryChoices() {
   return allRes().map((r) => ({ r, kind: kindForType(r.type) })).concat(guides).filter((x) => x.kind && !x.r.isArchived && !x.r.archived)
     .sort((a, b) => a.kind.localeCompare(b.kind) || String(a.r.name || '').localeCompare(String(b.r.name || '')));
 }
+
+// The type shown for an item is the one it has in the Resources manager, not the broader group it is filed under.
+const typeOf = (c) => String((c && c.typeLabel) || (KIND[c && c.kind] || KIND.other).label);
+// every type to offer: the Resources manager's own list, any type in use on a library item, and guides (flow types are not collateral)
+function typeOptions(extra = []) {
+  const seen = new Map();
+  const add = (t) => { const v = String(t || '').trim(); if (v && !isFlowType(v) && !seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v); };
+  (((state.master && state.master.resourceTypes) || []).map((t) => t && t.type)).forEach(add);
+  allRes().forEach((r) => add(r.type));
+  add('How-to guide'); extra.forEach(add);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+const kindOfTypeName = (t) => (String(t).toLowerCase() === 'how-to guide' ? 'guide' : (kindForType(t) || 'other'));
 
 // ---- drawing -----------------------------------------------------------------------------------------------
 const openSet = () => { OL()._fv = OL()._fv || {}; return (OL()._fv._openStepCallouts = OL()._fv._openStepCallouts || new Set()); };
@@ -118,7 +132,7 @@ function panelHtml(resId, stepId, c) {
   const k = KIND[c.kind] || KIND.other; const r = esc(resId), s = esc(stepId);
   const wide = c.kind === 'email' && c.libId && !c.missing;
   return `<div class="fv-callout-panel" ${wide ? 'style="width:420px;max-width:80vw;"' : ''} onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
-    <div class="fv-callout-panel-head"><span class="fv-callout-kind">${icon(k.icon, 11)} ${esc(k.label)}</span>
+    <div class="fv-callout-panel-head"><span class="fv-callout-kind">${icon(k.icon, 11)} ${esc(typeOf(c))}</span>
       <button type="button" class="fv-callout-x" title="Close" onclick="event.stopPropagation(); OL.fvToggleStepCallout('${r}','${s}','${esc(c.id)}')">${icon('x', 11)}</button></div>
     <div class="fv-callout-title">${esc(c.name)}</div>
     ${c.note ? `<div class="fv-callout-note">${esc(clip(c.note, 400))}</div>` : ''}
@@ -138,7 +152,7 @@ function innerHtml(step, res) {
   const list = calloutsOf(step); const open = openSet(); const r = esc(res.id), s = esc(step.id);
   const chips = list.map((c) => {
     const k = KIND[c.kind] || KIND.other; const on = open.has(`${keyOf(res.id, step.id)}|${c.id}`);
-    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" data-co-key="${esc(c.id)}" title="${esc(k.label)}: ${esc(c.name)}"
+    return `<button type="button" class="fv-callout-chip${on ? ' is-open' : ''}" data-co-key="${esc(c.id)}" title="${esc(typeOf(c))}: ${esc(c.name)}"
       onclick="event.stopPropagation(); OL.fvToggleStepCallout('${r}','${s}','${esc(c.id)}')">${icon(k.icon, 11)}<span>${esc(clip(c.name, 16))}</span></button>`;
   }).join('');
   const panels = list.filter((c) => open.has(`${keyOf(res.id, step.id)}|${c.id}`)).map((c) => panelHtml(res.id, step.id, c)).join('');
@@ -214,12 +228,12 @@ function typeNameForKind(kind) {
 }
 
 // "Create new": adds the item to the library right here, so nobody has to leave the flow map to make it first.
-function createLibraryItem({ kind, name, url, note }) {
+function createLibraryItem({ kind, type: chosenType, name, url, note }) {
   const pd = project();
   const list = pd.localResources || pd.resources;
   if (!Array.isArray(list)) return null;
   const isVault = (window.location.hash || '').startsWith('#/vault');
-  const type = typeNameForKind(kind);
+  const type = chosenType || typeNameForKind(kind);
   const info = ((state.master && state.master.resourceTypes) || []).find((t) => t.type === type);
   const res = {
     id: `${isVault ? 'res-vlt' : 'local-prj'}-${Date.now()}`, name, type, archetype: (info && info.archetype) || 'Base',
@@ -239,7 +253,7 @@ function renderPickList() {
   const q = fieldValue('fvsc-search').toLowerCase();
   const kindFilter = (elv('fvsc-filter') && elv('fvsc-filter').value) || '';
   const picked = (elv('fvsc-lib') && elv('fvsc-lib').value) || '';
-  const rows = libraryChoices().filter(({ r, kind }) => (!kindFilter || kind === kindFilter) && (!q || String(r.name || '').toLowerCase().includes(q)));
+  const rows = libraryChoices().filter(({ r }) => (!kindFilter || String(r._guide ? 'How-to guide' : r.type).toLowerCase() === kindFilter.toLowerCase()) && (!q || String(r.name || '').toLowerCase().includes(q)));
   const exact = rows.some(({ r }) => String(r.name || '').trim().toLowerCase() === q);
   const rowCss = 'display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--panel-border);';
   const createRow = q && !exact
@@ -249,7 +263,7 @@ function renderPickList() {
     return `<div data-id="${esc(r.id)}" onclick="OL.fvStepCalloutPick('${esc(r.id)}')" style="${rowCss}${on ? 'background:var(--accent-glow);' : ''}">
       <span style="color:var(--accent);">${icon(k.icon, 13)}</span>
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${on ? 700 : 500};" title="${esc(r.name || 'Untitled')}">${esc(r.name || 'Untitled')}</span>
-      <span class="tiny muted" style="white-space:nowrap;">${esc(k.label)}</span></div>`;
+      <span class="tiny muted" style="white-space:nowrap;">${esc(r._guide ? 'How-to guide' : (r.type || k.label))}</span></div>`;
   }).join('') : `<div class="tiny muted" style="padding:14px;">Nothing in the library matches${q ? ` &ldquo;${esc(fieldValue('fvsc-search'))}&rdquo;` : ''}. Use Create new to add it.</div>`);
   if (window.lucide) window.lucide.createIcons();
 }
@@ -271,8 +285,8 @@ function renderPickStatus() {
     st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('link', 12)} Linked to the library item <strong>${esc(lib.name || 'Untitled')}</strong>. Its name and link stay in step with the library.
       <button type="button" class="btn tiny soft" style="margin-left:6px;" onclick="OL.fvStepCalloutUnlink()">Unlink</button></div>`;
   } else if (isNew) {
-    const k = KIND[(kindEl && kindEl.value) || 'other'] || KIND.other;
-    st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('plus', 12)} Saving will add this to the library as a new <strong>${esc(k.label)}</strong> and link it to this step.
+    const newType = (kindEl && kindEl.value) || 'Reference';
+    st.innerHTML = `<div style="${box}background:var(--accent-glow);">${icon('plus', 12)} Saving will add this to the library as a new <strong>${esc(newType)}</strong> and link it to this step.
       <button type="button" class="btn tiny soft" style="margin-left:6px;" onclick="OL.fvStepCalloutUnlink()">Cancel</button></div>`;
   } else {
     st.innerHTML = `<div style="${box}">Not in the library: just a name and a link. Pick an item on the left, or <a href="#" onclick="OL.fvStepCalloutCreateNew(); return false;">create a new one</a>.</div>`;
@@ -285,7 +299,9 @@ function edit(resId, stepId, calloutId) {
   const cur = calloutId ? (step.callouts || []).find((c) => c.id === calloutId) : null;
   const curLib = cur && cur.libId ? libById(cur.libId) : null;
   const lbl = 'class="tiny muted" style="display:block;font-weight:600;margin:12px 0 4px;"';
-  const kindOpts = CALLOUT_KINDS.map((k) => `<option value="${k.key}">${esc(k.label)}</option>`).join('');
+  const curType = cur ? (cur.typeLabel || (curLib && (curLib._guide ? 'How-to guide' : curLib.type)) || typeNameForKind(cur.kind)) : '';
+  const types = typeOptions(curType ? [curType] : []);
+  const kindOpts = types.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
   // The dialog box is already wide (90% of the window, up to 900px); the form used to be squeezed into 460px of it.
   window.openModal(`
     <div class="modal-head"><div class="modal-title-text">${cur ? 'Edit collateral' : 'Add collateral'}</div><button class="btn small soft" style="margin-left:auto;" onclick="OL.closeModal()">Close</button></div>
@@ -309,7 +325,7 @@ function edit(resId, stepId, calloutId) {
           <div id="fvsc-fields">
           <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;">
             <div><label ${lbl}>Type</label>
-              <select id="fvsc-kind" class="modal-input" onchange="OL.fvStepCalloutKindChanged()">${CALLOUT_KINDS.map((k) => `<option value="${k.key}" ${cur && cur.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
+              <select id="fvsc-kind" class="modal-input" onchange="OL.fvStepCalloutKindChanged()">${types.map((t) => `<option value="${esc(t)}" ${curType && curType.toLowerCase() === t.toLowerCase() ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
             <div><label ${lbl}>Name</label>
               <input id="fvsc-name" class="modal-input" type="text" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Welcome email, 20 minute call scheduling page"></div>
           </div>
@@ -333,7 +349,7 @@ function pick(id) {
   const lib = id ? libById(id) : null; if (!lib) return;
   const set = (eid, v) => { const el = elv(eid); if (el) el.value = v; };
   set('fvsc-lib', String(lib.id)); set('fvsc-new', '');
-  set('fvsc-kind', lib._guide ? 'guide' : (kindForType(lib.type) || 'other')); set('fvsc-name', lib.name || '');
+  set('fvsc-kind', lib._guide ? 'How-to guide' : (lib.type || 'Reference')); set('fvsc-name', lib.name || '');
   set('fvsc-url', safeUrl(lib.externalUrl || lib.url));
   renderPickList(); renderPickStatus();
 }
@@ -366,11 +382,11 @@ function save(resId, stepId, calloutId) {
   if (url && !safeUrl(url)) { if (err) err.textContent = 'The link needs to start with http:// or https://'; return; }
   if (!libId && v('fvsc-new') === '1') {
     // "Create new": make the library item here, then link the step to it
-    const made = createLibraryItem({ kind: v('fvsc-kind') || 'other', name, url, note: v('fvsc-note') });
+    const made = createLibraryItem({ kind: kindOfTypeName(v('fvsc-kind')), type: v('fvsc-kind') === 'How-to guide' ? '' : v('fvsc-kind'), name, url, note: v('fvsc-note') });
     if (!made) { if (err) err.textContent = 'Could not add it to the library here.'; return; }
     libId = made.id;
   }
-  const entry = { id: calloutId || `sco-${uid()}`, kind: v('fvsc-kind') || 'other', name, url, note: v('fvsc-note') };
+  const entry = { id: calloutId || `sco-${uid()}`, kind: kindOfTypeName(v('fvsc-kind') || 'Reference'), typeLabel: v('fvsc-kind') || '', name, url, note: v('fvsc-note') };
   if (libId) entry.libId = libId;
   const next = (step.callouts || []).map((c) => ({ ...c }));
   const i = next.findIndex((c) => c.id === entry.id);
@@ -406,12 +422,12 @@ export function collectCollateral(pd = project()) {
     if (res.isArchived) return;
     const wf = wfOf(res); const base = [wf && wf.name, res.name].filter(Boolean).join(' \u203a ');
     calloutsFor(res).filter((c) => c.source !== 'logic').forEach((c) => {
-      out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, libId: c.linkId || '', resId: String(res.id), stepId: '', key: c.key, where: `${base} (whole process)` });
+      out.push({ kind: c.kind, typeLabel: c.typeLabel || '', name: c.name, url: c.url, note: c.note, libId: c.linkId || '', resId: String(res.id), stepId: '', key: c.key, where: `${base} (whole process)` });
     });
     (res.steps || []).forEach((step, idx) => {
       if (step.isArchived) return;
       calloutsOf(step).forEach((c) => {
-        out.push({ kind: c.kind, name: c.name, url: c.url, note: c.note, libId: c.libId || '', resId: String(res.id), stepId: String(step.id), key: c.id, where: `${base} \u203a Step ${idx + 1}: ${step.name || 'Unnamed step'}` });
+        out.push({ kind: c.kind, typeLabel: c.typeLabel || '', name: c.name, url: c.url, note: c.note, libId: c.libId || '', resId: String(res.id), stepId: String(step.id), key: c.id, where: `${base} \u203a Step ${idx + 1}: ${step.name || 'Unnamed step'}` });
       });
     });
   });
@@ -463,7 +479,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     const k = KIND[e.kind] || KIND.other;
     return `<tr class="apx-row">
       <td class="apx-no">${e2(e.label)}</td>
-      <td class="apx-ctype">${e2(k.label)}</td>
+      <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
       <td class="apx-link">${e.url ? e2(e.url) : '<span class="apx-none">No link</span>'}</td></tr>`;
   }).join('');
