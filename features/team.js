@@ -171,6 +171,9 @@ export function renderTeamManager() {
                 <div class="small muted subheader">Manage client members assigned to ${esc(client.meta.name)}</div>
             </div>
             <div class="header-actions">
+                <button class="btn soft" onclick="OL.openRolesManager()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="shield" style="width:16px; height:16px;"></i> Manage Roles
+                </button>
                 <button class="btn primary" onclick="OL.promptAddTeamMember()" style="display:flex; align-items:center; gap:6px;">
                     <i data-lucide="user-plus" style="width:16px; height:16px;"></i> Add Member
                 </button>
@@ -381,6 +384,7 @@ export function openTeamMemberModal(memberId, draftObj = null) {
             <div class="card-section" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 8px;">
                 <label class="modal-section-label" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:bold; font-size:11px; color:var(--accent);" class="uppercase">
                     <i data-lucide="shield" style="width:14px; height:14px;"></i> Assigned Roles
+                    <a href="#" style="margin-left:auto; font-weight:500; font-size:10px;" onclick="event.preventDefault(); OL.openRolesManager()">Manage roles</a>
                 </label>
                 <div class="pills-row" style="margin-bottom: 12px; min-height: 32px; display:flex; flex-wrap:wrap; gap:6px;">
                     ${member.roles.map(role => `
@@ -454,7 +458,7 @@ export function filterRoleSearch(memberId, query) {
     const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
     if (!member) return;
 
-    const allProjectRoles = [...new Set((client.projectData.teamMembers || []).flatMap(m => m.roles || []))];
+    const allProjectRoles = roleRows(client).map(r => r.name);
     const memberRoles = member.roles || [];
     const matches = allProjectRoles.filter(role =>
         role.toLowerCase().includes(q) && !memberRoles.includes(role)
@@ -486,6 +490,7 @@ export function addRoleToMember(memberId, roleName) {
     const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
 
     if (member) {
+        ensureProjectRole(client, roleName);
         if (!member.roles) member.roles = [];
         if (!member.roles.includes(roleName)) {
             member.roles.push(roleName);
@@ -512,6 +517,157 @@ export function removeRoleFromMember(memberId, roleName) {
         openTeamMemberModal(memberId);
         renderTeamManager();
     }
+}
+
+
+// ---------------------------------------------------------------
+// ROLES — one list for the Team Members tab and the flow map's assignments.
+//   company roles   state.master.roles          (Comp Roles; read-only here)
+//   project roles   client.projectData.roles    [{ id, name }]  (managed here)
+//   roles people already hold (member.roles, typed in the member window) are adopted as project roles
+// The flow map's assignee search reads the same lists, so a role made here can be assigned to a step or resource,
+// and the map shows who holds it.
+// ---------------------------------------------------------------
+function ensureProjectRole(client, name) {
+    const clean = String(name || '').trim();
+    if (!client || !clean) return null;
+    const pd = client.projectData || (client.projectData = {});
+    if (!Array.isArray(pd.roles)) pd.roles = [];
+    const key = clean.toLowerCase();
+    const hit = (state.master?.roles || []).find(r => String(r.name).toLowerCase() === key) || pd.roles.find(r => String(r.name).toLowerCase() === key);
+    if (hit) return hit;
+    const role = { id: 'role-' + clean, name: clean };   // same id the flow map already gives a role typed on a member
+    pd.roles.push(role);
+    return role;
+}
+
+export function roleRows(client = getActiveClient()) {
+    if (!client) return [];
+    (client.projectData?.teamMembers || []).forEach(m => (m.roles || []).forEach(r => ensureProjectRole(client, r)));
+    const company = (state.master?.roles || []).map(r => ({ id: r.id, name: r.name, source: 'company' }));
+    const own = (client.projectData?.roles || []).filter(r => !company.some(c => c.name.toLowerCase() === String(r.name).toLowerCase()))
+        .map(r => ({ id: r.id, name: r.name, source: 'project' }));
+    return [...company, ...own];
+}
+
+export function roleHolders(name, client = getActiveClient()) {
+    const key = String(name || '').toLowerCase();
+    return (client?.projectData?.teamMembers || []).filter(m => (m.roles || []).some(r => String(r).toLowerCase() === key)).map(m => m.name);
+}
+
+function eachAssigneeList(client, fn) {
+    const pd = (OL.getCurrentProjectData ? OL.getCurrentProjectData() : client.projectData) || {};
+    (pd.resources || []).forEach(res => {
+        if (Array.isArray(res.assignees)) fn(res.assignees, res, null);
+        (res.steps || []).forEach(st => { if (Array.isArray(st.assignees)) fn(st.assignees, res, st); });
+    });
+}
+const sameRole = (a, role) => a && a.type === 'role' && (String(a.id) === String(role.id) || String(a.name).toLowerCase() === String(role.name).toLowerCase());
+
+let _rolesView = [];
+export function openRolesManager() {
+    const client = getActiveClient();
+    if (!client) return;
+    const rows = roleRows(client);
+    _rolesView = rows;
+    const members = client.projectData.teamMembers || [];
+    const uses = rows.map(() => 0);
+    eachAssigneeList(client, (list) => list.forEach(a => rows.forEach((r, i) => { if (sameRole(a, r)) uses[i]++; })));
+
+    const body = rows.map((r, i) => {
+        const held = members.filter(m => (m.roles || []).some(x => String(x).toLowerCase() === r.name.toLowerCase()));
+        const free = members.filter(m => !held.includes(m));
+        const mine = r.source === 'project';
+        return `
+        <div style="display:grid; grid-template-columns: minmax(180px,1.2fr) 3fr 110px 70px; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);">
+            <div>
+                ${mine ? `<input type="text" class="modal-input" value="${esc(r.name)}" onchange="OL.renameProjectRole(${i}, this.value)">`
+                       : `<div style="font-weight:600; font-size:13px;">${esc(r.name)}</div><div class="tiny muted">Company role</div>`}
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
+                ${held.map(m => `<span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">${esc(m.name)}
+                    <i data-lucide="x" style="width:10px;height:10px;cursor:pointer;" onclick="OL.toggleRoleMember(${i}, '${esc(m.id)}')"></i></span>`).join('') || '<span class="tiny muted">No one holds this role</span>'}
+                ${free.length ? `<select class="modal-input tiny" style="width:auto; max-width:160px;" onchange="if(this.value) OL.toggleRoleMember(${i}, this.value)">
+                    <option value="">+ Add person</option>${free.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('')}</select>` : ''}
+            </div>
+            <div class="tiny muted" title="Steps and resources on the flow map assigned to this role">${uses[i]} on flow map</div>
+            <div style="text-align:right;">${mine ? `<button class="btn tiny soft" title="Delete role" onclick="OL.deleteProjectRole(${i})"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>` : ''}</div>
+        </div>`;
+    }).join('');
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text"><i data-lucide="shield" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i> Roles</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom:12px;">Roles for ${esc(client.meta?.name || 'this project')}. Anyone holding a role shows on the Team Members tab, and the role can be assigned to steps and resources on the flow map. Renaming a role updates its assignments.
+                Company roles are set in <a href="#" onclick="event.preventDefault(); OL.openRolesManagerModal && OL.openRolesManagerModal()">Comp Roles</a>.</p>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+                <input type="text" id="new-project-role" class="modal-input" style="flex:1;" placeholder="New role name"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();OL.addProjectRole(this.value);}">
+                <button class="btn primary" onclick="OL.addProjectRole(document.getElementById('new-project-role').value)">Add role</button>
+            </div>
+            ${body || '<div class="tiny muted" style="padding:20px 0;">No roles yet.</div>'}
+        </div>`;
+    if (typeof openModal === 'function') openModal(html);
+    const box = document.getElementById('active-modal-box');
+    if (box) box.classList.add('modal-wide');
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function rolesChanged() {
+    persist();
+    openRolesManager();
+    renderTeamManagerQuietly();
+    if (typeof OL.renderVisualizer === 'function' && String(window.location.hash).includes('visualizer')) { try { OL.renderVisualizer(); } catch (e) { /* map not showing */ } }
+}
+
+export function addProjectRole(name) {
+    const client = getActiveClient();
+    if (!client || !String(name || '').trim()) return;
+    ensureProjectRole(client, name);
+    rolesChanged();
+}
+
+export function renameProjectRole(i, value) {
+    const client = getActiveClient();
+    const row = _rolesView[i];
+    const clean = String(value || '').trim();
+    if (!client || !row || row.source !== 'project' || !clean || clean === row.name) return openRolesManager();
+    if (roleRows(client).some(r => r !== row && r.name.toLowerCase() === clean.toLowerCase())) { alert(`There is already a role called "${clean}".`); return openRolesManager(); }
+    const old = row.name;
+    const role = (client.projectData.roles || []).find(r => String(r.id) === String(row.id));
+    if (role) role.name = clean;
+    (client.projectData.teamMembers || []).forEach(m => { m.roles = (m.roles || []).map(x => String(x).toLowerCase() === old.toLowerCase() ? clean : x); });
+    eachAssigneeList(client, (list) => list.forEach(a => { if (sameRole(a, row)) a.name = clean; }));
+    rolesChanged();
+}
+
+export function deleteProjectRole(i) {
+    const client = getActiveClient();
+    const row = _rolesView[i];
+    if (!client || !row || row.source !== 'project') return;
+    let n = 0;
+    eachAssigneeList(client, (list) => list.forEach(a => { if (sameRole(a, row)) n++; }));
+    const held = roleHolders(row.name, client).length;
+    if (!confirm(`Delete the role "${row.name}"?${held ? `\n\nIt is taken off ${held} team member${held === 1 ? '' : 's'}.` : ''}${n ? `\nIt is also taken off ${n} assignment${n === 1 ? '' : 's'} on the flow map.` : ''}`)) return;
+    client.projectData.roles = (client.projectData.roles || []).filter(r => String(r.id) !== String(row.id));
+    (client.projectData.teamMembers || []).forEach(m => { m.roles = (m.roles || []).filter(x => String(x).toLowerCase() !== row.name.toLowerCase()); });
+    eachAssigneeList(client, (list) => { for (let k = list.length - 1; k >= 0; k--) if (sameRole(list[k], row)) list.splice(k, 1); });
+    rolesChanged();
+}
+
+export function toggleRoleMember(i, memberId) {
+    const client = getActiveClient();
+    const row = _rolesView[i];
+    const m = (client?.projectData?.teamMembers || []).find(x => String(x.id) === String(memberId));
+    if (!row || !m) return;
+    if (!Array.isArray(m.roles)) m.roles = m.role ? [m.role] : [];
+    const at = m.roles.findIndex(x => String(x).toLowerCase() === row.name.toLowerCase());
+    if (at >= 0) m.roles.splice(at, 1); else m.roles.push(row.name);
+    rolesChanged();
 }
 
 export function toggleTeamAssignment(itemId, memberId) {
@@ -602,7 +758,8 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     renderTeamManager, promptAddTeamMember, handleTeamMemberSave, updateTeamMember, removeTeamMember,
     openTeamMemberModal, syncTeamMemberName, filterRoleSearch, addRoleToMember,
-    removeRoleFromMember, toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap,
+    removeRoleFromMember, openRolesManager, addProjectRole, renameProjectRole, deleteProjectRole, toggleRoleMember, roleHolders, roleRows,
+    toggleTeamAssignment, filterTeamMapList, executeCreateTeamAndMap,
     copyMemberSetupLink, removeMemberLogin, setFollowUpContact
 });
 
