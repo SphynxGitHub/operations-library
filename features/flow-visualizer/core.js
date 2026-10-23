@@ -2706,9 +2706,10 @@ export function _fvRenderSteps(resources) {
               const appBadge = step.appName
                 ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">${esc(step.appName.substring(0,12))}</span>`
                 : '';
-              const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
-                `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${esc((a.name||'').substring(0,12))}</span>`
-              ).join('');
+              const assigneeBadges = (step.assignees || []).slice(0, 2).map(a => a.type === 'role'
+                ? `<span class="fv-step-badge" title="${esc(fvRoleTip(a))}" style="background:var(--accent-glow);color:var(--accent);"><i data-lucide="users" style="width:9px;height:9px;display:inline-block;vertical-align:-1px;margin-right:2px;"></i>${esc((a.name||'').substring(0,12))}</span>`
+                : `<span class="fv-step-badge" title="${esc(a.name || '')}" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">${esc((a.name||'').substring(0,12))}</span>`
+              ).join('') + ((step.assignees || []).length > 2 ? `<span class="fv-step-badge" title="${esc((step.assignees || []).slice(2).map(a => a.name).join(', '))}" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">+${(step.assignees || []).length - 2}</span>` : '');
               const groupTag = step.stepGroup
                 ? `<span class="fv-step-group-tag">${esc(step.stepGroup)}</span>`
                 : '';
@@ -3094,6 +3095,10 @@ export function _fvDrawStepConnections(resources) {
   };
   const elById = new Map();
   canvas.querySelectorAll('[id^="fv-step-"], [id^="fv-consol-"]').forEach(el => elById.set(el.id, el));
+  // every card's box in line coordinates: the condition / wait / loop labels are placed so they never sit on one
+  const cardBoxes = [];
+  elById.forEach(el => { const r = rectOf(el); if (r.width > 20 && r.height > 20) cardBoxes.push({ left: r.left - cRect.left, top: r.top - cRect.top, right: r.right - cRect.left, bottom: r.bottom - cRect.top }); });
+  const hitsCard = (x, y, W, H, pad = 4) => cardBoxes.some(b => x < b.right + pad && x + W > b.left - pad && y < b.bottom + pad && y + H > b.top - pad);
 
   // A resource placed in several workflows has a copy in each (see fvInstanceOf). A copy draws its own arrows; a link to another
   // resource is drawn from the copy that sits in the same workflow as that resource.
@@ -3266,9 +3271,37 @@ export function _fvDrawStepConnections(resources) {
         if (hasRule) marks.push('branch');
 
         if (marks.length) {
-          const mx = (fx + tx) / 2;
-          const my = (fy + ty) / 2;
           const size = 14, gap = 3, w = marks.length * size + (marks.length - 1) * gap + 10;
+          const ruleFull = hasRule ? String(outRule.rule).trim() : '';
+          const ruleShown = ruleFull.length > 34 ? ruleFull.slice(0, 33) + '\u2026' : ruleFull;
+          const ruleW = hasRule ? ruleShown.length * 5.8 + 14 : 0;
+          const labelW = w + (hasRule ? 4 + ruleW : 0), labelH = 20;
+
+          // Where to put it: a point on the line (the middle first, then further along either way), centred on the line,
+          // else beside it on the right or the left, taking the first spot that touches no card.
+          const pointAt = (t) => {
+            if (draftRoute && draftRoute.points.length > 1) {
+              const P = draftRoute.points; const segs = []; let tot = 0;
+              for (let i = 1; i < P.length; i++) { const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); segs.push(l); tot += l; }
+              let d0 = t * tot;
+              for (let i = 0; i < segs.length; i++) { if (d0 <= segs[i] || i === segs.length - 1) { const k = segs[i] ? Math.min(1, d0 / segs[i]) : 0; return [P[i][0] + (P[i + 1][0] - P[i][0]) * k, P[i][1] + (P[i + 1][1] - P[i][1]) * k]; } d0 -= segs[i]; }
+            }
+            const u = 1 - t;
+            return [u * u * u * fx + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * tx,
+                    u * u * u * fy + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * ty];
+          };
+          let bx = null, by = null;
+          const ts = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
+          search:
+          for (const t of ts) {
+            const [px, py] = pointAt(t);
+            for (const x of [px - labelW / 2, px + 8, px - 8 - labelW]) {
+              if (!hitsCard(x, py - labelH / 2, labelW, labelH)) { bx = x; by = py - labelH / 2; break search; }
+            }
+          }
+          if (bx === null) { const [px, py] = pointAt(0.5); bx = px - labelW / 2; by = py - labelH / 2; }
+          const mx = bx + w / 2;          // centre of the icon pill
+          const my = by + labelH / 2;
           const tipParts = [];
           if (hasRule) tipParts.push(outRule.rule);
           if (hasDelay) tipParts.push(`wait ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`);
@@ -3296,9 +3329,8 @@ export function _fvDrawStepConnections(resources) {
           // The condition itself, in words beside the icon (like Yes / No on a decision), cut short on the map;
           // hovering the pill or the icon shows all of it.
           if (hasRule) {
-            const full = String(outRule.rule).trim();
-            const shown = full.length > 34 ? full.slice(0, 33) + '\u2026' : full;
-            const lw = shown.length * 5.8 + 14, lx = mx + w / 2 + 4, ly = my;
+            const full = ruleFull, shown = ruleShown;
+            const lw = ruleW, lx = bx + w + 4, ly = my;
             const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             cg.style.cursor = 'help';
             const cp = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -4405,7 +4437,7 @@ export function _fvOpenStepsList(resId) {
         </div>
         <div id="res-assignee-pills-${res.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
           ${resAssignees.length ? resAssignees.map((a, idx) => `
-            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+            <span title="${a.type === 'role' ? esc(fvRoleTip(a)) : ''}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
                          background:var(--accent-glow);color:var(--accent);border:1px solid rgba(61,217,197,0.3);">
               <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px;height:10px;"></i>
               ${esc(a.name)}
@@ -7510,7 +7542,7 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     </label>
                     <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
                         ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
-                            <span style="display:inline-flex;align-items:center;gap:5px;
+                            <span title="${a.type==='role' ? esc(fvRoleTip(a)) : ''}" style="display:inline-flex;align-items:center;gap:5px;
                                          padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
                                          background:var(--accent-glow);color:var(--accent);
                                          border:1px solid rgba(61,217,197,0.3);">
@@ -7943,6 +7975,14 @@ export async function removeAppFromStep(resId, stepId) {
     }
 };
 
+// Who holds a role on this project (Team Members tab), for the map's role badges and the assignee search
+export function fvRoleHolders(name) {
+    return (OL.roleHolders ? OL.roleHolders(name) : []);
+}
+const fvRoleTip = (a) => { const h = fvRoleHolders(a.name); return `Role: ${a.name}${h.length ? ' - ' + h.join(', ') : ' - no one holds this role yet'}`; };
+const fvManageRolesRow = `<div class="search-result-item" style="border-top:1px solid var(--line);color:var(--accent);font-weight:600;" onmousedown="event.preventDefault(); OL.openRolesManager()"><i data-lucide="shield" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> Manage roles</div>`;
+const fvAssigneeLabel = (o) => `${esc(o.name)}${o.type === 'role' && fvRoleHolders(o.name).length ? ` <span class="tiny muted">${esc(fvRoleHolders(o.name).join(', '))}</span>` : ''}`;
+
 export function getFilteredAssigneeOptions(query) {
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
@@ -8010,12 +8050,12 @@ export function filterAssignmentSearch(parentId, stepId, isResource, query) {
         html += `<div class="search-category-label">${g.label}</div>`;
         html += g.items.map(item => `
             <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${item.id}', '${esc(item.name)}', '${item.type}')">
-                <i data-lucide="${item.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(item.name)}
+                <i data-lucide="${item.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${fvAssigneeLabel(item)}
             </div>
         `).join('');
     });
 
-    resultsOverlay.innerHTML = html;
+    resultsOverlay.innerHTML = html + fvManageRolesRow;
     resultsOverlay.style.display = 'block';
 };
 
@@ -8066,8 +8106,8 @@ export function filterResourceAssignmentSearch(resId, query) {
     box.innerHTML = Object.values(groups).filter((g) => g.items.length).map((g) =>
         `<div class="search-category-label">${g.label}</div>` + g.items.map((o) => `
             <div class="search-result-item" onmousedown="event.preventDefault(); OL.addResourceAssignee('${esc(resId)}', '${esc(o.id)}', '${esc(o.name).replace(/'/g, "\\'")}', '${o.type}')">
-                <i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${esc(o.name)}
-            </div>`).join('')).join('');
+                <i data-lucide="${o.icon}" style="width:13px;height:13px;display:inline-block;vertical-align:middle;"></i> ${fvAssigneeLabel(o)}
+            </div>`).join('')).join('') + fvManageRolesRow;
     box.style.display = 'block';
     if (window.lucide) window.lucide.createIcons();
 };
@@ -9606,7 +9646,7 @@ Object.assign(window.OL, {
     _fvToggleLogicType, _fvOpenTargetPicker, renderStepResources, updateAtomicStep,
     _fvRefreshInspector, filterAppSearch, selectAppForResource, selectAppForStep,
     removeAppFromStep, getFilteredAssigneeOptions, filterAssignmentSearch, executeAssignment,
-    filterResourceAssignmentSearch, addResourceAssignee, removeResourceAssignee,
+    filterResourceAssignmentSearch, fvRoleHolders, addResourceAssignee, removeResourceAssignee,
     removeAssignee, filterTargetSearch, setStepTargetResource, filterResourceSearch,
     toggleFilterMenu, syncCanvasFilters, centerNextCanvasMatch, centerPrevCanvasMatch,
     centerCanvasNode, refreshFilterDropdowns, clearAllFilters, addLinkToStep,
