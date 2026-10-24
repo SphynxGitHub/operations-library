@@ -305,20 +305,32 @@ export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false
   const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2, tcy = (t.top + t.bottom) / 2;
   // Lines that run down the right-hand side each take their own lane, so two of them never share a gutter or a stretch of
   // line: `gutters` is the list of side runs already drawn for this process ({ y0, y1, lane }).
-  const takeLane = (y0, y1) => {
+  const takeLane = (y0, y1, side = 'R') => {
     if (!Array.isArray(gutters)) return fromDecision ? 0 : 1;
     let k = 0;
-    while (gutters.some((g) => g.lane === k && g.y0 < y1 + 10 && g.y1 > y0 - 10)) k++;
-    gutters.push({ y0, y1, lane: k });
+    while (gutters.some((g) => g.side === side && g.lane === k && g.y0 < y1 + 10 && g.y1 > y0 - 10)) k++;
+    gutters.push({ y0, y1, lane: k, side });
     return k;
   };
   if (Math.abs(fcx - tcx) < 2) {
     const back = t.top < f.bottom - 1;
     const blocked = !back && (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
+    if (back) {
+      // a link back up to an earlier step (a loop) goes up the LEFT side, so it never shares the right-hand side with the
+      // lines that fork off to the next column. Only two lanes fit in the margin; a third goes up the right side.
+      const y0 = Math.min(fcy, tcy), y1 = Math.max(fcy, tcy);
+      const taken = Array.isArray(gutters) ? [0, 1].filter((k) => !gutters.some((g) => g.side === 'L' && g.lane === k && g.y0 < y1 + 10 && g.y1 > y0 - 10)) : [0];
+      if (taken.length) {
+        const k = taken[0];
+        if (Array.isArray(gutters)) gutters.push({ y0, y1, lane: k, side: 'L' });
+        const gx = Math.min(f.left, t.left) - 20 - 14 * k;
+        const fy = Math.min(f.bottom - 10, fcy + 9 * k), ty = Math.min(t.bottom - 10, tcy + 9 * k);
+        return { points: [[f.left, fy], [gx, fy], [gx, ty], [t.left, ty]], kind: 'loop-back', label: [f.left - 24, fy - 10] };
+      }
+    }
     if (back || blocked) {
-      // a link back up to an earlier step (a loop), or one that would run through a card: out of the right side, along the
-      // gutter beside the cards, and in at the right side of the target
-      const k = takeLane(Math.min(fcy, tcy), Math.max(fcy, tcy));
+      // one that would run through a card: out of the right side, along the gutter beside the cards, and in at the right side of the target
+      const k = takeLane(Math.min(fcy, tcy), Math.max(fcy, tcy), 'R');
       const gx = Math.max(f.right, t.right) + 22 + 18 * k;
       const fy = Math.min(f.bottom - 10, fcy + 9 * k), ty = Math.min(t.bottom - 10, tcy + 9 * k);
       return { points: [[f.right, fy], [gx, fy], [gx, ty], [t.right, ty]], kind: back ? 'loop-back' : 'round-the-side', label: [f.right + 24, fy - 10] };
