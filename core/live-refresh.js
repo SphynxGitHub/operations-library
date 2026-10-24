@@ -151,6 +151,7 @@ function startRealtime() {
         });
         ch.subscribe((status) => {
             realtimeUp = status === 'SUBSCRIBED';
+            OL._liveRealtimeUp = realtimeUp;   // read by the notification poll, which skips its own download of every project while this is on
             if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('Live updates unavailable (falling back to polling):', status);
         });
     } catch (e) {
@@ -160,8 +161,12 @@ function startRealtime() {
 
 // ---- fallback poll (and on returning to the tab) ----
 let polling = false;
-async function poll() {
+let lastPollAt = 0;
+async function poll(fromFocus = false) {
     if (polling || document.hidden) return;
+    // coming back to the tab or clicking into the window re-downloaded every loaded project each time; once in two minutes is plenty
+    if (fromFocus && Date.now() - lastPollAt < 2 * 60 * 1000) return;
+    lastPollAt = Date.now();
     polling = true;
     try {
         const loadedIds = Object.keys(state.clients || {}).filter(id => state.clients[id] && !state.clients[id]._metaOnly);
@@ -188,8 +193,8 @@ export function startLiveRefresh() {
     // Every minute without Realtime; every 3 minutes with it, as a safety net.
     let n = 0;
     setInterval(() => { n++; if (!realtimeUp || n % 3 === 0) poll(); }, 60 * 1000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-    window.addEventListener('focus', () => poll());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });
+    window.addEventListener('focus', () => poll(true));
 }
 
 window.OL = window.OL || {};
