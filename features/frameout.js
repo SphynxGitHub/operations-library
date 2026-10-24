@@ -294,14 +294,27 @@ export function layoutDraft(allSteps, opts = {}) {
 //                     gutter beside the cards, and in at the right side of the target. fromDecision picks the gutter
 //                     (nearer for a decision's line, further out for the end of a path) so two lines never share one.
 // others: the rest of the cards of the process, to tell whether a straight line down would run through one.
-export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false) {
+export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false, gutters = null) {
   const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2, tcy = (t.top + t.bottom) / 2;
+  // Lines that run down the right-hand side each take their own lane, so two of them never share a gutter or a stretch of
+  // line: `gutters` is the list of side runs already drawn for this process ({ y0, y1, lane }).
+  const takeLane = (y0, y1) => {
+    if (!Array.isArray(gutters)) return fromDecision ? 0 : 1;
+    let k = 0;
+    while (gutters.some((g) => g.lane === k && g.y0 < y1 + 10 && g.y1 > y0 - 10)) k++;
+    gutters.push({ y0, y1, lane: k });
+    return k;
+  };
   if (Math.abs(fcx - tcx) < 2) {
-    if (t.top < f.bottom - 1) return null;
-    const blocked = (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
-    if (blocked) {
-      const gx = Math.max(f.right, t.right) + (fromDecision ? 22 : 38);
-      return { points: [[f.right, fcy], [gx, fcy], [gx, tcy], [t.right, tcy]], kind: 'round-the-side', label: [f.right + 24, fcy - 10] };
+    const back = t.top < f.bottom - 1;
+    const blocked = !back && (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
+    if (back || blocked) {
+      // a link back up to an earlier step (a loop), or one that would run through a card: out of the right side, along the
+      // gutter beside the cards, and in at the right side of the target
+      const k = takeLane(Math.min(fcy, tcy), Math.max(fcy, tcy));
+      const gx = Math.max(f.right, t.right) + 22 + 18 * k;
+      const fy = Math.min(f.bottom - 10, fcy + 9 * k), ty = Math.min(t.bottom - 10, tcy + 9 * k);
+      return { points: [[f.right, fy], [gx, fy], [gx, ty], [t.right, ty]], kind: back ? 'loop-back' : 'round-the-side', label: [f.right + 24, fy - 10] };
     }
     const room = t.top - f.bottom;
     return { points: [[fcx, f.bottom], [tcx, t.top]], kind: 'down', label: room >= 26 ? [fcx + 24, f.bottom + 14] : null };
