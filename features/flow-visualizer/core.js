@@ -3131,6 +3131,7 @@ export function _fvDrawStepConnections(resources) {
   // every card's box in line coordinates: the condition / wait / loop labels are placed so they never sit on one
   const cardBoxes = [];
   elById.forEach(el => { const r = rectOf(el); if (r.width > 20 && r.height > 20) cardBoxes.push({ left: r.left - cRect.left, top: r.top - cRect.top, right: r.right - cRect.left, bottom: r.bottom - cRect.top }); });
+  const gutterRegs = new Map();   // per process: the side runs already used by lines that go round the cards, so no two share one
   const hitsCard = (x, y, W, H, pad = 4) => cardBoxes.some(b => x < b.right + pad && x + W > b.left - pad && y < b.bottom + pad && y + H > b.top - pad);
 
   // A resource placed in several workflows has a copy in each (see fvInstanceOf). A copy draws its own arrows; a link to another
@@ -3237,7 +3238,8 @@ export function _fvDrawStepConnections(resources) {
           draftRoute = routeDraftLink(
             { left: fRect.left, top: fRect.top, right: fRect.right, bottom: fRect.bottom },
             { left: tRect.left, top: tRect.top, right: tRect.right, bottom: tRect.bottom }, 28, others,
-            /^(yes|no)$/i.test((outRule.rule || '').trim()));
+            /^(yes|no)$/i.test((outRule.rule || '').trim()),
+            (gutterRegs.get(String(sourceRes.id)) || (gutterRegs.set(String(sourceRes.id), []), gutterRegs.get(String(sourceRes.id)))));
           if (draftRoute) {
             const R = 12, pts = draftRoute.points;
             d = `M ${pts[0][0]} ${pts[0][1]}`;
