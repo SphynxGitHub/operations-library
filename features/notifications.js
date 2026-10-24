@@ -396,7 +396,9 @@ function fireDesktopNotification(n) {
 
 async function pollForNotifications() {
     try {
-        const { data: clientsData } = await db.from('workspace_clients').select('id, project_data');
+        // Every project's full data, every 45 seconds, was the biggest download in the app. While live updates are connected
+        // (core/live-refresh.js) the projects are already kept current, so only the team roster is fetched below.
+        const { data: clientsData } = OL._liveRealtimeUp ? { data: [] } : await db.from('workspace_clients').select('id, project_data');
         // Never overwrite a project with unsaved local edits (this used to
         // silently drop changes made in the ~1.5 s before a save ran).
         const pendingSave = !!window.saveTimeout || state.isSaving === true;
