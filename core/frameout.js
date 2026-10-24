@@ -221,7 +221,11 @@ export function layoutDraft(allSteps, opts = {}) {
   const steps = (allSteps || []).filter(Boolean);
   const oneCol = Number.isFinite(opts.maxCols) && opts.maxCols < 2;
   const layout = {};
-  const main = steps.filter((s) => !s.branchOf);
+  // A step is on a Yes / No path only while its decision is still there. One whose decision was deleted keeps the old
+  // "branch of" marker; it is an ordinary step on the main line (it used to be left unplaced, far down the page).
+  const decisionIds = new Set(steps.filter((s) => s.kind === 'decision').map((s) => String(s.id)));
+  const onPath = (s) => !!(s.branchOf && decisionIds.has(String(s.branchOf)));
+  const main = steps.filter((s) => !onPath(s));
   main.forEach((s, i) => { layout[s.id] = { colOffset: 0, row: i, parentId: null, laneMode: true }; });
   main.forEach((d, i) => {
     if (d.kind !== 'decision') return;
@@ -237,6 +241,53 @@ export function layoutDraft(allSteps, opts = {}) {
     if (next && !oneCol && (yes.length || no.length)) { layout[next.id].after = yes.concat(no).map((x) => x.id); layout[next.id].extraGap = 26; }   // room for the lines from the ends of the paths to run across
   });
   steps.forEach((s, i) => { if (!layout[s.id]) layout[s.id] = { colOffset: 0, row: steps.length + i, parentId: null, laneMode: true }; });
+
+  // Forks drawn by hand (a step whose lines, with their own wording such as "Segment: New Client", leave for two or more
+  // later steps) get the same room as a Yes / No decision: the path that carries on furthest stays in the main column and
+  // each other path runs down a column of its own beside it, until the two meet.
+  if (!oneCol) {
+    const idx = new Map(steps.map((s, i) => [String(s.id), i]));
+    const ids = steps.map((s) => String(s.id)).sort((a, b) => b.length - a.length);
+    const fwd = (st) => {
+      const found = new Set();
+      ((st.logic && st.logic.out) || []).forEach((l) => {
+        if (!l || !l.targetId || l._implicit) return;
+        const id = ids.find((x) => String(l.targetId) === x || String(l.targetId).endsWith('-' + x));
+        const ti = id === undefined ? undefined : idx.get(id);
+        if (ti !== undefined && ti > idx.get(String(st.id))) found.add(ti);
+      });
+      return [...found].sort((a, b) => a - b);
+    };
+    steps.forEach((d) => {
+      if (d.kind === 'decision' || onPath(d)) return;                 // those are laid out above, from their Yes / No steps
+      const targets = fwd(d);
+      if (targets.length < 2) return;
+      const mainIdx = targets[targets.length - 1];
+      const chainIds = [];
+      targets.slice(0, -1).forEach((ti, n) => {
+        const seen = new Set();
+        let cur = steps[ti]; let first = true;
+        while (cur && !seen.has(String(cur.id)) && idx.get(String(cur.id)) < mainIdx) {
+          seen.add(String(cur.id));
+          const lay = layout[cur.id];
+          if (lay && lay.colOffset === 0 && !onPath(cur)) {
+            layout[cur.id] = { ...lay, colOffset: 1 + n, parentId: first ? d.id : null, parentGap: 0 };
+            chainIds.push(String(cur.id));
+            first = false;
+          }
+          const nexts = fwd(cur);
+          cur = nexts.length === 1 ? steps[nexts[0]] : null;
+        }
+      });
+      // wherever a side path comes back to (the step where the paths meet) waits until every step of the path is placed above it
+      const chainSet = new Set(chainIds);
+      const meets = new Set();
+      chainIds.forEach((cid) => fwd(steps[idx.get(cid)]).forEach((ti) => { const id = String(steps[ti].id); if (!chainSet.has(id)) meets.add(id); }));
+      meets.forEach((id) => {
+        if (layout[id] && layout[id].colOffset === 0) layout[id] = { ...layout[id], after: [...new Set([...(layout[id].after || []), ...chainIds])], extraGap: Math.max(layout[id].extraGap || 0, 26) };
+      });
+    });
+  }
   return layout;
 }
 
@@ -250,14 +301,27 @@ export function layoutDraft(allSteps, opts = {}) {
 //                     gutter beside the cards, and in at the right side of the target. fromDecision picks the gutter
 //                     (nearer for a decision's line, further out for the end of a path) so two lines never share one.
 // others: the rest of the cards of the process, to tell whether a straight line down would run through one.
-export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false) {
+export function routeDraftLink(f, t, gap = 14, others = [], fromDecision = false, gutters = null) {
   const fcx = (f.left + f.right) / 2, fcy = (f.top + f.bottom) / 2, tcx = (t.left + t.right) / 2, tcy = (t.top + t.bottom) / 2;
+  // Lines that run down the right-hand side each take their own lane, so two of them never share a gutter or a stretch of
+  // line: `gutters` is the list of side runs already drawn for this process ({ y0, y1, lane }).
+  const takeLane = (y0, y1) => {
+    if (!Array.isArray(gutters)) return fromDecision ? 0 : 1;
+    let k = 0;
+    while (gutters.some((g) => g.lane === k && g.y0 < y1 + 10 && g.y1 > y0 - 10)) k++;
+    gutters.push({ y0, y1, lane: k });
+    return k;
+  };
   if (Math.abs(fcx - tcx) < 2) {
-    if (t.top < f.bottom - 1) return null;
-    const blocked = (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
-    if (blocked) {
-      const gx = Math.max(f.right, t.right) + (fromDecision ? 22 : 38);
-      return { points: [[f.right, fcy], [gx, fcy], [gx, tcy], [t.right, tcy]], kind: 'round-the-side', label: [f.right + 24, fcy - 10] };
+    const back = t.top < f.bottom - 1;
+    const blocked = !back && (others || []).some((o) => o.left < fcx && o.right > fcx && o.bottom > f.bottom && o.top < t.top);
+    if (back || blocked) {
+      // a link back up to an earlier step (a loop), or one that would run through a card: out of the right side, along the
+      // gutter beside the cards, and in at the right side of the target
+      const k = takeLane(Math.min(fcy, tcy), Math.max(fcy, tcy));
+      const gx = Math.max(f.right, t.right) + 22 + 18 * k;
+      const fy = Math.min(f.bottom - 10, fcy + 9 * k), ty = Math.min(t.bottom - 10, tcy + 9 * k);
+      return { points: [[f.right, fy], [gx, fy], [gx, ty], [t.right, ty]], kind: back ? 'loop-back' : 'round-the-side', label: [f.right + 24, fy - 10] };
     }
     const room = t.top - f.bottom;
     return { points: [[fcx, f.bottom], [tcx, t.top]], kind: 'down', label: room >= 26 ? [fcx + 24, f.bottom + 14] : null };
