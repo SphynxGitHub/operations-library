@@ -3314,9 +3314,15 @@ export function _fvDrawStepConnections(resources) {
         if (marks.length) {
           const size = 14, gap = 3, w = marks.length * size + (marks.length - 1) * gap + 10;
           const ruleFull = hasRule ? String(outRule.rule).trim() : '';
-          const ruleShown = ruleFull.length > 34 ? ruleFull.slice(0, 33) + '\u2026' : ruleFull;
-          const ruleW = hasRule ? ruleShown.length * 5.8 + 14 : 0;
-          const labelW = w + (hasRule ? 4 + ruleW : 0), labelH = 20;
+          // A loop that goes up the left margin has no room beside it for a label, so its label stands up along the line,
+          // reading from the bottom to the top; the words are cut to the length of that run (hover for all of them)
+          const rp = draftRoute && draftRoute.kind === 'loop-back' ? draftRoute.points : null;
+          const vertLeft = !!(rp && rp.length === 4 && rp[1][0] < rp[0][0]);
+          const runLen = vertLeft ? Math.abs(rp[2][1] - rp[1][1]) : 0;
+          const maxText = vertLeft ? Math.min(34, Math.floor((runLen - 30 - w - 4 - 14) / 5.8)) : 34;
+          const ruleShown = !hasRule || maxText < 5 ? '' : (ruleFull.length > maxText ? ruleFull.slice(0, maxText - 1) + '\u2026' : ruleFull);
+          const ruleW = ruleShown ? ruleShown.length * 5.8 + 14 : 0;
+          const labelW = w + (ruleShown ? 4 + ruleW : 0), labelH = 20;
 
           // Where to put it: a point on the line (the middle first, then further along either way), centred on the line,
           // else beside it on the right or the left, taking the first spot that touches no card.
@@ -3332,7 +3338,7 @@ export function _fvDrawStepConnections(resources) {
                     u * u * u * fy + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * ty];
           };
           let bx = null, by = null;
-          const ts = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
+          const ts = vertLeft ? [] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
           search:
           for (const t of ts) {
             const [px, py] = pointAt(t);
@@ -3340,8 +3346,17 @@ export function _fvDrawStepConnections(resources) {
               if (!hitsCard(x, py - labelH / 2, labelW, labelH)) { bx = x; by = py - labelH / 2; break search; }
             }
           }
-          if (bx === null) { const [px, py] = pointAt(0.5); bx = px - labelW / 2; by = py - labelH / 2; }
-          labelBoxes.push({ left: bx, top: by, right: bx + labelW, bottom: by + labelH });
+          let rot = null;
+          if (vertLeft) {
+            const cx = rp[1][0], cy = (rp[1][1] + rp[2][1]) / 2;
+            bx = cx - labelW / 2; by = cy - labelH / 2;
+            rot = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            rot.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+            labelBoxes.push({ left: cx - labelH / 2, top: cy - labelW / 2, right: cx + labelH / 2, bottom: cy + labelW / 2 });
+          } else {
+            if (bx === null) { const [px, py] = pointAt(0.5); bx = px - labelW / 2; by = py - labelH / 2; }
+            labelBoxes.push({ left: bx, top: by, right: bx + labelW, bottom: by + labelH });
+          }
           const mx = bx + w / 2;          // centre of the icon pill
           const my = by + labelH / 2;
           const tipParts = [];
@@ -3366,11 +3381,11 @@ export function _fvDrawStepConnections(resources) {
             g.appendChild(ic);
           });
           if (tipParts.length) { const tt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); tt.textContent = tipParts.join(' | '); g.appendChild(tt); }
-          frag.appendChild(g);
+          (rot || frag).appendChild(g);
 
           // The condition itself, in words beside the icon (like Yes / No on a decision), cut short on the map;
           // hovering the pill or the icon shows all of it.
-          if (hasRule) {
+          if (ruleShown) {
             const full = ruleFull, shown = ruleShown;
             const lw = ruleW, lx = bx + w + 4, ly = my;
             const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -3386,8 +3401,9 @@ export function _fvDrawStepConnections(resources) {
             ct.textContent = shown;
             cg.appendChild(ct);
             const ctt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); ctt.textContent = full; cg.appendChild(ctt);
-            frag.appendChild(cg);
+            (rot || frag).appendChild(cg);
           }
+          if (rot) frag.appendChild(rot);
         }
       });
     });
