@@ -3098,6 +3098,9 @@ export function _fvDrawStepConnections(resources) {
       <marker id="fv-arr-no" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
         <path d="M0,0 L8,3 L0,6 Z" fill="#d4472a"/>
       </marker>
+      <marker id="fv-arr-loop" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#d97706"/>
+      </marker>
     </defs>
     <g id="fv-lines"></g>
   `;
@@ -3131,8 +3134,9 @@ export function _fvDrawStepConnections(resources) {
   // every card's box in line coordinates: the condition / wait / loop labels are placed so they never sit on one
   const cardBoxes = [];
   elById.forEach(el => { const r = rectOf(el); if (r.width > 20 && r.height > 20) cardBoxes.push({ left: r.left - cRect.left, top: r.top - cRect.top, right: r.right - cRect.left, bottom: r.bottom - cRect.top }); });
+  const labelBoxes = [];          // pills already placed, so two labels never sit on each other
   const gutterRegs = new Map();   // per process: the side runs already used by lines that go round the cards, so no two share one
-  const hitsCard = (x, y, W, H, pad = 4) => cardBoxes.some(b => x < b.right + pad && x + W > b.left - pad && y < b.bottom + pad && y + H > b.top - pad);
+  const hitsCard = (x, y, W, H, pad = 4) => cardBoxes.concat(labelBoxes).some(b => x < b.right + pad && x + W > b.left - pad && y < b.bottom + pad && y + H > b.top - pad);
 
   // A resource placed in several workflows has a copy in each (see fvInstanceOf). A copy draws its own arrows; a link to another
   // resource is drawn from the copy that sits in the same workflow as that resource.
@@ -3256,17 +3260,18 @@ export function _fvDrawStepConnections(resources) {
         } catch (err) { draftRoute = null; console.warn('Draft line routing skipped:', err); }
 
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
-        const isLoop     = outRule.type === 'loop';
+        const isBackLoop = !!(draftRoute && draftRoute.kind === 'loop-back');   // a link back up to an earlier step: amber and dashed
+        const isLoop     = outRule.type === 'loop' || isBackLoop;
         const isImplicit = !!outRule._implicit;
-        const color      = isImplicit ? '#3dd9c5' : isLoop ? '#f5b800' : isNo ? '#d4472a' : '#3dd9c5';
+        const color      = isImplicit ? '#3dd9c5' : isBackLoop ? '#d97706' : isLoop ? '#f5b800' : isNo ? '#d4472a' : '#3dd9c5';
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', d);
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', isImplicit ? '1' : '1.5');
-        path.setAttribute('stroke-opacity', isImplicit ? '0.3' : '0.7');
-        path.setAttribute('marker-end', isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
+        path.setAttribute('stroke-opacity', isImplicit ? '0.3' : isBackLoop ? '0.9' : '0.7');
+        path.setAttribute('marker-end', isBackLoop ? 'url(#fv-arr-loop)' : isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
         if (isImplicit) path.setAttribute('stroke-dasharray', '4,4');
         else if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
         frag.appendChild(path);
@@ -3275,6 +3280,7 @@ export function _fvDrawStepConnections(resources) {
         if (draftRoute && draftRoute.label && /^(yes|no)$/i.test((outRule.rule || '').trim())) {
           const word = (outRule.rule || '').trim().replace(/^./, (c) => c.toUpperCase());
           const lw = word.length * 6.4 + 12;
+          labelBoxes.push({ left: draftRoute.label[0] - lw / 2, top: draftRoute.label[1] - 8, right: draftRoute.label[0] + lw / 2, bottom: draftRoute.label[1] + 8 });
           const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           pill.setAttribute('x', draftRoute.label[0] - lw / 2); pill.setAttribute('y', draftRoute.label[1] - 8);
           pill.setAttribute('width', lw); pill.setAttribute('height', 16); pill.setAttribute('rx', 8);
@@ -3335,6 +3341,7 @@ export function _fvDrawStepConnections(resources) {
             }
           }
           if (bx === null) { const [px, py] = pointAt(0.5); bx = px - labelW / 2; by = py - labelH / 2; }
+          labelBoxes.push({ left: bx, top: by, right: bx + labelW, bottom: by + labelH });
           const mx = bx + w / 2;          // centre of the icon pill
           const my = by + labelH / 2;
           const tipParts = [];
@@ -9707,4 +9714,4 @@ window.renderVisualizer = renderVisualizer;
 switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // build stamp: type OL.build in the browser console to see which version of each file is running
-(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-23.loops', draftRoute: routeDraftLink.length });
+(window.OL = window.OL || {}).build = Object.assign(window.OL.build || {}, { flowCore: '2026-10-23.loops', loopRouting: String(routeDraftLink).includes('gutters') });
