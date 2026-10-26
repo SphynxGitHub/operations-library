@@ -8,7 +8,8 @@
 //                 data map (question -> data tag -> where else the tag is used).
 //
 // STORED WHERE:   card.formDesign = { pages: [{ id, title, intro, fields: [{ id, tagId, label, type, required, help, options }] }] }
-//                 A question is always tied to one data tag, and a tag appears once per form.
+//                 A question is always tied to one data tag, and a tag appears once per form. A page can also hold section headings,
+//                 { id, kind: 'heading', label, help }, which sit between questions, are not data, and never reach the card's tags or formFields.
 //
 // STAYS IN STEP:  Every change also updates the card the way the Data Tags list does: the tags are kept on the form's first step
 //                 (what the flow map shows), and for a form built here (no import source) card.formFields is rewritten in question
@@ -102,7 +103,8 @@ function ensureDesign(res) {
   res.formDesign = { pages: [{ id: newId('pg'), title: 'Page 1', intro: '', fields }] };
   return res.formDesign;
 }
-const allFields = (d) => d.pages.flatMap((p) => p.fields);
+const isHeading = (f) => f && f.kind === 'heading';
+const allFields = (d) => d.pages.flatMap((p) => p.fields.filter((f) => !isHeading(f)));
 function locate(d, fid) {
   for (const page of d.pages) { const idx = page.fields.findIndex((f) => f.id === fid); if (idx >= 0) return { page, idx, field: page.fields[idx] }; }
   return null;
@@ -199,7 +201,27 @@ function usageMap() {
 // ---- drawing ------------------------------------------------------------------------------------------------
 function libraryHtml(d) {
   const used = new Set(allFields(d).map((f) => String(f.tagId)));
-  const choices = tagPool().filter((t) => t && !used.has(String(t.id)));
+  const pool = tagPool().filter((t) => t);
+  const choices = pool.filter((t) => !t.isBundle && !used.has(String(t.id)));
+  const bundles = pool.filter((t) => t.isBundle);
+  const everyTag = allTags();
+  const bundleHtml = bundles.map((b) => {
+    const kids = (b.childIds || []).map((id) => everyTag.find((x) => x && String(x.id) === String(id))).filter(Boolean);
+    const onForm = kids.filter((k) => used.has(String(k.id))).length;
+    const names = [b.name, ...kids.map((k) => k.name)].join(' ').toLowerCase();
+    return `<details class="fb-tagrow" data-name="${esc(names)}" style="border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);">
+      <summary style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer;list-style:none;">
+        <i data-lucide="package" style="width:11px;height:11px;color:var(--accent);flex:0 0 auto;"></i>
+        <span style="font-size:11px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(b.name)}</span>
+        <span class="tiny muted" style="flex:0 0 auto;">${onForm ? `${onForm}/` : ''}${kids.length}</span>
+        <button type="button" class="btn tiny soft" style="flex:0 0 auto;" ${onForm === kids.length ? 'disabled' : ''} title="Add every tag in this bundle that is not already on the form"
+                onclick="event.preventDefault();event.stopPropagation();OL.fbAddTag('${esc(b.id)}')">${onForm ? 'Add rest' : 'Add all'}</button>
+      </summary>
+      <div style="padding:2px 8px 8px 24px;display:flex;flex-direction:column;gap:2px;">
+        ${kids.map((k) => `<div class="tiny" style="${used.has(String(k.id)) ? 'opacity:0.45;' : ''}">${esc(k.name)}${used.has(String(k.id)) ? ' <span class="muted">(on this form)</span>' : ''}</div>`).join('') || '<div class="tiny muted">This bundle has no tags yet. Add some on the Data Tags screen.</div>'}
+      </div>
+    </details>`;
+  }).join('');
   const groups = choices.reduce((g, t) => { const c = t.category || 'Other'; (g[c] = g[c] || []).push(t); return g; }, {});
   const page = activePage(d);
   return `
@@ -217,6 +239,7 @@ function libraryHtml(d) {
         <button class="btn tiny primary" onclick="OL.fbNewTag()">Create</button>
       </div>
       <div id="fb-library" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px;">
+        ${bundles.length ? `<div class="fb-group tiny muted" style="margin:2px 0;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;font-size:9px;">Bundles</div>${bundleHtml}` : ''}
         ${Object.keys(groups).sort().map((c) => `
           <div class="fb-group tiny muted" style="margin:8px 0 2px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;font-size:9px;">${esc(c)}</div>
           ${groups[c].map((t) => `
@@ -225,12 +248,37 @@ function libraryHtml(d) {
               <i data-lucide="${t.isBundle ? 'package' : 'tag'}" style="width:11px;height:11px;color:#a78bfa;flex:0 0 auto;"></i>
               <span style="font-size:11px;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(t.name)}${t.isBundle ? ' <span class="tiny muted">(bundle)</span>' : ''}</span>
               <i data-lucide="plus" style="width:12px;height:12px;opacity:0.6;flex:0 0 auto;"></i>
-            </div>`).join('')}`).join('') || '<span class="tiny muted">Every data tag is already on this form.</span>'}
+            </div>`).join('')}`).join('') || (bundles.length ? '' : '<span class="tiny muted">Every data tag is already on this form.</span>')}
       </div>
     </div>`;
 }
 
+function headingHtml(d, page, f, idx) {
+  return `
+    <div style="border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,0.04);">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i data-lucide="heading" style="width:13px;height:13px;color:var(--accent);flex:0 0 auto;"></i>
+          <input type="text" class="modal-input" style="flex:1;min-width:0;font-weight:600;" value="${esc(f.label)}" placeholder="Section heading"
+                 onchange="OL.fbFieldProp('${esc(f.id)}','label',this.value)">
+        </div>
+        <div style="display:flex;gap:2px;">
+          <button class="btn tiny soft" title="Move up" ${idx === 0 ? 'disabled' : ''} onclick="OL.fbShift('${esc(f.id)}',-1)"><i data-lucide="chevron-up" style="width:11px;height:11px;pointer-events:none;"></i></button>
+          <button class="btn tiny soft" title="Move down" ${idx === page.fields.length - 1 ? 'disabled' : ''} onclick="OL.fbShift('${esc(f.id)}',1)"><i data-lucide="chevron-down" style="width:11px;height:11px;pointer-events:none;"></i></button>
+          <button class="btn tiny soft" title="Remove this heading" onclick="OL.fbRemoveField('${esc(f.id)}')"><i data-lucide="x" style="width:11px;height:11px;pointer-events:none;"></i></button>
+        </div>
+      </div>
+      <input type="text" class="modal-input tiny" style="width:100%;box-sizing:border-box;margin-top:8px;" value="${esc(f.help || '')}" placeholder="Short description under the heading (optional)"
+             onchange="OL.fbFieldProp('${esc(f.id)}','help',this.value)">
+      ${d.pages.length > 1 ? `<div style="margin-top:8px;"><select class="modal-input tiny" style="width:auto;" onchange="OL.fbMoveField('${esc(f.id)}',this.value)">
+        <option value="">Move to page...</option>
+        ${d.pages.filter((p) => p.id !== page.id).map((p) => `<option value="${esc(p.id)}">${esc(p.title || 'Untitled page')}</option>`).join('')}
+      </select></div>` : ''}
+    </div>`;
+}
+
 function fieldHtml(d, page, f, idx, usage) {
+  if (isHeading(f)) return headingHtml(d, page, f, idx);
   const tag = findTag(f.tagId);
   const elsewhere = usage[String(f.tagId)] || [];
   const opts = HAS_OPTIONS.has(f.type);
@@ -287,12 +335,14 @@ function pagesHtml(d) {
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${p.fields.length ? p.fields.map((f, i) => fieldHtml(d, p, f, i, usage)).join('') : '<div class="tiny muted" style="padding:14px;text-align:center;border:1px dashed var(--line);border-radius:6px;">No questions on this page. Click a data tag on the left to add one.</div>'}
           </div>
+          <div style="margin-top:10px;"><button class="btn tiny soft" onclick="OL.fbAddHeading('${esc(p.id)}')"><i data-lucide="plus" style="width:11px;height:11px;"></i> Add section heading</button></div>
         </div>`).join('')}
-      <div><button class="btn small soft" onclick="OL.fbAddPage()"><i data-lucide="plus" style="width:12px;height:12px;"></i> Add page</button></div>
+      <div style="display:flex;gap:8px;"><button class="btn small soft" onclick="OL.fbAddPage()"><i data-lucide="plus" style="width:12px;height:12px;"></i> Add page</button></div>
     </div>`;
 }
 
 function previewFieldHtml(f) {
+  if (isHeading(f)) return `<div style="margin:18px 0 10px;padding-bottom:4px;border-bottom:1px solid var(--line);"><div style="font-size:14px;font-weight:700;">${esc(f.label || 'Section')}</div>${f.help ? `<div class="tiny muted" style="margin-top:2px;">${esc(f.help)}</div>` : ''}</div>`;
   const star = f.required ? '<span style="color:#ef4444;"> *</span>' : '';
   const label = `<label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">${esc(f.label)}${star}</label>`;
   const help = f.help ? `<div class="tiny muted" style="margin:-2px 0 6px;">${esc(f.help)}</div>` : '';
@@ -368,6 +418,10 @@ async function addTagsToPage(tag) {
     adds.forEach((t) => { if (!allFields(d).some((f) => String(f.tagId) === String(t.id))) page.fields.push(fieldFromTag(t)); });
   });
 }
+async function fbAddHeading(pageId) {
+  await save((d) => { const p = d.pages.find((x) => x.id === pageId); if (p) p.fields.push({ id: newId('hd'), kind: 'heading', label: 'New section', help: '' }); });
+  render();
+}
 async function fbAddTag(tagId) { const tag = findTag(tagId); if (!tag) return; await addTagsToPage(tag); render(); }
 async function fbNewTag() {
   const input = document.getElementById('fb-newtag');
@@ -383,8 +437,9 @@ async function fbFieldProp(fid, prop, value) {
   await save((d, res) => {
     const hit = locate(d, fid); if (!hit) return;
     const before = hit.field.label;
+    if (isHeading(hit.field) && prop === 'required') return;
     hit.field[prop] = prop === 'required' ? !!value : String(value).slice(0, prop === 'help' ? 300 : 200);
-    if (prop === 'label') repairLabel(res, hit.field.tagId, before, hit.field.label);
+    if (prop === 'label' && !isHeading(hit.field)) repairLabel(res, hit.field.tagId, before, hit.field.label);
   });
 }
 async function fbFieldType(fid, type) {
@@ -444,6 +499,7 @@ async function fbRemoveField(fid) {
   let used = 0;
   await save((d, res) => {
     const hit = locate(d, fid); if (!hit) return;
+    if (isHeading(hit.field)) { hit.page.fields.splice(hit.idx, 1); return; }
     used = pathCount(res, hit.field.tagId);
     hit.page.fields.splice(hit.idx, 1);
     const tagId = String(hit.field.tagId);
@@ -494,7 +550,7 @@ function fbPrint() {
   const usage = usageMap();
   const client = getActiveClient();
   let n = 0;
-  const pages = d.pages.map((p, i) => `<section class="${i ? 'brk' : ''}"><h2>${esc(p.title || 'Untitled page')}</h2>${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}${p.fields.map((f) => printFieldHtml(f, ++n)).join('') || '<p class="note">No questions on this page.</p>'}</section>`).join('');
+  const pages = d.pages.map((p, i) => `<section class="${i ? 'brk' : ''}"><h2>${esc(p.title || 'Untitled page')}</h2>${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}${p.fields.map((f) => (isHeading(f) ? `<div class="sec"><h3>${esc(f.label || 'Section')}</h3>${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}</div>` : printFieldHtml(f, ++n))).join('') || '<p class="note">No questions on this page.</p>'}</section>`).join('');
   let m = 0;
   const rows = allFields(d).map((f) => {
     const tag = findTag(f.tagId); const el = usage[String(f.tagId)] || [];
@@ -504,6 +560,7 @@ function fbPrint() {
     body{font:13px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;margin:0;padding:28px 36px;}
     h1{font-size:22px;margin:0 0 2px;} .sub{color:#555;margin:0 0 22px;} h2{font-size:16px;margin:0 0 4px;border-bottom:2px solid #111;padding-bottom:4px;}
     .intro{margin:6px 0 12px;color:#333;white-space:pre-wrap;} .brk{page-break-before:always;margin-top:0;}
+    .sec{margin:22px 0 6px;break-after:avoid;} .sec h3{font-size:14px;margin:0;padding-bottom:3px;border-bottom:1px solid #999;}
     .q{margin:14px 0;break-inside:avoid;} .ql{font-weight:600;} .n{color:#666;margin-right:2px;} .req{color:#b91c1c;} .help{color:#555;font-size:12px;margin:1px 0 4px;}
     .line{border-bottom:1px solid #444;height:22px;margin-top:6px;} .hint{color:#999;font-size:11px;} .box{border:1px solid #444;height:24px;margin-top:6px;} .box.tall{height:56px;}
     .opts{margin-top:5px;} .opt{padding:2px 0 2px 22px;position:relative;} .opt::before{content:"";position:absolute;left:0;top:4px;width:11px;height:11px;border:1.5px solid #444;}
@@ -527,6 +584,6 @@ function fbPrint() {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   openFormBuilder, fbClose, fbView, fbSetPage, fbFilter, fbAddTag, fbNewTag, fbFieldProp, fbFieldType, fbFieldOptions,
-  fbShift, fbSaveToTag, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
+  fbShift, fbSaveToTag, fbAddHeading, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
 });
 export { openFormBuilder };
