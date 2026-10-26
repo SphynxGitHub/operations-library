@@ -320,6 +320,13 @@ export function openDataDetailModal(id) {
                 </div>
             ` : ''}
 
+            <div class="card-section" style="margin-bottom:20px;">
+                <label class="modal-section-label">NAME</label>
+                <input type="text" class="modal-input" style="width:100%;box-sizing:border-box;margin-top:6px;" value="${esc(dp.name)}"
+                       onchange="OL.renameDatapoint('${esc(dp.id)}', this.value)">
+                ${dp.key ? `<div class="tiny muted" style="margin-top:6px;">Merge key <span style="font-family:monospace;">${esc(dp.key)}</span> stays the same when you rename, so emails and templates that use it keep working.</div>` : ''}
+            </div>
+
             <div class="card-section">
                 <label class="modal-section-label">DATA USAGE & FLOW</label>
                 ${OL.renderDataFlowMiniMap(id)}
@@ -358,6 +365,18 @@ function findTagAnywhere(id) {
     if (local) return { tag: local, local: true, client };
     const master = (state.master.datapoints || []).find(d => String(d.id) === String(id));
     return master ? { tag: master, local: false, client } : null;
+}
+export function renameDatapoint(id, name) {
+    const clean = String(name || '').trim().slice(0, 80);
+    const hit = findTagAnywhere(id);
+    if (!hit || !clean || clean === hit.tag.name) return;
+    hit.tag.name = clean;
+    // cards keep their own copy of each tag on their steps; keep those names in step
+    const cards = hit.client?.projectData?.localResources || [];
+    cards.forEach(r => (r.steps || []).forEach(st => (st.datapoints || []).forEach(d => { if (d && String(d.id) === String(id)) d.name = clean; })));
+    if (hit.client) markClientDirty(hit.client.id);
+    persist();
+    if (typeof OL.renderGlobalDataManager === 'function' && document.getElementById('master-fields-list')) OL.renderGlobalDataManager();
 }
 export function setTagFieldType(id, type) {
     const hit = findTagAnywhere(id); if (!hit) return;
@@ -584,6 +603,6 @@ Object.assign(window.OL, {
     executeDataImport, renderDataRow, renderBundleRow, openDataDetailModal,
     renderDataFlowMiniMap, addNewDatapoint, updateMasterDatapoint, dataPool,
     deleteMasterDatapointById, editBundle, toggleDpInBundle, removeStepDatapoint,
-    setTagFieldType, setTagOptions, renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
+    renameDatapoint, setTagFieldType, setTagOptions, renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
     handleBundleDragLeave, handleFieldDropOnBundle, removeFieldFromBundle
 });
