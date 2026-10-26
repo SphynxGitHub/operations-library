@@ -133,6 +133,52 @@ async function save(fn) {
   await OL.updateAndSync(() => { const d = ensureDesign(res); fn(d, res); syncToCard(res); }, getActiveClient()?.id);
 }
 
+// ---- flow map paths that depend on a question's answers -------------------------------------------------------------
+// A path on the flow map can say "when <question> is <choice>". It keeps the form, the tag, the question's text and the choice.
+// Those live on step.logic.out[].trig, step.jumps[].trig and res.placements[].when. When a form built here changes a question's
+// text or a choice, the paths that use it are updated in step; a choice that is removed cannot be mapped to anything, so those
+// paths are left as they were and reported. (Forms pulled from a service never reach here: the builder does not feed their flow map.)
+function eachAnswerRef(formId, tagId, fn) {
+  const same = (t) => t && String(t.formId) === String(formId) && String(t.tagId) === String(tagId);
+  const cards = (typeof OL.getCurrentProjectData === 'function' ? OL.getCurrentProjectData()?.resources : null) || [];
+  cards.forEach((r) => {
+    (r.steps || []).forEach((st) => {
+      ((st.logic && st.logic.out) || []).forEach((l) => { if (l && l.trig && l.trig.kind === 'answer' && same(l.trig)) fn({ trig: l.trig, holder: l, key: 'rule' }); });
+      (Array.isArray(st.jumps) ? st.jumps : []).forEach((j) => { if (j && j.trig && j.trig.kind === 'answer' && same(j.trig)) fn({ trig: j.trig, holder: j, key: 'label' }); });
+    });
+    (r.placements || []).forEach((p) => { if (p && p.when && same(p.when)) fn({ trig: p.when, holder: null, key: '' }); });
+  });
+}
+const swapText = (ref, from, to) => { if (ref.holder && typeof ref.holder[ref.key] === 'string') ref.holder[ref.key] = ref.holder[ref.key].split(from).join(to); };
+const pathCount = (res, tagId) => { let n = 0; if (!res || res.source) return 0; eachAnswerRef(res.id, tagId, () => { n++; }); return n; };
+
+// the question's text changed
+function repairLabel(res, tagId, oldLabel, newLabel) {
+  if (res.source || !oldLabel || oldLabel === newLabel) return;
+  eachAnswerRef(res.id, tagId, (ref) => { ref.trig.field = newLabel; swapText(ref, oldLabel, newLabel); });
+}
+// the choices changed: same count and the others unchanged = renames; anything else that disappeared is reported
+function repairChoices(res, tagId, oldOpts, newOpts) {
+  if (res.source) return [];
+  const gone = oldOpts.filter((o) => !newOpts.includes(o));
+  const added = newOpts.filter((o) => !oldOpts.includes(o));
+  const rename = new Map();
+  if (gone.length && gone.length === added.length) gone.forEach((o, i) => rename.set(o, added[i]));
+  const lost = [];
+  eachAnswerRef(res.id, tagId, (ref) => {
+    const v = ref.trig.value;
+    if (!v || !gone.includes(v)) return;
+    if (rename.has(v)) { ref.trig.value = rename.get(v); swapText(ref, `is ${v}`, `is ${rename.get(v)}`); }
+    else lost.push(v);
+  });
+  return lost;
+}
+const reportLost = (lost, what) => {
+  if (!lost.length) return;
+  const names = [...new Set(lost)].map((v) => `“${v}”`).join(', ');
+  toast(`${lost.length} flow map path${lost.length === 1 ? ' still uses' : 's still use'} ${names}, which ${what}. Open the path in the flow map to pick a new answer.`);
+};
+
 // Where else each tag is used in this project (other cards' steps), for the mapping view.
 function usageMap() {
   const map = {};
@@ -212,6 +258,7 @@ function fieldHtml(d, page, f, idx, usage) {
              onchange="OL.fbFieldProp('${esc(f.id)}','help',this.value)">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;">
         <span class="pill tiny soft" title="The data tag this answer fills"><i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i>${esc(tag ? tag.name : 'Missing tag')}${tag && tag.key ? ` <span style="font-family:monospace;opacity:0.7;">${esc(tag.key)}</span>` : ''}</span>
+        ${pathCount(getRes(), f.tagId) ? `<span class="pill tiny" style="border:1px solid var(--line);" title="Flow map paths that branch on this question's answer. Renaming the question or a choice updates them.">Used by ${pathCount(getRes(), f.tagId)} flow map path${pathCount(getRes(), f.tagId) === 1 ? '' : 's'}</span>` : ''}
         ${elsewhere.length ? `<span class="tiny muted" title="${esc(elsewhere.join(', '))}">Also used in ${elsewhere.length} other card${elsewhere.length === 1 ? '' : 's'}: ${esc(elsewhere.slice(0, 3).join(', '))}${elsewhere.length > 3 ? ', ...' : ''}</span>` : '<span class="tiny muted">Not used by any other card yet</span>'}
         ${d.pages.length > 1 ? `<span style="flex:1;"></span><select class="modal-input tiny" style="width:auto;" onchange="OL.fbMoveField('${esc(f.id)}',this.value)">
           <option value="">Move to page...</option>
@@ -333,20 +380,37 @@ async function fbNewTag() {
 }
 async function fbFieldProp(fid, prop, value) {
   if (!['label', 'required', 'help'].includes(prop)) return;
-  await save((d) => { const hit = locate(d, fid); if (!hit) return; hit.field[prop] = prop === 'required' ? !!value : String(value).slice(0, prop === 'help' ? 300 : 200); });
+  await save((d, res) => {
+    const hit = locate(d, fid); if (!hit) return;
+    const before = hit.field.label;
+    hit.field[prop] = prop === 'required' ? !!value : String(value).slice(0, prop === 'help' ? 300 : 200);
+    if (prop === 'label') repairLabel(res, hit.field.tagId, before, hit.field.label);
+  });
 }
 async function fbFieldType(fid, type) {
   if (!TYPES[type]) return;
-  await save((d) => {
+  let lost = [];
+  await save((d, res) => {
     const hit = locate(d, fid); if (!hit) return;
+    const wasChoices = HAS_OPTIONS.has(hit.field.type);
+    const old = [...(hit.field.options || [])];
     hit.field.type = type;
     if (HAS_OPTIONS.has(type) && !(hit.field.options || []).length) hit.field.options = [...(findTag(hit.field.tagId)?.options || [])];
+    if (wasChoices && !HAS_OPTIONS.has(type)) lost = repairChoices(res, hit.field.tagId, old, []);
   });
+  reportLost(lost, 'is no longer a choice on this question');
   render();
 }
 async function fbFieldOptions(fid, text) {
   const list = [...new Set(String(text || '').split('\n').map((s) => s.trim()).filter(Boolean))].slice(0, 100);
-  await save((d) => { const hit = locate(d, fid); if (hit) hit.field.options = list; });
+  let lost = [];
+  await save((d, res) => {
+    const hit = locate(d, fid); if (!hit) return;
+    const old = [...(hit.field.options || [])];
+    hit.field.options = list;
+    lost = repairChoices(res, hit.field.tagId, old, list);
+  });
+  reportLost(lost, 'is no longer a choice');
 }
 async function fbSaveToTag(fid) {
   await save((d) => {
@@ -377,13 +441,16 @@ async function fbMoveField(fid, pageId) {
   render();
 }
 async function fbRemoveField(fid) {
+  let used = 0;
   await save((d, res) => {
     const hit = locate(d, fid); if (!hit) return;
+    used = pathCount(res, hit.field.tagId);
     hit.page.fields.splice(hit.idx, 1);
     const tagId = String(hit.field.tagId);
     // the tag leaves the card's steps too, as the Data Tags list's × does
     (res.steps || []).forEach((st) => { if (Array.isArray(st.datapoints)) st.datapoints = st.datapoints.filter((x) => String(x.id) !== tagId); });
   });
+  if (used) toast(`${used} flow map path${used === 1 ? ' depends' : 's depend'} on the answer to that question. They were left as they were; open them in the flow map to change or remove them.`);
   render();
 }
 async function fbAddPage() {
