@@ -22,8 +22,43 @@ function savePool() {
     return persist();
 }
 
+// The default set every person on a form needs. Adds any missing tag to the master list and a "Person" bundle holding all five,
+// once. An existing tag with the same name is reused, and a bundle already named Person is left alone. Master writes are admin-only,
+// so this does nothing for partners and clients. Used by the Data Tags screen and the form builder.
+const DEFAULT_PERSON_TAGS = [
+    ['First Name', '{firstName}', 'Identity', 'dp-fname'], ['Middle Name', '{middleName}', 'Identity', 'dp-mname'],
+    ['Last Name', '{lastName}', 'Identity', 'dp-lname'], ['Email Address', '{email}', 'Contact', 'dp-email'],
+    ['Mobile Phone', '{mobilePhone}', 'Contact', 'dp-mobile']
+];
+export function ensureDefaultPersonBundle() {
+    if (window.IS_GUEST || !state.master) return;
+    if (!Array.isArray(state.master.datapoints)) state.master.datapoints = [];
+    const list = state.master.datapoints;
+    let changed = false;
+    const ids = DEFAULT_PERSON_TAGS.map(([name, key, category, id]) => {
+        const hit = list.find((d) => d && !d.isBundle && String(d.name || '').toLowerCase().trim() === name.toLowerCase());
+        if (hit) return hit.id;
+        list.push({ id, name, key, category }); changed = true; return id;
+    });
+    if (!list.some((d) => d && d.isBundle && String(d.name || '').toLowerCase().trim() === 'person')) {
+        list.push({ id: 'bundle-person', name: 'Person', isBundle: true, childIds: ids, category: 'Identity' }); changed = true;
+    }
+    if (changed) persist();
+}
+
+// A tag in two or more bundles is Global (shared by several groups); the Data Tags list can be narrowed to those.
+export function filterDataFields() {
+    const q = (document.getElementById('dm-field-search')?.value || '').toLowerCase().trim();
+    const globalOnly = !!document.getElementById('dm-global-only')?.checked;
+    document.querySelectorAll('#master-fields-list .data-field-card').forEach((el) => {
+        const ok = (!q || el.textContent.toLowerCase().includes(q)) && (!globalOnly || Number(el.dataset.bundles || 0) >= 2);
+        el.style.display = ok ? '' : 'none';
+    });
+}
+
 export function renderGlobalDataManager() {
     OL.registerView(renderGlobalDataManager);
+    if (window.location.hash.includes('vault')) ensureDefaultPersonBundle();
     const container = document.getElementById("mainContent");
     if (!container) return;
     container.style.cssText = '';
@@ -67,7 +102,10 @@ export function renderGlobalDataManager() {
                     <i data-lucide="list" style="width: 12px; height: 12px; opacity: 0.5;"></i>
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
                 </div>
-                <input type="text" class="modal-input tiny" placeholder="Search fields..." style="margin-bottom:10px;" oninput="const q=this.value.toLowerCase().trim(); document.querySelectorAll('#master-fields-list .data-field-card').forEach(el=>{el.style.display=(!q||el.textContent.toLowerCase().includes(q))?'':'none';});">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+                    <input type="text" id="dm-field-search" class="modal-input tiny" placeholder="Search fields..." style="flex:1;" oninput="OL.filterDataFields()">
+                    <label class="tiny" style="display:flex;align-items:center;gap:4px;white-space:nowrap;" title="Tags that sit in two or more bundles"><input type="checkbox" id="dm-global-only" onchange="OL.filterDataFields()"> Global only</label>
+                </div>
                 <div id="master-fields-list" style="flex:1; min-height:0; overflow-y:auto; padding-right:8px;">
                     ${datapoints.map(dp => {
                         const parentBundles = bundles.filter(b => (b.childIds || []).includes(dp.id));
@@ -78,7 +116,7 @@ export function renderGlobalDataManager() {
                         const isProtected = protectedFields.includes(dp.key);
 
                         return `
-                            <div class="data-field-card draggable-field" 
+                            <div class="data-field-card draggable-field" data-bundles="${parentBundles.length}" 
                                 draggable="true"
                                 onclick="OL.openDataDetailModal('${dp.id}')"
                                 ondragstart="OL.handleFieldDragStart(event, '${dp.id}')"
@@ -603,6 +641,6 @@ Object.assign(window.OL, {
     executeDataImport, renderDataRow, renderBundleRow, openDataDetailModal,
     renderDataFlowMiniMap, addNewDatapoint, updateMasterDatapoint, dataPool,
     deleteMasterDatapointById, editBundle, toggleDpInBundle, removeStepDatapoint,
-    renameDatapoint, setTagFieldType, setTagOptions, renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
+    renameDatapoint, ensureDefaultPersonBundle, filterDataFields, setTagFieldType, setTagOptions, renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
     handleBundleDragLeave, handleFieldDropOnBundle, removeFieldFromBundle
 });

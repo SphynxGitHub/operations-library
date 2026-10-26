@@ -8,7 +8,9 @@
 //                 data map (question -> data tag -> where else the tag is used).
 //
 // STORED WHERE:   card.formDesign = { pages: [{ id, title, intro, fields: [{ id, tagId, label, type, required, help, options }] }] }
-//                 A question is always tied to one data tag, and a tag appears once per form. A page can also hold section headings,
+//                 A question is always tied to a data tag. The same tag can be asked more than once on a form (First Name for the
+//                 primary person and again for a spouse); each ask is its own question with its own label. A tag used more than once
+//                 Global is a way to narrow the tag list: a tag that sits in two or more bundles is Global (derived, never chosen). A page can also hold section headings,
 //                 { id, kind: 'heading', label, help }, which sit between questions, are not data, and never reach the card's tags or formFields.
 //
 // STAYS IN STEP:  Every change also updates the card the way the Data Tags list does: the tags are kept on the form's first step
@@ -29,7 +31,7 @@ const TYPES = {
   date: 'Date', dropdown: 'Dropdown', radio: 'Single choice', checkbox: 'Multiple choice'
 };
 const HAS_OPTIONS = new Set(['dropdown', 'radio', 'checkbox']);
-const ui = { resId: null, view: 'build', pageId: null };
+const ui = { resId: null, view: 'build', pageId: null, globalOnly: false };
 
 const toast = (t) => { if (typeof OL.showToast === 'function') OL.showToast(t); else console.info(t); };
 const getRes = () => OL.getResourceById(ui.resId);
@@ -104,7 +106,15 @@ function ensureDesign(res) {
   return res.formDesign;
 }
 const isHeading = (f) => f && f.kind === 'heading';
-const allFields = (d) => d.pages.flatMap((p) => p.fields.filter((f) => !isHeading(f)));
+// questions = every ask on the form. allFields = one per tag (its first ask), which is what the card's tags, formFields and the
+// flow map's answer paths use; later asks of the same tag are repeats and do not change those.
+const questions = (d) => d.pages.flatMap((p) => p.fields.filter((f) => !isHeading(f)));
+const allFields = (d) => { const seen = new Set(); return questions(d).filter((f) => { const k = String(f.tagId); if (seen.has(k)) return false; seen.add(k); return true; }); };
+const isPrimary = (d, f) => allFields(d).includes(f);
+const asksOf = (d, tagId) => questions(d).filter((f) => String(f.tagId) === String(tagId)).length;
+// Global = the tag sits in two or more bundles (First Name is in both a primary-person and a spouse bundle). Used to narrow the list.
+const bundlesOf = (tagId) => allTags().filter((b) => b && b.isBundle && (b.childIds || []).map(String).includes(String(tagId))).length;
+const isGlobalTag = (tagId) => bundlesOf(tagId) >= 2;
 function locate(d, fid) {
   for (const page of d.pages) { const idx = page.fields.findIndex((f) => f.id === fid); if (idx >= 0) return { page, idx, field: page.fields[idx] }; }
   return null;
@@ -202,7 +212,7 @@ function usageMap() {
 function libraryHtml(d) {
   const used = new Set(allFields(d).map((f) => String(f.tagId)));
   const pool = tagPool().filter((t) => t);
-  const choices = pool.filter((t) => !t.isBundle && !used.has(String(t.id)));
+  const choices = pool.filter((t) => !t.isBundle && (!ui.globalOnly || isGlobalTag(t.id)));
   const bundles = pool.filter((t) => t.isBundle);
   const everyTag = allTags();
   const bundleHtml = bundles.map((b) => {
@@ -214,8 +224,8 @@ function libraryHtml(d) {
         <i data-lucide="package" style="width:11px;height:11px;color:var(--accent);flex:0 0 auto;"></i>
         <span style="font-size:11px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(b.name)}</span>
         <span class="tiny muted" style="flex:0 0 auto;">${onForm ? `${onForm}/` : ''}${kids.length}</span>
-        <button type="button" class="btn tiny soft" style="flex:0 0 auto;" ${onForm === kids.length ? 'disabled' : ''} title="Add every tag in this bundle that is not already on the form"
-                onclick="event.preventDefault();event.stopPropagation();OL.fbAddTag('${esc(b.id)}')">${onForm ? 'Add rest' : 'Add all'}</button>
+        <button type="button" class="btn tiny soft" style="flex:0 0 auto;" ${!kids.length ? 'disabled' : ''} title="${kids.length && onForm === kids.length ? 'Ask the whole set again, under a new heading (for example, for a spouse)' : 'Add every tag in this bundle that is not already on the form'}"
+                onclick="event.preventDefault();event.stopPropagation();${kids.length && onForm === kids.length ? `OL.fbAddBundleAgain('${esc(b.id)}')` : `OL.fbAddTag('${esc(b.id)}')`}">${kids.length && onForm === kids.length ? 'Add again' : (onForm ? 'Add rest' : 'Add all')}</button>
       </summary>
       <div style="padding:2px 8px 8px 24px;display:flex;flex-direction:column;gap:2px;">
         ${kids.map((k) => `<div class="tiny" style="${used.has(String(k.id)) ? 'opacity:0.45;' : ''}">${esc(k.name)}${used.has(String(k.id)) ? ' <span class="muted">(on this form)</span>' : ''}</div>`).join('') || '<div class="tiny muted">This bundle has no tags yet. Add some on the Data Tags screen.</div>'}
@@ -232,22 +242,26 @@ function libraryHtml(d) {
           ${d.pages.map((p, i) => `<option value="${esc(p.id)}" ${p.id === page.id ? 'selected' : ''}>${esc(p.title || 'Page ' + (i + 1))}</option>`).join('')}
         </select>
       </div>
-      <input type="text" class="modal-input tiny" placeholder="Search data tags..." oninput="OL.fbFilter(this.value)">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="text" class="modal-input tiny" style="flex:1;min-width:0;" placeholder="Search data tags..." oninput="OL.fbFilter(this.value)">
+        <label class="tiny" style="display:flex;align-items:center;gap:4px;white-space:nowrap;" title="Only tags that sit in two or more bundles"><input type="checkbox" ${ui.globalOnly ? 'checked' : ''} onchange="OL.fbGlobalOnly(this.checked)"> Global</label>
+      </div>
       <div style="display:flex;gap:6px;">
         <input type="text" id="fb-newtag" class="modal-input tiny" style="flex:1;min-width:0;" placeholder="New data tag name"
                onkeydown="if(event.key==='Enter'){event.preventDefault();OL.fbNewTag();}">
         <button class="btn tiny primary" onclick="OL.fbNewTag()">Create</button>
       </div>
       <div id="fb-library" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px;">
-        ${bundles.length ? `<div class="fb-group tiny muted" style="margin:2px 0;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;font-size:9px;">Bundles</div>${bundleHtml}` : ''}
+        ${bundles.length && !ui.globalOnly ? `<div class="fb-group tiny muted" style="margin:2px 0;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;font-size:9px;">Bundles</div>${bundleHtml}` : ''}
         ${Object.keys(groups).sort().map((c) => `
           <div class="fb-group tiny muted" style="margin:8px 0 2px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;font-size:9px;">${esc(c)}</div>
           ${groups[c].map((t) => `
-            <div class="fb-tagrow is-clickable" data-name="${esc(String(t.name || '').toLowerCase())}" onclick="OL.fbAddTag('${esc(t.id)}')"
-                 style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);">
-              <i data-lucide="${t.isBundle ? 'package' : 'tag'}" style="width:11px;height:11px;color:#a78bfa;flex:0 0 auto;"></i>
-              <span style="font-size:11px;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(t.name)}${t.isBundle ? ' <span class="tiny muted">(bundle)</span>' : ''}</span>
-              <i data-lucide="plus" style="width:12px;height:12px;opacity:0.6;flex:0 0 auto;"></i>
+            <div class="fb-tagrow ${used.has(String(t.id)) ? '' : 'is-clickable'}" data-name="${esc(String(t.name || '').toLowerCase())}" ${used.has(String(t.id)) ? '' : `onclick="OL.fbAddTag('${esc(t.id)}')"`}
+                 style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);${used.has(String(t.id)) ? 'opacity:0.7;' : ''}">
+              <i data-lucide="tag" style="width:11px;height:11px;color:#a78bfa;flex:0 0 auto;"></i>
+              <span style="font-size:11px;flex:1;min-width:0;overflow-wrap:anywhere;">${esc(t.name)}${used.has(String(t.id)) ? ' <span class="tiny muted">(on form)</span>' : ''}</span>
+              ${isGlobalTag(t.id) ? '<span class="pill tiny" style="flex:0 0 auto;font-size:9px;padding:0 6px;border:1px solid var(--accent);color:var(--accent);" title="In two or more bundles">Global</span>' : ''}
+              ${used.has(String(t.id)) ? `<button type="button" class="btn tiny soft" style="flex:0 0 auto;padding:0 6px;" title="Ask this question again on the form (for example, for a spouse)" onclick="event.stopPropagation();OL.fbAddAgain('${esc(t.id)}')">Add again</button>` : '<i data-lucide="plus" style="width:12px;height:12px;opacity:0.6;flex:0 0 auto;"></i>'}
             </div>`).join('')}`).join('') || (bundles.length ? '' : '<span class="tiny muted">Every data tag is already on this form.</span>')}
       </div>
     </div>`;
@@ -296,6 +310,7 @@ function fieldHtml(d, page, f, idx, usage) {
         <div style="display:flex;gap:2px;">
           <button class="btn tiny soft" title="Move up" ${idx === 0 ? 'disabled' : ''} onclick="OL.fbShift('${esc(f.id)}',-1)"><i data-lucide="chevron-up" style="width:11px;height:11px;pointer-events:none;"></i></button>
           <button class="btn tiny soft" title="Move down" ${idx === page.fields.length - 1 ? 'disabled' : ''} onclick="OL.fbShift('${esc(f.id)}',1)"><i data-lucide="chevron-down" style="width:11px;height:11px;pointer-events:none;"></i></button>
+          <button class="btn tiny soft" title="Ask this question again (a copy you can relabel)" onclick="OL.fbDuplicate('${esc(f.id)}')"><i data-lucide="copy" style="width:11px;height:11px;pointer-events:none;"></i></button>
           <button class="btn tiny soft" title="Remove from the form" onclick="OL.fbRemoveField('${esc(f.id)}')"><i data-lucide="x" style="width:11px;height:11px;pointer-events:none;"></i></button>
         </div>
       </div>
@@ -306,7 +321,8 @@ function fieldHtml(d, page, f, idx, usage) {
              onchange="OL.fbFieldProp('${esc(f.id)}','help',this.value)">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;">
         <span class="pill tiny soft" title="The data tag this answer fills"><i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i>${esc(tag ? tag.name : 'Missing tag')}${tag && tag.key ? ` <span style="font-family:monospace;opacity:0.7;">${esc(tag.key)}</span>` : ''}</span>
-        ${pathCount(getRes(), f.tagId) ? `<span class="pill tiny" style="border:1px solid var(--line);" title="Flow map paths that branch on this question's answer. Renaming the question or a choice updates them.">Used by ${pathCount(getRes(), f.tagId)} flow map path${pathCount(getRes(), f.tagId) === 1 ? '' : 's'}</span>` : ''}
+        ${!isPrimary(d, f) ? '<span class="tiny muted">Repeat of the same tag. The flow map follows the first one.</span>' : ''}
+        ${isPrimary(d, f) && pathCount(getRes(), f.tagId) ? `<span class="pill tiny" style="border:1px solid var(--line);" title="Flow map paths that branch on this question's answer. Renaming the question or a choice updates them.">Used by ${pathCount(getRes(), f.tagId)} flow map path${pathCount(getRes(), f.tagId) === 1 ? '' : 's'}</span>` : ''}
         ${elsewhere.length ? `<span class="tiny muted" title="${esc(elsewhere.join(', '))}">Also used in ${elsewhere.length} other card${elsewhere.length === 1 ? '' : 's'}: ${esc(elsewhere.slice(0, 3).join(', '))}${elsewhere.length > 3 ? ', ...' : ''}</span>` : '<span class="tiny muted">Not used by any other card yet</span>'}
         ${d.pages.length > 1 ? `<span style="flex:1;"></span><select class="modal-input tiny" style="width:auto;" onchange="OL.fbMoveField('${esc(f.id)}',this.value)">
           <option value="">Move to page...</option>
@@ -371,7 +387,7 @@ function render() {
   const d = ensureDesign(res);
   if (!d.pages.some((p) => p.id === ui.pageId)) ui.pageId = d.pages[0].id;
   const prevScroll = document.getElementById('fb-body')?.scrollTop || 0;
-  const count = allFields(d).length;
+  const count = questions(d).length;
   const imported = !!res.source;
   const html = `
     <div class="modal-head">
@@ -383,7 +399,7 @@ function render() {
       <button class="btn small soft" onclick="OL.fbClose()">Close</button>
     </div>
     <div class="modal-body" id="fb-body" style="max-width:none;width:100%;box-sizing:border-box;">
-      <div class="tiny muted" style="margin-bottom:12px;">${count} question${count === 1 ? '' : 's'} on ${d.pages.length} page${d.pages.length === 1 ? '' : 's'}. Each question is a data tag, so the form, the flow map and the Data Tags list always agree.${imported ? ` This form is read from ${esc(res.source)}; what you design here is a separate draft and is not sent back.` : ''}</div>
+      <div class="tiny muted" style="margin-bottom:12px;">${count} question${count === 1 ? '' : 's'} on ${d.pages.length} page${d.pages.length === 1 ? '' : 's'}. Each question is a data tag, so the form, the flow map and the Data Tags list agree. Tick Global to list only tags that sit in two or more bundles.${imported ? ` This form is read from ${esc(res.source)}; what you design here is a separate draft and is not sent back.` : ''}</div>
       ${ui.view === 'preview' ? previewHtml(d) : `<div style="display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start;">${libraryHtml(d)}${pagesHtml(d)}</div>`}
     </div>`;
   OL.showOverlayModal(`<div style="width:100%;">${html}</div>`, { wide: true });
@@ -395,6 +411,7 @@ function render() {
 // ---- actions ------------------------------------------------------------------------------------------------
 function openFormBuilder(resId) {
   if (!OL.getResourceById(resId)) { toast('Open a form card first.'); return; }
+  if (typeof OL.ensureDefaultPersonBundle === 'function') { try { OL.ensureDefaultPersonBundle(); } catch (e) { console.warn('Default Person bundle not added:', e); } }
   ui.resId = resId; ui.view = 'build'; ui.pageId = null;
   render();
 }
@@ -403,6 +420,7 @@ function fbClose() {
   OL.closeModal();
   if (id && typeof OL.openResourceModal === 'function') OL.openResourceModal(id);
 }
+const fbGlobalOnly = (on) => { ui.globalOnly = !!on; render(); };
 const fbView = (v) => { ui.view = v === 'preview' ? 'preview' : 'build'; render(); };
 const fbSetPage = (id) => { ui.pageId = id; };
 function fbFilter(q) {
@@ -417,6 +435,32 @@ async function addTagsToPage(tag) {
     const page = activePage(d);
     adds.forEach((t) => { if (!allFields(d).some((f) => String(f.tagId) === String(t.id))) page.fields.push(fieldFromTag(t)); });
   });
+}
+// Asking the same tag again: First Name for the primary person and again for a spouse. Same tag, its own label.
+async function fbAddAgain(tagId) {
+  const tag = findTag(tagId); if (!tag) return;
+  await save((d) => { activePage(d).fields.push(fieldFromTag(tag)); });
+  render();
+}
+// A bundle that is already fully on the form: ask the whole set again under a new section heading (primary person, then spouse).
+async function fbAddBundleAgain(bundleId) {
+  const b = findTag(bundleId); if (!b) return;
+  const pool = allTags();
+  const kids = (b.childIds || []).map((id) => pool.find((x) => x && String(x.id) === String(id))).filter(Boolean);
+  if (!kids.length) return;
+  await save((d) => {
+    const page = activePage(d);
+    page.fields.push({ id: newId('hd'), kind: 'heading', label: `${b.name} (copy)`, help: '' });
+    kids.forEach((t) => page.fields.push(fieldFromTag(t)));
+  });
+  render();
+}
+async function fbDuplicate(fid) {
+  await save((d) => {
+    const hit = locate(d, fid); if (!hit || isHeading(hit.field)) return;
+    hit.page.fields.splice(hit.idx + 1, 0, { ...hit.field, id: newId('fld'), label: `${hit.field.label} (copy)`, options: [...(hit.field.options || [])] });
+  });
+  render();
 }
 async function fbAddHeading(pageId) {
   await save((d) => { const p = d.pages.find((x) => x.id === pageId); if (p) p.fields.push({ id: newId('hd'), kind: 'heading', label: 'New section', help: '' }); });
@@ -439,7 +483,7 @@ async function fbFieldProp(fid, prop, value) {
     const before = hit.field.label;
     if (isHeading(hit.field) && prop === 'required') return;
     hit.field[prop] = prop === 'required' ? !!value : String(value).slice(0, prop === 'help' ? 300 : 200);
-    if (prop === 'label' && !isHeading(hit.field)) repairLabel(res, hit.field.tagId, before, hit.field.label);
+    if (prop === 'label' && !isHeading(hit.field) && isPrimary(d, hit.field)) repairLabel(res, hit.field.tagId, before, hit.field.label);
   });
 }
 async function fbFieldType(fid, type) {
@@ -451,7 +495,7 @@ async function fbFieldType(fid, type) {
     const old = [...(hit.field.options || [])];
     hit.field.type = type;
     if (HAS_OPTIONS.has(type) && !(hit.field.options || []).length) hit.field.options = [...(findTag(hit.field.tagId)?.options || [])];
-    if (wasChoices && !HAS_OPTIONS.has(type)) lost = repairChoices(res, hit.field.tagId, old, []);
+    if (wasChoices && !HAS_OPTIONS.has(type) && isPrimary(d, hit.field)) lost = repairChoices(res, hit.field.tagId, old, []);
   });
   reportLost(lost, 'is no longer a choice on this question');
   render();
@@ -463,7 +507,7 @@ async function fbFieldOptions(fid, text) {
     const hit = locate(d, fid); if (!hit) return;
     const old = [...(hit.field.options || [])];
     hit.field.options = list;
-    lost = repairChoices(res, hit.field.tagId, old, list);
+    lost = isPrimary(d, hit.field) ? repairChoices(res, hit.field.tagId, old, list) : [];
   });
   reportLost(lost, 'is no longer a choice');
 }
@@ -500,8 +544,9 @@ async function fbRemoveField(fid) {
   await save((d, res) => {
     const hit = locate(d, fid); if (!hit) return;
     if (isHeading(hit.field)) { hit.page.fields.splice(hit.idx, 1); return; }
-    used = pathCount(res, hit.field.tagId);
     hit.page.fields.splice(hit.idx, 1);
+    if (asksOf(d, hit.field.tagId)) return;   // asked elsewhere on the form: the tag and its paths stay
+    used = pathCount(res, hit.field.tagId);
     const tagId = String(hit.field.tagId);
     // the tag leaves the card's steps too, as the Data Tags list's × does
     (res.steps || []).forEach((st) => { if (Array.isArray(st.datapoints)) st.datapoints = st.datapoints.filter((x) => String(x.id) !== tagId); });
@@ -552,9 +597,9 @@ function fbPrint() {
   let n = 0;
   const pages = d.pages.map((p, i) => `<section class="${i ? 'brk' : ''}"><h2>${esc(p.title || 'Untitled page')}</h2>${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}${p.fields.map((f) => (isHeading(f) ? `<div class="sec"><h3>${esc(f.label || 'Section')}</h3>${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}</div>` : printFieldHtml(f, ++n))).join('') || '<p class="note">No questions on this page.</p>'}</section>`).join('');
   let m = 0;
-  const rows = allFields(d).map((f) => {
+  const rows = questions(d).map((f) => {
     const tag = findTag(f.tagId); const el = usage[String(f.tagId)] || [];
-    return `<tr><td>${++m}</td><td>${esc(f.label)}</td><td>${esc(TYPES[f.type] || f.type)}${f.required ? ', required' : ''}</td><td>${esc(tag ? tag.name : 'Missing tag')}${tag && tag.key ? ` <code>${esc(tag.key)}</code>` : ''}</td><td>${esc(el.join(', ') || 'None yet')}</td></tr>`;
+    return `<tr><td>${++m}</td><td>${esc(f.label)}</td><td>${esc(TYPES[f.type] || f.type)}${f.required ? ', required' : ''}</td><td>${esc(tag ? tag.name : 'Missing tag')}${tag && tag.key ? ` <code>${esc(tag.key)}</code>` : ''}${isPrimary(d, f) ? '' : ' (repeat)'}</td><td>${esc(el.join(', ') || 'None yet')}</td></tr>`;
   }).join('');
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(res.name || 'Form')}</title><style>
     body{font:13px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;margin:0;padding:28px 36px;}
@@ -584,6 +629,6 @@ function fbPrint() {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   openFormBuilder, fbClose, fbView, fbSetPage, fbFilter, fbAddTag, fbNewTag, fbFieldProp, fbFieldType, fbFieldOptions,
-  fbShift, fbSaveToTag, fbAddHeading, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
+  fbShift, fbSaveToTag, fbAddHeading, fbAddAgain, fbAddBundleAgain, fbGlobalOnly, fbDuplicate, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
 });
 export { openFormBuilder };
