@@ -325,6 +325,17 @@ export function openDataDetailModal(id) {
                 ${OL.renderDataFlowMiniMap(id)}
             </div>
 
+            ${dp.isBundle ? '' : `
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">ANSWER TYPE &amp; CHOICES</label>
+                <div class="tiny muted" style="margin:4px 0 8px;">Used as the starting point whenever this tag is added to a form in the form builder.</div>
+                <select class="modal-input tiny" style="width:100%;margin-bottom:8px;" onchange="OL.setTagFieldType('${esc(dp.id)}', this.value)">
+                    ${[['', 'Automatic'], ['text', 'Short text'], ['textarea', 'Long text'], ['email', 'Email'], ['phone', 'Phone'], ['number', 'Number'], ['date', 'Date'], ['dropdown', 'Dropdown'], ['radio', 'Single choice'], ['checkbox', 'Multiple choice']].map(([v, l]) => `<option value="${v}" ${(dp.fieldType || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <textarea class="modal-input tiny" rows="4" style="width:100%;box-sizing:border-box;" placeholder="Answer choices, one per line (for dropdown, single choice or multiple choice)"
+                          onchange="OL.setTagOptions('${esc(dp.id)}', this.value)">${esc((dp.options || []).join('\n'))}</textarea>
+            </div>`}
+
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">PROJECT BACKLINKS</label>
                 <div class="dp-manager-list">
@@ -339,6 +350,27 @@ export function openDataDetailModal(id) {
         </div>
     `;
     openModal(html);
+}
+
+function findTagAnywhere(id) {
+    const client = getActiveClient();
+    const local = (client?.projectData?.localDatapoints || []).find(d => String(d.id) === String(id));
+    if (local) return { tag: local, local: true, client };
+    const master = (state.master.datapoints || []).find(d => String(d.id) === String(id));
+    return master ? { tag: master, local: false, client } : null;
+}
+export function setTagFieldType(id, type) {
+    const hit = findTagAnywhere(id); if (!hit) return;
+    if (type) hit.tag.fieldType = type; else delete hit.tag.fieldType;
+    if (hit.local && hit.client) markClientDirty(hit.client.id);
+    persist();
+}
+export function setTagOptions(id, text) {
+    const hit = findTagAnywhere(id); if (!hit) return;
+    hit.tag.options = [...new Set(String(text || '').split('\n').map(x => x.trim()).filter(Boolean))].slice(0, 100);
+    if (hit.tag.options.length && !hit.tag.fieldType) hit.tag.fieldType = 'dropdown';
+    if (hit.local && hit.client) markClientDirty(hit.client.id);
+    persist();
 }
 
 export function renderDataFlowMiniMap(dataId) {
@@ -552,6 +584,6 @@ Object.assign(window.OL, {
     executeDataImport, renderDataRow, renderBundleRow, openDataDetailModal,
     renderDataFlowMiniMap, addNewDatapoint, updateMasterDatapoint, dataPool,
     deleteMasterDatapointById, editBundle, toggleDpInBundle, removeStepDatapoint,
-    renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
+    setTagFieldType, setTagOptions, renderDataTagPills, traceDataLineage, handleFieldDragStart, handleBundleDragOver,
     handleBundleDragLeave, handleFieldDropOnBundle, removeFieldFromBundle
 });

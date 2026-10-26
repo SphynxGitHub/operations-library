@@ -45,6 +45,7 @@ const allTags = () => [...(getActiveClient()?.projectData?.localDatapoints || []
 const findTag = (id) => allTags().find((d) => d && String(d.id) === String(id));
 
 function inferType(tag) {
+  if (TYPES[tag.fieldType]) return tag.fieldType;
   const n = `${tag.name || ''} ${tag.key || ''}`.toLowerCase();
   if ((tag.options || []).length) return 'dropdown';
   if (/e-?mail/.test(n)) return 'email';
@@ -206,6 +207,7 @@ function fieldHtml(d, page, f, idx, usage) {
       </div>
       ${opts ? `<textarea class="modal-input tiny" rows="3" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="Answer choices, one per line"
                onchange="OL.fbFieldOptions('${esc(f.id)}',this.value)">${esc((f.options || []).join('\n'))}</textarea>` : ''}
+      ${opts ? `<div style="margin-top:4px;"><button class="btn tiny soft" title="Make these choices and this answer type the default whenever this data tag is used" onclick="OL.fbSaveToTag('${esc(f.id)}')">Save choices to the data tag</button></div>` : ''}
       <input type="text" class="modal-input tiny" style="width:100%;box-sizing:border-box;margin-top:8px;" value="${esc(f.help || '')}" placeholder="Help text shown under the question (optional)"
              onchange="OL.fbFieldProp('${esc(f.id)}','help',this.value)">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;">
@@ -346,6 +348,15 @@ async function fbFieldOptions(fid, text) {
   const list = [...new Set(String(text || '').split('\n').map((s) => s.trim()).filter(Boolean))].slice(0, 100);
   await save((d) => { const hit = locate(d, fid); if (hit) hit.field.options = list; });
 }
+async function fbSaveToTag(fid) {
+  await save((d) => {
+    const hit = locate(d, fid); const tag = hit && findTag(hit.field.tagId);
+    if (!tag) return;
+    tag.options = [...(hit.field.options || [])];
+    tag.fieldType = hit.field.type;
+  });
+  toast('Saved. New forms that use this tag will start with these choices.');
+}
 async function fbShift(fid, dir) {
   await save((d) => {
     const hit = locate(d, fid); if (!hit) return;
@@ -449,6 +460,6 @@ function fbPrint() {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   openFormBuilder, fbClose, fbView, fbSetPage, fbFilter, fbAddTag, fbNewTag, fbFieldProp, fbFieldType, fbFieldOptions,
-  fbShift, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
+  fbShift, fbSaveToTag, fbMoveField, fbRemoveField, fbAddPage, fbPageProp, fbShiftPage, fbDelPage, fbPrint
 });
 export { openFormBuilder };
