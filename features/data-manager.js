@@ -60,14 +60,15 @@ export function renderGlobalDataManager() {
             </div>
         </div>
 
-        <div class="data-manager-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+        <div class="data-manager-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; height: calc(100vh - 230px); min-height: 420px;">
             
-            <div class="data-column">
+            <div class="data-column" style="display:flex; flex-direction:column; min-height:0;">
                 <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
                     <i data-lucide="list" style="width: 12px; height: 12px; opacity: 0.5;"></i>
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
                 </div>
-                <div id="master-fields-list">
+                <input type="text" class="modal-input tiny" placeholder="Search fields..." style="margin-bottom:10px;" oninput="const q=this.value.toLowerCase().trim(); document.querySelectorAll('#master-fields-list .data-field-card').forEach(el=>{el.style.display=(!q||el.textContent.toLowerCase().includes(q))?'':'none';});">
+                <div id="master-fields-list" style="flex:1; min-height:0; overflow-y:auto; padding-right:8px;">
                     ${datapoints.map(dp => {
                         const parentBundles = bundles.filter(b => (b.childIds || []).includes(dp.id));
                         const protectedFields = [
@@ -123,12 +124,12 @@ export function renderGlobalDataManager() {
                 </div>
             </div>
 
-            <div class="data-column">
+            <div class="data-column" style="display:flex; flex-direction:column; min-height:0;">
                 <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
                     <i data-lucide="layers" style="width: 12px; height: 12px; opacity: 0.5;"></i>
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">System Bundles</b>
                 </div>
-                <div id="bundles-list">
+                <div id="bundles-list" style="flex:1; min-height:0; overflow-y:auto; padding-right:8px;">
                     ${bundles.map(bn => `
                         <div class="bundle-drop-zone" 
                              id="bundle-zone-${bn.id}"

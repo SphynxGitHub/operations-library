@@ -1007,8 +1007,9 @@ export function openResourceModal(targetId, draftObj = null) {
             <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
                 <i data-lucide="tags" style="width:14px;height:14px;"></i> DATA TAGS
                 <span class="pill tiny soft">${formTags.length}</span>
+                ${/\b(forms?|questionnaires?)\b/.test(resType) ? `<span style="flex:1;"></span><button type="button" class="btn tiny primary" onclick="OL.openFormBuilder('${esc(res.id)}')"><i data-lucide="file-text" style="width:11px;height:11px;"></i> Form builder</button>` : ''}
             </label>
-            <div class="tiny muted" style="margin:4px 0 8px;">${/\b(forms?|questionnaires?)\b/.test(resType) ? 'The fields this form collects' : 'The data this resource uses or collects'}${(res.formFields || []).length ? `, as ${esc(res.source || 'the service')} reports them (refreshed on each pull)` : ''}.</div>
+            <div class="tiny muted" style="margin:4px 0 8px;">${/\b(forms?|questionnaires?)\b/.test(resType) ? 'The fields this form collects' : 'The data this resource uses or collects'}${(res.formFields || []).length ? (res.source ? `, as ${esc(res.source)} reports them (refreshed on each pull)` : ', as set in the form builder') : ''}.</div>
             <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
                 ${(() => {
                     const fields = res.formFields || [];
