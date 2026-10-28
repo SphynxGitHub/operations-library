@@ -2765,6 +2765,33 @@ export function copyToClipboard(text, btn) {
     });
 };
 
+// Edit history only needs to show WHAT changed, not keep full copies of long values. Storing whole email bodies
+// here made a 39 KB template grow to 390 KB and pushed whole projects past what one save request can carry.
+const HISTORY_VALUE_MAX = 200;
+function clipHistoryValue(v) {
+    if (typeof v !== 'string') return v;
+    return v.length > HISTORY_VALUE_MAX ? v.slice(0, HISTORY_VALUE_MAX) + '\u2026 (shortened)' : v;
+}
+
+// One-time cleanup for history entries saved before the cap existed. Run from the console: OL.trimAllEditHistory()
+export function trimAllEditHistory() {
+    let shrunk = 0;
+    Object.entries(state.clients || {}).forEach(([clientId, client]) => {
+        let touched = false;
+        const lists = [client?.projectData?.localResources, client?.projectData?.resources].filter(Array.isArray);
+        lists.forEach((list) => list.forEach((res) => {
+            (res.editHistory || []).forEach((e) => {
+                const o = clipHistoryValue(e.oldVal), n = clipHistoryValue(e.newVal);
+                if (o !== e.oldVal || n !== e.newVal) { e.oldVal = o; e.newVal = n; touched = true; }
+            });
+        }));
+        if (touched) { shrunk++; OL.markClientDirty?.(clientId); }
+    });
+    if (shrunk) persist();
+    console.log(`Trimmed edit history in ${shrunk} project(s).`);
+    return shrunk;
+}
+
 export function logResourceEdit(resId, field, oldVal, newVal) {
     const data = OL.getCurrentProjectData();
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
@@ -2775,8 +2802,8 @@ export function logResourceEdit(resId, field, oldVal, newVal) {
         id: 'eh-' + Date.now(),
         user,
         field,
-        oldVal: oldVal ?? null,
-        newVal: newVal ?? null,
+        oldVal: clipHistoryValue(oldVal) ?? null,
+        newVal: clipHistoryValue(newVal) ?? null,
         ts: Date.now()
     });
     // Keep last 50 entries only
@@ -3303,7 +3330,7 @@ Object.assign(window.OL, {
     addFileToContainer, removeFileFromContainer, simulateUpload,
     addResourceComment, wrapCommentSelection, renderResourceMiniMaps, goToResourceInMap,
     navigateBack, trackNav, clearNavHistory, filterSignatureSearch,
-    linkSignature, previewEmailTemplate, copyToClipboard, logResourceEdit,
+    linkSignature, previewEmailTemplate, copyToClipboard, logResourceEdit, trimAllEditHistory,
     handleResourceSave, renderEditHistory, addRegistryType,
     updateResourcePricingData, renameResourceType, pushToMaster,
     filterMasterResourceImport, importFromMaster, executeResourceImport,
