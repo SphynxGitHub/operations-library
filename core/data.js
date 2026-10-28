@@ -157,6 +157,28 @@ export function persist() {
     return saved;
 }
 
+// Retry a failed save with a growing delay (3s, 6s, 12s ... capped at 30s). persistNow() picks up every
+// project still in dirtyClientIds, so the retry sends exactly what failed.
+function scheduleSaveRetry() {
+    if (window.saveTimeout || window._persistRetryTimer) return;
+    const attempt = (window._persistRetryAttempt = (window._persistRetryAttempt || 0) + 1);
+    const delay = Math.min(30000, 3000 * Math.pow(2, attempt - 1));
+    window._persistRetryTimer = setTimeout(() => {
+        window._persistRetryTimer = null;
+        persistNow();
+    }, delay);
+}
+
+// Warn before closing or refreshing the tab while edits have not reached the database yet.
+if (typeof window !== 'undefined' && !window._olUnsavedGuard) {
+    window._olUnsavedGuard = true;
+    window.addEventListener('beforeunload', (e) => {
+        const unsaved = window.saveTimeout || window._persistRetryTimer || state.persistInFlight ||
+            (state.dirtyClientIds && state.dirtyClientIds.size > 0);
+        if (unsaved) { e.preventDefault(); e.returnValue = ''; return ''; }
+    });
+}
+
 function persistNow() {
     // NOTE: window.IS_GUEST is set to true for any non-admin session —
     // including a real logged-in partner/client and the legacy
@@ -204,6 +226,7 @@ function persistNow() {
             // The save below awaits several network calls before it snapshots the project. Until it finishes, live
             // refresh must not swap an older database copy over what is in memory (that undid deleted steps).
             state.persistInFlight = true;
+            let claimedIds = new Set();
             try {
             console.log("☁️ Background Sync Starting...");
 
@@ -275,6 +298,7 @@ function persistNow() {
             let rulesChangedSomething = false;
             const idsToSave = new Set(state.dirtyClientIds || []);
             if (state.activeClientId) idsToSave.add(state.activeClientId);
+            claimedIds = new Set(idsToSave);
             state.dirtyClientIds = new Set(); // claimed for this cycle; re-added below on failure
 
             for (const activeId of idsToSave) {
@@ -397,10 +421,23 @@ function persistNow() {
             }
 
             window.lastLocalSave = Date.now();
+            // The error toast promises "Will retry automatically", but nothing used to schedule that retry: failed
+            // projects stayed marked dirty and waited for the NEXT edit. Retry on our own with a growing delay.
+            if ((state.dirtyClientIds && state.dirtyClientIds.size > 0) || masterErr) {
+                scheduleSaveRetry();
+            } else {
+                window._persistRetryAttempt = 0;
+                clearTimeout(window._persistRetryTimer);
+                window._persistRetryTimer = null;
+            }
             console.log("✅ Background Sync Complete.");
             if (rulesChangedSomething) { try { window.OL?.scheduleViewRefresh?.(100); } catch (e) { /* never block a save */ } }
         } catch (error) {
             console.error("💀 Persistence Error:", error);
+            // Put the projects this cycle claimed back so they are not forgotten, and try again.
+            if (!state.dirtyClientIds) state.dirtyClientIds = new Set();
+            claimedIds.forEach((id) => state.dirtyClientIds.add(id));
+            scheduleSaveRetry();
             showSyncErrorToast(`Save failed unexpectedly (${error?.message || error}). Check your connection and try again.`);
             } finally {
                 state.persistInFlight = false;
