@@ -2634,13 +2634,35 @@ export function _fvRenderSteps(resources) {
       // Compute x positions for each resource
       const resLayouts = new Map();
       const resBaseX   = new Map();
+      // Room between a process's side-by-side columns. A line that runs sideways carrying a condition ("Contact Not Found")
+      // needs its tag to fit in the gap, or the tag lands on top of the next card; so such a process gets a wider gap.
+      const resGap = new Map();
+      const gapFor = (res, layout) => {
+        let need = COL_GAP;
+        (res.steps || []).forEach((st) => _fvGetEffectiveOut(st, res).forEach((l) => {
+          if (!l.targetId || l._implicit) return;
+          const rule = String(l.rule || '').trim();
+          if (!rule) return;
+          const k = OL._refSplitIdx(l.targetId);
+          if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
+          const from = layout[st.id], to = layout[l.targetId.substring(k + 1)];
+          if (!from || !to || from.colOffset === to.colOffset) return;
+          const types = l.types || [l.type || 'next'];
+          const marks = 1 + (types.includes('loop') || l.type === 'loop' ? 1 : 0) + (types.includes('delay') || l.type === 'delay' ? 1 : 0);
+          const labelW = marks * 17 + 7 + 4 + Math.min(34, rule.length) * 5.8 + 14;
+          need = Math.max(need, Math.ceil(labelW + 28));
+        }));
+        return Math.min(need, 300);
+      };
       let cumX = PAD_X;
       wfRes.forEach(r => {
         const rLayout = OL._fvLayoutResource(r);
         resLayouts.set(r, rLayout);
         resBaseX.set(r, cumX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
-        cumX += (1 + maxOff) * (CARD_W + COL_GAP);
+        const g = gapFor(r, rLayout);
+        resGap.set(r, g);
+        cumX += maxOff * (CARD_W + g) + CARD_W + COL_GAP;
       });
       const wfWidth = Math.max(cumX - PAD_X - COL_GAP + 28, 60);
       const wfRight = PAD_X + wfWidth;
@@ -2691,7 +2713,7 @@ export function _fvRenderSteps(resources) {
         hdrEl.dataset.resId = res.id;
         const _lay = resLayouts.get(res) || {};
         const _maxOff = Math.max(0, ...Object.values(_lay).map(l => l.colOffset));
-        const headW = Math.max(CARD_W, (1 + _maxOff) * (CARD_W + COL_GAP) - COL_GAP);
+        const headW = Math.max(CARD_W, CARD_W + _maxOff * (CARD_W + (resGap.get(res) || COL_GAP)));
         hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${wfContentTop + 2}px;
           width:${headW}px;z-index:6;`;
         hdrEl.innerHTML = `
@@ -2736,7 +2758,7 @@ export function _fvRenderSteps(resources) {
             const colX   = resBaseX.get(res);
             steps.forEach((step, idx) => {
               const li = layout[step.id] || { colOffset: 0, row: idx };
-              const x  = colX + li.colOffset * (CARD_W + COL_GAP);
+              const x  = colX + li.colOffset * (CARD_W + (resGap.get(res) || COL_GAP));
               const y  = estY + idx * (EST_STEP + STEP_GAP);
               step.coords = { x, y };
 
