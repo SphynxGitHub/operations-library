@@ -755,6 +755,10 @@ if (!OL._fv) OL._fv = {
 // Arrangement of the Steps view: 'auto' (fit the window), 'wide' (side by side) or 'tall' (one column)
 // 'auto' (fit the window) | 'wide' (no limit) | 'tall' (one column) | a number: the most columns allowed across a row
 const fvShapeFrom = (v) => (['auto', 'wide', 'tall'].includes(v) ? v : (Number(v) >= 1 ? Math.floor(Number(v)) : 'auto'));
+// Width the Steps view lays itself out against: the whole visible screen, not the map area. The map area gets narrower
+// whenever the inspector or a side panel is open, and every edit redraws the map, so measuring it made the diagram
+// shrink to one column the moment a step was selected. (Printing passes its own exact column count instead.)
+const fvLayoutWidth = () => window.innerWidth / (OL._fv.zoom || 1);
 if (!OL._fv.flowShape) OL._fv.flowShape = fvShapeFrom(sessionStorage.getItem('fv_flow_shape') || 'auto');
 // When the window is resized in Auto, re-flow the Steps view if the number of columns that fit has changed
 if (!OL._fv._resizeBound) {
@@ -766,7 +770,7 @@ if (!OL._fv._resizeBound) {
             if (OL._fv.layout !== 'steps' || OL._fv.flowShape === 'wide' || OL._fv.flowShape === 'tall' || OL._fv._colsOverride) return;
             if (!document.getElementById('fv-content')) return;
             const wrap = document.getElementById('fv-canvas-wrap');
-            const w = ((wrap && wrap.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
+            const w = fvLayoutWidth();
             const fit = chooseCols('auto', w);
             const want = typeof OL._fv.flowShape === 'number' ? Math.min(OL._fv.flowShape, fit) : fit;
             if (want !== OL._fv._renderedCols) OL.renderVisualizer();
@@ -2386,7 +2390,7 @@ export function _fvRenderSteps(resources) {
   // -- Responsive arrangement: how many card columns fit the window (or the paper, when printing) -----
   {
     const wrapEl = document.getElementById('fv-canvas-wrap');
-    const availW = ((wrapEl && wrapEl.clientWidth) || window.innerWidth) / (OL._fv.zoom || 1);
+    const availW = fvLayoutWidth();
     const colBox = { cardW: CARD_W, colGap: COL_GAP, padX: PAD_X };
     // A number is a cap on columns across a row, never more than fit the window (printing passes its own exact count)
     const maxCols = OL._fv._colsOverride ? chooseCols(OL._fv._colsOverride, availW, colBox)
@@ -3189,6 +3193,7 @@ export function _fvDrawStepConnections(resources) {
         const dx = tx_center - fx_center;
         const dy = ty_center - fy_center;
         const isCrossResource = String(tResId) !== String(sourceRes.id);
+        const isSelfLink = !isCrossResource && String(tStepId) === String(sourceStep.id);
 
         let fx, fy, tx, ty, isVert;
         if (isCrossResource) {
@@ -3204,6 +3209,12 @@ export function _fvDrawStepConnections(resources) {
             tx = tx_center; ty = tRect.top    - cRect.top;
             isVert = true;
           }
+        } else if (isSelfLink) {
+          // A step that loops back to itself ("restart this step"): a small bracket on the card's right edge, instead of a
+          // line from its top to its bottom that ran through the card and sat on top of the line to the next step.
+          fx = fRect.right - cRect.left; fy = fRect.top - cRect.top + fRect.height * 0.35;
+          tx = fx;                       ty = fRect.top - cRect.top + fRect.height * 0.65;
+          isVert = false;
         } else if (Math.abs(dy) >= Math.abs(dx)) {
           // Same resource, primarily vertical
           if (dy > 0) {
@@ -3227,10 +3238,10 @@ export function _fvDrawStepConnections(resources) {
         }
 
         const tension = Math.max(50, Math.abs(isVert ? dy : dx) * 0.4);
-        const cp1x = isVert ? fx : fx + (dx > 0 ?  tension : -tension);
-        const cp1y = isVert ? fy + (dy > 0 ?  tension : -tension) : fy;
-        const cp2x = isVert ? tx : tx + (dx > 0 ? -tension :  tension);
-        const cp2y = isVert ? ty + (dy > 0 ?  -tension :  tension) : ty;
+        const cp1x = isSelfLink ? fx + 56 : isVert ? fx : fx + (dx > 0 ?  tension : -tension);
+        const cp1y = isVert && !isSelfLink ? fy + (dy > 0 ?  tension : -tension) : fy;
+        const cp2x = isSelfLink ? tx + 56 : isVert ? tx : tx + (dx > 0 ? -tension :  tension);
+        const cp2y = isVert && !isSelfLink ? ty + (dy > 0 ?  -tension :  tension) : ty;
 
         let d = `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
 
