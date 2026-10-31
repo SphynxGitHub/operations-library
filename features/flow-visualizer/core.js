@@ -2362,7 +2362,7 @@ export function _fvRenderSteps(resources) {
   const PRINTING  = !!(OL._fv && OL._fv._printing);
   const SHOW_STAGE_LBL = !PRINTING || stageGroups.filter(g => g.stage).length > 1;
   const ZONE_HDR  = SHOW_STAGE_LBL ? 22 : 0;   // stage label height
-  const WF_PAD    = 14;   // padding inside workflow sub-zone
+  const WF_PAD    = 22;   // padding inside workflow sub-zone
   const WF_HDR    = 26;   // workflow sub-zone label height
   // resource column header height: the name, then (for a draft) its Open chip, then the callout chips
   const _hasCallouts = typeof OL.fvCalloutsFor === 'function' && (resources || []).some((r) => { try { return OL.fvCalloutsFor(r).some((c) => c.source !== 'logic'); } catch (e) { return false; } });
@@ -2590,7 +2590,7 @@ export function _fvRenderSteps(resources) {
 
     if (stage) {
       stageBgEl = document.createElement('div');
-      stageBgEl.style.cssText = `position:absolute;left:${PAD_X - 16}px;top:${stageTop}px;
+      stageBgEl.style.cssText = `position:absolute;left:${PAD_X - 32}px;top:${stageTop}px;
         width:200px;height:100px;border-radius:14px;
         background:rgba(255,255,255,0.016);border:1px solid rgba(255,255,255,0.05);
         pointer-events:none;`;
@@ -2647,8 +2647,8 @@ export function _fvRenderSteps(resources) {
 
       // Workflow sub-zone background
       const wfBgEl = document.createElement('div');
-      wfBgEl.style.cssText = `position:absolute;left:${PAD_X - 10}px;top:${wfY}px;
-        width:${wfWidth + 4}px;height:100px;border-radius:10px;
+      wfBgEl.style.cssText = `position:absolute;left:${PAD_X - 24}px;top:${wfY}px;
+        width:${wfWidth + 20}px;height:100px;border-radius:12px;
         background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.038);
         pointer-events:none;`;
       frag.appendChild(wfBgEl);
@@ -3042,7 +3042,7 @@ export function _fvRenderSteps(resources) {
         stageBgEl.style.height = actualStageH + 'px';
         // Width: widest workflow
         const maxWfW = Math.max(...wfMetaList.map(w => w.wfWidth), 100);
-        stageBgEl.style.width = (maxWfW + 20) + 'px';
+        stageBgEl.style.width = (maxWfW + 52) + 'px';
       }
       curStageY += actualStageH + STAGE_GAP;
     });
@@ -3331,9 +3331,21 @@ export function _fvDrawStepConnections(resources) {
           const vertLeft = !!(rp && rp.length === 4 && rp[1][0] < rp[0][0]);
           const runLen = vertLeft ? Math.abs(rp[2][1] - rp[1][1]) : 0;
           const maxText = vertLeft ? Math.min(34, Math.floor((runLen - 30 - w - 4 - 14) / 5.8)) : 34;
-          const ruleShown = !hasRule || maxText < 5 ? '' : (ruleFull.length > maxText ? ruleFull.slice(0, maxText - 1) + '\u2026' : ruleFull);
-          const ruleW = ruleShown ? ruleShown.length * 5.8 + 14 : 0;
-          const labelW = w + (ruleShown ? 4 + ruleW : 0), labelH = 20;
+          // On paper there is no hover, so the whole condition is printed, wrapped onto as many lines as it needs. On screen it is
+          // cut short and the pill's tooltip has the rest. (A label standing along a loop up the margin stays cut short.)
+          const wrapForPrint = !!(OL._fv && OL._fv._printing) && !vertLeft && hasRule;
+          let ruleLines = null;
+          if (wrapForPrint) {
+            ruleLines = []; let cur = '';
+            ruleFull.split(/\s+/).forEach((word) => {
+              if (cur && (cur + ' ' + word).length > 28) { ruleLines.push(cur); cur = word; } else cur = cur ? cur + ' ' + word : word;
+            });
+            if (cur) ruleLines.push(cur);
+          }
+          const ruleShown = wrapForPrint ? ruleFull : (!hasRule || maxText < 5 ? '' : (ruleFull.length > maxText ? ruleFull.slice(0, maxText - 1) + '\u2026' : ruleFull));
+          const ruleW = ruleShown ? (ruleLines ? Math.max(...ruleLines.map(l => l.length)) : ruleShown.length) * 5.8 + 14 : 0;
+          const ruleH = ruleLines ? Math.max(16, ruleLines.length * 11.5 + 6) : 16;
+          const labelW = w + (ruleShown ? 4 + ruleW : 0), labelH = Math.max(20, ruleH);
 
           // Where to put it: a point on the line (the middle first, then further along either way), centred on the line,
           // else beside it on the right or the left, taking the first spot that touches no card.
@@ -3402,14 +3414,20 @@ export function _fvDrawStepConnections(resources) {
             const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             cg.style.cursor = 'help';
             const cp = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            cp.setAttribute('x', lx); cp.setAttribute('y', ly - 8); cp.setAttribute('width', lw); cp.setAttribute('height', 16); cp.setAttribute('rx', 8);
+            cp.setAttribute('x', lx); cp.setAttribute('y', ly - ruleH / 2); cp.setAttribute('width', lw); cp.setAttribute('height', ruleH); cp.setAttribute('rx', Math.min(8, ruleH / 2));
             cp.style.fill = 'var(--panel)'; cp.setAttribute('stroke', color); cp.setAttribute('stroke-width', '1');
             cg.appendChild(cp);
             const ct = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            ct.setAttribute('x', lx + lw / 2); ct.setAttribute('y', ly + 3.5); ct.setAttribute('text-anchor', 'middle');
+            ct.setAttribute('x', lx + lw / 2); ct.setAttribute('y', ruleLines ? ly - (ruleLines.length - 1) * 5.75 + 3.5 : ly + 3.5); ct.setAttribute('text-anchor', 'middle');
             ct.setAttribute('font-size', '9.5'); ct.setAttribute('font-weight', '600'); ct.setAttribute('fill', color);
             ct.setAttribute('font-family', 'DM Sans, sans-serif'); ct.setAttribute('pointer-events', 'none');
-            ct.textContent = shown;
+            if (ruleLines) {
+              ruleLines.forEach((line, n) => {
+                const ts = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                ts.setAttribute('x', lx + lw / 2); ts.setAttribute('dy', n ? '11.5' : '0'); ts.textContent = line;
+                ct.appendChild(ts);
+              });
+            } else ct.textContent = shown;
             cg.appendChild(ct);
             const ctt = document.createElementNS('http://www.w3.org/2000/svg', 'title'); ctt.textContent = full; cg.appendChild(ctt);
             (rot || frag).appendChild(cg);
