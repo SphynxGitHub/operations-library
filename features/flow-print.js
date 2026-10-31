@@ -85,14 +85,36 @@ const textStyle = (t) => (t ? Object.entries({ 'font-family': t.fontFamily, 'fon
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const isBackground = (el) => el.style && el.style.pointerEvents === 'none' && /border-radius/.test(el.style.cssText || '') && !el.classList.contains('fv-step-card');
 
-// Boxes of everything in the diagram that must not be cut: cards, labels, headers (not the big zone backgrounds)
-export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight) {
+// Boxes of everything in the diagram that must not be cut: cards (with anything that sticks out of them: flags, jump rows, callouts),
+// labels, headers (not the big zone backgrounds), and the logic tags drawn on the lines (they live in the SVG layer, svgEl).
+export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight, svgEl = null) {
   const out = [];
+  const canMeasure = typeof contentEl.getBoundingClientRect === 'function';
+  const cRect = canMeasure ? contentEl.getBoundingClientRect() : null;
+  // the screen may be zoomed: bring measured boxes back to the diagram's own pixels
+  const k = cRect && contentEl.offsetHeight ? (cRect.height / contentEl.offsetHeight) || 1 : 1;
   Array.from(contentEl.children).forEach((el) => {
     if (isBackground(el)) return;
     const top = num(el.style.top); const h = heightOf(el);
-    if (h > 0) out.push({ top, bottom: top + h });
+    let t = top; let b = top + h;
+    if (canMeasure && typeof el.querySelectorAll === 'function' && h > 0) {
+      el.querySelectorAll('*').forEach((d) => {
+        const r = d.getBoundingClientRect();
+        if (!r.width && !r.height) return;
+        t = Math.min(t, (r.top - cRect.top) / k); b = Math.max(b, (r.bottom - cRect.top) / k);
+      });
+    }
+    if (h > 0) out.push({ top: t, bottom: b });
   });
+  // logic tags: the icon pill and the condition pill (and any wrapped lines of it), measured where they really are
+  if (svgEl && cRect && typeof svgEl.querySelectorAll === 'function') {
+    svgEl.querySelectorAll('g').forEach((g) => {
+      if (!g.querySelector(':scope > rect')) return;            // a pill is a group with its own rectangle (a rotated wrapper has none)
+      const r = g.getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      out.push({ top: (r.top - cRect.top) / k - 2, bottom: (r.bottom - cRect.top) / k + 2 });
+    });
+  }
   return out;
 }
 
@@ -324,7 +346,7 @@ export async function printFlowDiagram(deps, opts = {}) {
     const width = num(contentEl.style.width) || contentEl.scrollWidth;
     const height = num(contentEl.style.height) || contentEl.scrollHeight;
     const scale = fitScale(box.w, width, 1);
-    const pages = planPageBreaks(collectIntervals(contentEl), height, (box.h - PRINT_SLACK) / scale);
+    const pages = planPageBreaks(collectIntervals(contentEl, undefined, svgEl), height, (box.h - PRINT_SLACK) / scale);
     const client = opts.title || 'Flow map';
     const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     // questions, action items and notes: numbered flags on the cards and the list at the end
