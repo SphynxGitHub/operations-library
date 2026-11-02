@@ -141,7 +141,57 @@ const noteHandler = async (s) => {
 // "Link" means a note on the target for a meeting, and a saved excerpt link for an email.
 const linkHandler = (s) => (s.payload?.sourceKind === 'gmail_message' ? emailLink(s) : noteHandler(s));
 const registerNotes = () => ['change', 'approval', 'new_request', 'note', 'holding_reply', 'item_received']
-    .forEach((t) => OL.registerSuggestionHandler?.(t, { add_note: noteHandler, link: linkHandler, change_target: emailPick }));
+    .forEach((t) => OL.registerSuggestionHandler?.(t, { add_note: noteHandler, link: linkHandler, change_target: (s) => (s.payload?.sourceKind === 'gmail_message' ? emailPick(s) : meetingPick(s)) }));
+
+// "Choose target…" on a meeting card: a small list of this project's open requests and resources appears inside the card.
+// Picking one re-draws the card against that target. Nothing is saved until one of the card's own actions is chosen.
+const targetRow = (t) => ['Matched to', t ? `<b>${esc(t.label)}</b> <span class="muted">(${esc(t.type)})</span>` : '<span class="muted">nothing yet</span>'];
+function meetingPick(s) {
+    const p = s.payload || {}, card = document.getElementById('sg-card-' + s.id);
+    if (!card) return false;
+    const open = card.querySelector('[data-pick]');
+    if (open) { open.remove(); return false; }
+    const scope = s.type === 'scope_narrowed';   // a scope card only makes sense against a request
+    const items = (OL._openItemsForClassification?.(p.clientId) || []).filter((i) => !scope || i.type === 'request');
+    const group = (type, label) => {
+        const list = items.filter((i) => i.type === type);
+        return list.length ? `<optgroup label="${label}">${list.map((i) => `<option value="${esc(i.type)}:${esc(i.id)}"${p.target && p.target.id === i.id ? ' selected' : ''}>${esc(i.label)}</option>`).join('')}</optgroup>` : '';
+    };
+    const box = document.createElement('div');
+    box.setAttribute('data-pick', '1');
+    box.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+    box.innerHTML = `<select class="modal-input tiny" style="flex:1;min-width:180px;"><option value="">${scope ? 'No request (the project)' : 'Nothing (the project)'}</option>${group('request', 'Requests')}${group('resource', 'Resources')}</select>
+        <button type="button" class="btn tiny primary" data-use>Use this</button><button type="button" class="btn tiny soft" data-cancel>Cancel</button>`;
+    card.appendChild(box);
+    box.querySelector('[data-cancel]').onclick = () => box.remove();
+    box.querySelector('[data-use]').onclick = () => {
+        const v = box.querySelector('select').value;
+        const t = v ? items.find((i) => `${i.type}:${i.id}` === v) : null;
+        retarget(s, t ? { type: t.type, id: t.id, label: t.label } : null);
+    };
+    return false;   // keep the card
+}
+
+function retarget(s, t) {
+    const p = s.payload;
+    p.target = t;
+    s.rows = (s.rows || []).filter((r) => r[0] !== 'Matched to' && !(r[0] === 'Note' && /already in a round/.test(String(r[1]))));
+    if (s.type === 'scope_narrowed') {
+        const item = t && t.type === 'request' ? findLineItem(state.clients?.[p.clientId], t.id) : null;
+        s.actions = scopeActions(p, item);
+        s.rows.splice(1, 0, targetRow(t));
+        if (t && item && !canDefer(item)) s.rows.push(['Note', '<span class="muted">That request is already in a round or set to Do Later, so it is not offered as Do Later here.</span>']);
+    } else {
+        s.rows.unshift(targetRow(t));
+        s.actions = (s.actions || []).filter((a) => a.key !== 'link');
+        if (t) s.actions.unshift({ key: 'link', label: `Link to ${t.label}`, icon: 'link', primary: true });
+        const note = s.actions.find((a) => a.key === 'add_note');
+        if (note) note.label = t ? 'Add as note' : 'Add as note on the project';
+    }
+    const card = document.getElementById('sg-card-' + s.id);
+    if (card) card.outerHTML = OL.suggestionCardHtml(s);
+    refreshIcons();
+}
 
 function cardFor(base) {
     const { target, type, quote, confidence, payload } = base;
@@ -149,7 +199,7 @@ function cardFor(base) {
     if (target) actions.push({ key: 'link', label: `Link to ${target.label}`, icon: 'link', primary: true });
     actions.push({ key: 'add_note', label: target ? 'Add as note' : 'Add as note on the project', icon: 'sticky-note' });
     if (base.extraActions) actions.push(...base.extraActions);
-    if (!target && base.canChoose) actions.push({ key: 'change_target', label: 'Choose target…', icon: 'target' });
+    if ((!target || base.alwaysChoose) && base.canChoose) actions.push({ key: 'change_target', label: 'Choose target…', icon: 'target' });
     actions.push({ key: 'dismiss', label: 'Dismiss', icon: 'x' });
     return {
         id: 'ai_' + uid().slice(3), logId: base.logId, n: base.n, type, quote, confidence,
@@ -219,7 +269,7 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
         const type = (e.type === 'new_request' && t) || e.type === 'scope_narrowed' ? 'change' : (['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : e.type);
         if (!t && (type === 'new_request' || type === 'change')) { unmatched.push(e); }
         const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type, quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
-        cards.push(cardFor({ n: i + 1, logId, type, quote: e.text, confidence: m.confidence || 'low', target: t ? { type: t.type, id: t.id, label: t.label } : null,
+        cards.push(cardFor({ n: i + 1, logId, type, quote: e.text, confidence: m.confidence || 'low', target: t ? { type: t.type, id: t.id, label: t.label } : null, canChoose: true, alwaysChoose: true,
             rows: m.restates ? [['Note', 'Restates something already recorded, so adding it as a note is the default.']] : [],
             payload: { clientId: client.id, text: `${e.text} (meeting ${String(evt.start || '').slice(0, 10)})`, sourceKind: 'calendar_event', sourceId: evt.id } }));
     }
@@ -260,13 +310,21 @@ function findLineItem(client, id) {
 }
 const canDefer = (item) => !!item && (item.status === 'Backlog' ? String(item.backlogDecision || 'Do Now') !== 'Do Later' : item.status === 'Do Now');
 
+// The buttons on a scope card, which depend on the target and on what was already done.
+function scopeActions(p, item) {
+    const t = p.target, done = p.done || {};
+    const actions = [{ key: 'scope_create', label: p.title ? `Create request: ${p.title}` : 'Create a request for what they want now', icon: 'plus-circle', primary: true }];
+    if (item && canDefer(item)) actions.push({ key: 'scope_defer', label: `Set "${t.label}" to Do Later`, icon: 'clock' });
+    actions.push({ key: 'scope_note', label: t ? 'Add note on that request' : 'Add note on the project', icon: 'sticky-note' });
+    actions.push({ key: 'change_target', label: 'Choose target…', icon: 'target' });
+    actions.push({ key: 'dismiss', label: 'Dismiss', icon: 'x' });
+    return actions.filter((a) => !done[a.key]);
+}
+
 function scopeCard({ n, logId, quote, deferred, title, confidence, target, client, evt }) {
     const when = String(evt.start || '').slice(0, 10);
     const item = target && target.type === 'request' ? findLineItem(client, target.id) : null;
-    const actions = [{ key: 'scope_create', label: title ? `Create request: ${title}` : 'Create a request for what they want now', icon: 'plus-circle', primary: true }];
-    if (item && canDefer(item)) actions.push({ key: 'scope_defer', label: `Set "${target.label}" to Do Later`, icon: 'clock' });
-    actions.push({ key: 'scope_note', label: target ? 'Add note on that request' : 'Add note on the project', icon: 'sticky-note' });
-    actions.push({ key: 'dismiss', label: 'Dismiss', icon: 'x' });
+    const actions = scopeActions({ title, target, done: {} }, item);
     const rows = [['Deferred', `<i>"${esc(deferred)}"</i>`], ['Matched to', target ? `<b>${esc(target.label)}</b> <span class="muted">(${esc(target.type)})</span>` : '<span class="muted">nothing yet</span>']];
     if (target && item && !canDefer(item)) rows.push(['Note', '<span class="muted">That request is already in a round or set to Do Later, so it is not offered as Do Later here.</span>']);
     return { id: 'ai_' + uid().slice(3), logId, n, type: 'scope_narrowed', quote, confidence, rows, actions,
@@ -325,6 +383,7 @@ function registerScope() {
             }, p.clientId);
             return scopeDone(s, 'scope_defer', 'set to Do Later');
         },
+        change_target: (s) => meetingPick(s),
         scope_note: async (s) => {
             const p = s.payload, t = p.target || null;
             const res = await saveNote({

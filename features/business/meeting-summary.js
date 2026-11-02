@@ -577,10 +577,14 @@ OL.msSend = async function() {
         if (t) { t.status = 'Done'; t.completedAt = now; }
     }, st.client.id);
 
-    OL.closeModal();
-    if (OL._activeEventModalId === st.evt.id && typeof OL.openCalendarEventModal === 'function') {
-        OL.openCalendarEventModal(st.evt.id);
-    }
+    OL.msBack();
+};
+
+// Leaves the full-page view and goes back to the calendar event it was opened from.
+OL.msBack = function() {
+    const id = OL._msState?.evt?.id;
+    OL.closeFullPage();
+    if (id && typeof OL.openCalendarEventModal === 'function') OL.openCalendarEventModal(id);
 };
 
 OL.openMeetingSummaryEmail = async function(eventId) {
@@ -652,8 +656,10 @@ OL.openMeetingSummaryEmail = async function(eventId) {
             <div id="ms-other-tasks"></div>
         </div>`;
 
-    openModal(OL.composeShellHtml({
+    OL.closeModal();   // the calendar event window, if that is where this was opened from
+    OL.openFullPage(OL.composeShellHtml({
         prefix: 'ms',
+        page: true, backLabel: 'Back to calendar event', closeAction: 'OL.msBack()',
         title: 'Meeting summary email',
         toLabel: 'To (everyone on the meeting except you)',
         subject: draft.subject,
@@ -664,7 +670,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
                 <div id="ms-nextsteps-preview" style="margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></div>
             </div>`,
         closingHtml: messageTextToHtml(draft.closing, ''),
-        sidebarHtml, sidebarWidth: 360,
+        sidebarHtml, sidebarWidth: 560,
         sendAction: 'OL.msSend()',
     }));
     if (window.lucide) lucide.createIcons();
@@ -685,6 +691,7 @@ window.OL.msAddTask = OL.msAddTask;
 window.OL.msMakeRequest = OL.msMakeRequest;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
+window.OL.msBack = OL.msBack;
 window.OL.msCreateTasksFromSummary = OL.msCreateTasksFromSummary;
 window.OL.msToggleInclude = OL.msToggleInclude;
 window.OL.msSetOtherFilter = OL.msSetOtherFilter;

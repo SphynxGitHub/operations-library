@@ -374,6 +374,9 @@ export function composeStyles() {
         .ol-compose pre { font-size: 13px !important; line-height: 1.55 !important; }
         .ol-compose-layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--ol-compose-side, 340px); gap: 20px; align-items: start; box-sizing: border-box; max-width: 100%; }
         .ol-compose-layout.single { grid-template-columns: minmax(0, 1fr); }
+        /* Full-page version of the window (page: true): a header bar with a way back, then the same layout using the whole width */
+        .ol-page-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 12px 28px; background: var(--bg); border-bottom: 1px solid var(--panel-border, var(--line)); }
+        .ol-page-body { padding: 20px 28px 60px; box-sizing: border-box; }
         @media (max-width: 900px) {
             .ol-compose-layout { grid-template-columns: minmax(0, 1fr) !important; }
             .ol-compose-layout aside { position: static !important; max-height: none !important; }
@@ -403,16 +406,23 @@ export function composeShellHtml(c) {
     const close = c.closeAction || 'OL.closeModal()';
     const hasSidebar = !!c.sidebarHtml;
     const closing = c.closingHtml !== undefined && c.closingHtml !== null;
+    const page = !!c.page;
     return `
         ${composeStyles()}
-        <div class="modal-head">
+        ${page ? `<div class="ol-page-head">
+            <button class="btn small soft" onclick="${close}" style="display:inline-flex;align-items:center;gap:6px;"><i data-lucide="arrow-left" style="width:14px;height:14px;"></i>${esc(c.backLabel || 'Back')}</button>
+            <div class="modal-title-text">${esc(c.title || 'Email')}</div>
+            ${c.headBadgeHtml || ''}
+            <div class="spacer" style="flex:1;"></div>
+            ${c.headExtraHtml || ''}
+        </div>` : `<div class="modal-head">
             <div class="modal-title-text">${esc(c.title || 'Email')}</div>
             ${c.headBadgeHtml || ''}
             <div class="spacer"></div>
             ${c.headExtraHtml || ''}
             <button class="btn small soft" onclick="${close}">Close</button>
-        </div>
-        <div class="modal-body ol-compose" style="max-width:${hasSidebar ? 'none' : (c.maxWidth || '820px')}; width:100%; box-sizing:border-box;">
+        </div>`}
+        <div class="${page ? 'ol-page-body' : 'modal-body'} ol-compose" style="max-width:${hasSidebar || page ? 'none' : (c.maxWidth || '820px')}; width:100%; box-sizing:border-box;">
             ${c.introHtml || ''}
             <div class="ol-compose-layout ${hasSidebar ? '' : 'single'}" ${c.sidebarWidth ? `style="--ol-compose-side:${Number(c.sidebarWidth)}px;"` : ''}>
                 <div style="min-width:0;">
@@ -453,7 +463,7 @@ export function composeShellHtml(c) {
                         </div>
                     </div>
                 </div>
-                ${hasSidebar ? `<aside style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(56,189,248,0.03); position:sticky; top:0; max-height:calc(100vh - 150px); overflow-y:auto;">${c.sidebarHtml}</aside>` : ''}
+                ${hasSidebar ? `<aside style="min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; background:rgba(56,189,248,0.03); position:sticky; top:${page ? 70 : 0}px; max-height:calc(100vh - ${page ? 100 : 150}px); overflow-y:auto;">${c.sidebarHtml}</aside>` : ''}
             </div>
         </div>`;
 }
@@ -517,7 +527,32 @@ export async function sendCompose(prefix, built, payload = {}) {
     return { ok, result };
 }
 
+// A full-page view that covers the app (below the modal layer, so pickers and dialogs still open on top of it).
+// Close it with OL.closeFullPage(). The page behind keeps its place and is not re-rendered.
+function openFullPage(html) {
+    let layer = document.getElementById('ol-fullpage');
+    if (!layer) {
+        layer = document.createElement('div');
+        layer.id = 'ol-fullpage';
+        layer.style.cssText = 'position:fixed; inset:0; z-index:5000; background:var(--bg); overflow-y:auto; color:var(--text-main);';
+        document.body.appendChild(layer);
+        document.body.dataset.olPageOverflow = document.body.style.overflow || '';
+        document.body.style.overflow = 'hidden';
+    }
+    layer.innerHTML = html;
+    layer.scrollTop = 0;
+}
+function closeFullPage() {
+    const layer = document.getElementById('ol-fullpage');
+    if (layer) layer.remove();
+    if (document.body.dataset.olPageOverflow !== undefined) {
+        document.body.style.overflow = document.body.dataset.olPageOverflow;
+        delete document.body.dataset.olPageOverflow;
+    }
+}
+
 Object.assign(window.OL, {
+    openFullPage, closeFullPage,
     myTeamCard, signatureHtmlFor, getMySignatureHtml, signatureParts, fillClosing, saveSignatureFor, signatureIncluded, signaturePanelHtml,
     senderEmails, personDirectory, greetingContact, initRecipients, recipientBoxHtml, renderRecipients, renderAllRecipients,
     addRecipient, getRecipients, commitRecipients, composeStyles, composeShellHtml, assembleEmail, collectCompose, sendCompose,
