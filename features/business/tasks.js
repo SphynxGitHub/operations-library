@@ -33,7 +33,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
     const hoursUsed = (t) => Number(t.loggedHours || t.hoursLogged || 0);
     const todayKey = OL.localDateStr();
     const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : '';
-    let est, done, remaining;
+    let est, done, remaining, carried = 0;
     if (day) {
         // One day's group: only the part of each task that falls on THAT day, the same split the Availability table uses
         // (a 4h task with a 2h daily limit is 2h on its first day and 2h on the next, not 4h on the first).
@@ -46,6 +46,19 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
             return key === day ? n + (Number(e.minutes) || 0) / 60 : n;
         }, 0), 0);
         remaining = tasks.reduce((sum, t) => sum + onDay(taskRemainingSlots(t, undefined, { today: todayKey })), 0);
+        // Carry-over: a longer task that STARTED on an earlier day and spills onto this one has no row in this group, but its
+        // hours are on this day (the Availability table counts them). Same people filter as the Free number.
+        const inGroup = new Set(tasks.map(t => t.id));
+        const roster0 = (state.master?.sphynxTeam || []).map(m => m.name);
+        const who = (OL.dashboardTaskState?.assignees || []).filter(n => roster0.includes(n));
+        Object.values(state.clients || {}).filter(c => c && c.projectData && !c._metaOnly).flatMap(c => c.projectData.clientTasks || []).forEach((t) => {
+            if (!t || inGroup.has(t.id) || t.status === 'Done' || t.status === 'Approved' || t.status === 'Completed' || t.completed) return;
+            const start = String(t.dueDate || t.blockedOn?.dueDate || '').slice(0, 10);
+            if (!start || start >= day) return;   // only tasks that started earlier
+            if (who.length && !taskAssignees(t).some(n => who.includes(n))) return;
+            const e = onDay(taskDaySlots(t)), r = onDay(taskRemainingSlots(t, undefined, { today: todayKey }));
+            est += e; remaining += r; carried += r;
+        });
     } else {
         est = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);                               // estimated work
         done = tasks.reduce((sum, t) => sum + hoursUsed(t), 0);                                        // time tracked so far
@@ -67,7 +80,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
     }
     const cell = (label, value, color) => `<span class="muted">${label} ${scope} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
     return `<div class="tiny monospace" title="${day ? "Only the hours that fall on this day: a long task is split over days by the daily limit, like the Availability table. " : ""}Tasks with no estimate count the default (1h, or the follow-up default). Remaining = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
-        ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Remaining', remaining, remaining > 0 ? '#f5b942' : '#22c55e')}${openCell}</div>`;
+        ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Remaining', remaining, remaining > 0 ? '#f5b942' : '#22c55e')}${carried > 0.004 ? `<span class="muted" title="Hours of longer tasks that started on an earlier day and carry over onto this one. They are included in Estimated and Remaining.">incl. <strong style="font-size:12px;">${carried.toFixed(2)}h</strong> carried over</span>` : ''}${openCell}</div>`;
 };
 OL.activeTaskTimer = { 
     clientId: null, 
