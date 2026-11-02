@@ -527,24 +527,39 @@ export async function sendCompose(prefix, built, payload = {}) {
     return { ok, result };
 }
 
-// A full-page view that covers the app (below the modal layer, so pickers and dialogs still open on top of it).
+// A full-page view over the app's content area. It starts to the right of the app's left navigation (which stays usable, and
+// whose width changes when it is collapsed) and sits below the modal layer, so pickers and dialogs still open on top of it.
 // Close it with OL.closeFullPage(). The page behind keeps its place and is not re-rendered.
+let pageObserver = null;
+function placeFullPage() {
+    const layer = document.getElementById('ol-fullpage');
+    if (!layer) return;
+    const nav = document.querySelector('.sidebar');
+    const r = nav ? nav.getBoundingClientRect() : null;
+    layer.style.left = (r && r.width > 0 && r.left <= 1 ? Math.round(r.right) : 0) + 'px';
+}
 function openFullPage(html) {
     let layer = document.getElementById('ol-fullpage');
     if (!layer) {
         layer = document.createElement('div');
         layer.id = 'ol-fullpage';
-        layer.style.cssText = 'position:fixed; inset:0; z-index:5000; background:var(--bg); overflow-y:auto; color:var(--text-main);';
+        layer.style.cssText = 'position:fixed; top:0; right:0; bottom:0; left:0; z-index:5000; background:var(--bg); overflow-y:auto; color:var(--text-main);';
         document.body.appendChild(layer);
         document.body.dataset.olPageOverflow = document.body.style.overflow || '';
         document.body.style.overflow = 'hidden';
+        const nav = document.querySelector('.sidebar');
+        if (nav && window.ResizeObserver) { pageObserver = new ResizeObserver(placeFullPage); pageObserver.observe(nav); }
+        window.addEventListener('resize', placeFullPage);
     }
+    placeFullPage();
     layer.innerHTML = html;
     layer.scrollTop = 0;
 }
 function closeFullPage() {
     const layer = document.getElementById('ol-fullpage');
     if (layer) layer.remove();
+    if (pageObserver) { pageObserver.disconnect(); pageObserver = null; }
+    window.removeEventListener('resize', placeFullPage);
     if (document.body.dataset.olPageOverflow !== undefined) {
         document.body.style.overflow = document.body.dataset.olPageOverflow;
         delete document.body.dataset.olPageOverflow;
