@@ -8,7 +8,7 @@ import { getOlSettings } from './ol-settings.js';
 import { aiMode } from './ai-flags.js';
 
 const FEATURE_FOR_TASK = { recap_match: 'recap', email_classify: 'email', email_review_sent: 'email_review', holding_reply: 'holding_reply',
-    test_scenarios: 'test_scenarios', suggested_asks: 'suggested_asks', lead_intent: 'lead_intent', howto_guide: 'howto', history_entry: 'history' };
+    test_scenarios: 'test_scenarios', suggested_asks: 'suggested_asks', lead_intent: 'lead_intent', howto_guide: 'howto', history_entry: 'history', ask_notes: 'ask_notes' };
 
 export const featureMode = (feature) => aiMode(getOlSettings(state?.master), feature);
 

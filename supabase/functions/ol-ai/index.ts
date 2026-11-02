@@ -45,6 +45,9 @@ Output {"intent":"quote"|"paid_scoping"|"intro_call"|"unclear","quote":string,"c
   howto_guide: { feature: "howto", maxTokens: 4000, system:
 `You write a how-to guide for a client from the SCOPE and BUILD DETAILS of what was built. Sections: What was built; How to use it day to day; How to add or change things safely (include any naming rules the automations depend on); Who to contact. Plain language, short, no jargon. If TEAM_SIZE is more than 1, also write an onboarding template and an offboarding template for the new systems (steps for adding and removing a person).
 Output {"guide":{"built":string,"daily":string,"safeChanges":string,"contact":string},"onboarding":[string]|null,"offboarding":[string]|null}. ${JSON_ONLY}` },
+  ask_notes: { feature: "ask_notes", maxTokens: 900, system:
+`You answer a question about an agency's client work using ONLY the NOTES provided (each has an id, date, and text). If the notes do not answer it, say so. Do not use outside knowledge about the client.
+Output {"answer":string,"citations":[noteId],"found":boolean}. Cite every note the answer relies on, using ids copied exactly. ${JSON_ONLY}` },
   history_entry: { feature: "history", maxTokens: 500, system:
 `You write one history entry for a resource (a form, automation or email) when a task on it closes. From the TASK and its COMMENTS write 1 to 3 plain sentences: what changed and why. Do not include anything not in the source.
 Output {"entry":string,"confidence":"low"|"medium"|"high"}. ${JSON_ONLY}` },

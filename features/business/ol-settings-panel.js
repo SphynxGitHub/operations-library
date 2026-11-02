@@ -151,6 +151,7 @@ OL.saveOlSettings = function() {
         zapRepull: { enabled: on('os-zr-enabled'), taskTitle: v('os-zr-title'), taskDescription: v('os-zr-desc'), dueInDays: Math.round(num('os-zr-due', d.zapRepull.dueInDays)), assignee: v('os-zr-assignee') },
         introCall: { enabled: on('os-ic-enabled'), titleKeywords: v('os-ic-words'), daysBefore: num('os-ic-days', d.introCall.daysBefore), taskTitle: v('os-ic-title'), assignee: v('os-ic-assignee') },
         ai: cur.ai || {},
+        aiGraduated: cur.aiGraduated || {},
         newProjectRoles: Object.fromEntries(roleList().map((r, i) => [r.name, v('os-nr-' + i)])),
         scheduling: {
             greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,

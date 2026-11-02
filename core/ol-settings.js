@@ -11,6 +11,7 @@ import { state } from './data.js';
 export const DEFAULT_OL_SETTINGS = {
     // AI feature modes (off | shadow | suggest), edited in the AI section of Templates & settings. Everything starts off.
     ai: {},
+    aiGraduated: {},   // suggestion types an admin approved to link by themselves: { type: { by, at } }
     templates: {
         // {date} = the meeting date, {title} = the meeting title, {sender} = whoever is sending. The sender's signature
         // (Sphynx Team page) is added under every email and carries their name, so closings are just the sign-off word.

@@ -14,6 +14,7 @@ export const AI_FEATURES = [
     { key: 'suggested_asks', label: 'Suggested asks',            help: 'Lists what is likely to be needed from the client before and after scoping.', shadow: false },
     { key: 'lead_intent',   label: 'Lead intent reading',        help: 'Reads a lead email as quote wanted, paid scoping, intro call or unclear.', shadow: true },
     { key: 'howto',         label: 'How-to guides',              help: 'Drafts the client how-to guide and onboarding / offboarding templates after testing passes.', shadow: false },
+    { key: 'ask_notes',     label: 'Ask anything (notes search)', help: 'Search all notes by question, and optionally have the AI answer from the best matches with the notes cited.', shadow: false },
     { key: 'history',       label: 'Resource history entries',   help: 'Drafts a history entry for the resource when a task closes.', shadow: false },
 ];
 export const AI_FEATURE_KEYS = AI_FEATURES.map((f) => f.key);
