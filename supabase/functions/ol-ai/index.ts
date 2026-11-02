@@ -7,7 +7,12 @@
 //   4. logs the run (cleaned) to ai_runs, and returns the result.
 // A suggestion is only ever a suggestion: this function never changes client work.
 //
-// Needs the ANTHROPIC_API_KEY secret (already used by classify-email-candidates).
+// The thinking is done by ONE of these, whichever is set (Claude is used first if both are):
+//   ANTHROPIC_API_KEY        the Claude API directly
+//   ZAPIER_AI_WEBHOOK_URL    a Zap that starts with "Webhooks by Zapier > Catch Hook", runs an AI step, and ends with
+//                            "Webhooks by Zapier > Custom Response" returning {"text": "<the AI's answer>"}. The Zap must
+//                            answer within about 30 seconds. Optional ZAPIER_AI_SECRET is sent in the x-ol-secret header.
+// Text is cleaned of passwords and keys BEFORE it leaves this function, whichever route is used.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,6 +20,8 @@ import { authorizeTeamRequest } from "../_shared/auth.ts";
 import { scrubSecrets } from "../_shared/secret-scrub.ts";
 
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const ZAP_URL = Deno.env.get("ZAPIER_AI_WEBHOOK_URL");
+const ZAP_SECRET = Deno.env.get("ZAPIER_AI_SECRET");
 const MODEL = Deno.env.get("OL_AI_MODEL") || "claude-sonnet-4-6";
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" };
 
@@ -69,7 +76,7 @@ const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body)
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-  if (!API_KEY) return reply({ error: "ANTHROPIC_API_KEY is not set on this project" }, 500);
+  if (!API_KEY && !ZAP_URL) return reply({ error: "No AI route is set. Add ZAPIER_AI_WEBHOOK_URL (or ANTHROPIC_API_KEY) as a secret on this Supabase project." }, 500);
 
   const url = Deno.env.get("SUPABASE_URL")!;
   const service = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -95,15 +102,32 @@ serve(async (req) => {
   };
 
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: MODEL, max_tokens: task.maxTokens, system: task.system,
-        messages: [{ role: "user", content: JSON.stringify(clean) }] }),
-    });
-    if (!resp.ok) { const t = await resp.text(); await log(null, `Anthropic ${resp.status}`); return reply({ error: `Anthropic API error: ${t.slice(0, 300)}` }, 502); }
-    const data = await resp.json();
-    const raw = (data.content || []).map((b: any) => b.text || "").join("").trim().replace(/^```json\s*|```\s*$/g, "").trim();
+    const userText = JSON.stringify(clean);
+    let raw = "";
+    if (API_KEY) {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: MODEL, max_tokens: task.maxTokens, system: task.system, messages: [{ role: "user", content: userText }] }),
+      });
+      if (!resp.ok) { const t = await resp.text(); await log(null, `Anthropic ${resp.status}`); return reply({ error: `Anthropic API error: ${t.slice(0, 300)}` }, 502); }
+      const data = await resp.json();
+      raw = (data.content || []).map((b: any) => b.text || "").join("");
+    } else {
+      // Zapier route: the Zap gets the instructions and the cleaned text, and answers with {"text": "..."}.
+      let resp: Response;
+      try {
+        resp = await fetch(ZAP_URL!, {
+          method: "POST", signal: AbortSignal.timeout(28000),
+          headers: { "Content-Type": "application/json", ...(ZAP_SECRET ? { "x-ol-secret": ZAP_SECRET } : {}) },
+          body: JSON.stringify({ task: String(body.task), instructions: task.system, input: userText, max_tokens: task.maxTokens }),
+        });
+      } catch (_e) { await log(null, "Zap did not answer in time"); return reply({ error: "The Zap did not answer in time (Zapier allows about 30 seconds).", message: "The Zap did not answer in time." }, 504); }
+      if (!resp.ok) { await log(null, `Zapier ${resp.status}`); return reply({ error: `Zapier returned ${resp.status}` }, 502); }
+      const txt = await resp.text();
+      try { const j = JSON.parse(txt); raw = typeof j === "string" ? j : String(j.text ?? j.output ?? j.answer ?? ""); } catch { raw = txt; }
+    }
+    raw = raw.trim().replace(/^```json\s*|```\s*$/g, "").trim();
     let result: any = null;
     try { result = JSON.parse(raw); } catch { await log(null, "Answer was not JSON"); return reply({ error: "The AI answer could not be read", runId, secretsRemoved: count.n }, 502); }
     await log(result, null);
