@@ -628,6 +628,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
 
     const sidebarHtml = `
         <style>.ms-task-row textarea { min-height: 56px; overflow: hidden; }</style>
+        <div id="ms-ai-recap"></div>
         ${evt.linked_client_id && typeof OL.clientOpenItemsSidebarHtml === 'function' ? OL.clientOpenItemsSidebarHtml(evt.linked_client_id) : ''}
         <div class="bold tiny uppercase muted" style="margin-bottom:4px;">Tasks from this meeting</div>
         <div class="tiny muted" style="margin-bottom:10px;">
@@ -670,6 +671,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
     OL.renderAllRecipients('ms');
     renderMsTaskRows();
     renderMsOtherTasks();
+    try { OL.aiMeetingRecap?.({ evt, client, actionItems: zoomNextStepsNotYetTasks() }); } catch (e) { console.warn('Recap items skipped:', e); }
 };
 
 window.OL = window.OL || {};

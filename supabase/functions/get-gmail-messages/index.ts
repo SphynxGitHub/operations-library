@@ -33,6 +33,7 @@ import { authorizeTeamRequest } from "../_shared/auth.ts";
 import { getFreshGoogleAccessToken, GoogleAuthError } from "../_shared/google-token.ts";
 import { loadProjectRules, matchProjectRules, matchProjectRulesByText } from "../_shared/project-rules.ts";
 import { matchResourceByRootId } from "../_shared/resource-match.ts";
+import { scrubSecrets } from "../_shared/secret-scrub.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -737,12 +738,14 @@ serve(async (req) => {
           recipient_cc: ccHeader,
           recipient_bcc: bccHeader,
           subject,
-          snippet: detail.snippet || "",
-          body: body.slice(0, 200000),
+          snippet: scrubSecrets(detail.snippet || "").text,
+          // Passwords and keys that clients email by mistake are removed before the message is stored (see core/secret-scrub.js).
+          // The email in the inbox is not touched; the copy kept here is the cleaned one.
+          body: scrubSecrets(body.slice(0, 200000)).text,
           // Capped well above what any real email needs (most are under a
           // few KB), just guarding against a pathological inline-everything
           // marketing email blowing up row size.
-          body_html: bodyHtml ? bodyHtml.slice(0, 500000) : null,
+          body_html: bodyHtml ? bodyHtml.slice(0, 500000).replace(/>([^<]+)</g, (_m, t) => ">" + scrubSecrets(t).text + "<") : null,
           date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
           participants: Array.from(participantEmails),
           linked_client_id: primaryLinkedClientId,
