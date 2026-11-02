@@ -307,17 +307,38 @@ serve(async (req) => {
     // must not re-guess it (billing rules depend on it). Falls back to the
     // plain lookup if call_type_manual hasn't been added yet.
     const manualCallType = new Set<string>();
+    // What is stored for each event now. A sync used to rewrite EVERY event every time, changed or not, and each rewrite is
+    // pushed in full to every open tab by Realtime. Reading the stored values lets us write only the events that changed.
+    const storedById = new Map<string, any>();
+    const SYNCED_COLS = "title, description, location, link, start, end, all_day, calendar_summary, call_type, attendee_emails";
     for (const calendarId of calendarIds) {
-      let { data, error } = await supabase.from("calendar_events").select("id, call_type_manual").eq("calendar_id", calendarId);
+      let { data, error } = await supabase.from("calendar_events").select(`id, call_type_manual, ${SYNCED_COLS}`).eq("calendar_id", calendarId);
       if (error && /call_type_manual/.test(error.message || "")) {
-        ({ data, error } = await supabase.from("calendar_events").select("id").eq("calendar_id", calendarId));
+        ({ data, error } = await supabase.from("calendar_events").select(`id, ${SYNCED_COLS}`).eq("calendar_id", calendarId));
       }
       if (error) throw new Error(`Lookup failed for calendar "${calendarId}": ${error.message}`);
       (data || []).forEach((r: any) => {
         existingIds.add(r.id);
+        storedById.set(r.id, r);
         if (r.call_type_manual) manualCallType.add(r.id);
       });
     }
+
+    // True when writing this event would change what is stored (call_type only counts for events not categorised by hand).
+    const sameTime = (a: any, b: any) => (a == null && b == null) || (a != null && b != null && new Date(a).getTime() === new Date(b).getTime());
+    const sameList = (a: any, b: any) => {
+      const x = [...(a || [])].sort(), y = [...(b || [])].sort();
+      return x.length === y.length && x.every((v, i) => v === y[i]);
+    };
+    const hasChanged = (r: any, manual: boolean) => {
+      const o = storedById.get(r.id);
+      if (!o) return true;
+      const emails = r.attendeeEmails && r.attendeeEmails.size > 0 ? Array.from(r.attendeeEmails) : [];
+      return (o.title ?? "") !== r.title || (o.description ?? "") !== r.description || (o.location ?? "") !== r.location
+        || (o.link ?? "") !== r.link || (o.calendar_summary ?? "") !== r.calendar_summary || !!o.all_day !== !!r.all_day
+        || !sameTime(o.start, r.start) || !sameTime(o.end, r.end) || !sameList(o.attendee_emails, emails)
+        || (!manual && (o.call_type ?? null) !== (classifyCallType(r.title, r.description) ?? null));
+    };
 
     const coreFields = (r: any) => ({
       id: r.id,
@@ -344,8 +365,8 @@ serve(async (req) => {
 
     // Hand-categorized events are refreshed without call_type (sent as their
     // own batch so every row in an upsert has the same columns).
-    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id) && !manualCallType.has(r.id)).map(coreFields);
-    const existingManualRows = dedupedParsed.filter((r) => existingIds.has(r.id) && manualCallType.has(r.id)).map((r) => {
+    const existingRows = dedupedParsed.filter((r) => existingIds.has(r.id) && !manualCallType.has(r.id) && hasChanged(r, false)).map(coreFields);
+    const existingManualRows = dedupedParsed.filter((r) => existingIds.has(r.id) && manualCallType.has(r.id) && hasChanged(r, true)).map((r) => {
       const { call_type: _keep, ...rest } = coreFields(r);
       return rest;
     });
