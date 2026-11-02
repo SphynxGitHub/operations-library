@@ -59,6 +59,7 @@ OL.aiSectionHtml = function () {
         <div class="tiny muted" style="margin:2px 0 8px;">Each starts Off. Shadow runs quietly and only logs, so it can be compared with what people did. Suggest shows suggestions to approve. Changes here save at once. Passwords and keys are removed before anything reaches the AI.</div>
         ${rows}
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn tiny soft" onclick="OL.openNoteSearch()">${icon('search')} Search all notes</button>
             <button class="btn tiny soft" onclick="OL.openAiNumbers()">${icon('bar-chart-3')} See the numbers</button>
             <button class="btn tiny soft" onclick="OL.aiScrubStoredEmails()">${icon('shield-check')} Remove passwords and keys from saved emails</button>
         </div></div>`;
@@ -91,11 +92,13 @@ OL.openAiNumbers = async function () {
     modal(`<div class="card" style="padding:20px;max-width:none;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><b style="font-size:15px;">AI numbers, last 60 days</b><button class="btn tiny soft" style="margin-left:auto;" onclick="OL.closeModal()">Close</button></div>
         <table class="tiny" style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;"><th>Feature</th><th>Mode</th><th>Runs</th><th>Errors</th><th>Secrets removed</th></tr></thead><tbody>${per}</tbody></table>
+        <div id="ai-grad"></div>
         <div style="margin-top:14px;font-weight:600;font-size:13px;">Email shadow mode: compared with what you linked</div>
         ${cov ? `<div class="tiny" style="margin-top:4px;">${cov.emails} emails. It found ${cov.covered} of the ${cov.covered + cov.missed} things you linked${cov.coverage !== null ? ` (${cov.coverage}%)` : ''}, missed ${cov.missed}, and suggested ${cov.extra} you did not link (possible false flags).</div>` : '<div class="tiny muted" style="margin-top:4px;">No shadow runs on emails yet.</div>'}
         <div style="margin-top:14px;font-weight:600;font-size:13px;">Suggestions, by what people did</div>
         ${accRows ? `<table class="tiny" style="width:100%;border-collapse:collapse;margin-top:4px;"><thead><tr style="text-align:left;"><th>Type</th><th>Decided</th><th>Accepted</th><th>Edited</th><th>Dismissed</th><th>Added by hand</th><th>Kept</th></tr></thead><tbody>${accRows}</tbody></table>` : '<div class="tiny muted" style="margin-top:4px;">Nothing decided yet.</div>'}
         <div class="tiny muted" style="margin-top:12px;">Move to the next phase when most suggestions are accepted unchanged and you are not adding things by hand that it missed.</div></div>`);
+    OL.aiGraduationFill?.();
 };
 
 // One-time cleanup: the saved copies of emails (text and html) lose any password or key.
@@ -259,7 +262,7 @@ OL.aiEmailMount = function (m, container) {
     if (!ours && featureMode('email') === 'suggest') parts.push(`<div style="margin-bottom:10px;"><button class="btn tiny soft" onclick="OL.aiSuggestLinks('${esc(m.id)}')">${icon('sparkles')} Suggest links</button></div>`);
     host.innerHTML = `${parts.join('')}<div id="gmail-ai-cards" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>`;
     refreshIcons();
-    if (!autoDone.has(m.id)) { autoDone.set(m.id, true); aiEmailAuto(m).catch((e) => console.warn('AI email check skipped:', e)); }
+    if (!autoDone.has(m.id)) { autoDone.set(m.id, true); OL.aiAutoLink?.(m); aiEmailAuto(m).catch((e) => console.warn('AI email check skipped:', e)); }
 };
 
 OL.aiCopyCredentialReply = function () {

@@ -44,6 +44,7 @@ import * as OLClientReview from './features/client-review.js';
 import * as OLTimeBilling from './features/time-billing.js';
 import * as OLDashboardModules from './features/dashboard-modules.js';
 import * as OLAiFeatures from './features/ai-features.js';
+import * as OLAiSearch from './features/ai-search.js';
 import * as OLResourceKey from './features/resource-key.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
