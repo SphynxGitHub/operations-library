@@ -638,7 +638,7 @@ OL.renderDashboardTaskStream = function(allItems) {
                 ${(() => { const em = g.items.filter(i => i._type === 'email'); return em.length > 1 && OL.renderEmailGroupSelectCheckbox ? `<label class="tiny muted" style="margin-left:auto; display:inline-flex; align-items:center; gap:4px; text-transform:none; letter-spacing:0; font-weight:500; cursor:pointer;" onclick="event.stopPropagation();">${OL.renderEmailGroupSelectCheckbox(em)} select ${em.length} emails</label>` : ''; })()}
             </div>
             ${body}
-            ${typeof OL.taskGroupTotalHtml === 'function' ? OL.taskGroupTotalHtml(g.items) : ''}
+            ${typeof OL.taskGroupTotalHtml === 'function' ? OL.taskGroupTotalHtml(g.items, { day: groupBy === 'date' ? g.key : '' }) : ''}
         </div>
     `;
     }).join('');

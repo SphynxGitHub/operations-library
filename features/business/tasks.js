@@ -1,5 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
-import { taskEstimatedHours } from '../../core/scheduling.js';
+import { taskEstimatedHours, memberDayHours, dailyLoadHours } from '../../core/scheduling.js';
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -24,16 +24,35 @@ OL.EST_COL_RIGHT = OL.EST_CTRL_W + OL.EST_GAP + 14 + 10;   // + row padding + ga
 
 // Estimated / used / left for a group of tasks, with the total sitting in the same column as each row's estimate.
 // Used by every grouped task list (Task Manager, client tasks, the Daily Dashboard stream).
-OL.taskGroupTotalHtml = function(items) {
+// opts.day (YYYY-MM-DD): the group is "the tasks due that day", so the line speaks for that day ("today" / "Tue") and, for
+// today and later, adds Open: the hours of availability still free that day for the people in the assignee filter
+// (the same number as the Availability table). Without it the group is just a set of tasks: "all time".
+OL.taskGroupTotalHtml = function(items, opts = {}) {
     const tasks = (items || []).filter(t => !t._type || t._type === 'task');
     if (!tasks.length) return '';
     const hoursUsed = (t) => Number(t.loggedHours || t.hoursLogged || 0);
-    const est = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);                          // total estimated work
-    const done = tasks.reduce((sum, t) => sum + hoursUsed(t), 0);                                   // time tracked so far
-    const open = tasks.reduce((sum, t) => sum + Math.max(0, taskEstimatedHours(t) - hoursUsed(t)), 0);   // still to do (a task past its estimate has 0 open, it does not cancel another's)
-    const cell = (label, value, color) => `<span class="muted">${label} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
-    return `<div class="tiny monospace" title="Tasks with no estimate count the default (1h, or the follow-up default). Open = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
-        ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Open', open, open > 0 ? '#f5b942' : '#22c55e')}</div>`;
+    const est = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);                               // estimated work
+    const done = tasks.reduce((sum, t) => sum + hoursUsed(t), 0);                                        // time tracked so far
+    const remaining = tasks.reduce((sum, t) => sum + Math.max(0, taskEstimatedHours(t) - hoursUsed(t)), 0);   // still to do (a task past its estimate has 0 left, it does not cancel another's)
+
+    const todayKey = OL.localDateStr();
+    const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : '';
+    const scope = !day ? 'all time' : (day === todayKey ? 'today' : OL.formatDayKey(day, { weekday: 'short' }));
+
+    let openCell = '';
+    if (day && day >= todayKey) {
+        const roster = (state.master?.sphynxTeam || []).map(m => m.name);
+        const people = (OL.dashboardTaskState?.assignees || []).filter(n => roster.includes(n));
+        if (people.length) {
+            const events = OL._dashboardEventsCache || [];
+            const allTasks = Object.values(state.clients || {}).filter(c => c && c.projectData && !c._metaOnly).flatMap(c => c.projectData.clientTasks || []);
+            const free = people.reduce((sum, n) => sum + Math.max(0, memberDayHours(n, day) - dailyLoadHours(events, allTasks, n, day)), 0);
+            openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'} for ${esc(people.join(', '))}, after meetings and tasks. Same number as the Availability table.">Open ${scope} <strong style="font-size:12px; color:#2dd4bf;">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
+        }
+    }
+    const cell = (label, value, color) => `<span class="muted">${label} ${scope} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
+    return `<div class="tiny monospace" title="Tasks with no estimate count the default (1h, or the follow-up default). Remaining = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
+        ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Remaining', remaining, remaining > 0 ? '#f5b942' : '#22c55e')}${openCell}</div>`;
 };
 OL.activeTaskTimer = { 
     clientId: null, 
