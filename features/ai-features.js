@@ -180,18 +180,28 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
             ${d.recentlyCompleted ? `<div class="tiny muted">Recently completed: ${esc(d.recentlyCompleted.title)}. This is treated as new work.</div>` : ''}</div>`).join('')}</div>` : '';
     OL._aiDups = dups;
 
-    const entries = parseRecapItems(evt.zoom_summary);
-    box.innerHTML = `${dupHtml}<div class="bold tiny uppercase muted" style="margin-bottom:4px;">Recap items</div><div id="ms-ai-recap-cards" class="tiny muted">${entries.length ? 'Matching…' : 'No Recap Items section in this summary.'}</div>`;
+    let entries = parseRecapItems(evt.zoom_summary);
+    const fromSummary = !entries.length && String(evt.zoom_summary || '').trim().length > 40;   // no Recap Items section: the AI reads the whole summary
+    box.innerHTML = `${dupHtml}<div class="bold tiny uppercase muted" style="margin-bottom:4px;">Recap items</div><div id="ms-ai-recap-cards" class="tiny muted">${entries.length || fromSummary ? 'Matching…' : 'No summary to read yet.'}</div>`;
     refreshIcons();
-    if (!entries.length) return;
+    if (!entries.length && !fromSummary) return;
 
     const items = OL._openItemsForClassification ? OL._openItemsForClassification(client.id) : [];
-    const res = await runAi('recap_match', { entries: entries.map((e, i) => ({ id: 'e' + i, type: e.word, text: e.text, hint: e.targetHint })), items }, { clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id });
+    const res = fromSummary
+        ? await runAi('recap_from_summary', { summary: String(evt.zoom_summary).slice(0, 10000), items }, { clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id })
+        : await runAi('recap_match', { entries: entries.map((e, i) => ({ id: 'e' + i, type: e.word, text: e.text, hint: e.targetHint })), items }, { clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id });
     const out = el('ms-ai-recap-cards');
     if (!out) return;
     if (!res.ok) { out.textContent = NO_AI(res); return; }
     if (res.shadow) { out.textContent = 'Shadow mode: logged, nothing shown.'; return; }
 
+    if (fromSummary) {
+        // Each quote must really be in the summary; anything else is dropped.
+        const found = (res.result?.matches || []).filter((m) => m && quoteExists(m.quote, evt.zoom_summary)).slice(0, 12);
+        entries = found.map((m) => ({ type: ['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : 'note', word: m.type, text: String(m.quote).slice(0, 600), targetHint: '' }));
+        res.result = { matches: found.map((m, i) => ({ ...m, entryId: 'e' + i })) };
+        if (!entries.length) { out.textContent = 'Nothing in this summary looks like a client request, change or approval.'; return; }
+    }
     const byId = new Map((res.result?.matches || []).map((m) => [String(m.entryId), m]));
     const known = new Map(items.map((i) => [String(i.id), i]));
     const cards = [], unmatched = [];
