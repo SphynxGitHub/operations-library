@@ -19,10 +19,10 @@ import { recordOutcome } from '../core/suggestion-log.js';
 
 export const SUGGESTION_TYPE_LABELS = {
     change: 'Change', approval: 'Approval', holding_reply: 'Holding reply', item_received: 'Item received',
-    new_request: 'New request', note: 'Note',
+    new_request: 'New request', note: 'Note', scope_narrowed: 'Scope narrowed',
 };
 const TYPE_COLORS = {
-    change: '#f5b942', approval: '#2dd4bf', holding_reply: '#60a5fa', item_received: '#a78bfa', new_request: '#f5b942', note: '#9aa7bd',
+    change: '#f5b942', approval: '#2dd4bf', holding_reply: '#60a5fa', item_received: '#a78bfa', new_request: '#f5b942', note: '#9aa7bd', scope_narrowed: '#fb923c',
 };
 const CONFIDENCE_LABEL = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' };
 

@@ -76,7 +76,7 @@ OL.openAiNumbers = async function () {
     const since = new Date(Date.now() - 60 * 86400000).toISOString();
     let runs = [];
     try { const { data } = await db.from('ai_runs').select('id,feature,mode,source_id,output,secrets_removed,error,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(1500); runs = data || []; } catch (_) { /* table missing */ }
-    const types = ['change', 'approval', 'holding_reply', 'item_received', 'new_request', 'note'];
+    const types = ['change', 'approval', 'holding_reply', 'item_received', 'new_request', 'note', 'scope_narrowed'];
     const acc = {}; for (const t of types) acc[t] = await accuracyFor(t, since);
     const emailRuns = runs.filter((r) => r.feature === 'email' && r.mode === 'shadow' && r.source_id);
     let cov = null;
@@ -198,7 +198,7 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
     if (fromSummary) {
         // Each quote must really be in the summary; anything else is dropped.
         const found = (res.result?.matches || []).filter((m) => m && quoteExists(m.quote, evt.zoom_summary)).slice(0, 12);
-        entries = found.map((m) => ({ type: ['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : 'note', word: m.type, text: String(m.quote).slice(0, 600), targetHint: '' }));
+        entries = found.map((m) => ({ type: ['change', 'approval', 'new_request', 'note', 'scope_narrowed'].includes(m.type) ? m.type : 'note', word: m.type, text: String(m.quote).slice(0, 600), targetHint: '' }));
         res.result = { matches: found.map((m, i) => ({ ...m, entryId: 'e' + i })) };
         if (!entries.length) { out.textContent = 'Nothing in this summary looks like a client request, change or approval.'; return; }
     }
@@ -208,7 +208,15 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
     for (let i = 0; i < entries.length; i++) {
         const e = entries[i], m = byId.get('e' + i) || {};
         const t = m.targetId && known.get(String(m.targetId)) ? known.get(String(m.targetId)) : null;
-        const type = e.type === 'new_request' && t ? 'change' : (['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : e.type);
+        // Scope narrowed: the client cut what they want now and pushed the rest to later. It needs BOTH quotes to be real.
+        if ((m.type === 'scope_narrowed' || e.type === 'scope_narrowed') && m.deferredQuote && quoteExists(m.deferredQuote, evt.zoom_summary)) {
+            registerScope();
+            const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
+            cards.push(scopeCard({ n: i + 1, logId, quote: e.text, deferred: String(m.deferredQuote).slice(0, 600), title: String(m.title || '').trim().slice(0, 120), confidence: m.confidence || 'low', target: t,
+                client, evt }));
+            continue;
+        }
+        const type = (e.type === 'new_request' && t) || e.type === 'scope_narrowed' ? 'change' : (['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : e.type);
         if (!t && (type === 'new_request' || type === 'change')) { unmatched.push(e); }
         const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type, quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
         cards.push(cardFor({ n: i + 1, logId, type, quote: e.text, confidence: m.confidence || 'low', target: t ? { type: t.type, id: t.id, label: t.label } : null,
@@ -220,6 +228,97 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
         ${unmatched.length ? `<details style="margin-top:8px;"><summary class="tiny muted">Possible unrecorded requests (${unmatched.length})</summary><ul class="tiny">${unmatched.map((u) => `<li>${esc(u.text)}</li>`).join('')}</ul></details>` : ''}`;
     refreshIcons();
 };
+
+// ---- Scope narrowed: the client cut the scope to something smaller NOW and pushed the rest to LATER ----------------
+// One card, up to three separate one-click actions, each confirmed by a person: create the small request, set the big one
+// to Do Later, and leave a note on it saying what happened. Nothing happens by itself.
+function findLineItem(client, id) {
+    for (const sh of (client?.projectData?.scopingSheets || [])) {
+        const hit = (sh?.lineItems || []).find((i) => i && (String(i.id) === String(id) || String(i.resourceId) === String(id)));
+        if (hit) return hit;
+    }
+    return null;
+}
+const canDefer = (item) => !!item && (item.status === 'Backlog' ? String(item.backlogDecision || 'Do Now') !== 'Do Later' : item.status === 'Do Now');
+
+function scopeCard({ n, logId, quote, deferred, title, confidence, target, client, evt }) {
+    const when = String(evt.start || '').slice(0, 10);
+    const item = target && target.type === 'request' ? findLineItem(client, target.id) : null;
+    const actions = [{ key: 'scope_create', label: title ? `Create request: ${title}` : 'Create a request for what they want now', icon: 'plus-circle', primary: true }];
+    if (item && canDefer(item)) actions.push({ key: 'scope_defer', label: `Set "${target.label}" to Do Later`, icon: 'clock' });
+    actions.push({ key: 'scope_note', label: target ? 'Add note on that request' : 'Add note on the project', icon: 'sticky-note' });
+    actions.push({ key: 'dismiss', label: 'Dismiss', icon: 'x' });
+    const rows = [['Deferred', `<i>"${esc(deferred)}"</i>`], ['Matched to', target ? `<b>${esc(target.label)}</b> <span class="muted">(${esc(target.type)})</span>` : '<span class="muted">nothing yet</span>']];
+    if (target && item && !canDefer(item)) rows.push(['Note', '<span class="muted">That request is already in a round or set to Do Later, so it is not offered as Do Later here.</span>']);
+    return { id: 'ai_' + uid().slice(3), logId, n, type: 'scope_narrowed', quote, confidence, rows, actions,
+        payload: { clientId: client.id, text: quote, deferred, title, target, when, eventTitle: evt.title || 'Meeting', sourceKind: 'calendar_event', sourceId: evt.id, done: {} } };
+}
+
+// After an action: the button turns into a tick and the card stays, so the other actions are still there. When every
+// action that was offered has been done, the card goes away.
+function scopeDone(s, key, label) {
+    s.payload.done[key] = true;
+    const card = document.getElementById('sg-card-' + s.id);
+    const btn = card && [...card.querySelectorAll('button')].find((b) => (b.getAttribute('onclick') || '').includes(`'${key}'`));
+    if (btn) { btn.disabled = true; btn.textContent = `Done: ${label}`; }
+    const offered = (s.actions || []).map((a) => a.key).filter((k) => k.startsWith('scope_'));
+    if (offered.every((k) => s.payload.done[k])) {
+        if (s.logId) recordOutcome(s.logId, 'accepted', { decidedBy: getCurrentUserName?.() });
+        card?.remove();
+    }
+    return false;   // keep the card unless it was removed above
+}
+
+let scopeRegistered = false;
+function registerScope() {
+    if (scopeRegistered || !OL.registerSuggestionHandler) return;
+    scopeRegistered = true;
+    OL.registerSuggestionHandler('scope_narrowed', {
+        scope_create: async (s) => {
+            const p = s.payload, client = state.clients?.[p.clientId];
+            if (!client) return false;
+            const title = (prompt('Name for the new request (the smaller scope the client wants now):', p.title || 'New request') || '').trim();
+            if (!title) return false;
+            await updateAndSync(() => {
+                const pd = client.projectData;
+                if (!Array.isArray(pd.scopingSheets)) pd.scopingSheets = [];
+                let sheet = pd.scopingSheets.find((sh) => sh && sh.kind !== 'maintenance' && sh.id !== 'maintenance');
+                if (!sheet) { sheet = { id: 'initial', lineItems: [] }; pd.scopingSheets.unshift(sheet); }
+                if (!Array.isArray(sheet.lineItems)) sheet.lineItems = [];
+                sheet.lineItems.push({
+                    id: 'li-' + Date.now(), resourceId: 'reqline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                    name: title, requestType: 'build', status: 'Backlog', responsibleParty: 'Sphynx', round: null,
+                    teamMode: 'everyone', teamIds: [], data: {}, manualHours: 0, dependencies: [],
+                    notes: `From the meeting "${p.eventTitle}"${p.when ? ' on ' + p.when : ''}. The client narrowed the scope to this and deferred the rest: "${p.quote}"`,
+                });
+            }, p.clientId);
+            return scopeDone(s, 'scope_create', 'request created in the Backlog');
+        },
+        scope_defer: async (s) => {
+            const p = s.payload, client = state.clients?.[p.clientId];
+            const item = findLineItem(client, p.target?.id);
+            if (!item || !canDefer(item)) { alert('That request can no longer be set to Do Later from here. Nothing was changed.'); return false; }
+            if (!confirm(`Set "${p.target.label}" to Do Later?`)) return false;
+            await updateAndSync(() => {
+                const live = findLineItem(state.clients?.[p.clientId], p.target.id);
+                if (!live) return;
+                if (live.status === 'Backlog') live.backlogDecision = 'Do Later'; else live.status = 'Do Later';
+            }, p.clientId);
+            return scopeDone(s, 'scope_defer', 'set to Do Later');
+        },
+        scope_note: async (s) => {
+            const p = s.payload, t = p.target || null;
+            const res = await saveNote({
+                clientId: p.clientId, taskId: null, requestId: t?.type === 'request' ? t.id : null, resourceId: t?.type === 'resource' ? t.id : null,
+                author: getCurrentUserName?.(), type: 'meeting', visibility: 'team',
+                body: `Scope narrowed (meeting ${p.when || today()}). The client wants this first: "${p.text}" Deferred to later: "${p.deferred}"`,
+                sourceKind: p.sourceKind, sourceId: p.sourceId,
+            });
+            if (!res.note) { alert('The note could not be saved. Nothing was changed.'); return false; }
+            return scopeDone(s, 'scope_note', 'note added');
+        },
+    });
+}
 
 OL.aiDupNote = async function (clientId, taskId, idx, eventId) {
     const d = (OL._aiDups || [])[idx];
