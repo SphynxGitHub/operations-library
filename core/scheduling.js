@@ -85,9 +85,10 @@ export function meetingHoursForDay(calendarEvents, assignee, dayKey) {
     }, 0);
 }
 
-// How a task's hours fall on days. A task estimated at or under the per-day cap is one chunk on its due date. A longer
-// one is spread over working days, cap hours each, ending on its due date: the days the auto-scheduler chose
-// (task.workSlots) when they still match the task, otherwise worked back from the due date.
+// How a task's hours fall on days. The due date is the day to START working on a task (the soonest it should be worked),
+// not a deadline. A task estimated at or under the per-day cap is one chunk on its due date. A longer one is spread over
+// working days FROM its due date, cap hours each: the days the auto-scheduler chose (task.workSlots) when they still match
+// the task, otherwise laid forward from the due date.
 function maxPerDay(cfg) {
     const m = Number((cfg || getOlSettings().scheduling)?.maxHoursPerDay);
     return m > 0 ? m : Infinity;
@@ -117,6 +118,21 @@ export function spreadBackFrom(dueKey, hours, cap, isWorkday) {
     return slots;
 }
 
+// Hours laid forward from a start day, cap per working day (the last day gets what is left).
+export function spreadForwardFrom(startKey, hours, cap, isWorkday) {
+    const work = (d) => (typeof isWorkday === 'function' ? isWorkday(toDayKey(d)) : !isWeekend(d));
+    const cursor = fromDayKey(startKey);
+    const slots = [];
+    let remaining = hours;
+    for (let guard = 0; remaining > 0.001 && guard < 400; guard++, cursor.setDate(cursor.getDate() + 1)) {
+        if (!work(cursor)) continue;
+        const put = Math.min(cap, remaining);
+        slots.push({ date: toDayKey(cursor), hours: Math.round(put * 100) / 100 });
+        remaining -= put;
+    }
+    return slots;
+}
+
 export function taskDaySlots(task, cfg) {
     // A task whose date was removed while it waits on something (client, developer, third party) keeps a blocker on its
     // original day, so that time is not given to other work. It is only a hold: nothing moves or rewrites the task.
@@ -127,38 +143,25 @@ export function taskDaySlots(task, cfg) {
     if (!(hours > cap)) return [{ date: due, hours }];
     const saved = Array.isArray(task.workSlots) ? task.workSlots : [];
     const total = saved.reduce((sum, x) => sum + (Number(x.hours) || 0), 0);
-    if (saved.length && saved[saved.length - 1].date === due && Math.abs(total - hours) < 0.01) return saved.map((x) => ({ date: String(x.date).slice(0, 10), hours: Number(x.hours) || 0 }));
+    if (saved.length && String(saved[0].date).slice(0, 10) === due && Math.abs(total - hours) < 0.01) return saved.map((x) => ({ date: String(x.date).slice(0, 10), hours: Number(x.hours) || 0 }));
     const who = taskAssignees(task)[0];
-    return spreadBackFrom(due, hours, cap, who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : null);
+    return spreadForwardFrom(due, hours, cap, who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : null);
 }
 
 // What is LEFT of a task, laid on days: the estimate minus the time already logged (a 4h task with 2.1h used still has
-// 1.9h to do), split over working days by the per-day cap like taskDaySlots. With roll on, the part that would fall on days
-// already gone is moved forward onto today and the next working days (cap hours each), since that work is still owed.
-export function taskRemainingSlots(task, cfg, { today, roll } = {}) {
+// 1.9h to do), split over working days by the per-day cap, starting on its due date, or today when that date has passed
+// (days gone by do not matter: the work did not happen then, it happens from today).
+export function taskRemainingSlots(task, cfg, { today } = {}) {
+    const due = String(task?.dueDate || task?.blockedOn?.dueDate || '').slice(0, 10);
+    if (!due) return [];
     const logged = Number(task?.loggedHours || task?.hoursLogged || 0);
     const remaining = Math.round(Math.max(0, taskEstimatedHours(task, cfg) - logged) * 100) / 100;
     if (!(remaining > 0)) return [];
-    let slots = taskDaySlots(logged > 0 ? { ...task, estimatedHours: remaining, workSlots: undefined } : task, cfg);
-    if (!roll || !today) return slots;
-    let carry = slots.filter((x) => x.date < today).reduce((n, x) => n + x.hours, 0);
-    if (!(carry > 0.001)) return slots;
-    const keep = slots.filter((x) => x.date >= today).map((x) => ({ ...x }));
+    const start = today && due < today ? today : due;
+    if (start === due && !(logged > 0)) return taskDaySlots(task, cfg);
     const cap = maxPerDay(cfg);
     const who = taskAssignees(task)[0];
-    const isWork = who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : (key) => !isWeekend(fromDayKey(key));
-    const cursor = fromDayKey(today);
-    for (let guard = 0; carry > 0.001 && guard < 400; guard++, cursor.setDate(cursor.getDate() + 1)) {
-        const key = toDayKey(cursor);
-        if (!isWork(key)) continue;
-        const cur = keep.find((x) => x.date === key);
-        const room = cap === Infinity ? carry : Math.max(0, cap - (cur ? cur.hours : 0));
-        const put = Math.min(room, carry);
-        if (put <= 0) continue;
-        if (cur) cur.hours = Math.round((cur.hours + put) * 100) / 100; else keep.push({ date: key, hours: Math.round(put * 100) / 100 });
-        carry -= put;
-    }
-    return keep;
+    return spreadForwardFrom(start, remaining, cap, who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : null);
 }
 
 // Queued task hours for one assignee on one day — every open task (not this one being scheduled) with hours on that
@@ -174,14 +177,14 @@ export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cf
             return toDayKey(new Date(e.end || e.start)) === dayKey ? n + (Number(e.minutes) || 0) / 60 : n;
         }, 0), 0);
     }
-    // Today and later: only the work still to do (estimate minus time tracked), laid out from today forward. The part that
-    // was planned for days already gone is not counted there; it is placed from today on.
+    // Today and later: only the work still to do (estimate minus time tracked), starting on the due date (or today, when
+    // that has passed). The due date is the day to start, not a deadline.
     return (tasks || []).reduce((sum, t) => {
         if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         const closed = (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed;
         if (closed) return sum;
-        const onDay = taskRemainingSlots(t, cfg, { today, roll: true }).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
+        const onDay = taskRemainingSlots(t, cfg, { today }).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
         return sum + onDay;
     }, 0);
 }
@@ -307,8 +310,8 @@ export function reviewerFor(assignee, cfg = DEFAULT_OL_SETTINGS.scheduling) {
 // Finds the working days, starting today (or startDate), within windowDays, for a task: each day used must have booked
 // hours at or under the level this client's status may use (the same limit on every day checked; Closed days are never
 // used). A task longer than maxHoursPerDay takes that many hours on each day it uses, skipping days that are too busy,
-// and is due on the last of them.
-// Returns { date: 'YYYY-MM-DD' (the day it finishes), slots: [{ date, hours }], loadHours, tier (of the first day) } on
+// and is due on the FIRST of them (the due date is the day to start).
+// Returns { date: 'YYYY-MM-DD' (the day it starts), endDate (the day it finishes), slots: [{ date, hours }], loadHours, tier (of the first day) } on
 // success, or { date: null, reason: 'no_capacity_in_window', reviewer } if it does not all fit — the caller hands off
 // to a human at that point, never overbooks silently.
 export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estimatedHours, startDate, windowDays, excludeTaskId, clientStatus, config }) {
@@ -336,7 +339,7 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
                     if (!first) first = { loadHours: load, tier };
                     slots.push({ date: dayKey, hours: Math.round(put * 100) / 100 });
                     remaining -= put;
-                    if (remaining <= 0.001) return { date: dayKey, slots, loadHours: first.loadHours, tier: first.tier };
+                    if (remaining <= 0.001) return { date: slots[0].date, endDate: dayKey, slots, loadHours: first.loadHours, tier: first.tier };
                 }
                 checked++;
             }

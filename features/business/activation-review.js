@@ -162,7 +162,7 @@ OL.openNextQueuedActivation = function(clientId, justDoneItemId) {
     return true;
 };
 
-// The days a row's task falls on: the days the scheduler chose, or, for a date picked by hand, worked back from it.
+// The days a row's task falls on: the days the scheduler chose, or, for a date picked by hand, laid forward from it.
 const rowSlots = (row) => taskDaySlots({ dueDate: row.dueDate, estimatedHours: row.estimatedHours, workSlots: row.workSlots }, getOlSettings().scheduling);
 
 // How busy the assignee is on the days a row falls on, before this row: meetings + tasks already due, plus the other
@@ -296,7 +296,7 @@ OL.setActivationRowEstimate = function(rowId, value) {
         row.dueDateReason = slot.date ? null : slot.reason;
         row.reviewer = slot.date ? '' : (slot.reviewer || '');
     } else if (row.dueDateManual) {
-        row.workSlots = null;   // a hand-picked date is the last day; the days before it are worked back from it
+        row.workSlots = null;   // a hand-picked date is the first day; the days after it are laid forward from it
     }
     OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());
 };
@@ -306,7 +306,7 @@ OL.setActivationRowDueDate = function(rowId, value) {
     const row = st?.plan.find((r) => r.id === rowId);
     if (!row) return;
     row.dueDate = value;
-    row.workSlots = null;   // a hand-picked date is the last day; the days before it are worked back from it
+    row.workSlots = null;   // a hand-picked date is the first day; the days after it are laid forward from it
     row.dueDateManual = true;
     row.dueDateReason = null;   // a manually picked date isn't "no capacity found" anymore, whatever it was before
     OL.reRenderPreservingFocus(() => OL.renderActivationReviewStep());   // the day's load flag depends on the date
