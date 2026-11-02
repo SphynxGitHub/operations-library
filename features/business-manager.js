@@ -14,7 +14,7 @@ OL.renderDailyDashboard = function() {
 
     const clients = Object.values(state.clients || {});
     const allTasks = clients.flatMap(c => (c.projectData?.clientTasks || []).map(t => ({...t, clientName: c.meta.name, clientId: c.id})));
-    const dueToday = allTasks.filter(t => t.status !== 'Done' && t.dueDate);
+    const dueToday = allTasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved') && t.dueDate);
 
     main.innerHTML = `
         <div class="section-header">
@@ -31,7 +31,7 @@ OL.renderDailyDashboard = function() {
             </div>
             <div class="card" style="padding: 15px;">
                 <div class="tiny muted uppercase bold">Open Action Items</div>
-                <div style="font-size: 24px; font-weight: 900; color: #38bdf8; margin-top: 5px;">${allTasks.filter(t => t.status !== 'Done').length}</div>
+                <div style="font-size: 24px; font-weight: 900; color: #38bdf8; margin-top: 5px;">${allTasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved')).length}</div>
             </div>
             <div class="card" style="padding: 15px;">
                 <div class="tiny muted uppercase bold">Due Today / Overdue</div>
@@ -43,7 +43,7 @@ OL.renderDailyDashboard = function() {
             <div class="card" style="padding: 20px;">
                 <h3>High-Priority Task Stream</h3>
                 <div style="margin-top: 15px;">
-                    ${allTasks.filter(t => t.status !== 'Done').slice(0, 8).map(t => `
+                    ${allTasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved')).slice(0, 8).map(t => `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--line);">
                             <div>
                                 <strong>${esc(t.title || t.name)}</strong>
@@ -279,7 +279,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                 const taskDateStr = t.dueDate.slice(0, 10);
 
                 if (dateRange === 'Overdue') {
-                    dateMatch = taskDateStr < todayStr && t.status !== 'Done';
+                    dateMatch = taskDateStr < todayStr && (t.status !== 'Done' && t.status !== 'Approved');
                 } else if (dateRange === 'Today') {
                     dateMatch = taskDateStr === todayStr;
                 } else if (dateRange === 'Week') {
@@ -339,7 +339,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     const teamOptions = OL.getClientTeamOptions(t.clientId);
                     const isClientAssigned = t.assignee !== 'Sphynx Task';
                     const isTimerRunning = OL.activeTaskTimer.taskId === t.id;
-                    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && t.status !== 'Done';
+                    const isOverdue = t.dueDate && t.dueDate.slice(0,10) < todayStr && (t.status !== 'Done' && t.status !== 'Approved');
 
                     return `
                     <div style="display:grid; grid-template-columns: 2fr 130px 140px 110px 240px; gap: 12px; padding: 10px 14px; background: ${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isTimerRunning ? '#38bdf8' : 'var(--line)'}; border-radius: 6px; align-items:center; cursor:pointer;"

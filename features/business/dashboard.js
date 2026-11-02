@@ -275,7 +275,7 @@ OL.renderDailyDashboard = function() {
 
     const clients = getBusinessScopedClients();
     const allTasks = OL.getDashboardMasterTasks();
-    const openTasks = allTasks.filter(t => t.status !== 'Done');
+    const openTasks = allTasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved'));
     const eventItems = OL.getDashboardEventItems();
     const emailItems = OL.getDashboardEmailItems();
     const errorItems = OL.getDashboardErrorItems();

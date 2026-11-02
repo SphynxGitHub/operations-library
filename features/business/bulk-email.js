@@ -59,7 +59,7 @@ OL.renderBulkEmailToolbar = function() {
     const clients = Object.values(state.clients || {}).filter(c => c?.meta?.name).sort((a, b) => a.meta.name.localeCompare(b.meta.name));
     const st = OL._bulkEmailLink || (OL._bulkEmailLink = { clientId: '', taskId: '', requestId: '' });
     const chosen = st.clientId ? state.clients[st.clientId] : null;
-    const tasks = chosen ? (chosen.projectData?.clientTasks || []).filter(t => t.status !== 'Done') : [];
+    const tasks = chosen ? (chosen.projectData?.clientTasks || []).filter(t => (t.status !== 'Done' && t.status !== 'Approved')) : [];
     const reqs = chosen && OL.listProjectRequests ? OL.listProjectRequests(chosen).filter(r => !['Done', "Don't Do"].includes(r.status)) : [];
     bar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:520; padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; border:1px solid #a855f7; background:var(--panel-dark, #111); box-shadow:0 8px 24px rgba(0,0,0,0.4); border-radius:10px; max-width:94vw;';
     bar.innerHTML = `

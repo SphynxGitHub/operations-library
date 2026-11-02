@@ -725,7 +725,7 @@ OL.autoLinkGmailMessagesToTasks = async function() {
         const participants = (m.participants || []).map(p => p.toLowerCase());
         const subjectText = `${m.subject || ''}`.toLowerCase();
 
-        const openTasks = (client.projectData?.clientTasks || []).filter(t => t.status !== 'Done');
+        const openTasks = (client.projectData?.clientTasks || []).filter(t => (t.status !== 'Done' && t.status !== 'Approved'));
         // Two independent signals are required now. Assignee-in-participants
         // alone matched every email from a client contact who happened to
         // own exactly one open task (the Wealth IG problem: every email from
@@ -1734,7 +1734,7 @@ OL.renderExcerptLinkPicker = function() {
     const resourceIdsOfPicked = new Set(pickedRequestItems.flatMap((r) => requestResourceIds(r).map(String)));
 
     let taskPool = client ? (client.projectData?.clientTasks || []) : (OL._allClientTasksFlat ? OL._allClientTasksFlat() : []);
-    taskPool = taskPool.filter((t) => st.showDoneTasks || !(t.status === 'Done' || t.status === 'Completed' || t.completed));
+    taskPool = taskPool.filter((t) => st.showDoneTasks || !((t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed));
     if (narrowed) taskPool = taskPool.filter((t) => linksForTask(t).some((l) => pickedRequestIds.includes(String(l.requestId))));
     const tasks = taskPool.filter((t) => matchTitle(t.title || t.name)).slice(0, 80);
 
@@ -3334,7 +3334,7 @@ OL._allClientTasksFlat = function() {
     const st = OL._gmailLinkState || {};
     return Object.values(state.clients || {}).flatMap(c =>
         (c.projectData?.clientTasks || [])
-            .filter(t => st.showCompletedTasks || (t.status !== 'Done' && t.status !== 'Completed' && !t.completed))
+            .filter(t => st.showCompletedTasks || ((t.status !== 'Done' && t.status !== 'Approved') && t.status !== 'Completed' && !t.completed))
             .map(t => ({ ...t, _clientId: c.id, _clientName: c.meta?.name || 'Unnamed' }))
     ).sort((a, b) => getRecencyTimestamp(b) - getRecencyTimestamp(a));
 };
@@ -3512,7 +3512,7 @@ OL.renderGmailLinkStep = function() {
     const taskQuery = (st.taskQuery || '').trim().toLowerCase();
     let taskPool = selectedClient
         ? (selectedClient.projectData?.clientTasks || [])
-            .filter(t => st.showCompletedTasks || (t.status !== 'Done' && t.status !== 'Completed' && !t.completed))
+            .filter(t => st.showCompletedTasks || ((t.status !== 'Done' && t.status !== 'Approved') && t.status !== 'Completed' && !t.completed))
             .map(t => ({ ...t, _clientId: st.clientId, _clientName: selectedClient.meta?.name }))
         : OL._allClientTasksFlat();
 
@@ -3635,7 +3635,7 @@ OL.renderGmailLinkStep = function() {
                     <div style="max-height:240px; overflow:auto; margin-top:6px; display:grid; gap:4px;">
                         ${filteredTasks.length ? filteredTasks.map(t => `
                             <div class="tiny" style="padding:7px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px;" onmousedown="OL.setGmailLinkTask('${t.id}', '${t._clientId}')">
-                                <span>${esc(t.title || t.name)}${(t.status === 'Done' || t.status === 'Completed' || t.completed) ? `<span class="pill tiny">Done</span>` : ''}</span>
+                                <span>${esc(t.title || t.name)}${((t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed) ? `<span class="pill tiny">Done</span>` : ''}</span>
                                 ${!selectedClient ? `<span class="pill tiny soft" style="font-size:9px; flex-shrink:0;">${esc(t._clientName || '')}</span>` : ''}
                             </div>
                         `).join('') : `<div class="tiny muted" style="padding:8px;">No matching tasks.</div>`}

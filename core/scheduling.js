@@ -139,7 +139,7 @@ export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cf
     return (tasks || []).reduce((sum, t) => {
         if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
-        const closed = t.status === 'Done' || t.status === 'Completed' || t.completed;
+        const closed = (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed;
         if (closed) return sum;
         const onDay = taskDaySlots(t, cfg).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
         return sum + onDay;
