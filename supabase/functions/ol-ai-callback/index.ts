@@ -25,9 +25,13 @@ serve(async (req) => {
   if (!safeEqual(token, expected)) return reply({ error: "Not allowed" }, 403);
 
   // Only a run that is still waiting can receive an answer, and only once.
-  const { data, error } = await service.from("ai_runs").update({ output: { _raw: text.slice(0, 60000) }, error: null })
+  const { data, error } = await service.from("ai_runs").update({ output: { _raw: text.replace(/\u0000/g, "").slice(0, 60000) }, error: null })
     .eq("id", runId).eq("error", "pending").select("id");
-  if (error) return reply({ error: "Could not save the answer" }, 500);
+  if (error) {
+    // The token was already verified above, so it is safe to say why the save failed (the Zap's run history shows this).
+    console.error("ol-ai-callback save failed:", error.code, error.message, error.details);
+    return reply({ error: `Could not save the answer: ${error.code || ""} ${String(error.message || "").slice(0, 200)}`.trim() }, 500);
+  }
   if (!data || !data.length) return reply({ error: "That run is not waiting for an answer" }, 409);
   return reply({ ok: true });
 });
