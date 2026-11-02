@@ -160,8 +160,8 @@ export function renderClientDashboard() {
     
             ${clients.map(client => {
                 const tasks = (client.projectData?.clientTasks || []);
-                const openTasks = tasks.filter(t => t.status !== 'Done');
-                const doneTasks = tasks.filter(t => t.status === 'Done');
+                const openTasks = tasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved'));
+                const doneTasks = tasks.filter(t => (t.status === 'Done' || t.status === 'Approved'));
                 const isExpanded = state.dashboardExpanded?.[client.id] !== false;
             
                 return `

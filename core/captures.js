@@ -75,3 +75,13 @@ export async function noteExistsForSource(sourceKind, sourceId, target = {}) {
         return (data || []).length > 0;
     } catch (e) { off(e); return false; }
 }
+
+// Removes a note (used to unpin one from a resource).
+export async function deleteNote(id) {
+    if (!tableOk || !id) return false;
+    try {
+        const { error } = await db.from('capture_notes').delete().eq('id', String(id));
+        if (error) { off(error); return false; }
+        return true;
+    } catch (e) { off(e); return false; }
+}

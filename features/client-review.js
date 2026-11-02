@@ -14,6 +14,7 @@ import {
     buildReview, markSent, decideItem, approveAll, followUpOwnerFor, daysSince, saveReview, loadReviews,
 } from '../core/reviews.js';
 import { saveNote } from '../core/captures.js';
+import { SCOPING_OUTCOMES, isPreClient } from '../core/lead-rules.js';
 
 const RECENT_DAYS = 7;
 const RECENT_MAX = 10;
@@ -102,6 +103,41 @@ function pendingReviewHtml(client) {
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><i data-lucide="send" style="width:15px;height:15px;color:#a78bfa;"></i><b style="font-size:14px;">Pending client review</b></div>${blocks}</div>`;
 }
 
+// Shown only while a project is still in Discovery: the lead tasks, and the outcome of an intro call.
+function leadStripHtml(client) {
+    if (!isPreClient(client)) return '';
+    const names = closedNames();
+    const tasks = client.projectData?.clientTasks || [];
+    const has = (kind) => tasks.some((t) => t && t.leadTaskKind === kind && !isTaskClosed(t, names));
+    const intro = tasks.find((t) => t && t.introCallEventId && !isTaskClosed(t, names) && !t.scopingOutcome);
+    const btn = (kind, label, icon) => `<button class="btn tiny soft" ${has(kind) ? 'disabled title="Already open"' : ''} onclick="OL.crLeadTask('${esc(client.id)}','${kind}')" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="${icon}" style="width:12px;height:12px;"></i>${label}</button>`;
+    const outcome = intro ? `
+        <select class="modal-input tiny" style="width:auto;" onchange="OL.crIntroOutcome('${esc(client.id)}','${esc(String(intro.id))}', this.value)">
+            <option value="">Intro call outcome...</option>${SCOPING_OUTCOMES.map((o) => `<option value="${o.key}">${esc(o.label)}</option>`).join('')}
+        </select>` : '';
+    return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line);">
+        <i data-lucide="user-plus" style="width:15px;height:15px;color:var(--accent);"></i><b style="font-size:14px;">Lead</b>
+        <span class="tiny muted">Still in Discovery. A task is the record of what is owed.</span>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${outcome}${btn('prepare_quote', 'Prepare quote', 'file-text')}${btn('offer_paid_scoping', 'Offer paid scoping', 'search')}</span></div>`;
+}
+
+export function crLeadTask(clientId, kind) {
+    updateAndSync(() => { OL.createLeadTaskFor?.(clientId, kind); }, clientId);
+    window.renderClientTaskManager?.();
+}
+
+// Records what the intro call led to and creates the matching lead task.
+export function crIntroOutcome(clientId, taskId, key) {
+    const o = SCOPING_OUTCOMES.find((x) => x.key === key);
+    if (!o) return;
+    updateAndSync(() => {
+        const t = taskOf(clientOf(clientId), taskId);
+        if (t) { t.scopingOutcome = o.key; t.scopingOutcomeAt = new Date().toISOString(); }
+        if (o.task) OL.createLeadTaskFor?.(clientId, o.task);
+    }, clientId);
+    window.renderClientTaskManager?.();
+}
+
 export function clientReviewPanelHtml(client) {
     if (!client) return '';
     const now = new Date();
@@ -109,6 +145,7 @@ export function clientReviewPanelHtml(client) {
     const sendable = sendableTasks(client);
     return `
     <div class="card" style="padding:16px 20px;margin-bottom:20px;">
+        ${leadStripHtml(client)}
         ${pendingReviewHtml(client)}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
             <i data-lucide="history" style="width:15px;height:15px;color:var(--accent);"></i><b style="font-size:14px;">Recently closed</b>
@@ -311,5 +348,5 @@ export async function crSend() {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     clientReviewPanelHtml, loadClientReviewPanel,
-    crAddFollowUp, crReopen, crDecide, crApproveAll, crOpenSend, crTogglePick, crSetSummary, crSetOutside, crSend,
+    crLeadTask, crIntroOutcome, crAddFollowUp, crReopen, crDecide, crApproveAll, crOpenSend, crTogglePick, crSetSummary, crSetOutside, crSend,
 });

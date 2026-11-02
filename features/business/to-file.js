@@ -767,7 +767,7 @@ async function ensureFilingTask(clientId, item, n) {
     await updateAndSync(() => {
         const pd = state.clients?.[clientId]?.projectData; if (!pd) return;
         pd.clientTasks = pd.clientTasks || [];
-        const ex = pd.clientTasks.find((t) => t && String(t.fileQueueFor) === String(item.id) && t.status !== 'Done');
+        const ex = pd.clientTasks.find((t) => t && String(t.fileQueueFor) === String(item.id) && (t.status !== 'Done' && t.status !== 'Approved'));
         if (ex) { ex.title = title; ex.name = title; return; }
         pd.clientTasks.unshift({ id: uid(), title, name: title, description: 'Linked emails, comments and files from this request still need filing to resources. Closes itself when the queue for the request is empty (To File tab).',
             status: 'Pending Sphynx Action', assignee: userName(), dueDate: dayStr(Date.now()), isClientTask: false, loggedHours: 0, parentTaskId: null, billable: false,
@@ -778,7 +778,7 @@ async function ensureFilingTask(clientId, item, n) {
 // The "File N items" task closes by itself when nothing is left open for its request, and keeps its count current.
 async function closeFilingTasks() {
     for (const c of getBusinessScopedClients()) {
-        const tasks = (c.projectData?.clientTasks || []).filter((t) => t && t.fileQueueFor && t.status !== 'Done');
+        const tasks = (c.projectData?.clientTasks || []).filter((t) => t && t.fileQueueFor && (t.status !== 'Done' && t.status !== 'Approved'));
         for (const t of tasks) {
             const left = openItemsFor(t.fileQueueFor).length; const it = reqOf(c, t.fileQueueFor);
             if (left === 0) {

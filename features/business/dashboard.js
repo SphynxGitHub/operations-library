@@ -275,7 +275,7 @@ OL.renderDailyDashboard = function() {
 
     const clients = getBusinessScopedClients();
     const allTasks = OL.getDashboardMasterTasks();
-    const openTasks = allTasks.filter(t => t.status !== 'Done');
+    const openTasks = allTasks.filter(t => (t.status !== 'Done' && t.status !== 'Approved'));
     const eventItems = OL.getDashboardEventItems();
     const emailItems = OL.getDashboardEmailItems();
     const errorItems = OL.getDashboardErrorItems();
@@ -343,6 +343,8 @@ OL.renderDailyDashboard = function() {
                 <div style="font-size: 24px; font-weight: 900; color: #ef4444; margin-top: 5px;">${dueTodayOrOverdue}</div>
             </div>
         </div>
+
+        <div id="dashboard-modules">${typeof OL.dashboardModulesHtml === 'function' ? OL.dashboardModulesHtml() : ''}</div>
 
         <div class="card" style="padding: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
@@ -417,6 +419,7 @@ OL.renderDailyDashboard = function() {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    if (typeof OL.loadDashboardModules === 'function') OL.loadDashboardModules();
     if (searchWasFocused) {
         const box = document.getElementById('global-search-input');
         if (box) { box.focus(); try { box.setSelectionRange(searchCursor, searchCursor); } catch (e) { /* not selectable */ } OL.globalSearchRestore(); }

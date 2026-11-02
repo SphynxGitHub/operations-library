@@ -15,7 +15,7 @@ import { dailyLoadHours, taskDaySlots, findFirstAvailableDate, memberLimitHours 
 
 const localDate = (key) => { const [y, m, d] = String(key).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 
-const isClosed = (t) => t.status === 'Done' || t.status === 'Completed' || !!t.completed;
+const isClosed = (t) => (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || !!t.completed;
 
 function isMovable(t, todayKey) {
     if (!t || t.id == null || isClosed(t) || t.dueRelativeTo) return false;
