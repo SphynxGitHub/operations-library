@@ -964,6 +964,15 @@ OL.renderFilteredTaskGroups = function(allTasks) {
             });
         }
 
+        const groupEst = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);
+        const groupUsed = tasks.reduce((sum, t) => sum + Number(t.loggedHours || t.hoursLogged || 0), 0);
+        const groupLeft = groupEst - groupUsed;
+        const groupFooter = `<div class="tiny monospace" style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:16px; flex-wrap:wrap;">
+            <span class="muted">Estimated <strong style="color:var(--text);">${groupEst.toFixed(2)}h</strong></span>
+            <span class="muted">Used <strong style="color:var(--accent);">${groupUsed.toFixed(2)}h</strong></span>
+            <span style="color:${groupLeft < 0 ? '#ef4444' : '#22c55e'}; font-weight:bold;">${groupLeft < 0 ? `${Math.abs(groupLeft).toFixed(2)}h over` : `${groupLeft.toFixed(2)}h left`}</span>
+            <span class="muted" title="Tasks with no estimate count the default (1h, or the follow-up default)">* = default estimate</span></div>`;
+
         return `
         <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
             <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: ${reqInfo ? '#64c6a2' : 'var(--accent)'}; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
@@ -1006,6 +1015,7 @@ OL.renderFilteredTaskGroups = function(allTasks) {
                     `).join('')}
                 </div>
             `}
+            ${groupFooter}
         </div>
         `;
     }).join('');
@@ -1367,6 +1377,17 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     `}
                 </div>`}
             </div>
+
+            <!-- Estimate (middle of the row): used / estimated hours; red once the time used passes the estimate -->
+            ${(() => {
+                const est = taskEstimatedHours(t);
+                const used = Number(t.loggedHours || t.hoursLogged || 0);
+                const over = used > est + 1e-9;
+                const own = Number.isFinite(parseFloat(t.estimatedHours));
+                return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="flex:1; text-align:center; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
+                    <i data-lucide="hourglass" style="width:11px;height:11px; vertical-align:-1px; pointer-events:none;"></i> ${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
+                </div>`;
+            })()}
 
             <div style="display:flex; align-items:center; gap:10px;">
                 <!-- Time Controls -->
