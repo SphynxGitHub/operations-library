@@ -296,6 +296,7 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
             <div style="display: grid; gap: 8px; ${req ? 'padding-left:14px; border-left:2px solid rgba(100,198,162,0.3);' : ''}">
                 ${OL.sortTasksWithSubtasksNested(groupTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
             </div>
+            ${OL.taskGroupTotalHtml(groupTasks)}
         </div>
     `;
         }).join('');
