@@ -112,6 +112,15 @@ function bodyFor(key) {
 
 // Which tile is open (click again to close). Kept for the session only.
 let openKey = '';
+// The four headline numbers from the dashboard (Active Clients, ...) so they sit in the same row as the module tiles.
+let stats = [];
+export function dashSetStats(list) { stats = Array.isArray(list) ? list : []; }
+function statTile(st) {
+    return `<div style="width:128px;height:112px;flex:none;padding:10px 10px 8px;border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;background:var(--panel);border:1px solid var(--line);">
+        <span style="height:16px;"></span>
+        <span style="font-size:30px;font-weight:700;line-height:1;color:${st.color || 'inherit'};">${esc(String(st.value))}</span>
+        <span style="font-size:11px;line-height:1.2;opacity:.8;">${esc(st.label)}</span></div>`;
+}
 export function dashTile(key) { openKey = openKey === key ? '' : key; paint(); }
 
 // One small square: icon, a big count, the name. It turns amber when something is waiting and shows an outline when open.
@@ -136,7 +145,7 @@ export function dashboardModulesHtml() {
     const others = list.filter((m) => m.key !== 'availability').map((m) => ({ m, b: bodyFor(m.key) }));
     const openOne = others.find((x) => x.m.key === openKey);
     const availHtml = avail ? (() => { const b = bodyFor('availability'); return `<div style="margin-bottom:14px;">${card(avail, b.count, b.body, b.extra)}</div>`; })() : '';
-    const tiles = others.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:${openOne ? '12px' : '25px'};">${others.map((x) => tile(x.m, x.b)).join('')}</div>` : '';
+    const tiles = (others.length || stats.length) ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:${openOne ? '12px' : '25px'};">${stats.map(statTile).join('')}${others.map((x) => tile(x.m, x.b)).join('')}</div>` : '';
     const opened = openOne ? `<div style="margin-bottom:25px;">${card(openOne.m, openOne.b.count, openOne.b.body, `<button class="btn tiny soft" style="margin-left:auto;" onclick="OL.dashTile('${esc(openOne.m.key)}')">Close</button>`)}</div>` : '';
     return `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
@@ -144,7 +153,7 @@ export function dashboardModulesHtml() {
         <span style="margin-left:auto;display:flex;gap:8px;">
             <button class="btn tiny soft" onclick="OL.dashModulesPreset()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="users" style="width:12px;height:12px;"></i>Team meeting preset</button>
             <button class="btn tiny soft" onclick="OL.dashModulesOpen()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="layout-grid" style="width:12px;height:12px;"></i>Customize</button></span></div>
-    ${list.length ? `${availHtml}${tiles}${opened}` : '<div class="tiny muted" style="margin-bottom:25px;">No modules are switched on.</div>'}`;
+    ${list.length || stats.length ? `${availHtml}${tiles}${opened}` : '<div class="tiny muted" style="margin-bottom:25px;">No modules are switched on.</div>'}`;
 }
 
 function paint() {
@@ -206,4 +215,4 @@ export function dashModulesOpen() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashModuleToggle, dashModulesOpen });
+Object.assign(window.OL, { dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashModuleToggle, dashModulesOpen });

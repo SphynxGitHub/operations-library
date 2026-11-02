@@ -315,6 +315,13 @@ OL.renderDailyDashboard = function() {
     const searchWasFocused = document.activeElement && document.activeElement.id === 'global-search-input';
     const searchCursor = searchWasFocused ? document.activeElement.selectionStart : null;
 
+    if (typeof OL.dashSetStats === 'function') OL.dashSetStats([
+        { label: 'Active Clients', value: clients.length, color: 'var(--accent)' },
+        { label: 'Active Requests', value: requestItems.length, color: '#64c6a2' },
+        { label: 'Open Action Items', value: openTasks.length, color: '#38bdf8' },
+        { label: 'Due Today / Overdue', value: dueTodayOrOverdue, color: '#ef4444' }
+    ]);
+
     main.innerHTML = `
         <div class="section-header" id="daily-dashboard-shell">
             <div>
@@ -324,25 +331,6 @@ OL.renderDailyDashboard = function() {
         </div>
 
         ${typeof OL.globalSearchHtml === 'function' ? OL.globalSearchHtml() : ''}
-
-        <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 25px;">
-            <div class="card" style="padding: 15px;">
-                <div class="tiny muted uppercase bold">Active Clients</div>
-                <div style="font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 5px;">${clients.length}</div>
-            </div>
-            <div class="card" style="padding: 15px;">
-                <div class="tiny muted uppercase bold">Active Requests</div>
-                <div style="font-size: 24px; font-weight: 900; color: #64c6a2; margin-top: 5px;">${requestItems.length}</div>
-            </div>
-            <div class="card" style="padding: 15px;">
-                <div class="tiny muted uppercase bold">Open Action Items</div>
-                <div style="font-size: 24px; font-weight: 900; color: #38bdf8; margin-top: 5px;">${openTasks.length}</div>
-            </div>
-            <div class="card" style="padding: 15px;">
-                <div class="tiny muted uppercase bold">Due Today / Overdue</div>
-                <div style="font-size: 24px; font-weight: 900; color: #ef4444; margin-top: 5px;">${dueTodayOrOverdue}</div>
-            </div>
-        </div>
 
         <div id="dashboard-modules">${typeof OL.dashboardModulesHtml === 'function' ? OL.dashboardModulesHtml() : ''}</div>
 
