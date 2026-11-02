@@ -171,8 +171,9 @@ export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cf
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         const closed = (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed;
         if (closed) return sum;
-        // only what is still to do counts, and work that fell on days already gone shows up from today on
-        const onDay = taskRemainingSlots(t, cfg, { today, roll: dayKey >= today }).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
+        // only what is still to do counts. Overdue work is NOT pushed onto today (that made today look booked solid);
+        // it is the due-today/overdue list's job to surface it.
+        const onDay = taskRemainingSlots(t, cfg).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
         return sum + onDay;
     }, 0);
 }
