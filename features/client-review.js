@@ -67,6 +67,7 @@ function recentRowHtml(client, t) {
             <div class="tiny muted">Closed ${esc(dayLabel(t.completedAt) || 'recently')}${t.assignee ? ` · ${esc(t.assignee)}` : ''}</div></div>
         ${state_}
         <button class="btn tiny soft" onclick="OL.crAddFollowUp('${esc(client.id)}','${esc(String(t.id))}')" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="plus" style="width:12px;height:12px;"></i>Add follow-up task</button>
+        ${window.OL?.aiHistoryButtonHtml?.(client.id, t.id) || ''}
         <button class="btn tiny soft" onclick="OL.crReopen('${esc(client.id)}','${esc(String(t.id))}')" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="undo-2" style="width:12px;height:12px;"></i>Reopen</button>
     </div>`;
 }
@@ -145,6 +146,7 @@ export function clientReviewPanelHtml(client) {
     const sendable = sendableTasks(client);
     return `
     <div class="card" style="padding:16px 20px;margin-bottom:20px;">
+        ${window.OL?.aiClientToolsHtml?.(client) || ''}
         ${leadStripHtml(client)}
         ${pendingReviewHtml(client)}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">

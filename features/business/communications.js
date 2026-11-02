@@ -2427,6 +2427,7 @@ OL.classifyEmailCandidates = async function(messageId) {
     if (fetchErr || !m || m.classified_at) return;
 
     const bodyText = OL._stripHtmlForPreview ? (OL._stripHtmlForPreview(m.body) || m.snippet || '') : (m.body || m.snippet || '');
+    try { OL.aiEmailShadow?.(m, bodyText); } catch (e) { console.warn('AI shadow run skipped:', e); }
     if (!OL._emailLooksLikeCandidate(bodyText)) {
         // Still mark classified — no candidates, but no need to re-check
         // this same email's heuristic again on every future open.
@@ -2457,6 +2458,7 @@ OL.classifyEmailCandidates = async function(messageId) {
 OL.renderGmailSuggestions = function(m) {
     const container = document.getElementById('gmail-suggestions');
     if (!container) return;
+    try { OL.aiEmailMount?.(m, container); } catch (e) { console.warn('AI suggestions skipped:', e); }
     const pending = (Array.isArray(m.suggestions) ? m.suggestions : []).filter((s) => s.status === 'pending');
     if (!pending.length) { container.innerHTML = ''; return; }
 

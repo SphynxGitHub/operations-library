@@ -110,6 +110,7 @@ OL.renderOlSettingsPanel = function() {
                 field('If nothing fits, ask', personSelect('os-sc-reviewer', sc.reviewer, 'The person the task is assigned to'), 'They pick the date by hand.') +
                 field('…or, if it has no named person', personSelect('os-sc-fallback', resolveMember(sc.fallbackReviewer), 'No one'), 'Used when the task is assigned to "Sphynx Task" or no one.') + `</div>`)}
 
+        ${OL.aiSectionHtml ? OL.aiSectionHtml() : ''}
         ${section('Default people for new projects', 'Who a new project starts with for each role (its Role Defaults). Existing projects are not changed, and a project can still be changed after it is made.',
             `<div class="os-row">${roleList().map((r, i) => field(esc(r.name), personSelect('os-nr-' + i, resolveMember((getOlSettings().newProjectRoles || {})[r.name]), 'No one'))).join('')}</div>`)}
 
@@ -149,6 +150,7 @@ OL.saveOlSettings = function() {
         integrations: { autoPull: on('os-ig-enabled'), everyHours: Math.max(1, Math.round(num('os-ig-hours', d.integrations.everyHours))) },
         zapRepull: { enabled: on('os-zr-enabled'), taskTitle: v('os-zr-title'), taskDescription: v('os-zr-desc'), dueInDays: Math.round(num('os-zr-due', d.zapRepull.dueInDays)), assignee: v('os-zr-assignee') },
         introCall: { enabled: on('os-ic-enabled'), titleKeywords: v('os-ic-words'), daysBefore: num('os-ic-days', d.introCall.daysBefore), taskTitle: v('os-ic-title'), assignee: v('os-ic-assignee') },
+        ai: cur.ai || {},
         newProjectRoles: Object.fromEntries(roleList().map((r, i) => [r.name, v('os-nr-' + i)])),
         scheduling: {
             greenUnderHours: green, yellowUnderHours: yellow, redUnderHours: red,
