@@ -47,7 +47,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
             const events = OL._dashboardEventsCache || [];
             const allTasks = Object.values(state.clients || {}).filter(c => c && c.projectData && !c._metaOnly).flatMap(c => c.projectData.clientTasks || []);
             const free = people.reduce((sum, n) => sum + Math.max(0, memberDayHours(n, day) - dailyLoadHours(events, allTasks, n, day)), 0);
-            openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'} for ${esc(people.join(', '))}, after meetings and tasks. Same number as the Availability table.">Open ${scope} <strong style="font-size:12px; color:#2dd4bf;">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
+            openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'} for ${esc(people.join(', '))}, after meetings and tasks. Same number as the Availability table.">Free ${scope} <strong style="font-size:12px; color:#2dd4bf;">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
         }
     }
     const cell = (label, value, color) => `<span class="muted">${label} ${scope} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
