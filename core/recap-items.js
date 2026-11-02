@@ -14,6 +14,7 @@
 export const RECAP_TYPES = { change: 'change', request: 'new_request', approval: 'approval', question: 'note', info: 'note' };
 
 const HEAD = /^\s*(?:#{1,6}\s*|\*\*)?\s*recap\s+items\s*(?:\*\*)?\s*:?\s*$/i;
+const ZOOM_HEAD = /^\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(quick recap|next steps|summary|action items|overview)\s*(?:\*\*)?\s*:?\s*$/i;
 const OTHER_HEAD = /^\s*(?:#{1,6}\s+\S|\*\*[^*]+\*\*\s*:?\s*$|[A-Z][A-Za-z ]{2,40}:\s*$)/;
 
 export function parseRecapItems(summaryText) {
@@ -24,7 +25,10 @@ export function parseRecapItems(summaryText) {
     for (let i = start + 1; i < lines.length; i++) {
         const raw = lines[i];
         if (!raw.trim()) { if (items.length) { const next = lines.slice(i + 1).find((l) => l.trim()); if (!next || !/^\s*[-*•\d]/.test(next)) break; } continue; }
-        if (OTHER_HEAD.test(raw) && !/^\s*[-*•]/.test(raw)) break;
+        const isBullet = /^\s*(?:[-*•]|\d+[.)])\s/.test(raw);
+        // Zoom's own headings are plain lines ("Next Steps", "Summary"); any short unpunctuated non-bullet line after entries also ends the section.
+        if (!isBullet && (ZOOM_HEAD.test(raw) || (items.length && raw.trim().length <= 40 && !/[.!?:]$/.test(raw.trim())))) break;
+        if (OTHER_HEAD.test(raw) && !isBullet) break;
         const body = raw.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
         if (!body) continue;
         const m = /^(change|request|approval|question|info(?:rmation)?)\s*[:\-–—]\s*(.+)$/i.exec(body);
