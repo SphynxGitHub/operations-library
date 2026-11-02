@@ -31,7 +31,7 @@ OL.taskGroupTotalHtml = function(items) {
     const used = tasks.reduce((sum, t) => sum + Number(t.loggedHours || t.hoursLogged || 0), 0);
     const left = est - used;
     return `<div class="tiny monospace" style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:14px;">
-        <span style="color:${left < 0 ? '#ef4444' : '#22c55e'}; font-weight:bold;">${left < 0 ? `${Math.abs(left).toFixed(2)}h over` : `${left.toFixed(2)}h left`}</span>
+        <span style="color:${left < 0 ? '#ef4444' : '#22c55e'}; font-weight:bold;">${left < 0 ? `${Math.abs(left).toFixed(2)}h over estimate` : `${left.toFixed(2)}h of work still to do`}</span>
         <span title="Tasks with no estimate count the default (1h, or the follow-up default)" style="width:${OL.EST_COL_W}px; flex:none; text-align:right; font-size:12px; font-weight:bold; color:${left < 0 ? '#ef4444' : 'var(--text)'};">Total ${used.toFixed(2)}h / ${est.toFixed(2)}h est</span></div>`;
 };
 OL.activeTaskTimer = { 
