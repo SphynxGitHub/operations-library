@@ -30,7 +30,7 @@ jobs:
             [ "$name" = "_shared" ] && continue
             [ -f "$dir/index.ts" ] || continue
             echo "::group::Deploy $name"
-            if ! supabase functions deploy "$name" --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}" --no-verify-jwt; then
+            if ! supabase functions deploy "$name" --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}" --no-verify-jwt --yes; then
               echo "::error::Deploying $name failed"
               failed=1
             fi
