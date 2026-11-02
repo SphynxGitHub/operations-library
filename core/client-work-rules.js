@@ -38,6 +38,7 @@ import { isRoundApproved, isActiveItem, getCurrentRound, roundStatusOf } from '.
 import { isOngoing, hasTimeLogTab } from './maintenance.js';
 import { state, uid } from './data.js';
 import { getOlSettings, fillTemplate } from './ol-settings.js';
+import { quoteTaskState, reconcileLostLead, createLeadTask } from './lead-rules.js';
 
 export const BLOCKED_STATUS = 'Pending Client Action';   // the default waiting status; any "Pending Client ..." status counts
 export const OPEN_STATUS = 'Pending Sphynx Action';
@@ -761,6 +762,11 @@ function reconcileDraftingRounds(client, ctx) {
     const repeatDays = Math.max(1, Number(cfg.repeatEveryDays) || afterDays);
     const pd = client.projectData;
 
+    // A lead's quote task comes first: no follow-ups on the sheet while it is open, and the wait counts from the day
+    // it was closed (the sheet was not really "out" before then).
+    const quote = quoteTaskState(client, ctx);
+    if (quote.open) return created;
+
     // Every round currently in Drafting, with how long it has been there.
     const drafting = [];
     (pd.scopingSheets || []).forEach((sheet) => {
@@ -776,6 +782,7 @@ function reconcileDraftingRounds(client, ctx) {
                 entry.statusChangedAt = ctx.now;   // start the clock
                 since = day(ctx.now);
             }
+            if (quote.closedDay && since < quote.closedDay) since = quote.closedDay;
             drafting.push({ key: `${sheet.id || 'sheet'}:${round}`, round, age: daysBetween(since, ctx.today) });
         });
     });
@@ -863,8 +870,9 @@ export function runClientWorkRules(client, ctx) {
     syncSharedProjects(client, ctx);
     reconcileQuarterlyCheckIns(client, ctx);
     const maintenance = reconcileMaintenance(client, ctx);
+    const lostLead = reconcileLostLead(client, ctx, roundStatusOf);
     const drafting = reconcileDraftingRounds(client, ctx);
-    return { blocked, followUp, maintenance, drafting };
+    return { blocked, followUp, maintenance, drafting, lostLead };
 }
 
 // ------------------------------------------------------------------------------------------
@@ -898,6 +906,11 @@ function contextNow(extra = {}) {
 }
 
 export function runClientWorkRulesFor(client) { return runClientWorkRules(client, contextNow()); }
+// Makes a lead task (Prepare quote or Offer paid scoping) for a project; null if one is already open.
+export function createLeadTaskFor(clientId, kind, opts) {
+    const client = state.clients?.[clientId];
+    return client ? createLeadTask(client, kind, contextNow(), opts) : null;
+}
 
 // The follow-up task was deleted: don't make a new one until the next follow-up would have been due.
 export function snoozeClientFollowUp(client) {
@@ -1127,4 +1140,4 @@ export function queuedRequestAsksForId(clientId, taskId) {
     return queuedRequestAsks(client, t, contextNow());
 }
 
-Object.assign(window.OL, { queuedRequestAsksForId, snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, syncHoursAlerts, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
+Object.assign(window.OL, { createLeadTaskFor, queuedRequestAsksForId, snoozeClientFollowUp, sweepClientWorkRules, runClientWorkRulesFor, onClientBecameOngoing, createQuarterlyCheckInFor, syncPeriodReminders, syncHoursAlerts, planZapRepull, openClientTasksFor, openClientTasksForId, isActiveRequestTask, followUpEmailData, followUpEmailDataForId });
