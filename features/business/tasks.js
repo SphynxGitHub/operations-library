@@ -16,6 +16,9 @@ OL.globalTaskFilterState = {
     subGroupBy: 'none' 
 };
 
+// Estimate column width, and the space to its right (timer 26+4+44, billable 34, avatar 56, three 10px gaps, row padding 14).
+OL.EST_COL_W = 150;
+OL.EST_COL_RIGHT = 74 + 34 + 56 + 30 + 14;
 OL.activeTaskTimer = { 
     clientId: null, 
     taskId: null, 
@@ -967,11 +970,9 @@ OL.renderFilteredTaskGroups = function(allTasks) {
         const groupEst = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);
         const groupUsed = tasks.reduce((sum, t) => sum + Number(t.loggedHours || t.hoursLogged || 0), 0);
         const groupLeft = groupEst - groupUsed;
-        const groupFooter = `<div class="tiny monospace" style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:16px; flex-wrap:wrap;">
-            <span class="muted">Estimated <strong style="color:var(--text);">${groupEst.toFixed(2)}h</strong></span>
-            <span class="muted">Used <strong style="color:var(--accent);">${groupUsed.toFixed(2)}h</strong></span>
+        const groupFooter = `<div class="tiny monospace" style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:14px;">
             <span style="color:${groupLeft < 0 ? '#ef4444' : '#22c55e'}; font-weight:bold;">${groupLeft < 0 ? `${Math.abs(groupLeft).toFixed(2)}h over` : `${groupLeft.toFixed(2)}h left`}</span>
-            <span class="muted" title="Tasks with no estimate count the default (1h, or the follow-up default)">* = default estimate</span></div>`;
+            <span title="Tasks with no estimate count the default (1h, or the follow-up default)" style="width:${OL.EST_COL_W}px; flex:none; text-align:right; font-size:12px; font-weight:bold; color:${groupLeft < 0 ? '#ef4444' : 'var(--text)'};">Total ${groupUsed.toFixed(2)}h / ${groupEst.toFixed(2)}h est</span></div>`;
 
         return `
         <div style="margin-bottom: 20px; padding: 16px; background: ${reqInfo ? 'rgba(100,198,162,0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${reqInfo ? 'rgba(100,198,162,0.3)' : 'var(--line)'}; border-radius: 10px;">
@@ -1378,18 +1379,17 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 </div>`}
             </div>
 
-            <!-- Estimate (middle of the row): used / estimated hours; red once the time used passes the estimate -->
-            ${(() => {
-                const est = taskEstimatedHours(t);
-                const used = Number(t.loggedHours || t.hoursLogged || 0);
-                const over = used > est + 1e-9;
-                const own = Number.isFinite(parseFloat(t.estimatedHours));
-                return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="flex:1; text-align:center; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
-                    <i data-lucide="hourglass" style="width:11px;height:11px; vertical-align:-1px; pointer-events:none;"></i> ${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
-                </div>`;
-            })()}
-
             <div style="display:flex; align-items:center; gap:10px;">
+                <!-- Estimate column: fixed width and right-aligned, so it lines up on every row (the footer total uses the same column) -->
+                ${(() => {
+                    const est = taskEstimatedHours(t);
+                    const used = Number(t.loggedHours || t.hoursLogged || 0);
+                    const over = used > est + 1e-9;
+                    const own = Number.isFinite(parseFloat(t.estimatedHours));
+                    return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="width:${OL.EST_COL_W}px; flex:none; text-align:right; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
+                        ${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
+                    </div>`;
+                })()}
                 <!-- Time Controls -->
                 <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:4px;">
                     <button class="btn tiny ${isTimerRunning ? 'danger' : 'primary'}" 
@@ -1400,13 +1400,13 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                         <i data-lucide="${isTimerRunning ? 'square' : 'timer'}" style="width:12px;height:12px; pointer-events:none;"></i>
                     </button>
 
-                    <span id="timer-display-${t.id}" class="tiny monospace bold" style="min-width:38px; text-align:right; color:${isTimerRunning ? '#38bdf8' : 'var(--accent)'}; font-size:11px;">
+                    <span id="timer-display-${t.id}" class="tiny monospace bold" style="width:44px; text-align:right; color:${isTimerRunning ? '#38bdf8' : 'var(--accent)'}; font-size:11px;">
                         ${isTimerRunning ? OL.formatSecondsDisplay(OL.activeTaskTimer.elapsedSeconds) : `${t.loggedHours.toFixed(2)}h`}
                     </span>
                 </div>
 
                 <!-- Billable Toggle -->
-                <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
+                <div onclick="event.stopPropagation();" style="display:flex; align-items:center; justify-content:center; width:34px; flex:none;">
                     ${(() => {
                         const isBill = OL.isTaskBillable(t, state.clients?.[t.clientId]);
                         const locked = OL.isClientTaskForBilling(t, state.clients?.[t.clientId]);
@@ -1420,7 +1420,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                 </div>
 
                 <!-- Assignee Avatar -->
-                <div onclick="event.stopPropagation();" style="display:flex; justify-content:center; position:relative;">
+                <div onclick="event.stopPropagation();" style="display:flex; justify-content:flex-end; position:relative; width:56px; flex:none;">
                     ${taskAssignees(t).length > 1 ? OL.renderMultiAssigneeAvatars(t) : `<div title="Assignee: ${esc(t.assignee)}" 
                          style="width:24px; height:24px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; ${avatarBorder ? `border:2px solid ${avatarBorder}; box-sizing:border-box;` : (isNamedPerson ? 'border:none;' : `border:1px solid ${avatarColor};`)} font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; cursor:pointer;"
                          onclick="OL.openEditTaskAssigneeDropdown(event, '${t.clientId}', '${t.id}')">
