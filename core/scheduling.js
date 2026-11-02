@@ -166,14 +166,22 @@ export function taskRemainingSlots(task, cfg, { today, roll } = {}) {
 export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cfg) {
     if (!assignee) return 0;
     const today = toDayKey(new Date());
+    // A day that has passed shows the time actually tracked on it (every task, finished or not). What was planned for it
+    // and not done does not matter any more.
+    if (dayKey < today) {
+        return (tasks || []).reduce((sum, t) => sum + (Array.isArray(t?.timeLog) ? t.timeLog : []).reduce((n, e) => {
+            if (!e || (e.by && e.by !== assignee) || !(e.end || e.start)) return n;
+            return toDayKey(new Date(e.end || e.start)) === dayKey ? n + (Number(e.minutes) || 0) / 60 : n;
+        }, 0), 0);
+    }
+    // Today and later: only the work still to do (estimate minus time tracked), laid out from today forward. The part that
+    // was planned for days already gone is not counted there; it is placed from today on.
     return (tasks || []).reduce((sum, t) => {
         if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         const closed = (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed;
         if (closed) return sum;
-        // only what is still to do counts. Overdue work is NOT pushed onto today (that made today look booked solid);
-        // it is the due-today/overdue list's job to surface it.
-        const onDay = taskRemainingSlots(t, cfg).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
+        const onDay = taskRemainingSlots(t, cfg, { today, roll: true }).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
         return sum + onDay;
     }, 0);
 }
