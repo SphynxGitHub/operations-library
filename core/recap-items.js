@@ -80,3 +80,19 @@ export function duplicateCheck(itemText, tasks, today = new Date().toISOString()
 export function checkActionItems(items, tasks, today) {
     return (items || []).map((text) => ({ text, ...duplicateCheck(text, tasks, today) }));
 }
+
+// ---- Scope narrowing, found without the AI -----------------------------------------------------------------------
+// The AI does not always label a "we only need X for now, the rest later" moment as scope narrowing, so OL also looks for
+// the two sentences itself: one saying what is wanted NOW, a different one saying the rest comes LATER. Both are copied
+// verbatim from the summary. Returns { now, deferred } or null.
+const NOW_SIGNAL = /\b(immediate priority|first priority|quick fix|for now|right now|at the moment|just need|only need|simple (?:one[- ]way |one[- ]time )?(?:sync|fix|solution|zap))\b/i;
+const LATER_SIGNAL = /\b(?:later|future project|future phase|next phase|down the road|at a later time|in a future)\b/i;
+const LATER_ABOUT = /\b(?:address|addressed|tackle|handle|handled|revisit|project|solution|phase|automation|component|scope|rest)\b/i;
+export function detectScopeNarrowing(summary) {
+    const sentences = String(summary || '').split(/\n+|(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 20 && s.length < 400);
+    const now = sentences.find((s) => NOW_SIGNAL.test(s) && !/\bfuture project\b/i.test(s));
+    if (!now) return null;
+    const deferred = sentences.find((s) => s !== now && LATER_SIGNAL.test(s) && LATER_ABOUT.test(s) && !NOW_SIGNAL.test(s));
+    if (!deferred) return null;
+    return { now, deferred };
+}

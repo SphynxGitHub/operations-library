@@ -14,7 +14,7 @@ import { isTaskClosed } from '../core/work-status.js';
 import { AI_FEATURES, aiModes } from '../core/ai-flags.js';
 import { getOlSettings } from '../core/ol-settings.js';
 import { runAi, featureMode } from '../core/ai-client.js';
-import { parseRecapItems, checkActionItems } from '../core/recap-items.js';
+import { parseRecapItems, checkActionItems, detectScopeNarrowing } from '../core/recap-items.js';
 import { cleanEmailBody, quoteExists } from '../core/email-clean.js';
 import { saveNote } from '../core/captures.js';
 import { logSuggestion, logManual, recordOutcome, accuracyFor } from '../core/suggestion-log.js';
@@ -222,6 +222,25 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
         cards.push(cardFor({ n: i + 1, logId, type, quote: e.text, confidence: m.confidence || 'low', target: t ? { type: t.type, id: t.id, label: t.label } : null,
             rows: m.restates ? [['Note', 'Restates something already recorded, so adding it as a note is the default.']] : [],
             payload: { clientId: client.id, text: `${e.text} (meeting ${String(evt.start || '').slice(0, 10)})`, sourceKind: 'calendar_event', sourceId: evt.id } }));
+    }
+    // Backstop: if the AI did not call anything "scope narrowed" but the summary plainly says it (what they want NOW and a
+    // different sentence saying the rest comes LATER), make that card from the two verbatim sentences. It replaces the card for
+    // the "now" sentence when there is one, and borrows that card's match (or the most common match) as the target.
+    if (fromSummary && !cards.some((c) => c.type === 'scope_narrowed')) {
+        const sc = detectScopeNarrowing(evt.zoom_summary);
+        if (sc && quoteExists(sc.now, evt.zoom_summary) && quoteExists(sc.deferred, evt.zoom_summary)) {
+            registerScope();
+            const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const at = cards.findIndex((c) => norm(c.quote) === norm(sc.now));
+            const counts = new Map();
+            cards.forEach((c) => { const tg = c.payload?.target; if (tg && tg.type === 'request') counts.set(tg.id, { tg, n: (counts.get(tg.id)?.n || 0) + 1 }); });
+            const common = [...counts.values()].sort((a, b) => b.n - a.n)[0]?.tg || null;
+            const target = (at >= 0 && cards[at].payload?.target?.type === 'request' ? cards[at].payload.target : null) || common;
+            const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: sc.now, targetKind: target?.type, targetId: target?.id, confidence: 'medium', secretsRemoved: res.secretsRemoved });
+            const card = scopeCard({ n: 0, logId, quote: sc.now, deferred: sc.deferred, title: '', confidence: 'medium', target, client, evt });
+            if (at >= 0) cards.splice(at, 1, card); else cards.unshift(card);
+            cards.forEach((c, i) => { c.n = i + 1; });
+        }
     }
     out.className = '';
     out.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${cards.map((c) => OL.suggestionCardHtml(c)).join('')}</div>
