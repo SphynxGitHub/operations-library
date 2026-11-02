@@ -211,7 +211,28 @@ function cardFor(base) {
 // ================================================================================================================
 // 1. Meetings: Recap Items and duplicate check
 // ================================================================================================================
-OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
+// The last saved answer for a meeting, so reopening it does not ask the AI again (and does not use another Zapier task).
+async function lastRecapRun(sourceId) {
+    try {
+        const { data } = await db.from('ai_runs').select('id,output,secrets_removed,created_at').eq('feature', 'recap').eq('source_id', String(sourceId))
+            .eq('mode', 'suggest').is('error', null).not('output', 'is', null).order('created_at', { ascending: false }).limit(1);
+        return data?.[0] || null;
+    } catch (_) { return null; }
+}
+const normQuote = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+// What was already suggested for this meeting, by type and quote, so a card someone has dealt with does not come back.
+async function priorLogs(sourceId) {
+    const m = new Map();
+    try {
+        const { data } = await db.from('suggestion_log').select('id,suggestion_type,quote,status').eq('source_kind', 'calendar_event').eq('source_id', String(sourceId)).order('created_at', { ascending: true });
+        (data || []).forEach((r) => m.set(`${r.suggestion_type}|${normQuote(r.quote)}`, r));
+    } catch (_) { /* log table missing: every card counts as new */ }
+    return m;
+}
+OL.aiRecapRerun = function () { const c = OL._aiRecapCtx; if (c) OL.aiMeetingRecap({ ...c, rerun: true }); };
+
+// rerun: ask the AI again. auto: when there is no saved answer yet, run now (true) or wait for the button (false).
+OL.aiMeetingRecap = async function ({ evt, client, actionItems, rerun = false, auto = true }) {
     const box = el('ms-ai-recap');
     const mode = featureMode('recap');
     if (!box || mode === 'off' || !client) return;
@@ -232,18 +253,36 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
 
     let entries = parseRecapItems(evt.zoom_summary);
     const fromSummary = !entries.length && String(evt.zoom_summary || '').trim().length > 40;   // no Recap Items section: the AI reads the whole summary
-    box.innerHTML = `${dupHtml}<div class="bold tiny uppercase muted" style="margin-bottom:4px;">Recap items</div><div id="ms-ai-recap-cards" class="tiny muted">${entries.length || fromSummary ? 'Matching…' : 'No summary to read yet.'}</div>`;
+    OL._aiRecapCtx = { evt, client, actionItems };
+    const header = (note, label) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><div class="bold tiny uppercase muted">Recap items</div>
+        <span class="tiny muted" id="ms-ai-recap-when">${esc(note)}</span>
+        <button type="button" class="btn tiny soft" style="margin-left:auto;" onclick="OL.aiRecapRerun()" title="Ask the AI to read the summary again. This uses an AI run.">${label}</button></div>`;
+    const canRun = !!(entries.length || fromSummary);
+    const cached = canRun && !rerun && mode === 'suggest' ? await lastRecapRun(evt.id) : null;
+    if (canRun && !cached && !rerun && !auto) {
+        box.innerHTML = `${dupHtml}${header('', 'Run')}<div id="ms-ai-recap-cards" class="tiny muted">Not run for this meeting yet. Press Run to read the summary.</div>`;
+        return;
+    }
+    box.innerHTML = `${dupHtml}${header(cached ? `Saved result from ${String(cached.created_at || '').slice(0, 10)}` : '', 'Re-run')}<div id="ms-ai-recap-cards" class="tiny muted">${canRun ? (cached ? 'Loading…' : 'Matching…') : 'No summary to read yet.'}</div>`;
     refreshIcons();
-    if (!entries.length && !fromSummary) return;
+    if (!canRun) return;
 
     const items = OL._openItemsForClassification ? OL._openItemsForClassification(client.id) : [];
-    const res = fromSummary
+    const prior = await priorLogs(evt.id);
+    const logOrReuse = async (sg) => {
+        const hit = prior.get(`${sg.type}|${normQuote(sg.quote)}`);
+        return hit ? { logId: hit.id, decided: hit.status !== 'pending' } : { logId: await logSuggestion(sg), decided: false };
+    };
+    let handled = 0;
+    const res = cached ? { ok: true, mode, result: cached.output, secretsRemoved: Number(cached.secrets_removed) || 0 }
+        : fromSummary
         ? await runAi('recap_from_summary', { summary: String(evt.zoom_summary).slice(0, 10000), items }, { clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id })
         : await runAi('recap_match', { entries: entries.map((e, i) => ({ id: 'e' + i, type: e.word, text: e.text, hint: e.targetHint })), items }, { clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id });
     const out = el('ms-ai-recap-cards');
     if (!out) return;
     if (!res.ok) { out.textContent = NO_AI(res); return; }
     if (res.shadow) { out.textContent = 'Shadow mode: logged, nothing shown.'; return; }
+    if (!cached) { const w = el('ms-ai-recap-when'); if (w) w.textContent = 'Just ran'; }
 
     if (fromSummary) {
         // Each quote must really be in the summary; anything else is dropped.
@@ -261,14 +300,16 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
         // Scope narrowed: the client cut what they want now and pushed the rest to later. It needs BOTH quotes to be real.
         if ((m.type === 'scope_narrowed' || e.type === 'scope_narrowed') && m.deferredQuote && quoteExists(m.deferredQuote, evt.zoom_summary)) {
             registerScope();
-            const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
+            const { logId, decided } = await logOrReuse({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
+            if (decided) { handled++; continue; }
             cards.push(scopeCard({ n: i + 1, logId, quote: e.text, deferred: String(m.deferredQuote).slice(0, 600), title: String(m.title || '').trim().slice(0, 120), confidence: m.confidence || 'low', target: t,
                 client, evt }));
             continue;
         }
         const type = (e.type === 'new_request' && t) || e.type === 'scope_narrowed' ? 'change' : (['change', 'approval', 'new_request', 'note'].includes(m.type) ? m.type : e.type);
         if (!t && (type === 'new_request' || type === 'change')) { unmatched.push(e); }
-        const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type, quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
+        const { logId, decided } = await logOrReuse({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type, quote: e.text, targetKind: t?.type, targetId: t?.id, confidence: m.confidence, secretsRemoved: res.secretsRemoved });
+        if (decided) { handled++; continue; }
         cards.push(cardFor({ n: i + 1, logId, type, quote: e.text, confidence: m.confidence || 'low', target: t ? { type: t.type, id: t.id, label: t.label } : null, canChoose: true, alwaysChoose: true,
             rows: m.restates ? [['Note', 'Restates something already recorded, so adding it as a note is the default.']] : [],
             payload: { clientId: client.id, text: `${e.text} (meeting ${String(evt.start || '').slice(0, 10)})`, sourceKind: 'calendar_event', sourceId: evt.id } }));
@@ -276,7 +317,7 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
     // Backstop: if the AI did not call anything "scope narrowed" but the summary plainly says it (what they want NOW and a
     // different sentence saying the rest comes LATER), make that card from the two verbatim sentences. It replaces the card for
     // the "now" sentence when there is one, and borrows that card's match (or the most common match) as the target.
-    if (fromSummary && !cards.some((c) => c.type === 'scope_narrowed')) {
+    if (fromSummary && !cards.some((c) => c.type === 'scope_narrowed') && ![...prior.values()].some((r) => r.suggestion_type === 'scope_narrowed' && r.status !== 'pending')) {
         const sc = detectScopeNarrowing(evt.zoom_summary);
         if (sc && quoteExists(sc.now, evt.zoom_summary) && quoteExists(sc.deferred, evt.zoom_summary)) {
             registerScope();
@@ -286,13 +327,14 @@ OL.aiMeetingRecap = async function ({ evt, client, actionItems }) {
             cards.forEach((c) => { const tg = c.payload?.target; if (tg && tg.type === 'request') counts.set(tg.id, { tg, n: (counts.get(tg.id)?.n || 0) + 1 }); });
             const common = [...counts.values()].sort((a, b) => b.n - a.n)[0]?.tg || null;
             const target = (at >= 0 && cards[at].payload?.target?.type === 'request' ? cards[at].payload.target : null) || common;
-            const logId = await logSuggestion({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: sc.now, targetKind: target?.type, targetId: target?.id, confidence: 'medium', secretsRemoved: res.secretsRemoved });
+            const { logId } = await logOrReuse({ clientId: client.id, sourceKind: 'calendar_event', sourceId: evt.id, type: 'scope_narrowed', quote: sc.now, targetKind: target?.type, targetId: target?.id, confidence: 'medium', secretsRemoved: res.secretsRemoved });
             const card = scopeCard({ n: 0, logId, quote: sc.now, deferred: sc.deferred, title: '', confidence: 'medium', target, client, evt });
             if (at >= 0) cards.splice(at, 1, card); else cards.unshift(card);
-            cards.forEach((c, i) => { c.n = i + 1; });
         }
     }
-    out.className = '';
+    cards.forEach((c, i) => { c.n = i + 1; });
+    out.className = cards.length ? '' : 'tiny muted';
+    if (!cards.length) { out.textContent = handled ? 'Everything found in this summary has been dealt with.' : 'Nothing in this summary looks like a client request, change or approval.'; return; }
     out.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${cards.map((c) => OL.suggestionCardHtml(c)).join('')}</div>
         ${unmatched.length ? `<details style="margin-top:8px;"><summary class="tiny muted">Possible unrecorded requests (${unmatched.length})</summary><ul class="tiny">${unmatched.map((u) => `<li>${esc(u.text)}</li>`).join('')}</ul></details>` : ''}`;
     refreshIcons();

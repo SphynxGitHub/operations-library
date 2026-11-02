@@ -580,17 +580,15 @@ OL.msSend = async function() {
     OL.msBack();
 };
 
-// Leaves the full-page view and goes back to the calendar event it was opened from.
+// Leaves the full page (the event and its summary email are one page) and goes back to what was behind it.
 OL.msBack = function() {
-    const id = OL._msState?.evt?.id;
     OL.closeFullPage();
-    if (id && typeof OL.openCalendarEventModal === 'function') OL.openCalendarEventModal(id);
+    OL._activeEventModalId = null;
 };
 
 OL.openMeetingSummaryEmail = async function(eventId) {
     const { data: evt, error } = await db.from('calendar_events').select('*').eq('id', eventId).single();
     if (error || !evt) { alert('Could not load that meeting.'); return; }
-    if (!String(evt.zoom_summary || '').trim() && !confirm("This meeting has no Zoom summary yet. Write the summary yourself?")) return;
     if (!evt.linked_client_id) { alert('Link this meeting to a client first, so the summary can be filed with them.'); return; }
 
     const client = await loadFullClient(evt.linked_client_id);
@@ -656,11 +654,14 @@ OL.openMeetingSummaryEmail = async function(eventId) {
             <div id="ms-other-tasks"></div>
         </div>`;
 
+    const eventParts = OL.eventPageParts ? OL.eventPageParts(evt) : { introHtml: '', commentsHtml: '' };
     OL.closeModal();   // the calendar event window, if that is where this was opened from
     OL.openFullPage(OL.composeShellHtml({
         prefix: 'ms',
-        page: true, backLabel: 'Back to calendar event', closeAction: 'OL.msBack()',
-        title: 'Meeting summary email',
+        page: true, backLabel: 'Back', closeAction: 'OL.msBack()',
+        title: evt.title || 'Meeting',
+        introHtml: `${eventParts.introHtml}<div class="bold tiny uppercase muted" style="margin:0 0 8px;">Summary email</div>`,
+        belowHtml: eventParts.commentsHtml,
         toLabel: 'To (everyone on the meeting except you)',
         subject: draft.subject,
         messageHtml: messageTextToHtml(draft.message, OL._msState.recordingUrl), messageMinHeight: 260,
@@ -677,7 +678,10 @@ OL.openMeetingSummaryEmail = async function(eventId) {
     OL.renderAllRecipients('ms');
     renderMsTaskRows();
     renderMsOtherTasks();
-    try { OL.aiMeetingRecap?.({ evt, client, actionItems: zoomNextStepsNotYetTasks() }); } catch (e) { console.warn('Recap items skipped:', e); }
+    OL.eventPageAfterRender?.(evt);
+    // The recap uses the saved answer when there is one. It only asks the AI by itself the first time, and not at all for a meeting
+    // whose summary has already been sent (the Run / Re-run button is there for that).
+    try { OL.aiMeetingRecap?.({ evt, client, actionItems: zoomNextStepsNotYetTasks(), auto: !evt.summary_sent_at }); } catch (e) { console.warn('Recap items skipped:', e); }
 };
 
 window.OL = window.OL || {};

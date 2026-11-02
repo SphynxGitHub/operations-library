@@ -910,12 +910,8 @@ OL.formatEventDescription = function(text) {
     return html;
 };
 
-OL.openCalendarEventModal = async function(id) {
-    const { data: evt, error } = await db.from('calendar_events').select('*').eq('id', id).single();
-    if (error || !evt) { alert('Could not load that event.'); return; }
-
-    OL._activeEventModalId = id;
-
+// The pieces of the event view, shared by the small window and by the full page (which also holds the summary email).
+function eventParts(evt) {
     const projectName = evt.linked_client_id ? (state.clients[evt.linked_client_id]?.meta?.name || 'Project') : '';
     const showCalendarBadge = (state.master?.syncedCalendarIds || []).length > 1 && evt.calendar_summary;
     const startLabel = evt.all_day
@@ -937,19 +933,8 @@ OL.openCalendarEventModal = async function(id) {
     const attendeeListHTML = (Array.isArray(evt.attendee_emails) && evt.attendee_emails.length > 0)
         ? evt.attendee_emails.map(email => OL.renderContactPillOrPrompt(email, { clientId: evt.linked_client_id })).join(' ')
         : '<span class="muted">None listed</span>';
-    
-    const html = `
-        <div style="padding: 24px; max-width: 820px; width: 100%;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;">
-                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-                    <i data-lucide="calendar" style="width:22px;height:22px;color:#38bdf8; flex-shrink:0;"></i>
-                    <h3 style="margin:0; font-size:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(evt.title || 'Untitled Event')}</h3>
-                </div>
-                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0; margin-left:10px;">✕</button>
-            </div>
 
-            <div style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
-                <div style="min-width:0;">
+    const pills = `
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 20px;">
                         ${projectName ? `
                             <span onclick="event.stopPropagation();">${OL.renderProjectPill(evt.linked_client_id, projectName)}</span>
@@ -968,18 +953,26 @@ OL.openCalendarEventModal = async function(id) {
                               onclick="OL.openEditEventCallTypeDropdown(event, '${evt.id}')">
                             ${esc(evt.call_type || 'Uncategorized')}
                         </span>
-                    </div>
+                    </div>`;
 
-                    ${evt.linked_client_id && new Date(evt.start) < new Date() ? `
+    const toolbarTail = `
+                            <button class="btn small soft" onclick="OL.openContextCompose()" title="Blank email about this meeting (stays open over this window)">New email</button>
+                            ${evt.summary_sent_at ? `<span class="tiny muted">Summary sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
+                            <span class="tiny muted" style="margin-left:auto;">${OL.zoomStatusLine ? OL.zoomStatusLine(evt) : ''}</span>
+                            <button class="btn tiny soft" title="Look this meeting up in Zoom again (summary, action items, recording → Drive)" onclick="OL.recheckZoomForEvent('${evt.id}')"><i data-lucide="refresh-cw" style="width:11px;height:11px;"></i> Re-check Zoom</button>`;
+    const isPastLinked = !!evt.linked_client_id && new Date(evt.start) < new Date();
+    const toolbar = isPastLinked ? `
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-6px 0 18px; padding:10px 12px; border:1px solid rgba(37,99,235,0.3); background:rgba(37,99,235,0.05); border-radius:8px;">
                             <button class="btn small primary" onclick="OL.openMeetingSummaryEmail('${evt.id}')">${evt.summary_sent_at ? 'Resend' : 'Prepare'} summary email</button>
-                            <button class="btn small soft" onclick="OL.openContextCompose()" title="Blank email about this meeting (stays open over this window)">New email</button>
-                            ${evt.summary_sent_at ? `<span class="tiny muted">Sent ${new Date(evt.summary_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>` : ''}
-                            <span class="tiny muted" style="margin-left:auto;">${OL.zoomStatusLine ? OL.zoomStatusLine(evt) : ''}</span>
-                            <button class="btn tiny soft" title="Look this meeting up in Zoom again (summary, action items, recording → Drive)" onclick="OL.recheckZoomForEvent('${evt.id}')"><i data-lucide="refresh-cw" style="width:11px;height:11px;"></i> Re-check Zoom</button>
-                        </div>
-                    ` : ''}
+                            ${toolbarTail}
+                        </div>` : '';
+    // On the full page the email is right below, so the toolbar has no "Prepare" button.
+    const pageToolbar = isPastLinked ? `
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-6px 0 18px; padding:10px 12px; border:1px solid rgba(37,99,235,0.3); background:rgba(37,99,235,0.05); border-radius:8px;">
+                            ${toolbarTail}
+                        </div>` : '';
 
+    const info = `
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; background:rgba(0,0,0,0.15); padding:14px; border-radius:6px; border:1px solid var(--line);" class="tiny">
                         <div><strong class="muted">When:</strong> ${esc(startLabel)}${endLabel ? ` – ${esc(endLabel)}` : ''}</div>
                         <div>
@@ -994,40 +987,42 @@ OL.openCalendarEventModal = async function(id) {
                         ${showCalendarBadge ? `<div style="grid-column: span 2;"><strong class="muted">Calendar:</strong> ${esc(evt.calendar_summary)}</div>` : ''}
                     </div>
 
-                    ${OL.renderAgendaPlaceholder ? OL.renderAgendaPlaceholder(evt) : ''}
+                    ${OL.renderAgendaPlaceholder ? OL.renderAgendaPlaceholder(evt) : ''}`;
 
-                    ${evt.description ? `
+    const description = evt.description ? `
                         <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 6px; border:1px solid var(--line);">
                             <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;">Description</label>
                             <div id="event-desc-${evt.id}" style="font-size:13px; line-height:1.5; color:var(--text); overflow-wrap: break-word; max-height:160px; overflow:hidden;">${OL.formatEventDescription(evt.description)}</div>
                             <button id="event-desc-toggle-${evt.id}" class="btn tiny soft" style="display:none; margin-top:8px;" onclick="OL.toggleEventDescription('${evt.id}')">Show more</button>
                         </div>
-                    ` : ''}
+                    ` : '';
 
-                    ${evt.zoom_summary ? `
+    const zoomBody = evt.zoom_summary ? `<div style="font-size:13px; line-height:1.5; color:var(--text); white-space:pre-wrap; overflow-wrap:break-word;">${OL.formatEventDescription(evt.zoom_summary)}</div>` : '';
+    const zoom = evt.zoom_summary ? `
                         <div style="margin-bottom: 20px; background: rgba(37,99,235,0.05); padding: 14px; border-radius: 6px; border:1px solid rgba(37,99,235,0.25);">
                             <label class="bold tiny uppercase muted" style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
                                 <i data-lucide="video" style="width:12px;height:12px;color:#38bdf8;"></i> Zoom Summary
                             </label>
-                            <div style="font-size:13px; line-height:1.5; color:var(--text); white-space:pre-wrap; overflow-wrap:break-word;">${OL.formatEventDescription(evt.zoom_summary)}</div>
-
+                            ${zoomBody}
                         </div>
-                    ` : ''}
+                    ` : '';
+    const zoomCollapsed = evt.zoom_summary ? `
+                        <details style="margin-bottom: 20px; background: rgba(37,99,235,0.05); padding: 10px 14px; border-radius: 6px; border:1px solid rgba(37,99,235,0.25);">
+                            <summary class="bold tiny uppercase muted" style="cursor:pointer;">Zoom summary, as received (the email below starts from this)</summary>
+                            <div style="margin-top:8px;">${zoomBody}</div>
+                        </details>` : '';
 
-                    ${evt.link ? `
+    const link = evt.link ? `
                         <a href="${evt.link}" target="_blank" class="btn tiny soft" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
                             Open in Google Calendar <i data-lucide="external-link" style="width:12px;height:12px;"></i>
                         </a>
-                    ` : ''}
-                </div>
+                    ` : '';
 
-                <div id="event-comments-sidebar-${evt.id}" style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
-                    ${OL.renderEventCommentsSidebarHTML(evt)}
-                </div>
-            </div>
-        </div>
-    `;
-    OL.showOverlayModal(html);
+    return { pills, toolbar, pageToolbar, info, description, zoom, zoomCollapsed, link, comments: OL.renderEventCommentsSidebarHTML(evt) };
+}
+
+// What has to run once the event's HTML is in the page.
+function afterEventRender(evt) {
     OL.setComposeContext?.({ kind: 'event', clientId: evt.linked_client_id || null, id: evt.id, title: evt.title, attendees: evt.attendee_emails || [] });
     if (OL.renderAgendaSection) OL.renderAgendaSection(evt.id);
     // Handles the (rare) case of reopening this modal for a different
@@ -1049,6 +1044,80 @@ OL.openCalendarEventModal = async function(id) {
             toggleBtn.style.display = 'inline-flex';
         }
     }
+    if (window.lucide) lucide.createIcons();
+}
+
+// For a past meeting with a Zoom summary (or one already sent) the event and its summary email are ONE full page.
+const eventOpensAsPage = (evt) => !!evt.linked_client_id && new Date(evt.start) < new Date() && !!(evt.zoom_summary || evt.summary_sent_at)
+    && typeof OL.openMeetingSummaryEmail === 'function';
+
+// The event half of that page: the details block at the top and the comments underneath the email.
+OL.eventPageParts = function(evt) {
+    const p = eventParts(evt);
+    return {
+        introHtml: `<div id="evt-page-details" style="margin-bottom:18px;">${p.pills}${p.pageToolbar}${p.info}${p.description}${p.zoomCollapsed}${p.link}</div>`,
+        commentsHtml: `<div id="event-comments-sidebar-${evt.id}" style="border-top:1px solid var(--line); margin-top:22px; padding-top:14px; min-width:0;">${p.comments}</div>`,
+    };
+};
+OL.eventPageAfterRender = (evt) => afterEventRender(evt);
+
+OL.openCalendarEventModal = async function(id) {
+    const { data: evt, error } = await db.from('calendar_events').select('*').eq('id', id).single();
+    if (error || !evt) { alert('Could not load that event.'); return; }
+
+    OL._activeEventModalId = id;
+
+    if (eventOpensAsPage(evt)) {
+        // Already on this event's page: refresh the details and comments only, so an unsent email is not thrown away.
+        const details = document.getElementById('evt-page-details');
+        if (details && OL._msState?.evt?.id === id) {
+            const parts = OL.eventPageParts(evt);
+            details.outerHTML = parts.introHtml;
+            const cm = document.getElementById(`event-comments-sidebar-${id}`);
+            if (cm) cm.outerHTML = parts.commentsHtml;
+            afterEventRender(evt);
+            return;
+        }
+        OL.closeModal?.();
+        return OL.openMeetingSummaryEmail(id);
+    }
+
+    const projectName = evt.linked_client_id ? (state.clients[evt.linked_client_id]?.meta?.name || 'Project') : '';
+    const p = eventParts(evt);
+
+    const html = `
+        <div style="padding: 24px; max-width: 820px; width: 100%;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;">
+                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+                    <i data-lucide="calendar" style="width:22px;height:22px;color:#38bdf8; flex-shrink:0;"></i>
+                    <h3 style="margin:0; font-size:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(evt.title || 'Untitled Event')}</h3>
+                </div>
+                <button class="btn tiny soft" onclick="OL.closeModal()" style="font-weight:bold; font-size:14px; flex-shrink:0; margin-left:10px;">✕</button>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1.6fr 1fr; gap:24px; align-items:start;">
+                <div style="min-width:0;">
+                    ${p.pills}
+
+                    ${p.toolbar}
+
+                    ${p.info}
+
+                    ${p.description}
+
+                    ${p.zoom}
+
+                    ${p.link}
+                </div>
+
+                <div id="event-comments-sidebar-${evt.id}" style="border-left:1px solid var(--line); padding-left:20px; min-width:0;">
+                    ${p.comments}
+                </div>
+            </div>
+        </div>
+    `;
+    OL.showOverlayModal(html);
+    afterEventRender(evt);
 };
 
 window.OL.openCalendarEventModal = OL.openCalendarEventModal;
