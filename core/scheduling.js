@@ -154,6 +154,9 @@ export function taskDaySlots(task, cfg) {
 export function taskRemainingSlots(task, cfg, { today } = {}) {
     const due = String(task?.dueDate || task?.blockedOn?.dueDate || '').slice(0, 10);
     if (!due) return [];
+    // A task waiting on someone (no date of its own, only the date it was held on) is not work to do: once that day has passed
+    // it does not roll onto today. It only blocks its original day.
+    if (!task?.dueDate && today && due < today) return [];
     const logged = Number(task?.loggedHours || task?.hoursLogged || 0);
     const remaining = Math.round(Math.max(0, taskEstimatedHours(task, cfg) - logged) * 100) / 100;
     if (!(remaining > 0)) return [];
