@@ -132,16 +132,47 @@ export function taskDaySlots(task, cfg) {
     return spreadBackFrom(due, hours, cap, who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : null);
 }
 
+// What is LEFT of a task, laid on days: the estimate minus the time already logged (a 4h task with 2.1h used still has
+// 1.9h to do), split over working days by the per-day cap like taskDaySlots. With roll on, the part that would fall on days
+// already gone is moved forward onto today and the next working days (cap hours each), since that work is still owed.
+export function taskRemainingSlots(task, cfg, { today, roll } = {}) {
+    const logged = Number(task?.loggedHours || task?.hoursLogged || 0);
+    const remaining = Math.round(Math.max(0, taskEstimatedHours(task, cfg) - logged) * 100) / 100;
+    if (!(remaining > 0)) return [];
+    let slots = taskDaySlots(logged > 0 ? { ...task, estimatedHours: remaining, workSlots: undefined } : task, cfg);
+    if (!roll || !today) return slots;
+    let carry = slots.filter((x) => x.date < today).reduce((n, x) => n + x.hours, 0);
+    if (!(carry > 0.001)) return slots;
+    const keep = slots.filter((x) => x.date >= today).map((x) => ({ ...x }));
+    const cap = maxPerDay(cfg);
+    const who = taskAssignees(task)[0];
+    const isWork = who && !isGenericAssignee(who) ? (key) => memberDayHours(who, key, cfg || getOlSettings().scheduling) > 0 : (key) => !isWeekend(fromDayKey(key));
+    const cursor = fromDayKey(today);
+    for (let guard = 0; carry > 0.001 && guard < 400; guard++, cursor.setDate(cursor.getDate() + 1)) {
+        const key = toDayKey(cursor);
+        if (!isWork(key)) continue;
+        const cur = keep.find((x) => x.date === key);
+        const room = cap === Infinity ? carry : Math.max(0, cap - (cur ? cur.hours : 0));
+        const put = Math.min(room, carry);
+        if (put <= 0) continue;
+        if (cur) cur.hours = Math.round((cur.hours + put) * 100) / 100; else keep.push({ date: key, hours: Math.round(put * 100) / 100 });
+        carry -= put;
+    }
+    return keep;
+}
+
 // Queued task hours for one assignee on one day — every open task (not this one being scheduled) with hours on that
 // day, counting only the part of a spread-out task that falls on it.
 export function queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId, cfg) {
     if (!assignee) return 0;
+    const today = toDayKey(new Date());
     return (tasks || []).reduce((sum, t) => {
         if (!t || (excludeTaskId != null && t.id === excludeTaskId)) return sum;   // a row with no id (a task not saved yet) is never "the one being scheduled"
         if (!taskAssignees(t).includes(assignee)) return sum;   // a shared task loads every person on it
         const closed = (t.status === 'Done' || t.status === 'Approved') || t.status === 'Completed' || t.completed;
         if (closed) return sum;
-        const onDay = taskDaySlots(t, cfg).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
+        // only what is still to do counts, and work that fell on days already gone shows up from today on
+        const onDay = taskRemainingSlots(t, cfg, { today, roll: dayKey >= today }).filter((x) => x.date === dayKey).reduce((n, x) => n + x.hours, 0);
         return sum + onDay;
     }, 0);
 }
