@@ -40,6 +40,7 @@ import * as OLReview from './features/review.js';
 import * as OLRequestTag from './features/request-tag.js';
 import * as OLSuggestionCard from './features/suggestion-card.js';
 import * as OLBackwardMove from './features/backward-move.js';
+import * as OLClientReview from './features/client-review.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
