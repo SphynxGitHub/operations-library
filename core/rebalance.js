@@ -69,9 +69,10 @@ export function planRollovers({ events = [], entries = [], cfg, todayKey, maxMov
 
                 const oldDueDate = record.get(String(t.id))?.oldDueDate || String(t.dueDate).slice(0, 10);
                 const newSlots = [...keep, ...res.slots];
-                t.dueDate = res.date;
+                const newDue = newSlots[0].date;   // the due date is the day work starts
+                t.dueDate = newDue;
                 t.workSlots = newSlots;
-                record.set(String(t.id), { clientId: w.clientId, taskId: t.id, title: t.title || t.name || 'Task', assignee: person, oldDueDate, newDueDate: res.date, newSlots, from: record.get(String(t.id))?.from || day });
+                record.set(String(t.id), { clientId: w.clientId, taskId: t.id, title: t.title || t.name || 'Task', assignee: person, oldDueDate, newDueDate: newDue, newSlots, from: record.get(String(t.id))?.from || day });
                 if (++moves >= maxMoves) return [...record.values()];
             }
         }

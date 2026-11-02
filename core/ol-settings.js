@@ -83,7 +83,7 @@ export const DEFAULT_OL_SETTINGS = {
         // Estimated hours for a task = its fee / this number (the buffer is built in). 0 = fall back to 1h per task.
         feePerEstimatedHour: 200,
         // The most hours of ONE task counted on a single day. A task estimated longer than this is spread over several
-        // working days, this many hours each (the last day gets what is left). 0 = never split.
+        // working days, this many hours each (the last day gets what is left), starting on the due date. 0 = never split.
         maxHoursPerDay: 2,
         // Once a person's total for a day (meetings + tasks) reaches this many hours, tasks on that day move to a later day
         // until it is back under. Meetings never move. 0 = off.
