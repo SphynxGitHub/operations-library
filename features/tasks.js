@@ -115,6 +115,9 @@ export function renderClientTaskManager() {
             </form>
         </div>
 
+        <!-- RECENTLY CLOSED + PENDING CLIENT REVIEW (pinned, so a late change does not mean flipping to Closed) -->
+        <div id="client-review-panel">${OL.clientTaskFilterState.status === 'Open' && typeof OL.clientReviewPanelHtml === 'function' ? OL.clientReviewPanelHtml(client) : ''}</div>
+
         <div class="card" style="padding: 20px;">
             <!-- WORKSPACE FILTER TOOLBAR -->
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line);">
@@ -183,6 +186,7 @@ export function renderClientTaskManager() {
 
     requestAnimationFrame(() => {
         if (window.lucide) lucide.createIcons();
+        if (OL.clientTaskFilterState.status === 'Open') OL.loadClientReviewPanel?.(client.id);
     });
 }
 

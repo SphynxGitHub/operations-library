@@ -187,11 +187,15 @@ OL.thirdPartyAssignees = [
 OL.getSystemStatuses = function() {
     if (Array.isArray(state.master?.taskStatuses)) {
         // The status list is saved in the database, so a status added in code has to be slotted in here or it never shows.
-        const list = state.master.taskStatuses;
+        let list = state.master.taskStatuses;
         if (!list.some(s => String(s?.name || '').toLowerCase() === 'developer/third party task')) {
             const at = list.findIndex(s => s?.isClosed);
             const add = { id: 'st-dev3p', name: 'Developer/Third Party Task', color: '#8b5cf6', isClosed: false };
-            return at < 0 ? [...list, add] : [...list.slice(0, at), add, ...list.slice(at)];
+            list = at < 0 ? [...list, add] : [...list.slice(0, at), add, ...list.slice(at)];
+        }
+        // Approved is its own end state, separate from Done: the client has signed off on it.
+        if (!list.some(s => String(s?.name || '').toLowerCase() === 'approved')) {
+            list = [...list, { id: 'st-approved', name: 'Approved', color: '#22c55e', isClosed: true }];
         }
         return list;
     }
@@ -206,7 +210,8 @@ OL.getSystemStatuses = function() {
         { id: "st-7", name: "Needs Follow Up", color: "#ff7f27", isClosed: false },
         { id: "st-8", name: "Client Task", color: "#cb1d63", isClosed: false },
         { id: "st-dev3p", name: "Developer/Third Party Task", color: "#8b5cf6", isClosed: false },
-        { id: "st-9", name: "Done", color: "#299764", isClosed: true }
+        { id: "st-9", name: "Done", color: "#299764", isClosed: true },
+        { id: "st-approved", name: "Approved", color: "#22c55e", isClosed: true }
     ];
 };
 
