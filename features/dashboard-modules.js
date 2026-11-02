@@ -110,16 +110,41 @@ function bodyFor(key) {
     return { count: '', body: '', extra: '' };
 }
 
+// Which tile is open (click again to close). Kept for the session only.
+let openKey = '';
+export function dashTile(key) { openKey = openKey === key ? '' : key; paint(); }
+
+// One small square: icon, a big count, the name. It turns amber when something is waiting and shows an outline when open.
+function tile(m, b) {
+    const open = openKey === m.key;
+    const n = b.count === '' ? null : Number(b.count);
+    const hot = n !== null && Number.isFinite(n) && n > 0;
+    return `<button type="button" onclick="OL.dashTile('${esc(m.key)}')" title="${esc(m.label)}" aria-expanded="${open}"
+        style="width:128px;height:112px;flex:none;padding:10px 10px 8px;border-radius:12px;cursor:pointer;text-align:left;display:flex;flex-direction:column;justify-content:space-between;
+               background:var(--panel);color:inherit;font:inherit;border:1px solid ${open ? 'var(--accent)' : 'var(--line)'};${open ? 'box-shadow:0 0 0 1px var(--accent);' : ''}">
+        <span style="display:flex;align-items:center;justify-content:space-between;"><i data-lucide="${m.icon}" style="width:16px;height:16px;color:var(--accent);"></i>
+            <i data-lucide="${open ? 'chevron-up' : 'chevron-down'}" style="width:13px;height:13px;opacity:.6;"></i></span>
+        <span style="font-size:30px;font-weight:700;line-height:1;color:${hot ? '#f5b942' : 'inherit'};">${n === null ? '...' : esc(String(b.count))}</span>
+        <span style="font-size:11px;line-height:1.2;opacity:.8;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${esc(m.label)}</span></button>`;
+}
+
 export function dashboardModulesHtml() {
     const on = enabled();
-    const modules = MODULES.filter((m) => on.includes(m.key)).map((m) => { const b = bodyFor(m.key); return card(m, b.count, b.body, b.extra); }).join('');
+    const list = MODULES.filter((m) => on.includes(m.key));
+    if (openKey && !list.some((m) => m.key === openKey)) openKey = '';
+    const avail = list.find((m) => m.key === 'availability');
+    const others = list.filter((m) => m.key !== 'availability').map((m) => ({ m, b: bodyFor(m.key) }));
+    const openOne = others.find((x) => x.m.key === openKey);
+    const availHtml = avail ? (() => { const b = bodyFor('availability'); return `<div style="margin-bottom:14px;">${card(avail, b.count, b.body, b.extra)}</div>`; })() : '';
+    const tiles = others.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:${openOne ? '12px' : '25px'};">${others.map((x) => tile(x.m, x.b)).join('')}</div>` : '';
+    const opened = openOne ? `<div style="margin-bottom:25px;">${card(openOne.m, openOne.b.count, openOne.b.body, `<button class="btn tiny soft" style="margin-left:auto;" onclick="OL.dashTile('${esc(openOne.m.key)}')">Close</button>`)}</div>` : '';
     return `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-        <b style="font-size:14px;">Modules</b><span class="tiny muted">Shown for you. Switch them on or off.</span>
+        <b style="font-size:14px;">Modules</b><span class="tiny muted">Shown for you. Click a square to open it.</span>
         <span style="margin-left:auto;display:flex;gap:8px;">
             <button class="btn tiny soft" onclick="OL.dashModulesPreset()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="users" style="width:12px;height:12px;"></i>Team meeting preset</button>
             <button class="btn tiny soft" onclick="OL.dashModulesOpen()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="layout-grid" style="width:12px;height:12px;"></i>Customize</button></span></div>
-    ${modules ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-bottom:25px;">${modules}</div>` : '<div class="tiny muted" style="margin-bottom:25px;">No modules are switched on.</div>'}`;
+    ${list.length ? `${availHtml}${tiles}${opened}` : '<div class="tiny muted" style="margin-bottom:25px;">No modules are switched on.</div>'}`;
 }
 
 function paint() {
@@ -181,4 +206,4 @@ export function dashModulesOpen() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashModuleToggle, dashModulesOpen });
+Object.assign(window.OL, { dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashModuleToggle, dashModulesOpen });
