@@ -1612,7 +1612,7 @@ export function openResourceModal(targetId, draftObj = null) {
                 <div style="display:flex;border-bottom:1px solid var(--line);">
                     <div onclick="state.v2.activeCommentTab='comments';OL.openResourceModal('${res.id}')"
                          style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                cursor:pointer;${activeTab!=='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                                cursor:pointer;${(activeTab!=='history' && activeTab!=='keys') ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
                         COMMENTS
                     </div>
                     <div onclick="state.v2.activeCommentTab='history';OL.openResourceModal('${res.id}')"
@@ -1620,10 +1620,15 @@ export function openResourceModal(targetId, draftObj = null) {
                                 cursor:pointer;${activeTab==='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
                         EDIT HISTORY
                     </div>
+                    <div onclick="state.v2.activeCommentTab='keys';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${activeTab==='keys' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        KEY CHANGES
+                    </div>
                 </div>
 
                 <div style="flex:1;overflow-y:auto;padding:14px;min-width:0;">
-                    ${activeTab === 'history' ? OL.renderEditHistory(res) : `
+                    ${activeTab === 'history' ? OL.renderEditHistory(res) : activeTab === 'keys' ? (typeof OL.resourceKeyChangesHtml === 'function' ? OL.resourceKeyChangesHtml(res) : '') : `
                         <div id="task-comments-sidebar-${res.id}" style="min-width:0;">
                             ${OL._findCommentHost && typeof OL.renderTaskCommentsSidebarHTML === 'function' ? OL.renderTaskCommentsSidebarHTML(getActiveClient(), res) : ''}
                         </div>

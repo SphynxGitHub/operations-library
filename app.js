@@ -43,6 +43,7 @@ import * as OLBackwardMove from './features/backward-move.js';
 import * as OLClientReview from './features/client-review.js';
 import * as OLTimeBilling from './features/time-billing.js';
 import * as OLDashboardModules from './features/dashboard-modules.js';
+import * as OLResourceKey from './features/resource-key.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
