@@ -34,8 +34,6 @@ OL.taskGroupTotalHtml = function(items) {
     const cell = (label, value, color) => `<span class="muted">${label} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
     return `<div class="tiny monospace" title="Tasks with no estimate count the default (1h, or the follow-up default). Open = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
         ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Open', open, open > 0 ? '#f5b942' : '#22c55e')}</div>`;
-}; font-weight:bold;">${left < 0 ? `${Math.abs(left).toFixed(2)}h over estimate` : `${left.toFixed(2)}h of work still to do`}</span>
-        <span title="Tasks with no estimate count the default (1h, or the follow-up default)" style="width:${OL.EST_COL_W}px; flex:none; text-align:right; font-size:12px; font-weight:bold; color:${left < 0 ? '#ef4444' : 'var(--text)'};">Total ${used.toFixed(2)}h / ${est.toFixed(2)}h est</span></div>`;
 };
 OL.activeTaskTimer = { 
     clientId: null, 
