@@ -120,11 +120,12 @@ serve(async (req) => {
         source_kind: ctx.sourceKind ? String(ctx.sourceKind) : null, source_id: ctx.sourceId ? String(ctx.sourceId) : null,
         output: null, secrets_removed: count.n, error: "pending", created_by: authz.userId });
       const token = await runToken(runId, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      // The text starts with a label on purpose: Zapier's Catch Hook turns a body that is pure JSON into an object, and the Zap expects a string.
       try {
         const resp = await fetch(ZAP_URL!, {
           method: "POST", signal: AbortSignal.timeout(20000),
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task: String(body.task), instructions: task.system, input: userText, max_tokens: task.maxTokens,
+          body: JSON.stringify({ task: String(body.task), instructions: task.system, input: `INPUT:\n${userText}`, max_tokens: task.maxTokens,
             run_id: runId, callback_token: token, callback_url: `${url}/functions/v1/ol-ai-callback` }),
         });
         if (!resp.ok) { await log(null, `Zapier ${resp.status}`); return reply({ error: `Zapier returned ${resp.status}` }, 502); }
