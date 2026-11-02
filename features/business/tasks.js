@@ -1,5 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
-import { taskEstimatedHours, memberDayHours, dailyLoadHours } from '../../core/scheduling.js';
+import { taskEstimatedHours, memberDayHours, dailyLoadHours, taskDaySlots, taskRemainingSlots } from '../../core/scheduling.js';
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -31,12 +31,27 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
     const tasks = (items || []).filter(t => !t._type || t._type === 'task');
     if (!tasks.length) return '';
     const hoursUsed = (t) => Number(t.loggedHours || t.hoursLogged || 0);
-    const est = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);                               // estimated work
-    const done = tasks.reduce((sum, t) => sum + hoursUsed(t), 0);                                        // time tracked so far
-    const remaining = tasks.reduce((sum, t) => sum + Math.max(0, taskEstimatedHours(t) - hoursUsed(t)), 0);   // still to do (a task past its estimate has 0 left, it does not cancel another's)
-
     const todayKey = OL.localDateStr();
     const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : '';
+    let est, done, remaining;
+    if (day) {
+        // One day's group: only the part of each task that falls on THAT day, the same split the Availability table uses
+        // (a 4h task with a 2h daily limit is 2h on its first day and 2h on the next, not 4h on the first).
+        const onDay = (slots) => slots.filter(x => x.date === day).reduce((n, x) => n + x.hours, 0);
+        est = tasks.reduce((sum, t) => sum + onDay(taskDaySlots(t)), 0);
+        done = tasks.reduce((sum, t) => sum + (Array.isArray(t.timeLog) ? t.timeLog : []).reduce((n, e) => {
+            if (!e || !(e.end || e.start)) return n;
+            const d = new Date(e.end || e.start);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            return key === day ? n + (Number(e.minutes) || 0) / 60 : n;
+        }, 0), 0);
+        remaining = tasks.reduce((sum, t) => sum + onDay(taskRemainingSlots(t, undefined, { today: todayKey })), 0);
+    } else {
+        est = tasks.reduce((sum, t) => sum + taskEstimatedHours(t), 0);                               // estimated work
+        done = tasks.reduce((sum, t) => sum + hoursUsed(t), 0);                                        // time tracked so far
+        remaining = tasks.reduce((sum, t) => sum + Math.max(0, taskEstimatedHours(t) - hoursUsed(t)), 0);   // still to do (a task past its estimate has 0 left, it does not cancel another's)
+    }
+
     const scope = !day ? 'all time' : (day === todayKey ? 'today' : OL.formatDayKey(day, { weekday: 'short' }));
 
     let openCell = '';
@@ -51,7 +66,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
         }
     }
     const cell = (label, value, color) => `<span class="muted">${label} ${scope} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
-    return `<div class="tiny monospace" title="Tasks with no estimate count the default (1h, or the follow-up default). Remaining = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
+    return `<div class="tiny monospace" title="${day ? "Only the hours that fall on this day: a long task is split over days by the daily limit, like the Availability table. " : ""}Tasks with no estimate count the default (1h, or the follow-up default). Remaining = estimate minus time tracked, per task." style="margin-top:12px; padding:10px ${OL.EST_COL_RIGHT}px 0 0; border-top:1px solid var(--line); display:flex; justify-content:flex-end; align-items:center; gap:18px; flex-wrap:wrap;">
         ${cell('Estimated', est, 'var(--text)')}${cell('Completed', done, 'var(--accent)')}${cell('Remaining', remaining, remaining > 0 ? '#f5b942' : '#22c55e')}${openCell}</div>`;
 };
 OL.activeTaskTimer = { 
