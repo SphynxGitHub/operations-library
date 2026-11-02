@@ -53,6 +53,7 @@ export function renderClientTaskManager() {
                 ${fuWaiting ? `<div class="pill tiny soft" title="The client follow-up was marked done. It comes back on this date if the client still has items open." style="font-weight:bold; display:flex; align-items:center; gap:6px; color:#22c55e;">
                     <i data-lucide="check-circle" style="width:14px;height:14px;"></i> Followed up · next ${esc(OL.formatDayKey ? OL.formatDayKey(fuWaitUntil, { month: 'short', day: 'numeric' }) : fuWaitUntil)}
                 </div>` : ''}
+                ${typeof OL.allowancePillHtml === 'function' ? OL.allowancePillHtml(client) : ''}
                 <div class="pill tiny accent" style="font-weight: bold; display:flex; align-items:center; gap:6px;">
                     <i data-lucide="clock" style="width:14px;height:14px;"></i> Logged: ${totalLoggedHours.toFixed(2)}h
                 </div>
