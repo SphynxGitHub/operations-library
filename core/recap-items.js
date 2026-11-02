@@ -37,7 +37,7 @@ export function parseRecapItems(summaryText) {
         let target = '';
         const t = /\[([^\]]{1,120})\]\s*\.?\s*$/.exec(text);
         if (t) { target = t[1].trim(); text = text.slice(0, t.index).trim(); }
-        if (text) items.push({ type: RECAP_TYPES[word] || 'note', word, text, targetHint: target });
+        if (text && !/^(none|n\/a|nothing|no items)\.?$/i.test(text)) items.push({ type: RECAP_TYPES[word] || 'note', word, text, targetHint: target });
     }
     return items;
 }
