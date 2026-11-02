@@ -15,6 +15,7 @@
 // browser — only this function, running server-side, ever sees it.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { scrubSecrets } from "../_shared/secret-scrub.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const CORS_HEADERS = {
@@ -59,7 +60,9 @@ serve(async (req) => {
     const itemsList = (Array.isArray(openItems) ? openItems : []).slice(0, 60)
       .map((i: any) => `- [${i.type}] ${i.id}: ${i.label}`).join("\n") || "(none)";
 
-    const userMessage = `OPEN ITEMS for this client:\n${itemsList}\n\nEMAIL BODY:\n${emailBody.slice(0, 8000)}`;
+    // Passwords and API keys that clients email by mistake are removed before anything reaches the AI.
+    const scrubbed = scrubSecrets(emailBody.slice(0, 8000));
+    const userMessage = `OPEN ITEMS for this client:\n${itemsList}\n\nEMAIL BODY:\n${scrubbed.text}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -109,7 +112,7 @@ serve(async (req) => {
         confidence: ["low", "medium", "high"].includes(c.confidence) ? c.confidence : "low",
       }));
 
-    return new Response(JSON.stringify({ candidates: cleanCandidates }), {
+    return new Response(JSON.stringify({ candidates: cleanCandidates, secretsRemoved: scrubbed.removed }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   } catch (e) {
