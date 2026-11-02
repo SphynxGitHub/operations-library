@@ -344,6 +344,8 @@ OL.renderDailyDashboard = function() {
             </div>
         </div>
 
+        <div id="dashboard-modules">${typeof OL.dashboardModulesHtml === 'function' ? OL.dashboardModulesHtml() : ''}</div>
+
         <div class="card" style="padding: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
                 <h3 style="margin:0;">High-Priority Stream</h3>
@@ -417,6 +419,7 @@ OL.renderDailyDashboard = function() {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    if (typeof OL.loadDashboardModules === 'function') OL.loadDashboardModules();
     if (searchWasFocused) {
         const box = document.getElementById('global-search-input');
         if (box) { box.focus(); try { box.setSelectionRange(searchCursor, searchCursor); } catch (e) { /* not selectable */ } OL.globalSearchRestore(); }
