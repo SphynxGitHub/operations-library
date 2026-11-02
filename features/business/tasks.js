@@ -18,7 +18,8 @@ OL.globalTaskFilterState = {
 
 // Estimate column width, and the space to its right (timer 26+4+44, billable 34, avatar 56, three 10px gaps, row padding 14).
 OL.EST_COL_W = 150;
-OL.EST_COL_RIGHT = 74 + 34 + 56 + 30 + 14;
+OL.EST_GAP = 28;   // breathing room between the estimate and the timer/billable/assignee controls
+OL.EST_COL_RIGHT = 74 + 34 + 56 + 30 + 14 + OL.EST_GAP;
 OL.activeTaskTimer = { 
     clientId: null, 
     taskId: null, 
@@ -1386,7 +1387,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     const used = Number(t.loggedHours || t.hoursLogged || 0);
                     const over = used > est + 1e-9;
                     const own = Number.isFinite(parseFloat(t.estimatedHours));
-                    return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="width:${OL.EST_COL_W}px; flex:none; text-align:right; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
+                    return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="width:${OL.EST_COL_W}px; flex:none; margin-right:${OL.EST_GAP}px; text-align:right; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
                         ${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
                     </div>`;
                 })()}
