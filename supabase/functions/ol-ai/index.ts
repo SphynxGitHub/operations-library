@@ -9,15 +9,16 @@
 //
 // The thinking is done by ONE of these, whichever is set (Claude is used first if both are):
 //   ANTHROPIC_API_KEY        the Claude API directly
-//   ZAPIER_AI_WEBHOOK_URL    a Zap that starts with "Webhooks by Zapier > Catch Hook", runs an AI step, and ends with
-//                            "Webhooks by Zapier > Custom Response" returning {"text": "<the AI's answer>"}. The Zap must
-//                            answer within about 30 seconds. Optional ZAPIER_AI_SECRET is sent in the x-ol-secret header.
+//   ZAPIER_AI_WEBHOOK_URL    a Zap/workflow that starts with a Catch Hook, runs an AI step, and POSTs its answer back to
+//                            the ol-ai-callback function (run_id, token, text). This function waits for it (up to about
+//                            100 seconds), so long answers are fine.
 // Text is cleaned of passwords and keys BEFORE it leaves this function, whichever route is used.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authorizeTeamRequest } from "../_shared/auth.ts";
 import { scrubSecrets } from "../_shared/secret-scrub.ts";
+import { runToken } from "../_shared/hmac.ts";
 
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const ZAP_URL = Deno.env.get("ZAPIER_AI_WEBHOOK_URL");
@@ -95,7 +96,7 @@ serve(async (req) => {
   const runId = "air_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   const log = async (output: unknown, error: string | null) => {
     try {
-      await service.from("ai_runs").insert({ id: runId, feature: task.feature, mode, client_id: ctx.clientId ? String(ctx.clientId) : null,
+      await service.from("ai_runs").upsert({ id: runId, feature: task.feature, mode, client_id: ctx.clientId ? String(ctx.clientId) : null,
         source_kind: ctx.sourceKind ? String(ctx.sourceKind) : null, source_id: ctx.sourceId ? String(ctx.sourceId) : null,
         output: output ?? null, secrets_removed: count.n, error, created_by: authz.userId });
     } catch (_e) { /* logging must never block the answer */ }
@@ -114,18 +115,30 @@ serve(async (req) => {
       const data = await resp.json();
       raw = (data.content || []).map((b: any) => b.text || "").join("");
     } else {
-      // Zapier route: the Zap gets the instructions and the cleaned text, and answers with {"text": "..."}.
-      let resp: Response;
+      // Zapier route: record a pending run, hand the Zap its id and a signed token, then wait for the Zap to call back.
+      await service.from("ai_runs").upsert({ id: runId, feature: task.feature, mode, client_id: ctx.clientId ? String(ctx.clientId) : null,
+        source_kind: ctx.sourceKind ? String(ctx.sourceKind) : null, source_id: ctx.sourceId ? String(ctx.sourceId) : null,
+        output: null, secrets_removed: count.n, error: "pending", created_by: authz.userId });
+      const token = await runToken(runId, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       try {
-        resp = await fetch(ZAP_URL!, {
-          method: "POST", signal: AbortSignal.timeout(28000),
-          headers: { "Content-Type": "application/json", ...(ZAP_SECRET ? { "x-ol-secret": ZAP_SECRET } : {}) },
-          body: JSON.stringify({ task: String(body.task), instructions: task.system, input: userText, max_tokens: task.maxTokens }),
+        const resp = await fetch(ZAP_URL!, {
+          method: "POST", signal: AbortSignal.timeout(20000),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: String(body.task), instructions: task.system, input: userText, max_tokens: task.maxTokens,
+            run_id: runId, callback_token: token, callback_url: `${url}/functions/v1/ol-ai-callback` }),
         });
-      } catch (_e) { await log(null, "Zap did not answer in time"); return reply({ error: "The Zap did not answer in time (Zapier allows about 30 seconds).", message: "The Zap did not answer in time." }, 504); }
-      if (!resp.ok) { await log(null, `Zapier ${resp.status}`); return reply({ error: `Zapier returned ${resp.status}` }, 502); }
-      const txt = await resp.text();
-      try { const j = JSON.parse(txt); raw = typeof j === "string" ? j : String(j.text ?? j.output ?? j.answer ?? ""); } catch { raw = txt; }
+        if (!resp.ok) { await log(null, `Zapier ${resp.status}`); return reply({ error: `Zapier returned ${resp.status}` }, 502); }
+      } catch (_e) { await log(null, "Could not reach the Zap"); return reply({ error: "Could not reach the Zap." }, 502); }
+      const deadline = Date.now() + 100000;
+      let answer = "";
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const { data: row } = await service.from("ai_runs").select("output,error").eq("id", runId).maybeSingle();
+        if (row?.output?._raw) { answer = String(row.output._raw); break; }
+        if (row && row.error && row.error !== "pending") break;
+      }
+      if (!answer) { await log(null, "Zap did not answer in time"); return reply({ error: "The Zap did not answer in time.", message: "The Zap did not answer in time." }, 504); }
+      raw = answer;
     }
     raw = raw.trim().replace(/^```json\s*|```\s*$/g, "").trim();
     let result: any = null;
