@@ -40,7 +40,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
         // (a 4h task with a 2h daily limit is 2h on its first day and 2h on the next, not 4h on the first).
         const onDay = (slots) => slots.filter(x => x.date === day).reduce((n, x) => n + x.hours, 0);
         est = tasks.reduce((sum, t) => sum + onDay(taskDaySlots(t)), 0);
-        // Completed = ALL time tracked on that day by the people in the assignee filter, on any task. The work done on a day
+        // Completed = ALL time tracked on that day by the people in the assignee filter, on any task, plus ended meetings. The work done on a day
         // is not limited to the tasks due that day: a task due earlier, later or with no date counts when time went into it.
         const dayKeyOf = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
         const rosterNames = (state.master?.sphynxTeam || []).map(m => m.name);
@@ -52,6 +52,17 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
                 if (doneBy.length && e.by && !doneBy.includes(e.by)) return n;      // someone else's time; entries with no name count
                 return dayKeyOf(e.end || e.start) === day ? n + (Number(e.minutes) || 0) / 60 : n;
             }, 0), 0);
+        // Meetings count once they have ended: their logged time (the same hours shown on the meeting row), for the people in
+        // the assignee filter. A meeting still to come, or one with no time logged, adds nothing yet.
+        const nowMs = Date.now();
+        done += (OL._dashboardEventsCache || []).reduce((sum, evt) => {
+            if (!evt || evt.all_day || !evt.start || dayKeyOf(evt.start) !== day) return sum;
+            if (new Date(evt.end || evt.start).getTime() > nowMs) return sum;      // not over yet
+            const hrs = Number(evt.logged_hours) || 0;
+            if (hrs <= 0) return sum;
+            if (doneBy.length && !doneBy.some(n => evt.assignee === n || (Array.isArray(evt.assignees) && evt.assignees.includes(n)))) return sum;
+            return sum + hrs;
+        }, 0);
         remaining = tasks.reduce((sum, t) => sum + onDay(taskRemainingSlots(t, undefined, { today: todayKey })), 0);
         // Carry-over: a task whose date is earlier (a longer one that spills over, or one not done on its day) has no row in this
         // group, but its remaining hours land on this day, and the Availability table counts them. Same people filter as Free.
