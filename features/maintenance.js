@@ -14,7 +14,7 @@ import {
     ensureMaintenanceSheet, maintenanceSheetOf, isMaintenanceSheet, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
-    allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES,
+    allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES, grantStart,
     planPriorPeriod, manualUsedHours, noteWithoutMarker, carryoverExpiry,
     isCoachingClient, meetingTimeEntries, MEETING_ENTRY_PREFIX, grantRank,
 } from '../core/maintenance.js';
@@ -206,7 +206,7 @@ function ledgerFor(client, slot) {
     const grants = slot.grants || [];
     const allocations = {};
     tasks.forEach((t) => { if (t && t.hoursGrantId && grants.some((g) => String(g.id) === String(t.hoursGrantId))) allocations[t.id] = t.hoursGrantId; });
-    const days = grants.flatMap((g) => [String(g.granted_on).slice(0, 10), String(g.expires_on).slice(0, 10)]).filter(Boolean).sort();
+    const days = grants.flatMap((g) => [grantStart(g), String(g.expires_on).slice(0, 10)]).filter(Boolean).sort();
     const opts = taskTimeOpts(client, slot);
     const win = days.length ? { start_date: days[0], due_date: days[days.length - 1] > today ? days[days.length - 1] : today } : null;
     const entries = win ? allEntries(client, slot, tasks, win, opts) : [];
@@ -331,7 +331,7 @@ function grantCardHtml(client, g, ledger, gt) {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
                     <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${n && g.source !== 'plan_allotment' ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}${noteWithoutMarker(g.note) ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(noteWithoutMarker(g.note))}</span>` : ''}</div>
-                    <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${isBlockClosed(ledger, g) ? ' · <strong>closed (used up)</strong>' : ''}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
+                    <div class="tiny muted">${g.covers_from ? `Purchased ${esc(niceDate(g.granted_on))} · covers ${esc(niceDate(g.covers_from))} to ${esc(niceDate(g.expires_on))}` : `${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}`}${isBlockClosed(ledger, g) ? ' · <strong>closed (used up)</strong>' : ''}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="tiny bold" style="color:${u > h ? '#ef4444' : 'var(--text)'};">${esc(hoursText(u))} of ${esc(hoursText(h))}</span>
@@ -476,7 +476,7 @@ function adHocCardHtml(ledger) {
 }
 // Ad hoc clients: the log covers the life of the hours available now (earliest purchase still active, to today).
 const adHocWindow = (ledger) => {
-    const starts = ledger.current.map((g) => String(g.granted_on).slice(0, 10)).sort();
+    const starts = ledger.current.map((g) => grantStart(g)).sort();
     return { start_date: starts[0] || todayIso(), due_date: todayIso() };
 };
 
@@ -498,7 +498,7 @@ function renderCoachingTimeLog(main, client) {
     const ledger = ledgerFor(client, slot);     // entries cover the dates the prepaid hours cover; with none, just today
     let body;
     if (hasGrants) {
-        const starts = slot.grants.map((g) => String(g.granted_on).slice(0, 10)).sort();
+        const starts = slot.grants.map((g) => grantStart(g)).sort();
         const win = { start_date: starts[0], due_date: todayIso() };
         const nonBillable = summarizePeriodTime(ledger.entries.filter((e) => e.date >= win.start_date && e.date <= win.due_date)).nonBillableHours;
         body = `<div class="card" style="padding:16px;"><div class="bold">Prepaid hours</div>
@@ -604,7 +604,7 @@ export function openGrantTasksModal(grantId) {
         </label>`;
     }).join('');
     openModal(`${modalHead(`Tasks for this ${esc((GRANT_LABEL[grant.source] || 'grant').toLowerCase())}`)}<div class="modal-body" style="padding-top:14px;">
-        <p class="tiny muted" style="margin-bottom:10px;">${esc(grantShort(grant))} (${esc(niceDate(grant.granted_on))} to ${esc(niceDate(grant.expires_on))}). Billable time on the ticked tasks, logged between those dates, comes out of these hours instead of the plan allotment. A grant with tasks ticked is held for them.</p>
+        <p class="tiny muted" style="margin-bottom:10px;">${esc(grantShort(grant))} (${esc(niceDate(grantStart(grant)))} to ${esc(niceDate(grant.expires_on))}). Billable time on the ticked tasks, logged between those dates, comes out of these hours instead of the plan allotment. A grant with tasks ticked is held for them.</p>
         <input type="text" class="modal-input" placeholder="Filter tasks…" style="margin-bottom:8px;" oninput="const q=this.value.toLowerCase(); document.querySelectorAll('.gt-row').forEach(r => r.style.display = r.dataset.q.includes(q) ? '' : 'none')">
         <div style="max-height:340px; overflow-y:auto;">${rows || '<div class="tiny muted">No tasks on this project.</div>'}</div>
         <button class="btn primary" style="width:100%; justify-content:center; margin-top:12px;" onclick="OL.submitGrantTasks('${esc(grantId)}')">Save</button></div>`);
@@ -799,12 +799,14 @@ export function openAdHocPurchaseModal() {
         ${field('Hours', `<input id="ah-hours" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 10">`)}
         ${field(coaching ? 'Date paid' : 'Purchase date', `<input id="ah-date" type="date" class="modal-input" value="${todayIso()}">`)}
         ${coaching ? field('Expires (optional)', `<input id="ah-exp" type="date" class="modal-input">`) : ''}
+        ${field('Covers hours from (optional)', `<input id="ah-covers" type="date" class="modal-input">`)}
+        <div class="tiny muted" style="margin:-6px 0 12px;">Leave blank to cover time from the purchase date on. Set an earlier date when the purchase pays for hours already used, such as overage on the plan period: time logged from that date on, after the plan hours run out, is charged to it. The expiry still follows the purchase date.</div>
         ${field('Note (optional)', `<input id="ah-note" type="text" class="modal-input" placeholder="e.g. Invoice 1042">`)}
         <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitAdHocPurchase()">${coaching ? 'Log prepaid hours' : 'Add hours'}</button></div>`);
 }
 export async function submitAdHocPurchase() {
     const client = getActiveClient(); if (!client) return;
-    const res = await saveAdHoc(client.id, { hours: val('ah-hours'), purchasedOn: val('ah-date'), note: val('ah-note'), expiresOn: val('ah-exp') });
+    const res = await saveAdHoc(client.id, { hours: val('ah-hours'), purchasedOn: val('ah-date'), note: val('ah-note'), expiresOn: val('ah-exp'), coversFrom: val('ah-covers') });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -825,6 +827,7 @@ export function openEditGrantModal(grantId) {
             ${field('Expires', `<input id="eg-expires" type="date" class="modal-input" value="${d(grant.expires_on)}" oninput="this.dataset.touched='1'">`)}
         </div>
         ${adHoc ? '<div class="tiny muted" style="margin:-6px 0 12px;">Changing the purchase date moves the expiry to a year later, unless you set the expiry yourself.</div>' : ''}
+        ${adHoc ? field('Covers hours from (optional)', `<input id="eg-covers" type="date" class="modal-input" value="${d(grant.covers_from)}">`) + '<div class="tiny muted" style="margin:-6px 0 12px;">An earlier date than the purchase date lets this purchase absorb hours already used (for example plan period overage). Clear it to cover time from the purchase date on.</div>' : ''}
         ${field('Status', `<select id="eg-status" class="modal-input">${GRANT_STATUSES.map((st) => `<option value="${st}" ${grant.status === st ? 'selected' : ''}>${STATUS_LABEL[st]}</option>`).join('')}</select>`)}
         ${field('Note (optional)', `<input id="eg-note" type="text" class="modal-input" value="${esc(grant.note || '')}" placeholder="e.g. Invoice 1042">`)}
         <div style="display:flex; gap:10px;">
@@ -838,7 +841,7 @@ export function egRecalc() {
 }
 export async function submitEditGrant(grantId) {
     const { client, grant } = findGrant(grantId); if (!grant) return;
-    const plan = planEditGrant({ grant, patch: { hours: val('eg-hours'), granted_on: val('eg-granted'), expires_on: val('eg-expires'), status: val('eg-status'), note: val('eg-note') } });
+    const plan = planEditGrant({ grant, patch: { hours: val('eg-hours'), granted_on: val('eg-granted'), expires_on: val('eg-expires'), status: val('eg-status'), note: val('eg-note'), ...(document.getElementById('eg-covers') ? { covers_from: val('eg-covers') } : {}) } });
     if (plan.error) { alert(plan.error); return; }
     const { error } = await db.from('hours_grant').update(plan.update).eq('id', grant.id);
     if (error) { alert(friendly(error)); return; }

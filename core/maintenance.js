@@ -180,7 +180,9 @@ export function hoursUsedInPeriod(tasks, period, opts = {}) {
 const gDay = (v) => String(v || '').slice(0, 10);
 // The order hours are used in: carryover first, then the plan allotment, then anything else (ad hoc / prepaid purchases).
 export const grantRank = (g) => (g.source === 'courtesy_carryover' ? 0 : g.source === 'plan_allotment' ? 1 : 2);
-export const grantCovers = (g, day) => !!day && day >= gDay(g.granted_on) && day <= gDay(g.expires_on);
+// An ad hoc purchase can cover hours logged before it was bought (covers_from, optional): it is charged for time from that date on.
+export const grantStart = (g) => gDay(g.covers_from) || gDay(g.granted_on);
+export const grantCovers = (g, day) => !!day && day >= grantStart(g) && day <= gDay(g.expires_on);
 export const entryKey = (e) => `${e.taskId}|${e.id}`;
 
 export function allocateHours({ entries = [], grants = [], allocations = {} }) {
@@ -319,7 +321,7 @@ export function planPriorPeriod({ clientId, start, due, allotment, used, carryHo
 
 // An ad hoc purchase: hours that expire a year after they are bought.
 // Also used for a coaching client's prepaid hours. expiresOn (optional) replaces the default of a year after purchase.
-export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '', expiresOn = '' }) {
+export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '', expiresOn = '', coversFrom = '' }) {
     const h = cleanHours(hours);
     if (h <= 0) return { error: 'Enter the number of hours.' };
     if (!validDate(purchasedOn)) return { error: 'Enter a valid purchase date.' };
@@ -328,7 +330,8 @@ export function planAdHocPurchase({ clientId, hours, purchasedOn, note = '', exp
         if (!validDate(expiresOn) || expiresOn <= purchasedOn) return { error: 'The expiry date must be after the purchase date.' };
         expires = expiresOn;
     }
-    return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: expires, status: 'active', note: String(note || '').trim() || null } };
+    if (!isBlank(coversFrom) && (!validDate(coversFrom) || coversFrom > purchasedOn)) return { error: 'The covers-from date must be on or before the purchase date.' };
+    return { grant: { client_id: clientId, source: 'ad_hoc_purchase', hours_granted: h, granted_on: purchasedOn, expires_on: expires, status: 'active', note: String(note || '').trim() || null, ...(!isBlank(coversFrom) ? { covers_from: coversFrom } : {}) } };
 }
 
 // Edit an ad hoc purchase or a courtesy carryover. (A plan allotment is edited through its plan period.)
@@ -345,6 +348,13 @@ export function planEditGrant({ grant, patch }) {
     const status = patch.status ?? grant.status;
     if (!GRANT_STATUSES.includes(status)) return { error: 'Pick a status.' };
     const update = { hours_granted: h, granted_on: granted, expires_on: expires, status };
+    if (grant.source === 'ad_hoc_purchase' && patch.covers_from !== undefined) {
+        const cf = String(patch.covers_from || '').trim();
+        if (cf) {
+            if (!validDate(cf) || cf > granted) return { error: 'The covers-from date must be on or before the purchase date.' };
+            update.covers_from = cf;
+        } else if (grant.covers_from) update.covers_from = null;      // cleared (only written when the column has a value to clear)
+    }
     if (patch.note !== undefined) update.note = String(patch.note || '').trim() || null;
     return { update };
 }
