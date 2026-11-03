@@ -184,6 +184,8 @@ export const grantRank = (g) => (g.source === 'courtesy_carryover' ? 0 : g.sourc
 export const grantStart = (g) => gDay(g.covers_from) || gDay(g.granted_on);
 export const grantCovers = (g, day) => !!day && day >= grantStart(g) && day <= gDay(g.expires_on);
 export const entryKey = (e) => `${e.taskId}|${e.id}`;
+// The most recent block (latest start, then latest expiry): the only one that ever shows hours over its limit.
+export const latestGrant = (gs) => (gs || []).slice().sort((a, b) => gDay(b.granted_on).localeCompare(gDay(a.granted_on)) || gDay(b.expires_on).localeCompare(gDay(a.expires_on)))[0] || null;
 
 export function allocateHours({ entries = [], grants = [], allocations = {} }) {
     const cap = {}, used = {};
@@ -220,7 +222,7 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
             left -= take;
             if (!left) break;
         }
-        if (left > 0) charge(key, pool[0], left, true);
+        if (left > 0) charge(key, latestGrant(pool), left, true);      // overage lands on the most recent block only
     });
     return { usedMinutes: used, charges, unfundedMinutes: unfunded };
 }

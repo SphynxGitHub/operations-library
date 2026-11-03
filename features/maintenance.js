@@ -14,7 +14,7 @@ import {
     ensureMaintenanceSheet, maintenanceSheetOf, isMaintenanceSheet, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
-    allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES, grantStart,
+    allocateHours, entryKey, planEditGrant, adHocExpiry, GRANT_STATUSES, grantStart, latestGrant,
     planPriorPeriod, manualUsedHours, noteWithoutMarker, carryoverExpiry,
     isCoachingClient, meetingTimeEntries, MEETING_ENTRY_PREFIX, grantRank,
 } from '../core/maintenance.js';
@@ -241,7 +241,7 @@ function currentBlockFigures(ledger) {
     const gs = poolOf(ledger); if (!gs.length) return null;
     const open = openBlockOf(ledger);
     if (open) { const total = Number(open.hours_granted || 0), used = usedHoursOf(ledger, open); return { grant: open, total, used, left: Math.round((total - used) * 1000) / 1000, open: true }; }
-    const last = gs[gs.length - 1], total = Number(last.hours_granted || 0), over = overflowHours(ledger);
+    const last = latestGrant(gs), total = Number(last.hours_granted || 0), over = overflowHours(ledger);
     return { grant: last, total, used: Math.round((total + over) * 1000) / 1000, left: -over, open: false };
 }
 const allocatedCount = (ledger, g) => Object.values(ledger.allocations).filter((id) => String(id) === String(g.id)).length;
