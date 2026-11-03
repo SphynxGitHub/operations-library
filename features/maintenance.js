@@ -216,7 +216,13 @@ function ledgerFor(client, slot) {
     const current = grants.filter((g) => g.status !== 'expired' && String(g.expires_on).slice(0, 10) >= today
         && (g.source !== 'plan_allotment' || (active && g.period_id === active.id)))
         .sort((a, b) => grantRank(a) - grantRank(b) || String(a.expires_on).localeCompare(String(b.expires_on)));
-    return { entries, alloc, allocations, current, opts, tasks };
+    // A carryover or purchase with tasks set aside for it is HELD for those tasks: it can't fund other work, so it is
+    // kept out of the hours available for new work (the pool) and shown on its own line. Without tasks set aside it
+    // stays in the pool. That choice is made per block, from its "Set aside tasks" button.
+    const heldIds = new Set(Object.values(allocations).map(String).filter((id) => { const g = grants.find((x) => String(x.id) === id); return g && g.source !== 'plan_allotment'; }));
+    const held = current.filter((g) => heldIds.has(String(g.id)));
+    const pool = current.filter((g) => !heldIds.has(String(g.id)));
+    return { entries, alloc, allocations, current, held, pool, opts, tasks };
 }
 // Hours used out of a grant: time charged to it from the logs, plus any usage recorded by hand for an earlier plan period.
 const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] || 0) / 60) + manualUsedHours(g)) * 1000) / 1000;
@@ -226,12 +232,13 @@ const usedHoursOf = (ledger, g) => Math.round((((ledger.alloc.usedMinutes[g.id] 
 const EPS = 1e-6;
 const blockLeft = (ledger, g) => Math.round((Number(g.hours_granted || 0) - usedHoursOf(ledger, g)) * 1000) / 1000;
 const isBlockClosed = (ledger, g) => Number(g.hours_granted || 0) > 0 && blockLeft(ledger, g) <= EPS;
-const openBlockOf = (ledger) => ledger.current.find((g) => !isBlockClosed(ledger, g)) || null;
+const poolOf = (ledger) => ledger.pool || ledger.current;
+const openBlockOf = (ledger) => poolOf(ledger).find((g) => !isBlockClosed(ledger, g)) || null;
 // Hours used beyond every current block together (time that had nowhere left to go).
-const overflowHours = (ledger) => Math.max(0, Math.round((ledger.current.reduce((s, g) => s + usedHoursOf(ledger, g), 0) - ledger.current.reduce((s, g) => s + Number(g.hours_granted || 0), 0)) * 1000) / 1000);
+const overflowHours = (ledger) => Math.max(0, Math.round((poolOf(ledger).reduce((s, g) => s + usedHoursOf(ledger, g), 0) - poolOf(ledger).reduce((s, g) => s + Number(g.hours_granted || 0), 0)) * 1000) / 1000);
 // What the bar and the summary email report: the open block, or, when every block is used up, the latest one at 100% (plus any overflow).
 function currentBlockFigures(ledger) {
-    const gs = ledger.current; if (!gs.length) return null;
+    const gs = poolOf(ledger); if (!gs.length) return null;
     const open = openBlockOf(ledger);
     if (open) { const total = Number(open.hours_granted || 0), used = usedHoursOf(ledger, open); return { grant: open, total, used, left: Math.round((total - used) * 1000) / 1000, open: true }; }
     const last = gs[gs.length - 1], total = Number(last.hours_granted || 0), over = overflowHours(ledger);
@@ -262,7 +269,9 @@ function grantTasks(ledger) {
 // The headline: every hour available right now (this period's allotment, plus unexpired carryovers and ad hoc
 // purchases) in one bar, with the breakdown underneath.
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
-    const gs = ledger.current;
+    const gs = poolOf(ledger);
+    const heldHtml = heldLinesHtml(ledger);
+    if (!gs.length && ledger.held?.length) return `<div class="tiny muted" style="margin:14px 0 6px;">No hours available for new work right now.${canManage() ? ' Start a plan period or add an ad hoc purchase.' : ''}</div>${heldHtml}`;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const f = currentBlockFigures(ledger);
     const { total, used, left } = f;
@@ -280,7 +289,22 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
         <div style="height:10px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-bottom:6px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
         ${!f.open ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">Every block of hours is used up. ${canManage() ? 'Add more hours before more billable time is logged.' : ''}</div>` : ''}
         ${f.open && (queued.length || closedCount) ? `<div class="tiny muted" style="margin-bottom:6px;">${closedCount ? `${closedCount} earlier block${closedCount === 1 ? '' : 's'} closed (used up).` : ''}${closedCount && queued.length ? ' ' : ''}${queued.length ? `Next up when this one is used: ${queued.map((x) => esc(grantShort(x))).join(' · ')}.` : ''}</div>` : ''}
+        ${heldHtml}
         ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
+}
+
+// Blocks held for set-aside tasks: their own line and bar under the headline, not counted as hours available.
+function heldLinesHtml(ledger) {
+    const held = ledger.held || [];
+    return held.map((g) => {
+        const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g), left = Math.round((h - u) * 1000) / 1000;
+        const n = allocatedCount(ledger, g), pct = h > 0 ? Math.round((u / h) * 100) : 0;
+        const color = u > h ? '#ef4444' : GRANT_COLOR[g.source] || '#60a5fa';
+        return `<div style="margin:10px 0 6px;">
+            <div class="tiny" style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;"><span><strong>${esc(GRANT_LABEL[g.source] || g.source)} held for ${n} task${n === 1 ? '' : 's'}</strong>: ${esc(hoursText(u))} of ${esc(hoursText(h))} used · ${left < 0 ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : `${esc(hoursText(left))} left`}, for those tasks only</span><span class="muted">expires ${esc(niceDate(g.expires_on))}, not counted above</span></div>
+            <div style="height:6px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-top:4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
+        </div>`;
+    }).join('');
 }
 
 // One card per grant: its own bar, and the tasks charged to it.
@@ -306,7 +330,7 @@ function grantCardHtml(client, g, ledger, gt) {
         <div style="border:1px solid var(--line); border-left:3px solid ${GRANT_COLOR[g.source] || '#22c55e'}; border-radius:8px; padding:12px; margin-top:10px; ${expired ? 'opacity:0.7;' : ''}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
-                    <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${noteWithoutMarker(g.note) ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(noteWithoutMarker(g.note))}</span>` : ''}</div>
+                    <div class="bold">${esc(GRANT_LABEL[g.source] || g.source)}${n && g.source !== 'plan_allotment' ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}${noteWithoutMarker(g.note) ? ` <span class="tiny muted" style="font-weight:400;">· ${esc(noteWithoutMarker(g.note))}</span>` : ''}</div>
                     <div class="tiny muted">${esc(niceDate(g.granted_on))} to ${esc(niceDate(g.expires_on))}${isBlockClosed(ledger, g) ? ' · <strong>closed (used up)</strong>' : ''}${!expired ? ` · <span style="${daysLeft <= 30 ? 'color:#f59e0b; font-weight:600;' : ''}">${daysLeft} day${daysLeft === 1 ? '' : 's'} left</span>` : ' · expired'}${g.status !== 'active' ? ` · ${esc(g.status.replace('_', ' '))}` : ''}${Number(g.hours_expired) > 0 ? ` · ${esc(hoursText(g.hours_expired))} written off` : ''}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -325,7 +349,8 @@ function grantCardsHtml(client, slot, ledger) {
     if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
     const gt = grantTasks(ledger);
     // Blocks with hours left stay up top; used-up blocks go in the collapsed list with the expired ones.
-    const live = ledger.current.filter((g) => !isBlockClosed(ledger, g));
+    const heldSet = new Set((ledger.held || []).map((g) => String(g.id)));
+    const live = ledger.current.filter((g) => !isBlockClosed(ledger, g)).sort((a, b) => (heldSet.has(String(a.id)) ? 1 : 0) - (heldSet.has(String(b.id)) ? 1 : 0));
     const liveIds = new Set(live.map((g) => String(g.id)));
     const earlier = slot.grants.filter((g) => !liveIds.has(String(g.id)))
         .sort((a, b) => String(b.expires_on).localeCompare(String(a.expires_on)));
