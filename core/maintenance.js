@@ -200,15 +200,18 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
         const key = entryKey(e);
         charges[key] = [];
         const pinned = byId.get(String(allocations[e.taskId] || ''));
+        let left = e.minutes;
         if (pinned && grantCovers(pinned, e.date)) {
-            charge(key, pinned, e.minutes, used[pinned.id] + e.minutes > cap[pinned.id]);
-            return;
+            // A task set aside for a grant is charged to it up to the grant's hours; what doesn't fit goes on to the
+            // next grant (the plan allotment, then other purchases), never past the grant it was set aside for.
+            const room = Math.max(0, cap[pinned.id] - used[pinned.id]);
+            if (e.minutes <= 0 || room >= e.minutes) { charge(key, pinned, e.minutes); return; }
+            if (room > 0) { charge(key, pinned, room); left -= room; }
         }
         const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
             .sort((a, b) => grantRank(a) - grantRank(b) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
-        if (!pool.length) { unfunded += e.minutes; return; }
-        if (e.minutes <= 0) { charge(key, pool[0], e.minutes); return; }      // a correction goes back where time goes
-        let left = e.minutes;
+        if (!pool.length) { unfunded += left; return; }
+        if (left <= 0) { charge(key, pool[0], left); return; }      // a correction goes back where time goes
         for (const g of pool) {
             const room = cap[g.id] - used[g.id];
             if (room <= 0) continue;
