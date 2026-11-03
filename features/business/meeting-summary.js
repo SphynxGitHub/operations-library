@@ -1,5 +1,5 @@
 // ================= 📧 MEETING SUMMARY EMAIL =================
-// When a meeting linked to a client has a Zoom summary, a "Meeting summary" task appears for
+// When a meeting linked to a client has a Zoom summary, a "Meeting after-action" task appears for
 // whoever from the team was on the meeting (the project's Communication person, if they attended). Opening it (or the meeting) shows one window with the
 // email and the meeting's REAL tasks side by side. The Next steps section of the email is
 // generated from those tasks, so a change is made once, on the task: editing a title, owner
@@ -56,12 +56,12 @@ function dueTwoDaysAfter(startIso) {
 }
 
 function makeSummaryTask(client, evt) {
-    const title = `Meeting summary: ${evt.title || 'Meeting'}`;
+    const title = `Meeting after-action: ${evt.title || 'Meeting'}`;
     return {
         id: uid(),
         title,
         name: title,
-        description: 'Review the Zoom summary and the action items from this meeting, edit the email, and send it to the attendees.',
+        description: 'Go through this meeting: create tasks from its Zoom action items (or skip them, or add them as notes on existing tasks), log any requests, then edit the follow-up email and send it to the attendees.',
         status: 'Pending Sphynx Action',
         assignee: summaryAssignee(client, evt),
         dueDate: dueTwoDaysAfter(evt.start),
@@ -86,7 +86,11 @@ function makeSummaryTask(client, evt) {
 let materializing = false;
 // Pass { eventId } to limit it to one meeting (the Re-check Zoom button);
 // with no argument it handles every meeting still waiting for tasks.
+// Off: action items are no longer turned into tasks automatically. They wait in the meeting's after-action window, where each
+// one gets its own Create task / Skip / Add as a note choice. Set this to true to bring the old create-everything step back.
+const AUTO_CREATE_ZOOM_TASKS = false;
 OL.materializeZoomActionItems = async function(opts = {}) {
+    if (!AUTO_CREATE_ZOOM_TASKS) return 0;
     const onlyEventId = opts?.eventId ? String(opts.eventId) : null;
     if (materializing) return 0;
     materializing = true;
