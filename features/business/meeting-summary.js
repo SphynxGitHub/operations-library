@@ -13,7 +13,7 @@
 import { db, state, esc, uid, loadFullClient, updateAndSync } from '../../core/data.js';
 import { addLink } from '../../core/task-links.js';
 import { getOlSettings } from '../../core/ol-settings.js';
-import { buildSummaryDraft, tasksForEvent, nextStepsText, nextStepsHtml, messageTextToHtml, zoomItemsNotYetTasks, closedTasksForEvent } from '../../core/meeting-summary.js';
+import { buildSummaryDraft, splitActionItemOwner, tasksForEvent, nextStepsText, nextStepsHtml, messageTextToHtml, zoomItemsNotYetTasks, closedTasksForEvent } from '../../core/meeting-summary.js';
 import { fillClosing } from './compose-shared.js';
 
 const LOOKBACK_DAYS = 7;          // only meetings this recent get a task automatically
@@ -395,11 +395,18 @@ OL.msCreateTaskFromItem = async function(idx) {
     const st = OL._msState;
     const item = (OL._msZoomItems || [])[idx];
     if (!st || !item) return;
+    // "Ally: Update the SOP" becomes "Update the SOP" for Ally (a client task), "Arielle: ..." a Sphynx task for Arielle.
+    const who = splitActionItemOwner(item, {
+        team: (state.master?.sphynxTeam || []).map(m => m.name).filter(Boolean),
+        clientPeople: (st.client.projectData?.teamMembers || []).map(m => m.name).filter(Boolean),
+        attendees: meetingAttendees(st.evt), eventTitle: st.evt.title,
+    });
+    const isClient = who.owner === 'client';
     await updateAndSync(() => {
         st.client.projectData.clientTasks.unshift({
-            id: uid(), title: item, name: item,
-            status: 'Pending Sphynx Action', assignee: 'Sphynx Task', dueDate: dueTwoDaysAfter(st.evt.start),
-            isClientTask: false, loggedHours: 0, createdAt: new Date().toISOString(),
+            id: uid(), title: who.title, name: who.title, zoomItem: item,
+            status: isClient ? 'Client Task' : 'Pending Sphynx Action', assignee: who.assignee, dueDate: dueTwoDaysAfter(st.evt.start),
+            isClientTask: isClient, loggedHours: 0, createdAt: new Date().toISOString(),
             linkedEventId: st.evt.id, parentEventId: st.evt.id, source: 'zoom_summary'
         });
     }, st.client.id);

@@ -82,7 +82,8 @@ function tiedToEvent(t, eventId) {
 // the summary's own "Next steps" list, each once. A task made from one of them counts whether it is open or done, so
 // finished work is never offered again; an item whose task was deleted is offered again.
 export function zoomItemsNotYetTasks({ summary, actionItems, tasks, eventId }) {
-    const known = new Set((tasks || []).filter((t) => tiedToEvent(t, eventId)).map((t) => String(t.title || t.name || '').trim().toLowerCase()));
+    // A task made from an item may have dropped the owner's name from its title, so the item's own wording is remembered on it (zoomItem).
+    const known = new Set((tasks || []).filter((t) => tiedToEvent(t, eventId)).flatMap((t) => [t.title || t.name, t.zoomItem]).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean));
     const seen = new Set();
     const out = [];
     [...(Array.isArray(actionItems) ? actionItems : []).map((x) => String(x || '').trim()), ...splitNextStepsSection(summary).items].forEach((item) => {
@@ -92,6 +93,34 @@ export function zoomItemsNotYetTasks({ summary, actionItems, tasks, eventId }) {
         out.push(String(item).trim());
     });
     return out;
+}
+
+// A Zoom action item usually starts with who it is for: "Ally: Update the SOP", "Arielle: Set up the Zap". This works out the
+// owner from that name and returns the task wording without it:
+//   a team member  -> that person, a Sphynx task, title without the name
+//   a client contact -> that person, a client task, title without the name
+//   a name from the meeting title that is not on the team -> a client task, name kept in the title
+//   anything else (no name, an unknown or ambiguous one) -> the generic Sphynx task, the item unchanged
+// A first name matches only when it is unambiguous; when two team members share one, whoever was on the meeting wins.
+export function splitActionItemOwner(item, { team = [], clientPeople = [], attendees = [], eventTitle = '' } = {}) {
+    const text = String(item || '').trim();
+    const plain = { title: text, assignee: 'Sphynx Task', owner: 'sphynx' };
+    const m = /^([^:\n]{2,40}):\s*(\S[\s\S]*)$/.exec(text);
+    if (!m) return plain;
+    const who = m[1].trim(), rest = m[2].trim(), lw = who.toLowerCase();
+    const matches = (names) => {
+        const exact = names.filter((n) => String(n).trim().toLowerCase() === lw);
+        return exact.length ? exact : names.filter((n) => String(n).trim().toLowerCase().split(/\s+/)[0] === lw);
+    };
+    let t = matches(team);
+    if (t.length > 1) { const here = t.filter((n) => attendees.includes(n)); if (here.length === 1) t = here; }
+    if (t.length === 1) return { title: rest, assignee: t[0], owner: 'sphynx' };
+    if (t.length > 1) return plain;
+    const c = matches(clientPeople);
+    if (c.length === 1) return { title: rest, assignee: c[0], owner: 'client' };
+    if (c.length > 1) return { title: text, assignee: 'Client Task', owner: 'client' };
+    const inTitle = new RegExp('\\b' + who.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(String(eventTitle || ''));
+    return inTitle ? { title: text, assignee: 'Client Task', owner: 'client' } : plain;
 }
 
 // Tasks from this meeting that are already closed (so the list of open ones leaves them out).
