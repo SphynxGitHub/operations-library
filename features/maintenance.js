@@ -266,54 +266,31 @@ function grantTasks(ledger) {
     return { byGrant: out, taskGrants };
 }
 
-// The headline: every hour available right now (this period's allotment, plus unexpired carryovers and ad hoc
-// purchases) in one bar, with the breakdown underneath.
+// The headline: one line and bar per block of hours available now (courtesy carryover, plan allotment, purchases), in the
+// order time is charged to them. Each fills only to its own hours; any excess shows over on the most recent block alone.
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
-    const gs = poolOf(ledger);
-    const heldHtml = heldLinesHtml(ledger) + overageHtml(ledger);
-    if (!gs.length && ledger.held?.length) return `<div class="tiny muted" style="margin:14px 0 6px;">No hours available for new work right now.${canManage() ? ' Start a plan period or add an ad hoc purchase.' : ''}</div>${heldHtml}`;
+    const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
-    const f = currentBlockFigures(ledger);
-    const { total, used, left } = f;
-    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-    const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
-    const g = f.grant;
-    const queued = gs.filter((x) => x !== g && !isBlockClosed(ledger, x));
-    const closedCount = gs.filter((x) => isBlockClosed(ledger, x) && x !== g).length;
-    const blockName = `${(GRANT_LABEL[g.source] || g.source).toLowerCase()}${g.source === 'plan_allotment' ? '' : ` expiring ${niceDate(g.expires_on)}`}`;
-    return `
-        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin:14px 0 6px;">
-            <div class="tiny bold" style="color:${left < 0 ? '#ef4444' : 'var(--text)'};">${esc(hoursText(used))} of ${esc(hoursText(total))} used (${pct}%) · ${left < 0 ? `<strong>${esc(hoursText(-left))} over</strong>` : f.open ? `${esc(hoursText(left))} left` : '<strong>block closed, all used</strong>'}${nonBillableHours > 0 ? `<span class="muted" style="font-weight:400;"> · ${esc(hoursText(nonBillableHours))} non-billable, not counted</span>` : ''}</div>
-            <div class="tiny muted">${f.open ? 'Open block' : 'Latest block'}: ${esc(blockName)}</div>
-        </div>
-        <div style="height:10px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-bottom:6px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
-        ${!f.open ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">Every block of hours is used up. ${canManage() ? 'Add more hours before more billable time is logged.' : ''}</div>` : ''}
-        ${f.open && (queued.length || closedCount) ? `<div class="tiny muted" style="margin-bottom:6px;">${closedCount ? `${closedCount} earlier block${closedCount === 1 ? '' : 's'} closed (used up).` : ''}${closedCount && queued.length ? ' ' : ''}${queued.length ? `Next up when this one is used: ${queued.map((x) => esc(grantShort(x))).join(' · ')}.` : ''}</div>` : ''}
-        ${heldHtml}
-        ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
-}
-
-// Time that no block could cover, shown against the block it landed on. An open purchase must never hide it: the
-// headline only follows the open block, so a plan allotment or carryover that is over gets its own red line.
-function overageHtml(ledger) {
-    const over = ledger.current.map((g) => ({ g, o: Math.round((usedHoursOf(ledger, g) - Number(g.hours_granted || 0)) * 1000) / 1000 })).filter((x) => x.o > EPS);
-    if (!over.length) return '';
-    const total = Math.round(over.reduce((s, x) => s + x.o, 0) * 1000) / 1000;
-    return `<div class="tiny" style="color:#ef4444; margin:8px 0 6px;"><strong>${esc(hoursText(total))} over what the client has paid for</strong>: ${over.map((x) => `${esc((GRANT_LABEL[x.g.source] || x.g.source).toLowerCase())} ${esc(hoursText(x.o))}`).join(' · ')}.</div>`;
-}
-
-// Blocks held for set-aside tasks: their own line and bar under the headline, not counted as hours available.
-function heldLinesHtml(ledger) {
-    const held = ledger.held || [];
-    return held.map((g) => {
-        const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g), left = Math.round((h - u) * 1000) / 1000;
-        const n = allocatedCount(ledger, g), pct = h > 0 ? Math.round((u / h) * 100) : 0;
-        const color = u > h ? '#ef4444' : GRANT_COLOR[g.source] || '#60a5fa';
-        return `<div style="margin:10px 0 6px;">
-            <div class="tiny" style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;"><span><strong>${esc(GRANT_LABEL[g.source] || g.source)} held for ${n} task${n === 1 ? '' : 's'}</strong>: ${esc(hoursText(u))} of ${esc(hoursText(h))} used · ${left < 0 ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : `${esc(hoursText(left))} left`}, for those tasks only</span><span class="muted">expires ${esc(niceDate(g.expires_on))}, not counted above</span></div>
-            <div style="height:6px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-top:4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
+    const allUsed = gs.every((g) => isBlockClosed(ledger, g));
+    const rows = gs.map((g) => {
+        const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
+        const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
+        const n = g.source !== 'plan_allotment' ? allocatedCount(ledger, g) : 0;
+        const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : GRANT_COLOR[g.source] || '#22c55e';
+        const status = left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : left <= EPS ? 'used up' : `${esc(hoursText(left))} left`;
+        return `<div style="margin:10px 0 0;">
+            <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">
+                <span style="${left < -EPS ? 'color:#ef4444;' : ''}"><strong>${esc(GRANT_LABEL[g.source] || g.source)}</strong>${n ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}: ${esc(hoursText(u))} of ${esc(hoursText(h))} used (${pct}%) · ${status}</span>
+                <span class="muted">${g.source === 'plan_allotment' ? 'ends' : 'expires'} ${esc(niceDate(g.expires_on))}</span>
+            </div>
+            <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-top:4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
         </div>`;
     }).join('');
+    return `
+        <div style="margin:6px 0 4px;">${rows}</div>
+        ${nonBillableHours > 0 ? `<div class="tiny muted" style="margin:8px 0 4px;">${esc(hoursText(nonBillableHours))} non-billable, not counted</div>` : ''}
+        ${allUsed ? `<div class="tiny" style="color:#f59e0b; margin:6px 0;">Every block of hours is used up. ${canManage() ? 'Add more hours before more billable time is logged.' : ''}</div>` : ''}
+        ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
 }
 
 // One card per grant: its own bar, and the tasks charged to it.

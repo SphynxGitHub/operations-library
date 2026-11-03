@@ -189,8 +189,9 @@ export const latestGrant = (gs) => (gs || []).slice().sort((a, b) => gDay(b.gran
 
 export function allocateHours({ entries = [], grants = [], allocations = {} }) {
     const cap = {}, used = {};
+    // Capacity is not rounded to whole minutes, so 3.06 h fills to exactly 3.06 h.
     // Hours recorded by hand as already used (an earlier period, an upgrade's overage) leave less room for time logged here.
-    grants.forEach((g) => { cap[g.id] = Math.max(0, Math.round((Number(g.hours_granted || 0) - manualUsedHours(g)) * 60)); used[g.id] = 0; });
+    grants.forEach((g) => { cap[g.id] = Math.max(0, (Number(g.hours_granted || 0) - manualUsedHours(g)) * 60); used[g.id] = 0; });
     const byId = new Map(grants.map((g) => [String(g.id), g]));
     const reserved = new Set(Object.values(allocations).filter(Boolean).map(String)
         .filter((id) => byId.get(id) && byId.get(id).source !== 'plan_allotment'));
@@ -207,7 +208,7 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
             // A task set aside for a grant is charged to it up to the grant's hours; what doesn't fit goes on to the
             // next grant (the plan allotment, then other purchases), never past the grant it was set aside for.
             const room = Math.max(0, cap[pinned.id] - used[pinned.id]);
-            if (e.minutes <= 0 || room >= e.minutes) { charge(key, pinned, e.minutes); return; }
+            if (e.minutes <= 0 || room >= e.minutes - 1e-9) { charge(key, pinned, e.minutes); return; }
             if (room > 0) { charge(key, pinned, room); left -= room; }
         }
         const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
@@ -220,9 +221,9 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
             const take = Math.min(room, left);
             charge(key, g, take);
             left -= take;
-            if (!left) break;
+            if (left < 1e-9) { left = 0; break; }
         }
-        if (left > 0) charge(key, latestGrant(pool), left, true);      // overage lands on the most recent block only
+        if (left > 1e-9) charge(key, latestGrant(pool), left, true);      // overage lands on the most recent block only
     });
     return { usedMinutes: used, charges, unfundedMinutes: unfunded };
 }
