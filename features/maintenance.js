@@ -696,7 +696,36 @@ export function openEditPeriodModal(periodId) {
         ${field('Tier', tierSelectHtml('pe-tier', 'pe-allot', periodTierTitle(period, allot)))}
         ${field('Hours allotment', `<input id="pe-allot" type="number" min="0" step="0.25" class="modal-input" value="${allot || ''}" ${hoursOnInput('pe-tier', 'pe-allot')}>`)}
         <div class="tiny muted" style="margin-bottom:14px;">Changing the dates or hours updates the allotment grant, and any unused carryover from this period.</div>
-        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitEditPeriod('${esc(periodId)}')">Save</button></div>`);
+        <div style="display:flex; gap:10px;">
+            <button class="btn primary" style="flex:1; justify-content:center;" onclick="OL.submitEditPeriod('${esc(periodId)}')">Save</button>
+            <button class="btn soft" style="color:#ef4444;" onclick="OL.deletePeriod('${esc(periodId)}')">Delete period</button>
+        </div></div>`);
+}
+// Removes a plan period that should never have existed (for example one entered at the wrong tier). Its hours grants
+// (the allotment and any carryover from it) go with it, and tasks set aside for those grants go back to Auto. Time
+// already logged stays on the tasks, so the hours simply fall to the remaining blocks the next time the page draws.
+export async function deletePeriod(periodId) {
+    const { client, period, grants } = findPeriod(periodId); if (!period || !canManage()) return;
+    const mine = grants.filter((g) => String(g.period_id) === String(period.id));
+    const mineIds = new Set(mine.map((g) => String(g.id)));
+    const tasks = (client.projectData?.clientTasks || []).filter((t) => t && mineIds.has(String(t.hoursGrantId || '')));
+    const label = `${niceDate(period.start_date)} to ${niceDate(period.due_date)}${period.tier ? ` (${period.tier})` : ''}`;
+    const msg = `Delete the plan period ${label}?\n\nThis also deletes its ${mine.length} hours block${mine.length === 1 ? '' : 's'} (${hoursText(mine.reduce((s, g) => s + Number(g.hours_granted || 0), 0))}).`
+        + `${tasks.length ? ` The ${tasks.length} task${tasks.length === 1 ? '' : 's'} set aside for ${tasks.length === 1 ? 'it' : 'them'} go back to Auto.` : ''}`
+        + `\n\nTime already logged stays on the tasks and is charged to the remaining blocks. This cannot be undone.`
+        + `${period.status === 'active' ? '\n\nThis is the ACTIVE period.' : ''}`;
+    if (!confirm(msg)) return;
+    // .select() returns the rows actually removed: a row-level-security policy that blocks deletes removes nothing and raises no error.
+    if (mine.length) {
+        const g = await db.from('hours_grant').delete().eq('period_id', period.id).select('id');
+        if (g.error) { alert(friendly(g.error)); return; }
+        if ((g.data || []).length < mine.length) { alert('The hours blocks could not be deleted (the database refused). Run supabase/migrations/2026_11c_delete_plan_periods.sql, then try again.'); return; }
+    }
+    const p = await db.from('maintenance_plan_period').delete().eq('id', period.id).select('id');
+    if (p.error) { alert(friendly(p.error)); return; }
+    if (!(p.data || []).length) { alert('The period could not be deleted (the database refused). Run supabase/migrations/2026_11c_delete_plan_periods.sql, then try again.'); return; }
+    if (tasks.length) await saveTaskGrants(client, tasks.map((t) => ({ taskId: t.id, grantId: null })));
+    OL.closeModal(); await reloadAndRedraw(client.id);
 }
 export async function submitEditPeriod(periodId) {
     const { client, period, grants } = findPeriod(periodId); if (!period) return;
@@ -1078,7 +1107,7 @@ window.OL = window.OL || {};
 Object.assign(window.OL, {
     prepaidHoursSummary, renderMaintenancePage, renderClientRequests, loadMaintenanceData,
     openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
-    openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing,
+    openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing, deletePeriod,
     openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
     maintenanceTabAllowed, migrateClientRequestsToBacklog,
