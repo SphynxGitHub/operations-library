@@ -375,39 +375,62 @@ function requestHintFor(task) {
 // now. The email drops that list from SUMMARY (its NEXT STEPS comes from tasks), so an item with no task would be
 // missing from the email altogether. Tasks made from this meeting, done or not, are not offered again; ones that were
 // deleted are.
+// Items you chose to skip (or filed as a note on an existing task) are kept on the project, per meeting, and not offered again.
+const zoomItemKey = (item) => String(item || '').trim().toLowerCase();
 function zoomNextStepsNotYetTasks() {
     const st = OL._msState;
+    const skipped = new Set((st.client.projectData.dismissedZoomItems || []).filter(d => String(d.eventId) === String(st.evt.id)).map(d => d.key));
     return zoomItemsNotYetTasks({
         summary: st.evt.zoom_summary || '', actionItems: st.evt.zoom_action_items,
         tasks: st.client.projectData.clientTasks || [], eventId: st.evt.id,
-    });
+    }).filter(item => !skipped.has(zoomItemKey(item)));
 }
 
-OL.msCreateTasksFromSummary = async function() {
+// One task from one of Zoom's action items, only when you choose to. The rest stay listed until you create, skip or file them.
+OL.msCreateTaskFromItem = async function(idx) {
     const st = OL._msState;
-    if (!st) return;
-    const items = zoomNextStepsNotYetTasks();
-    if (!items.length) return;
+    const item = (OL._msZoomItems || [])[idx];
+    if (!st || !item) return;
     await updateAndSync(() => {
-        items.forEach(item => st.client.projectData.clientTasks.unshift({
+        st.client.projectData.clientTasks.unshift({
             id: uid(), title: item, name: item,
             status: 'Pending Sphynx Action', assignee: 'Sphynx Task', dueDate: dueTwoDaysAfter(st.evt.start),
             isClientTask: false, loggedHours: 0, createdAt: new Date().toISOString(),
             linkedEventId: st.evt.id, parentEventId: st.evt.id, source: 'zoom_summary'
-        }));
+        });
     }, st.client.id);
     renderMsTaskRows();
 };
 
+// Leaves an item out for good (not a task, not wanted in the email). Used by Skip, and when an item is filed as a note.
+async function dismissZoomItem(item) {
+    const st = OL._msState;
+    if (!st || !item) return;
+    await updateAndSync(() => {
+        const pd = st.client.projectData;
+        if (!Array.isArray(pd.dismissedZoomItems)) pd.dismissedZoomItems = [];
+        const key = zoomItemKey(item);
+        if (!pd.dismissedZoomItems.some(d => String(d.eventId) === String(st.evt.id) && d.key === key)) pd.dismissedZoomItems.push({ eventId: st.evt.id, key });
+    }, st.client.id);
+    renderMsTaskRows();
+}
+OL.msSkipZoomItem = (idx) => dismissZoomItem((OL._msZoomItems || [])[idx]);
+OL.msDismissZoomText = (eventId, text) => (OL._msState && String(OL._msState.evt.id) === String(eventId) ? dismissZoomItem(text) : null);
+
 function zoomItemsBoxHtml() {
     const items = zoomNextStepsNotYetTasks();
+    OL._msZoomItems = items;
     if (!items.length) return '';
     return `
         <div style="border:1px solid #f59e0b; border-radius:6px; padding:8px; margin-bottom:8px; font-size:12px;">
-            <div class="bold" style="color:#f59e0b; margin-bottom:4px;">Zoom recorded ${items.length} action item${items.length === 1 ? '' : 's'} for this meeting that ${items.length === 1 ? "isn't a task" : "aren't tasks"} now</div>
-            <ul style="margin:0 0 6px 0; padding-left:18px;">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-            <button type="button" class="btn tiny primary" onclick="OL.msCreateTasksFromSummary()">Create ${items.length === 1 ? 'this task' : `these ${items.length} tasks`}</button>
-            <div class="tiny muted" style="margin-top:4px;">If they were tasks before, they have since been deleted. Without tasks they don't appear in the email.</div>
+            <div class="bold" style="color:#f59e0b; margin-bottom:6px;">Zoom recorded ${items.length} action item${items.length === 1 ? '' : 's'} for this meeting that ${items.length === 1 ? "isn't a task" : "aren't tasks"} now</div>
+            ${items.map((i, n) => `<div style="padding:6px 0; border-top:1px solid var(--line);">
+                <div style="margin-bottom:4px;">${esc(i)}</div>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn tiny primary" onclick="OL.msCreateTaskFromItem(${n})">Create task</button>
+                    <button type="button" class="btn tiny soft" onclick="OL.msSkipZoomItem(${n})" title="Leave this out: no task, and it isn't offered again">Skip</button>
+                </div></div>`).join('')}
+            <div class="tiny muted" style="margin-top:4px;">Only items that become tasks appear in the email's next steps.</div>
         </div>`;
 }
 
@@ -712,7 +735,9 @@ window.OL.msMakeRequest = OL.msMakeRequest;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
 window.OL.msBack = OL.msBack;
-window.OL.msCreateTasksFromSummary = OL.msCreateTasksFromSummary;
+window.OL.msCreateTaskFromItem = OL.msCreateTaskFromItem;
+window.OL.msSkipZoomItem = OL.msSkipZoomItem;
+window.OL.msDismissZoomText = OL.msDismissZoomText;
 window.OL.msToggleInclude = OL.msToggleInclude;
 window.OL.msSetOtherFilter = OL.msSetOtherFilter;
 

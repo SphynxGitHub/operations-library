@@ -447,7 +447,8 @@ OL.aiDupNote = async function (clientId, taskId, idx, eventId) {
     if (!res.note) { alert('The note could not be saved. Nothing was changed.'); return; }
     logSuggestion({ clientId, sourceKind: 'calendar_event', sourceId: eventId, type: 'note', quote: d.text, targetKind: 'task', targetId: taskId, confidence: d.level === 'strong' ? 'high' : 'medium' })
         .then((id) => id && recordOutcome(id, 'accepted', { decidedBy: getCurrentUserName?.() }));
-    alert('Added as a note on that task. Remember to leave this item out when you create tasks from the meeting.');
+    if (typeof OL.msDismissZoomText === 'function') await OL.msDismissZoomText(eventId, d.text);      // it is a note now, so it is not offered as a task
+    alert('Added as a note on that task.');
 };
 
 // ================================================================================================================
