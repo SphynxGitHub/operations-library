@@ -1,6 +1,6 @@
 // ================= 📧 MEETING SUMMARY EMAIL =================
 // When a meeting linked to a client has a Zoom summary, a "Meeting summary" task appears for
-// the client's Communication role. Opening it (or the meeting) shows one window with the
+// whoever from the team was on the meeting (the project's Communication person, if they attended). Opening it (or the meeting) shows one window with the
 // email and the meeting's REAL tasks side by side. The Next steps section of the email is
 // generated from those tasks, so a change is made once, on the task: editing a title, owner
 // or due date, adding a task, or deleting one updates the actual task immediately and the
@@ -32,6 +32,22 @@ function communicationAssignee(client) {
     return (assignment && assignment.memberName) || 'Sphynx Task';
 }
 
+// Who from the team was on the meeting (the event's assignee and assignees, kept to people on the team roster).
+function meetingAttendees(evt) {
+    const roster = (state.master?.sphynxTeam || []).map(m => m.name);
+    const names = [...(Array.isArray(evt?.assignees) ? evt.assignees : []), evt?.assignee].filter(Boolean);
+    return [...new Set(names)].filter(n => roster.includes(n));
+}
+
+// The summary goes to the project's Communication person only when they were on the meeting. Otherwise it goes to someone who
+// was (the first team member on the event); with nobody on the event, the generic Sphynx task.
+function summaryAssignee(client, evt) {
+    const attendees = meetingAttendees(evt);
+    const comm = communicationAssignee(client);
+    if (attendees.includes(comm)) return comm;
+    return attendees[0] || 'Sphynx Task';
+}
+
 function dueTwoDaysAfter(startIso) {
     const d = new Date(startIso);
     if (Number.isNaN(d.getTime())) return '';
@@ -47,7 +63,7 @@ function makeSummaryTask(client, evt) {
         name: title,
         description: 'Review the Zoom summary and the action items from this meeting, edit the email, and send it to the attendees.',
         status: 'Pending Sphynx Action',
-        assignee: communicationAssignee(client),
+        assignee: summaryAssignee(client, evt),
         dueDate: dueTwoDaysAfter(evt.start),
         isClientTask: false,
         loggedHours: 0,
@@ -219,7 +235,7 @@ OL.checkMeetingSummaries = async function() {
         const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
         const { data: events, error } = await db
             .from('calendar_events')
-            .select('id, title, start, linked_client_id, summary_sent_at')
+            .select('id, title, start, linked_client_id, summary_sent_at, assignee, assignees')
             .not('zoom_summary', 'is', null)
             .neq('zoom_summary', '')
             .not('linked_client_id', 'is', null)
