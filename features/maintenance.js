@@ -266,13 +266,15 @@ function grantTasks(ledger) {
     return { byGrant: out, taskGrants };
 }
 
-// The headline: one line and bar per block of hours available now (courtesy carryover, plan allotment, purchases), in the
-// order time is charged to them. Each fills only to its own hours; any excess shows over on the most recent block alone.
+// The headline: one line and bar per block of hours available now (courtesy carryover, plan allotment, purchases),
+// newest block first. Each fills only to its own hours; any excess shows over on the most recent block alone.
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
-    const rows = gs.map((g) => {
+    // Newest block on top, oldest at the bottom (latest start first, then latest expiry).
+    const newestFirst = gs.slice().sort((a, b) => grantStart(b).localeCompare(grantStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on)));
+    const rows = newestFirst.map((g) => {
         const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
         const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
         const n = g.source !== 'plan_allotment' ? allocatedCount(ledger, g) : 0;
