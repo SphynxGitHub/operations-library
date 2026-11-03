@@ -132,12 +132,21 @@ function elapsedFromScheduledStart(scheduledStartIso: string | null, actualEndIs
 async function actualMeetingTimes(meetingUuid: string, accessToken: string, summaryPayload?: any): Promise<{ start: string | null; end: string } | null> {
   if (summaryPayload?.meeting_end_time) return { start: summaryPayload.meeting_start_time || null, end: summaryPayload.meeting_end_time };
   try {
+    lastTimeLookupProblem = "";
     const res = await fetch(`https://api.zoom.us/v2/past_meetings/${encodeZoomUuid(meetingUuid)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const t = (await res.text().catch(() => "")).slice(0, 200);
+      lastTimeLookupProblem = res.status === 400 || res.status === 401 || res.status === 403
+        ? `Zoom refused the past-meeting lookup (HTTP ${res.status}: ${t}). The Zoom app likely needs the "meeting:read:past_meeting" permission; add it, then reconnect Zoom.`
+        : `Zoom's past-meeting lookup answered HTTP ${res.status}: ${t}`;
+      return null;
+    }
     const m = await res.json();
+    if (!m?.end_time) lastTimeLookupProblem = "Zoom's past-meeting record has no end time yet (it can take a while after the meeting ends).";
     return m?.end_time ? { start: m.start_time || null, end: m.end_time } : null;
-  } catch (_) { return null; }
+  } catch (e: any) { lastTimeLookupProblem = `Past-meeting lookup failed: ${e?.message || e}`; return null; }
 }
+let lastTimeLookupProblem = "";
 
 // Saves what Zoom reported on the event and, unless someone set the time by hand, makes it the logged time.
 // Two separate updates so a column that is not there yet (see the 2026_10 migration) never blocks the sync.
@@ -554,7 +563,7 @@ serve(async (req) => {
           if (!uuid) { if (report) report.notes.push("Zoom has no past instance of this meeting yet, so no actual end time."); continue; }
           if (!evt.zoom_meeting_uuid) await supabase.from("calendar_events").update({ zoom_meeting_id: mid, zoom_meeting_uuid: uuid }).eq("id", evt.id);
           if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(uuid, accessToken))) elapsedSaved++;
-          else if (report) report.notes.push("Zoom returned no usable actual end time for this meeting.");
+          else if (report) report.notes.push(lastTimeLookupProblem || "Zoom returned an end time that doesn't fit this meeting (before its start or over 12 hours), so the scheduled length stays.");
         }
       } else console.error("Elapsed-time pass skipped:", elapsedErr.message);
     }
