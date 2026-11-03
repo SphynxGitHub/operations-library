@@ -2927,6 +2927,8 @@ OL.renderTaskCommentsSidebarHTML = function(client, task) {
                 <button type="button" class="btn tiny soft" style="padding:2px 6px; font-style:italic;" title="Italic" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('italic')">I</button>
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Bullet List" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('insertUnorderedList')">• List</button>
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Numbered List" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('insertOrderedList')">1. List</button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; display:inline-flex; align-items:center;" title="Outdent bullet" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('outdent')"><i data-lucide="indent-decrease" style="width:12px;height:12px;"></i></button>
+                <button type="button" class="btn tiny soft" style="padding:2px 6px; display:inline-flex; align-items:center;" title="Indent bullet" onmousedown="event.preventDefault()" onclick="OL.execCommentCommand('indent')"><i data-lucide="indent-increase" style="width:12px;height:12px;"></i></button>
                 <button type="button" class="btn tiny soft" style="padding:2px 6px; display:inline-flex; align-items:center;" title="Insert Link" onmousedown="event.preventDefault()" onclick="OL.toggleInlineLinkPopover('${task.id}')">
                     <i data-lucide="link" style="width:12px;height:12px;"></i>
                 </button>
@@ -3493,6 +3495,8 @@ OL.renderRichTextField = function(opts) {
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Heading" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'h4')">H</button>
                 ${btn('insertUnorderedList', '• List', 'Bullet list')}
                 ${btn('insertOrderedList', '1. List', 'Numbered list')}
+                ${btn('outdent', '<i data-lucide="indent-decrease" style="width:11px;height:11px;"></i>', 'Outdent bullet')}
+                ${btn('indent', '<i data-lucide="indent-increase" style="width:11px;height:11px;"></i>', 'Indent bullet')}
                 <button type="button" class="btn tiny soft" style="padding:2px 6px;" title="Quote" onmousedown="event.preventDefault()" onclick="document.execCommand('formatBlock', false, 'blockquote')"></button>
                 ${btn('createLink', '<i data-lucide="link" style="width:11px;height:11px;"></i>', 'Link')}
                 <span style="width:1px; height:16px; background:var(--line); margin:0 4px;"></span>
