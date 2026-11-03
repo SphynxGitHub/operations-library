@@ -270,7 +270,7 @@ function grantTasks(ledger) {
 // purchases) in one bar, with the breakdown underneath.
 function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = poolOf(ledger);
-    const heldHtml = heldLinesHtml(ledger);
+    const heldHtml = heldLinesHtml(ledger) + overageHtml(ledger);
     if (!gs.length && ledger.held?.length) return `<div class="tiny muted" style="margin:14px 0 6px;">No hours available for new work right now.${canManage() ? ' Start a plan period or add an ad hoc purchase.' : ''}</div>${heldHtml}`;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const f = currentBlockFigures(ledger);
@@ -291,6 +291,15 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
         ${f.open && (queued.length || closedCount) ? `<div class="tiny muted" style="margin-bottom:6px;">${closedCount ? `${closedCount} earlier block${closedCount === 1 ? '' : 's'} closed (used up).` : ''}${closedCount && queued.length ? ' ' : ''}${queued.length ? `Next up when this one is used: ${queued.map((x) => esc(grantShort(x))).join(' · ')}.` : ''}</div>` : ''}
         ${heldHtml}
         ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
+}
+
+// Time that no block could cover, shown against the block it landed on. An open purchase must never hide it: the
+// headline only follows the open block, so a plan allotment or carryover that is over gets its own red line.
+function overageHtml(ledger) {
+    const over = ledger.current.map((g) => ({ g, o: Math.round((usedHoursOf(ledger, g) - Number(g.hours_granted || 0)) * 1000) / 1000 })).filter((x) => x.o > EPS);
+    if (!over.length) return '';
+    const total = Math.round(over.reduce((s, x) => s + x.o, 0) * 1000) / 1000;
+    return `<div class="tiny" style="color:#ef4444; margin:8px 0 6px;"><strong>${esc(hoursText(total))} over what the client has paid for</strong>: ${over.map((x) => `${esc((GRANT_LABEL[x.g.source] || x.g.source).toLowerCase())} ${esc(hoursText(x.o))}`).join(' · ')}.</div>`;
 }
 
 // Blocks held for set-aside tasks: their own line and bar under the headline, not counted as hours available.
