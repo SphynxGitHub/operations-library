@@ -2307,7 +2307,7 @@ OL.startCalendarAutoSync = function(intervalMs = 5 * 60 * 1000) {
     if (OL._calendarAutoSyncTimer) return;
     OL._calendarAutoSyncTimer = setInterval(() => {
         const isConnected = state.master?.communications?.gmail?.connected || state.master?.googleConnected || false;
-        if (!isConnected || OL.calendarState.loading) return;
+        if (!isConnected || OL.calendarState.loading || document.hidden) return;
         OL.fetchLiveGoogleCalendar();
     }, intervalMs);
 };

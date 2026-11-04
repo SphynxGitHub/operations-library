@@ -204,6 +204,6 @@ OL.meetingTimeSave = async function () {
 };
 
 if (!OL._mtpTimer) {
-    OL._mtpTimer = setInterval(() => OL.checkMeetingTimePrompts(), CHECK_EVERY_MS);
+    OL._mtpTimer = setInterval(() => { if (!document.hidden) OL.checkMeetingTimePrompts(); }, CHECK_EVERY_MS);
     setTimeout(() => OL.checkMeetingTimePrompts(), 20000);
 }

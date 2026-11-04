@@ -395,31 +395,15 @@ function fireDesktopNotification(n) {
 }
 
 async function pollForNotifications() {
+    // Nothing is downloaded here any more. This used to fetch the team roster (and, without live updates, every project in full)
+    // every 45 seconds in every open tab. The projects and the roster are kept current by core/live-refresh.js (Realtime, with
+    // a light "which projects changed" check as the fallback), so this only works out what is new from what is already in memory.
     try {
-        // Every project's full data, every 45 seconds, was the biggest download in the app. While live updates are connected
-        // (core/live-refresh.js) the projects are already kept current, so only the team roster is fetched below.
-        const { data: clientsData } = OL._liveRealtimeUp ? { data: [] } : await db.from('workspace_clients').select('id, project_data');
-        // Never overwrite a project with unsaved local edits (this used to
-        // silently drop changes made in the ~1.5 s before a save ran).
-        const pendingSave = !!window.saveTimeout || state.isSaving === true;
-        (clientsData || []).forEach(row => {
-            const client = state.clients?.[row.id];
-            if (client && !pendingSave) client.projectData = row.project_data || client.projectData;
-        });
-
-        const { data: masterRow } = await db.from('workspace_masters').select('sphynx_team').eq('id', 'main_state').maybeSingle();
-        if (Array.isArray(masterRow?.sphynx_team) && masterRow.sphynx_team.length && !pendingSave) {
-            // Keeps read-marks made locally (merges instead of replacing).
-            if (typeof OL._mergeMasterRow === 'function') OL._mergeMasterRow(masterRow);
-            else state.master.sphynxTeam = masterRow.sphynx_team;
-            // Same staleness issue as sync() in core/data.js — keep a live
-            // session's permissions current without requiring a re-login.
-            if (typeof OL.reconcileCurrentUserPermissions === 'function' && OL.reconcileCurrentUserPermissions()) {
-                if (typeof window.buildLayout === 'function') window.buildLayout();
-            }
+        if (typeof OL.reconcileCurrentUserPermissions === 'function' && OL.reconcileCurrentUserPermissions()) {
+            if (typeof window.buildLayout === 'function') window.buildLayout();
         }
     } catch (e) {
-        console.warn('Notification poll failed (will retry next interval):', e);
+        console.warn('Notification check failed (will retry next interval):', e);
         return;
     }
 

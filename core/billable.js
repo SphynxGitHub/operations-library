@@ -351,7 +351,7 @@ export async function loadEventCallTypes() {
 export const loadCoachingEventTypes = loadEventCallTypes; // old name
 if (typeof window !== 'undefined') {
     setTimeout(loadEventCallTypes, 8000);
-    setInterval(loadEventCallTypes, 10 * 60 * 1000);
+    setInterval(() => { if (!document.hidden) loadEventCallTypes(); }, 10 * 60 * 1000);
 }
 
 window.OL = window.OL || {};

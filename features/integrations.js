@@ -889,7 +889,7 @@ export async function autoPullIntegrations(client) {
 }
 
 OL.autoPullActiveClient = () => { const c = getActiveClient(); if (c) return autoPullIntegrations(c); };
-if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { OL.autoPullActiveClient(); }, 60 * 60 * 1000);
+if (typeof window !== 'undefined' && typeof setInterval === 'function') setInterval(() => { if (!document.hidden) OL.autoPullActiveClient(); }, 60 * 60 * 1000);
 
 export function openImportHub() {
     const client = getActiveClient();

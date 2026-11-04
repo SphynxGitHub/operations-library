@@ -876,7 +876,7 @@ OL.startGmailAutoSync = function(intervalMs = 5 * 60 * 1000) {
     if (OL._gmailAutoSyncTimer) return; // already running, don't stack timers
     OL._gmailAutoSyncTimer = setInterval(() => {
         const isConnected = state.master?.communications?.gmail?.connected || state.master?.googleConnected || false;
-        if (!isConnected || OL.commTabState.loading) return;
+        if (!isConnected || OL.commTabState.loading || document.hidden) return;   // the server-side cron keeps gmail_messages fresh while nobody is looking
         OL.fetchLiveGmailMessages();
     }, intervalMs);
 };

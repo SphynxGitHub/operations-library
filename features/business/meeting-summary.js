@@ -842,9 +842,9 @@ window.OL.msSetOtherFilter = OL.msSetOtherFilter;
 // First check shortly after load, then every few minutes while the app is open.
 if (typeof window !== 'undefined' && typeof setTimeout === 'function') {
     setTimeout(() => OL.checkMeetingSummaries(), 20 * 1000);
-    setInterval(() => OL.checkMeetingSummaries(), CHECK_EVERY_MS);
+    setInterval(() => { if (!document.hidden) OL.checkMeetingSummaries(); }, CHECK_EVERY_MS);   // not while the tab is in the background
     setTimeout(() => OL.backgroundZoomSync(), 45 * 1000);
     setTimeout(() => OL.applyExtensionTimeEntries(), 15 * 1000);
-    setInterval(() => OL.applyExtensionTimeEntries(), 2 * 60 * 1000);
-    setInterval(() => OL.backgroundZoomSync(), ZOOM_SYNC_EVERY_MS);
+    setInterval(() => { if (!document.hidden) OL.applyExtensionTimeEntries(); }, 2 * 60 * 1000);
+    setInterval(() => { if (!document.hidden) OL.backgroundZoomSync(); }, ZOOM_SYNC_EVERY_MS);   // the ol_sync_zoom cron job covers the hours nobody has the app open
 }

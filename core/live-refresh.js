@@ -130,17 +130,29 @@ let realtimeUp = false;
 function startRealtime() {
     try {
         const ch = db.channel('ol-live');
-        ch.on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_clients' }, async (p) => {
-            let row = p.new;
-            // Big projects can exceed Realtime's message size, in which case
-            // the change arrives without its data — fetch that one row.
-            if (row?.id && !row.project_data && state.clients?.[row.id] && !state.clients[row.id]._metaOnly) {
-                const { data } = await db.from('workspace_clients').select('id, meta, project_data').eq('id', row.id).maybeSingle();
-                row = data || row;
-            }
+        const applyClientRow = (row) => {
             const merged = mergeClientRow(row);
             if (row?.id && !hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at);   // so the background check does not fetch it again
             if (merged) scheduleViewRefresh(600);
+        };
+        // Big projects can exceed Realtime's message size, in which case the change arrives without its data and the project has to be
+        // fetched. Someone editing saves every couple of seconds, and every open tab fetched the whole project each time. Now each tab
+        // fetches a project at most once per 8 seconds (after the changes stop arriving), and not at all while the tab is in the
+        // background: coming back to the tab runs the "which projects changed" check, which fetches only what is out of date.
+        const pendingFetch = {};
+        const fetchLater = (id) => {
+            clearTimeout(pendingFetch[id]);
+            pendingFetch[id] = setTimeout(async () => {
+                delete pendingFetch[id];
+                if (document.hidden) { lastPollAt = 0; return; }   // makes the check on returning to the tab run straight away
+                const { data } = await db.from('workspace_clients').select('id, meta, project_data, updated_at').eq('id', id).maybeSingle();
+                if (data) applyClientRow(data);
+            }, 8000);
+        };
+        ch.on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_clients' }, (p) => {
+            const row = p.new;
+            if (row?.id && !row.project_data && state.clients?.[row.id] && !state.clients[row.id]._metaOnly) { fetchLater(row.id); return; }
+            applyClientRow(row);
         });
         ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'workspace_masters' }, (p) => {
             if (mergeMasterRow(p.new)) scheduleViewRefresh(600);

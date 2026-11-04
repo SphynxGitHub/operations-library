@@ -4,7 +4,7 @@
 // plus the `admins` table. The old ?admin=... URL secret has been removed:
 // it was readable in the public source and granted admin screens to anyone.
 
-import { db, state, persist } from './data.js';
+import { db, state, persist, clearProjectCache } from './data.js';
 import { getPreviewTarget, clearPreviewTarget, mountPreviewBanner, isPreviewActive, exitPreview } from './preview.js';
 
 // Old ?access=token share links. OFF: they no longer open anything (the database lockdown ends them).
@@ -311,6 +311,7 @@ export async function signOut() {
     // In a preview tab "sign out" means "leave the preview". Signing out for real would also end the
     // admin's own session in every other tab.
     if (isPreviewActive()) { exitPreview(); return; }
+    await clearProjectCache();   // the staff-only local copy of the projects goes with the session
     await db.auth.signOut();
     window.location.href = 'login.html';
 }

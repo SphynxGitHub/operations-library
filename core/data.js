@@ -451,7 +451,7 @@ function persistNow() {
 
 // One request for every project, as it always was. If it fails (timeout or network blip) it is tried again rather than
 // leaving the app with no projects loaded.
-async function fetchAllClientRows() {
+async function fetchAllClientRowsFull() {
     let res = null;
     for (let attempt = 0; attempt < 3; attempt++) {
         res = await db.from('workspace_clients').select('*');
@@ -460,6 +460,103 @@ async function fetchAllClientRows() {
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
     return res;
+}
+
+// ---- project cache (staff only) ----
+// Loading the app used to download every project in full, every time, for every person (this was most of the REST egress).
+// Now each staff browser keeps the last copy of each project it downloaded (IndexedDB, one store per signed-in user) and the
+// load first asks only "id + updated_at" for every project (a few KB), then downloads just the projects that changed since.
+// Needs workspace_clients.updated_at (migrations/2026_11e). Without it, or if anything here fails, the full download below runs as before.
+// Partners and clients never use the cache, and signing out clears it (clearProjectCache, called from core/auth.js signOut).
+const CACHE_DB = 'ol-project-cache';
+function openCacheDb() {
+    return new Promise((resolve, reject) => {
+        if (typeof indexedDB === 'undefined') return reject(new Error('no indexedDB'));
+        const req = indexedDB.open(CACHE_DB, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore('rows'); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+function idbDo(dbh, mode, fn) {
+    return new Promise((resolve, reject) => {
+        const tx = dbh.transaction('rows', mode);
+        const store = tx.objectStore('rows');
+        let out;
+        try { out = fn(store); } catch (e) { return reject(e); }
+        tx.oncomplete = () => resolve(out && 'result' in out ? out.result : undefined);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+    });
+}
+export async function clearProjectCache() {
+    try {
+        const dbh = await openCacheDb();
+        await idbDo(dbh, 'readwrite', (s) => s.clear());
+        dbh.close();
+    } catch (e) { /* nothing cached */ }
+}
+
+async function fetchAllClientRows() {
+    // Guests (partners, clients) and the admin preview of them always read live, never from the cache.
+    if (window.IS_GUEST || isPreviewActive()) return fetchAllClientRowsFull();
+    let dbh = null;
+    try {
+        const sess = await db.auth.getSession();
+        const uid = sess?.data?.session?.user?.id;
+        if (!uid) return fetchAllClientRowsFull();
+
+        // 1. cheap: which projects exist and when did each last change
+        const stamps = [];
+        for (let from = 0; ; from += 1000) {
+            const { data, error } = await db.from('workspace_clients').select('id, updated_at').order('id').range(from, from + 999);
+            if (error) return fetchAllClientRowsFull();
+            stamps.push(...(data || []));
+            if (!data || data.length < 1000) break;
+        }
+        if (!stamps.length || stamps.some((r) => !r.updated_at)) return fetchAllClientRowsFull();   // column missing: old behaviour
+
+        // 2. what this browser already has (a different signed-in user starts from nothing)
+        dbh = await openCacheDb();
+        const cached = new Map();
+        await idbDo(dbh, 'readonly', (s) => {
+            const req = s.openCursor();
+            req.onsuccess = () => {
+                const cur = req.result;
+                if (!cur) return;
+                if (cur.value && cur.value.uid === uid) cached.set(cur.key, cur.value);
+                cur.continue();
+            };
+            return {};
+        });
+
+        const liveIds = new Set(stamps.map((r) => r.id));
+        const need = stamps.filter((r) => !cached.has(r.id) || cached.get(r.id).updated_at !== r.updated_at).map((r) => r.id);
+
+        // 3. download only what changed
+        const fresh = new Map();
+        for (let i = 0; i < need.length; i += 10) {
+            const { data, error } = await db.from('workspace_clients').select('*').in('id', need.slice(i, i + 10));
+            if (error) { dbh.close(); return fetchAllClientRowsFull(); }
+            (data || []).forEach((row) => fresh.set(row.id, row));
+        }
+
+        // 4. keep the cache in step: new/changed rows in, deleted projects out
+        await idbDo(dbh, 'readwrite', (s) => {
+            fresh.forEach((row, id) => s.put({ uid, updated_at: row.updated_at, row }, id));
+            cached.forEach((_v, id) => { if (!liveIds.has(id)) s.delete(id); });
+            return {};
+        });
+        dbh.close();
+
+        const rows = stamps.map((r) => fresh.get(r.id) || cached.get(r.id)?.row).filter(Boolean);
+        console.log(`📦 Projects: ${fresh.size} downloaded, ${rows.length - fresh.size} from this browser's copy.`);
+        return { data: rows, error: null };
+    } catch (e) {
+        console.warn('Project cache unavailable, loading everything:', e?.message || e);
+        try { dbh?.close(); } catch (_e) { /* already closed */ }
+        return fetchAllClientRowsFull();
+    }
 }
 
 // ---- sync: initial fetch of master registry + client list ----

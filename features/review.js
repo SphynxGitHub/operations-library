@@ -477,5 +477,5 @@ Object.assign(window.OL, { editReviewDatesFor, saveReviewDates, openReviewSettin
 // First check shortly after the app loads, then every few minutes while it is open.
 if (typeof window !== 'undefined' && typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) {
     setTimeout(() => pullClientReviewFeedback(), 25 * 1000);
-    setInterval(() => pullClientReviewFeedback(), 5 * 60 * 1000);
+    setInterval(() => { if (!document.hidden) pullClientReviewFeedback(); }, 5 * 60 * 1000);
 }
