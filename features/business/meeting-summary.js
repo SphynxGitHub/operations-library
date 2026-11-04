@@ -617,6 +617,8 @@ OL.msSend = async function() {
         linked_client_id: st.client.id, linked_event_id: st.evt.id, linked_task_id: st.task.id,
     });
     if (!ok) return;
+    clearTimeout(msDraftTimer);
+    msClearDraft(st.evt.id);   // sent: the saved draft is no longer needed
 
     const now = new Date().toISOString();
     const { error: stampErr } = await db.from('calendar_events').update({ summary_sent_at: now }).eq('id', st.evt.id);
@@ -634,6 +636,38 @@ OL.msSend = async function() {
 OL.msBack = function() {
     OL.closeFullPage();
     OL._activeEventModalId = null;
+};
+
+// ---- Draft kept between visits ----
+// Whatever is edited in the summary email (recipients, subject, message, closing) is kept in this browser, per meeting, as
+// it is typed, and comes back the next time the meeting's summary is opened (after a refresh, or after leaving to come
+// back later). It is cleared when the email is sent or when "Reset to default" is used. Kept in the browser on purpose:
+// saving it to the database on every pause would send the whole project back and forth.
+const msDraftKey = (eventId) => `ol-ms-draft-${eventId}`;
+const msLoadDraft = (eventId) => { try { const v = JSON.parse(localStorage.getItem(msDraftKey(eventId)) || 'null'); return v && typeof v === 'object' ? v : null; } catch (_) { return null; } };
+const msClearDraft = (eventId) => { try { localStorage.removeItem(msDraftKey(eventId)); } catch (_) {} };
+let msDraftTimer = null;
+const msSaveDraftNow = () => {
+    const st = OL._msState;
+    if (!st || !document.getElementById('ms-message')) return;
+    try {
+        const r = OL.getRecipients ? OL.getRecipients('ms') : null;
+        localStorage.setItem(msDraftKey(st.evt.id), JSON.stringify({
+            to: r?.toList || [], cc: r?.ccList || [], bcc: r?.bccList || [],
+            subject: document.getElementById('ms-subject')?.value || '',
+            messageHtml: document.getElementById('ms-message')?.innerHTML || '',
+            closingHtml: document.getElementById('ms-closing')?.innerHTML || '',
+            savedAt: Date.now(),
+        }));
+    } catch (_) { /* storage full or blocked: the draft just isn't kept */ }
+};
+const msQueueDraftSave = () => { clearTimeout(msDraftTimer); msDraftTimer = setTimeout(msSaveDraftNow, 500); };
+OL.msResetDraft = function() {
+    const st = OL._msState;
+    if (!st) return;
+    if (!confirm('Throw away your edits to this email and go back to the default text?')) return;
+    msClearDraft(st.evt.id);
+    OL.openMeetingSummaryEmail(st.evt.id);
 };
 
 OL.openMeetingSummaryEmail = async function(eventId) {
@@ -676,7 +710,8 @@ OL.openMeetingSummaryEmail = async function(eventId) {
     });
 
     OL._msState = { recordingUrl: evt.zoom_recording_drive_url || '', evt, client, task };
-    OL.initRecipients('ms', { to: draft.recipients, directory: OL.personDirectory(client, [['On this meeting', evt.attendee_emails || []]]) });
+    const savedDraft = msLoadDraft(evt.id);
+    OL.initRecipients('ms', { to: savedDraft?.to || draft.recipients, cc: savedDraft?.cc || [], bcc: savedDraft?.bcc || [], onChange: msQueueDraftSave, directory: OL.personDirectory(client, [['On this meeting', evt.attendee_emails || []]]) });
 
     const sidebarHtml = `
         <style>.ms-task-row textarea { min-height: 56px; overflow: hidden; }</style>
@@ -710,22 +745,30 @@ OL.openMeetingSummaryEmail = async function(eventId) {
         prefix: 'ms',
         page: true, backLabel: 'Back', closeAction: 'OL.msBack()',
         title: evt.title || 'Meeting',
-        introHtml: `${eventParts.introHtml}<div class="bold tiny uppercase muted" style="margin:0 0 8px;">Summary email</div>`,
+        introHtml: `${eventParts.introHtml}<div style="display:flex; align-items:center; gap:10px; margin:0 0 8px;"><div class="bold tiny uppercase muted">Summary email</div>${savedDraft ? `<div class="tiny muted">Your edits are saved as you type. <a href="#" onclick="event.preventDefault(); OL.msResetDraft();">Reset to default</a></div>` : `<div class="tiny muted">Edits are saved as you type.</div>`}</div>`,
         belowHtml: eventParts.commentsHtml,
         toLabel: 'To (everyone on the meeting except you)',
-        subject: draft.subject,
-        messageHtml: messageTextToHtml(draft.message, OL._msState.recordingUrl), messageMinHeight: 260,
+        subject: savedDraft?.subject || draft.subject,
+        messageHtml: savedDraft?.messageHtml || messageTextToHtml(draft.message, OL._msState.recordingUrl), messageMinHeight: 260,
         middleHtml: `
             <div style="margin-bottom:10px;">
                 <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
                 <div id="ms-nextsteps-preview" style="margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></div>
             </div>`,
-        closingHtml: messageTextToHtml(draft.closing, ''),
+        closingHtml: savedDraft?.closingHtml || messageTextToHtml(draft.closing, ''),
         sidebarHtml, sidebarWidth: 560,
         sendAction: 'OL.msSend()',
     }));
     if (window.lucide) lucide.createIcons();
     OL.renderAllRecipients('ms');
+    {
+        const layer = document.getElementById('ol-fullpage');
+        if (layer) {
+            if (OL._msDraftListener) layer.removeEventListener('input', OL._msDraftListener);
+            OL._msDraftListener = (e) => { if (e.target && ['ms-subject', 'ms-message', 'ms-closing'].includes(e.target.id) || e.target?.closest?.('#ms-message, #ms-closing')) msQueueDraftSave(); };
+            layer.addEventListener('input', OL._msDraftListener);
+        }
+    }
     renderMsTaskRows();
     renderMsOtherTasks();
     OL.eventPageAfterRender?.(evt);
@@ -746,6 +789,7 @@ window.OL.msMakeRequest = OL.msMakeRequest;
 window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
 window.OL.msBack = OL.msBack;
+window.OL.msResetDraft = OL.msResetDraft;
 window.OL.msCreateTaskFromItem = OL.msCreateTaskFromItem;
 window.OL.msSkipZoomItem = OL.msSkipZoomItem;
 window.OL.msDismissZoomText = OL.msDismissZoomText;
