@@ -209,7 +209,7 @@ serve(async (req) => {
       if (!fileUrl) {
         return new Response(JSON.stringify({ error: "missing_file_url" }), { status: 400, headers: corsHeaders });
       }
-      console.log(`[zoom-recording] begin ${fileName} (declared ${fileSize ? Math.round(Number(fileSize) / 1048576) + " MB" : "unknown size"})`);
+      console.log(`[zoom-recording] request ${fileName} (declared ${fileSize ? Math.round(Number(fileSize) / 1048576) + " MB" : "unknown size"})`);
       const zoomRes = await fetch(fileUrl, {
         headers: zoomAccessToken ? { Authorization: `Bearer ${zoomAccessToken}` } : {},
         redirect: "follow"
@@ -237,66 +237,32 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "drive_session_failed", message: t.slice(0, 500) }), { status: 502, headers: corsHeaders });
       }
 
-      // One fixed 8 MB buffer, filled in place and reused for every chunk.
-      // The previous version grew the buffer by allocating a NEW array and
-      // copying everything on every network read (~64 KB), so each 8 MB
-      // chunk meant hundreds of MB of copying -- that's what exhausted the
-      // function's CPU/memory ("not enough compute resources").
-      const CHUNK = 4 * 1024 * 1024; // must be a multiple of 256 KB (4 MB keeps peak memory low)
-      console.log(`[zoom-recording] start: ${fileName}, size ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "unknown"}`);
-      const buf = new Uint8Array(CHUNK);
-      let filled = 0;
-      const reader = zoomRes.body.getReader();
-      let offset = 0;
+      // The copy must not run through JavaScript: Supabase stops a function after 2 seconds of CPU, and moving
+      // a video through a JS read/copy loop in small pieces used all of that long before the file finished
+      // ("CPU Time exceeded"). Instead Zoom's download stream is handed straight to Google as one request, so the
+      // bytes are piped by the runtime itself and the code only waits.
+      console.log(`[zoom-recording] begin ${fileName}, size ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "unknown"}`);
+      if (!totalSize) {
+        return new Response(JSON.stringify({ error: "drive_upload_failed", message: "Zoom did not report the recording's size, so it can't be copied safely." }), { status: 502, headers: corsHeaders });
+      }
       let finalData: any = null;
-
-      // Stop cleanly before Supabase's wall-clock limit kills the function,
-      // so the caller gets a readable error instead of a crash.
-      const startedAt = Date.now();
-      const TIME_BUDGET_MS = 130_000;
-
-      const sendChunk = async (chunk: Uint8Array, isLast: boolean) => {
-        const end = offset + chunk.length - 1;
-        const total = isLast ? String(offset + chunk.length) : "*";
-        const range = chunk.length ? `bytes ${offset}-${end}/${total}` : `bytes */${total}`;
-        const r = await fetch(sessionUrl, { method: "PUT", headers: { "Content-Range": range }, body: chunk });
-        if (r.status === 308) { await r.body?.cancel(); offset += chunk.length; return; }
-        if (r.ok) { finalData = await r.json().catch(() => ({})); offset += chunk.length; return; }
-        throw new Error(`Drive chunk upload failed (HTTP ${r.status}): ${(await r.text()).slice(0, 300)}`);
-      };
-
       try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (value) {
-            let pos = 0;
-            while (pos < value.length) {
-              const n = Math.min(CHUNK - filled, value.length - pos);
-              buf.set(value.subarray(pos, pos + n), filled);
-              filled += n; pos += n;
-              if (filled === CHUNK) {
-                await sendChunk(buf, false);
-                filled = 0;
-                if ((offset / CHUNK) % 10 === 0) {
-                  let mem = ""; try { mem = ` heap ${Math.round((Deno as any).memoryUsage().rss / 1048576)} MB rss`; } catch (_) {}
-                  console.log(`[zoom-recording] sent ${Math.round(offset / 1048576)} MB of ${totalSize ? Math.round(totalSize / 1048576) : "?"} MB,${mem}, ${Math.round((Date.now() - startedAt) / 1000)}s`);
-                }
-                if (Date.now() - startedAt > TIME_BUDGET_MS) {
-                  await reader.cancel().catch(() => {});
-                  throw new Error(`recording is too large to copy within one run (stopped after ${Math.round(offset / 1048576)} MB of ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "?"})`);
-                }
-              }
-            }
-          }
-          if (done) break;
-        }
-        await sendChunk(buf.subarray(0, filled), true);
+        const putRes = await fetch(sessionUrl, {
+          method: "PUT",
+          headers: { "Content-Length": String(totalSize), "Content-Type": contentType },
+          body: zoomRes.body,
+          // @ts-ignore: needed by the fetch spec when the body is a stream
+          duplex: "half"
+        });
+        if (!putRes.ok) throw new Error(`Drive upload failed (HTTP ${putRes.status}): ${(await putRes.text()).slice(0, 300)}`);
+        finalData = await putRes.json().catch(() => ({}));
+        console.log(`[zoom-recording] done, Drive file ${finalData?.id}`);
       } catch (e: any) {
-        console.error(`[zoom-recording] failed after ${Math.round(offset / 1048576)} MB: ${e.message}`);
+        console.error(`[zoom-recording] failed: ${e.message}`);
         return new Response(JSON.stringify({ error: "drive_upload_failed", message: e.message }), { status: 502, headers: corsHeaders });
       }
 
-      return new Response(JSON.stringify({ success: true, fileId: finalData?.id, webViewLink: finalData?.webViewLink, bytes: offset }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, fileId: finalData?.id, webViewLink: finalData?.webViewLink, bytes: totalSize }), { status: 200, headers: corsHeaders });
     }
     // ACTION 2B: SYNC UPLOADS
 
