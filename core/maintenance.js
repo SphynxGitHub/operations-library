@@ -180,6 +180,10 @@ export function hoursUsedInPeriod(tasks, period, opts = {}) {
 const gDay = (v) => String(v || '').slice(0, 10);
 // The order hours are used in: carryover first, then the plan allotment, then anything else (ad hoc / prepaid purchases).
 export const grantRank = (g) => (g.source === 'courtesy_carryover' ? 0 : g.source === 'plan_allotment' ? 1 : 2);
+// A plan allotment given a "covers hours from" date earlier than its own start (an upgrade whose new hours take over the old tier's
+// overage) is only used for those earlier dates after everything else that covers them, so it absorbs what nothing else can.
+// From its own start date on it is the normal plan allotment.
+export const grantRankOn = (g, day) => (g.source === 'plan_allotment' && gDay(g.covers_from) && day < gDay(g.granted_on) ? 3 : grantRank(g));
 // An ad hoc purchase can cover hours logged before it was bought (covers_from, optional): it is charged for time from that date on.
 export const grantStart = (g) => gDay(g.covers_from) || gDay(g.granted_on);
 export const grantCovers = (g, day) => !!day && day >= grantStart(g) && day <= gDay(g.expires_on);
@@ -212,7 +216,7 @@ export function allocateHours({ entries = [], grants = [], allocations = {} }) {
             if (room > 0) { charge(key, pinned, room); left -= room; }
         }
         const pool = grants.filter((g) => grantCovers(g, e.date) && g.status !== 'expired' && !reserved.has(String(g.id)))
-            .sort((a, b) => grantRank(a) - grantRank(b) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
+            .sort((a, b) => grantRankOn(a, e.date) - grantRankOn(b, e.date) || gDay(a.expires_on).localeCompare(gDay(b.expires_on)));
         if (!pool.length) { unfunded += left; return; }
         if (left <= 0) { charge(key, pool[0], left); return; }      // a correction goes back where time goes
         for (const g of pool) {
@@ -261,6 +265,14 @@ export function planEditPeriod({ period, grants = [], patch }) {
     if (allot) {
         const p = { granted_on: start, expires_on: due };
         if (patch.allotment !== undefined) { const h = cleanHours(patch.allotment); if (h > 0) p.hours_granted = h; }
+        // Optional: the allotment also covers hours logged from this earlier date (an upgrade taking over the old tier's overage).
+        if (patch.coversFrom !== undefined) {
+            const cf = String(patch.coversFrom || '').trim();
+            if (cf) {
+                if (!validDate(cf) || cf > start) return { error: 'The covers-from date must be on or before the period start date.' };
+                p.covers_from = cf;
+            } else if (allot.covers_from) p.covers_from = null;      // cleared (only written when the column has a value to clear)
+        }
         grantUpdates.push({ id: allot.id, patch: p });
     }
     // A carryover follows the period's end date (3 months, or 6 if renewing) UNLESS someone set its expiry by hand;

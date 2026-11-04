@@ -273,7 +273,9 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
     // Newest block on top, oldest at the bottom (latest start first, then latest expiry).
-    const newestFirst = gs.slice().sort((a, b) => grantStart(b).localeCompare(grantStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on)));
+    // (A plan allotment is placed by its own start, not by an earlier covers-from date, so an upgraded period stays on top.)
+    const shownStart = (g) => (g.source === 'plan_allotment' ? String(g.granted_on || '').slice(0, 10) : grantStart(g));
+    const newestFirst = gs.slice().sort((a, b) => shownStart(b).localeCompare(shownStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on)));
     const rows = newestFirst.map((g) => {
         const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
         const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
@@ -703,11 +705,14 @@ export async function submitPriorPeriod() {
 export function openEditPeriodModal(periodId) {
     const { period, grants } = findPeriod(periodId); if (!period) return;
     const allot = grants.filter((g) => g.period_id === period.id && g.source === 'plan_allotment').reduce((s, g) => s + Number(g.hours_granted), 0);
+    const allotGrant = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active') || grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment');
     openModal(`${modalHead('Edit plan period')}<div class="modal-body" style="padding-top:14px;">
         ${field('Start date', `<input id="pe-start" type="date" class="modal-input" value="${esc(period.start_date)}">`)}
         ${field('Due date', `<input id="pe-due" type="date" class="modal-input" value="${esc(period.due_date)}">`)}
         ${field('Tier', tierSelectHtml('pe-tier', 'pe-allot', periodTierTitle(period, allot)))}
         ${field('Hours allotment', `<input id="pe-allot" type="number" min="0" step="0.25" class="modal-input" value="${allot || ''}" ${hoursOnInput('pe-tier', 'pe-allot')}>`)}
+        ${field('Covers hours from (optional)', `<input id="pe-covers" type="date" class="modal-input" value="${esc(String(allotGrant?.covers_from || '').slice(0, 10))}">`)}
+        <div class="tiny muted" style="margin:-6px 0 10px;">For an upgrade: the date from which these hours also take on time logged before the period starts, such as the overage from the earlier tier. Only used for those earlier dates, after every other block that covers them. Leave blank otherwise.</div>
         <div class="tiny muted" style="margin-bottom:14px;">Changing the dates or hours updates the allotment grant, and any unused carryover from this period.</div>
         <div style="display:flex; gap:10px;">
             <button class="btn primary" style="flex:1; justify-content:center;" onclick="OL.submitEditPeriod('${esc(periodId)}')">Save</button>
@@ -744,6 +749,7 @@ export async function submitEditPeriod(periodId) {
     const { client, period, grants } = findPeriod(periodId); if (!period) return;
     const patch = { start_date: val('pe-start'), due_date: val('pe-due'), tier: val('pe-tier') };
     if (val('pe-allot') !== '') patch.allotment = val('pe-allot');
+    patch.coversFrom = val('pe-covers');
     const res = await savePeriodEdit(period, grants, patch);
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
