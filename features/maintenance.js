@@ -284,7 +284,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
-    // Oldest block first (earliest start, then earliest expiry).
+    // Newest block on top (latest start, then latest expiry).
     // (A plan allotment is placed by its own start, not by an earlier covers-from date, so an upgraded period stays on top.)
     const newestFirst = gs.slice().sort(newestBlockFirst);
     const rows = newestFirst.map((g) => {
@@ -346,15 +346,15 @@ function grantCardHtml(client, g, ledger, gt) {
         </div>`;
 }
 
-// Blocks are listed oldest first, by the date each began (a purchase by its purchase date), then by expiry. A carryover begins the
+// Blocks are listed newest first, by the date each began (a purchase by its purchase date), then by expiry. A carryover begins the
 // day its plan period ends, so it lands right after the period it came from.
 const blockStart = (g) => String(g.granted_on || '').slice(0, 10);   // the date the block began or was bought (not an earlier covers-from date)
-const newestBlockFirst = (a, b) => blockStart(a).localeCompare(blockStart(b)) || String(a.expires_on).localeCompare(String(b.expires_on));
+const newestBlockFirst = (a, b) => blockStart(b).localeCompare(blockStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on));
 
 function grantCardsHtml(client, slot, ledger) {
     if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
     const gt = grantTasks(ledger);
-    // Every block in one list, oldest first; used-up and expired ones are dimmed by their cards.
+    // Every block in one list, newest first; used-up and expired ones are dimmed by their cards.
     const all = slot.grants.slice().sort(newestBlockFirst);
     return `${all.map((g) => grantCardHtml(client, g, ledger, gt)).join('')}
         <div class="tiny muted" style="margin-top:10px;">Each hour is charged to one block only. Billable time comes out of a courtesy carryover first, then the plan allotment, then other purchases, soonest to expire first. A block closes when its hours are used up; a carryover or purchase with tasks set aside for it is held for those tasks.</div>`;
