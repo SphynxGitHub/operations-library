@@ -336,7 +336,9 @@ function grantCardHtml(client, g, ledger, gt) {
 
 // Blocks are listed newest first, by start date (a plan allotment by its own start, not an earlier covers-from date), then by expiry.
 const blockStart = (g) => (g.source === 'plan_allotment' ? String(g.granted_on || '').slice(0, 10) : grantStart(g));
-const newestBlockFirst = (a, b) => blockStart(b).localeCompare(blockStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on));
+// A courtesy carryover is always at the bottom (it is carried from the period before, so it is the oldest); the rest go newest first.
+const newestBlockFirst = (a, b) => ((a.source === 'courtesy_carryover' ? 1 : 0) - (b.source === 'courtesy_carryover' ? 1 : 0))
+    || blockStart(b).localeCompare(blockStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on));
 
 function grantCardsHtml(client, slot, ledger) {
     if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
