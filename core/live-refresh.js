@@ -165,7 +165,9 @@ let lastPollAt = 0;
 async function poll(fromFocus = false) {
     if (polling || document.hidden) return;
     // coming back to the tab or clicking into the window re-downloaded every loaded project each time; once in two minutes is plenty
-    if (fromFocus && Date.now() - lastPollAt < 2 * 60 * 1000) return;
+    // While live updates are connected the projects are already kept current by them, so this is only a safety net, and each run
+    // downloads every loaded project in full: coming back to the tab only re-checks after 15 minutes then (2 minutes without live updates).
+    if (fromFocus && Date.now() - lastPollAt < (realtimeUp ? 15 : 2) * 60 * 1000) return;
     lastPollAt = Date.now();
     polling = true;
     try {
@@ -190,9 +192,10 @@ export function startLiveRefresh() {
     if (OL._liveRefreshStarted) return;
     OL._liveRefreshStarted = true;
     startRealtime();
-    // Every minute without Realtime; every 3 minutes with it, as a safety net.
+    // Every minute without Realtime; every 15 minutes with it, as a safety net (it used to be every 3: each run downloads every
+    // project in full, for every open tab, which added up to most of the database egress).
     let n = 0;
-    setInterval(() => { n++; if (!realtimeUp || n % 3 === 0) poll(); }, 60 * 1000);
+    setInterval(() => { n++; if (!realtimeUp || n % 15 === 0) poll(); }, 60 * 1000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });
     window.addEventListener('focus', () => poll(true));
 }
