@@ -334,8 +334,8 @@ function grantCardHtml(client, g, ledger, gt) {
         </div>`;
 }
 
-// Blocks are listed newest first, by start date (a plan allotment by its own start, not an earlier covers-from date), then by expiry.
-const blockStart = (g) => (g.source === 'plan_allotment' ? String(g.granted_on || '').slice(0, 10) : grantStart(g));
+// Blocks are listed newest first, by the date each began (a purchase by its purchase date), then by expiry.
+const blockStart = (g) => String(g.granted_on || '').slice(0, 10);   // the date the block began or was bought (not an earlier covers-from date)
 // A courtesy carryover is always at the bottom (it is carried from the period before, so it is the oldest); the rest go newest first.
 const newestBlockFirst = (a, b) => ((a.source === 'courtesy_carryover' ? 1 : 0) - (b.source === 'courtesy_carryover' ? 1 : 0))
     || blockStart(b).localeCompare(blockStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on));
