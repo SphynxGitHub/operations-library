@@ -128,8 +128,18 @@ OL.loadDashboardEvents = async function() {
     if (typeof OL.syncEventBillableFromRules === 'function') await OL.syncEventBillableFromRules(OL._dashboardEventsCache);
 };
 
+// Once a meeting has ended and its after-action task exists, the task takes its place on the dashboard and the meeting row
+// is left out of the list. The meeting stays in the cache, so the day's Completed / Estimated / Remaining still count it.
+const meetingReplacedByTask = (e) => {
+    if (!e || e.all_day || !e.linked_client_id) return false;
+    const endMs = new Date(e.end || e.start).getTime();
+    if (!Number.isFinite(endMs) || endMs > Date.now()) return false;
+    const tasks = state.clients?.[e.linked_client_id]?.projectData?.clientTasks;
+    return Array.isArray(tasks) && tasks.some(t => t && String(t.meetingSummaryEventId || '') === String(e.id));
+};
+
 OL.getDashboardEventItems = function() {
-    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id)).map(e => {
+    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id) && !meetingReplacedByTask(e)).map(e => {
         // An event can have several assignees (calendar_events.assignees); `assignee` is only the first of them.
         const list = Array.isArray(e.assignees) && e.assignees.length ? e.assignees : (e.assignee ? [e.assignee] : []);
         return {
