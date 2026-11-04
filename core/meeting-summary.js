@@ -342,8 +342,17 @@ export function buildSummaryDraft(input) {
     const fillT = (text, vars = tvars) => String(text)
         .replace(/\s+on \{date\}/g, vars.date ? ` on ${vars.date}` : '')
         .replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+    // "with me" when one person from Sphynx was on the meeting, "with us" when more than one was. Counted from the
+    // invite's attendees that are on the Sphynx team; the sender counts as one when none of them can be told apart.
+    const sphynxSet = new Set((input.sphynxEmails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean));
+    const sphynxOnCall = new Set((input.attendeeEmails || []).map((e) => String(e || '').trim().toLowerCase()).filter((e) => sphynxSet.has(e)));
+    const withWho = sphynxOnCall.size > 1 ? 'us' : 'me';
+    // Saved templates that still hold the old default wording (it named the date) get the new wording; a template that was
+    // edited on purpose is kept, and may use {with} for me / us.
+    const OLD_INTRO = 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.';
+    const introTpl = !tpl.intro || String(tpl.intro).trim() === OLD_INTRO ? 'Thank you for meeting with {with} today. Below is a summary of what we covered and the next steps.' : tpl.intro;
     const intro = [
-        fillT(tpl.intro || 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.'),
+        fillT(introTpl, { ...tvars, with: withWho }),
         ...(recordingUrl ? [`${RECORDING_LINE}.`] : []),
     ].join('\n');
     // One line break under a header, not a blank line: the summary starts right beneath SUMMARY.

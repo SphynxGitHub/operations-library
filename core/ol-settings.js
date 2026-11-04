@@ -17,7 +17,7 @@ export const DEFAULT_OL_SETTINGS = {
         // (Sphynx Team page) is added under every email and carries their name, so closings are just the sign-off word.
         meetingSummary: {
             subject: 'Summary: {title} ({date})',
-            intro: 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.',
+            intro: 'Thank you for meeting with {with} today. Below is a summary of what we covered and the next steps.',
             closing: 'Best,',
         },
         // {client} = the project name, {sender} = whoever is sending.
