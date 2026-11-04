@@ -317,11 +317,51 @@ const msTasks = () => {
     const st = OL._msState;
     const ex = st.excluded || new Set();
     const inc = st.included || new Set();
-    return [
+    return sortByNextStepsOrder([
         ...meetingTasks().filter(t => !ex.has(String(t.id))),
         ...otherOpenTasks().filter(t => inc.has(String(t.id)))
-    ];
+    ]);
 };
+
+// The order of the tasks in Next steps. It is kept on the summary task (nextStepsOrder: a list of task ids); tasks not in
+// the list (new ones) follow in their usual order. Within the email the Sphynx and client groups keep their own order.
+function sortByNextStepsOrder(list) {
+    const order = (OL._msState?.task?.nextStepsOrder || []).map(String);
+    if (!order.length) return list;
+    const rank = (t) => { const i = order.indexOf(String(t.id)); return i === -1 ? order.length : i; };
+    return list.map((t, i) => ({ t, i })).sort((a, b) => (rank(a.t) - rank(b.t)) || (a.i - b.i)).map(x => x.t);
+}
+
+OL.msMoveTask = async function(taskId, dir) {
+    const st = OL._msState;
+    if (!st) return;
+    const ids = msTasks().map(t => String(t.id));
+    const i = ids.indexOf(String(taskId));
+    const j = i + (dir < 0 ? -1 : 1);
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await updateAndSync(() => {
+        const t = st.client.projectData.clientTasks.find(x => x.id === st.task.id) || st.task;
+        const rest = (t.nextStepsOrder || []).map(String).filter(id => !ids.includes(id));
+        t.nextStepsOrder = [...ids, ...rest];
+        st.task.nextStepsOrder = t.nextStepsOrder;
+    }, st.client.id);
+    renderMsTaskRows();
+};
+
+function renderMsReorder() {
+    const el = document.getElementById('ms-reorder');
+    if (!el) return;
+    const tasks = msTasks();
+    if (tasks.length < 2) { el.innerHTML = ''; return; }
+    const arrow = (id, dir, icon, off) => `<button type="button" class="btn tiny soft" style="padding:1px 5px; ${off ? 'opacity:.3; pointer-events:none;' : ''}" title="Move ${dir < 0 ? 'up' : 'down'}" onclick="OL.msMoveTask('${esc(String(id))}', ${dir})"><i data-lucide="${icon}" style="width:12px;height:12px;"></i></button>`;
+    const wasOpen = el.querySelector('details')?.open;
+    el.innerHTML = `<details ${wasOpen ? 'open' : ''} style="margin-top:8px;"><summary class="tiny muted" style="cursor:pointer;">Reorder next steps</summary>
+        <div style="margin-top:6px;">${tasks.map((t, i) => `<div style="display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid var(--line);">
+            <div style="flex:1; min-width:0; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(t.title || t.name || '')}">${esc(t.title || t.name || '')}</div>
+            ${arrow(t.id, -1, 'arrow-up', i === 0)}${arrow(t.id, 1, 'arrow-down', i === tasks.length - 1)}</div>`).join('')}</div></details>`;
+    if (window.lucide) lucide.createIcons();
+}
 
 OL.msToggleInclude = function(taskId, on, fromMeeting) {
     const st = OL._msState;
@@ -457,7 +497,7 @@ function renderMsTaskRows() {
     const st = OL._msState;
     const box = document.getElementById('ms-task-rows');
     if (!box) return;
-    const tasks = meetingTasks();
+    const tasks = sortByNextStepsOrder(meetingTasks());
     const zoomBox = zoomItemsBoxHtml();
     const closedNote = closedTasksNoteHtml();
     const emptyNote = closedNote || (zoomBox ? '' : `<div class="tiny muted" style="margin-bottom:8px;">No open task is tied to this meeting, and Zoom's summary has no next steps of its own. A task belongs here when it came from this meeting's Zoom action items, was added below, or is marked as part of this meeting. Add one below, or tick tasks from "Other open tasks" to include them.</div>`);
@@ -507,6 +547,7 @@ function renderMsNextSteps() {
     if (!el) return;
     const html = nextStepsHtml(msTasks(), st.client.meta?.name || '');
     el.innerHTML = html || '<span class="muted">(No next steps section: nothing is ticked "Include in summary".)</span>';
+    renderMsReorder();
 }
 
 OL.msUpdateTask = async function(taskId, field, value) {
@@ -754,6 +795,7 @@ OL.openMeetingSummaryEmail = async function(eventId) {
             <div style="margin-bottom:10px;">
                 <div class="tiny muted" style="margin-bottom:4px;">Next steps: built from the tasks in the sidebar, so change them there</div>
                 <div id="ms-nextsteps-preview" style="margin:0; padding:12px; border:1px dashed var(--line); border-radius:6px; background:rgba(56,189,248,0.04); font-family:inherit; font-size:13px; line-height:1.55;"></div>
+                <div id="ms-reorder"></div>
             </div>`,
         closingHtml: savedDraft?.closingHtml || messageTextToHtml(draft.closing, ''),
         sidebarHtml, sidebarWidth: 560,
@@ -790,6 +832,7 @@ window.OL.msDeleteTask = OL.msDeleteTask;
 window.OL.msSend = OL.msSend;
 window.OL.msBack = OL.msBack;
 window.OL.msResetDraft = OL.msResetDraft;
+window.OL.msMoveTask = OL.msMoveTask;
 window.OL.msCreateTaskFromItem = OL.msCreateTaskFromItem;
 window.OL.msSkipZoomItem = OL.msSkipZoomItem;
 window.OL.msDismissZoomText = OL.msDismissZoomText;
