@@ -224,9 +224,9 @@ function ledgerFor(client, slot) {
     const entries = win ? allEntries(client, slot, tasks, win, opts) : [];
     const alloc = allocateHours({ entries, grants, allocations });
     const active = slot.periods.find((p) => p.status === 'active');
-    // Hours available now: this period's allotment, plus carryovers and purchases that haven't expired.
+    // Hours available now: every plan allotment, carryover and purchase that hasn't expired (the old tier of a mid-period upgrade runs to the day before the new one starts).
     const current = grants.filter((g) => g.status !== 'expired' && String(g.expires_on).slice(0, 10) >= today
-        && (g.source !== 'plan_allotment' || (active && g.period_id === active.id)))
+        && (g.source !== 'plan_allotment' || !!g.period_id))
         .sort((a, b) => grantRank(a) - grantRank(b) || String(a.expires_on).localeCompare(String(b.expires_on)));
     // A carryover or purchase with tasks set aside for it is HELD for those tasks: it can't fund other work, so it is
     // kept out of the hours available for new work (the pool) and shown on its own line. Without tasks set aside it
