@@ -304,6 +304,55 @@ export function planClosePeriod({ period, carryoverHours = 0, carryoverExpires =
     return out;
 }
 
+// ---- upgrading the tier part-way through a period ----
+// Months between two dates (end exclusive): whole months, plus the leftover days as a share of the next month.
+export function monthsBetween(startIso, endIso) {
+    if (!(endIso > startIso)) return 0;
+    let m = 0;
+    while (addMonthsIso(startIso, m + 1) <= endIso) m++;
+    const from = addMonthsIso(startIso, m), to = addMonthsIso(startIso, m + 1);
+    const span = (Date.parse(to) - Date.parse(from)) / 86400000, left = (Date.parse(endIso) - Date.parse(from)) / 86400000;
+    return m + (span > 0 ? left / span : 0);
+}
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// "finish": the new tier runs to the period's existing end date, its hours prorated for the months left.
+// "extend": the new tier starts on the upgrade date for a full year. Either way the old tier is prorated for the
+// months it ran and ends the day before. Unused old-tier hours end with it; overage the old tier ran up is covered
+// by the new hours (covers_from), so it is not charged twice.
+export function planUpgradeTier({ period, grants = [], newTier, mode, effective }) {
+    const t = tierByTitle(newTier);
+    if (!t) return { error: 'Pick the tier to upgrade to.' };
+    if (mode !== 'finish' && mode !== 'extend') return { error: 'Choose finish current period or extend period.' };
+    const start = String(period.start_date).slice(0, 10), due = String(period.due_date).slice(0, 10);
+    if (!validDate(effective) || effective <= start) return { error: 'The upgrade date must be after the period start.' };
+    if (mode === 'finish' && effective > due) return { error: 'The upgrade date is after this period ends. Use extend period.' };
+    const allot = grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active')
+        || grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment');
+    const oldHours = Number(allot?.hours_granted) || 0;
+    const elapsed = monthsBetween(start, effective);
+    const oldProrated = round2(oldHours * Math.min(elapsed, 12) / 12);
+    const dayBefore = addDaysIso(effective, -1);
+    let newStart = effective, newDue, newHours, remaining = null;
+    if (mode === 'finish') {
+        newDue = due;
+        remaining = monthsBetween(effective, addDaysIso(due, 1));
+        newHours = round2(t.hours * remaining / 12);
+    } else {
+        newDue = periodDue(effective);
+        newHours = t.hours;
+    }
+    return {
+        oldProrated, oldHours, elapsedMonths: elapsed, remainingMonths: remaining, newHours, newStart, newDue, dayBefore,
+        periodUpdate: { due_date: dayBefore, status: 'closed' },
+        grantUpdate: allot ? { id: allot.id, patch: { hours_granted: oldProrated, expires_on: dayBefore } } : null,
+        next: {
+            period: { client_id: period.client_id, start_date: newStart, due_date: newDue, renewing: !!period.renewing, status: 'active', tier: t.title },
+            grant: newHours > 0 ? { client_id: period.client_id, source: 'plan_allotment', hours_granted: newHours, granted_on: newStart, expires_on: newDue, status: 'active', covers_from: start } : null,
+        },
+    };
+}
+
 // ---- a plan period from BEFORE the hours were tracked here ----
 // For a client whose earlier plan period was never backfilled with time logs: record what the period was
 // (hours allotted), how much of it was used, and how many hours were carried forward and until when. The period

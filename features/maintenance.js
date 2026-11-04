@@ -10,7 +10,7 @@ import { getRequestTypes } from '../core/requests.js';
 import { deriveWorkStatus, WORK_STATUS_LABELS } from '../core/work-status.js';
 import { assigneeForRole } from '../core/testing.js';
 import {
-    maintenanceMode, ONGOING, ADHOC, periodProgress, planStartPeriod, planEditPeriod, planClosePeriod, planAdHocPurchase,
+    maintenanceMode, ONGOING, ADHOC, periodProgress, planStartPeriod, planEditPeriod, planClosePeriod, planUpgradeTier, planAdHocPurchase,
     ensureMaintenanceSheet, maintenanceSheetOf, isMaintenanceSheet, buildMaintenanceRequest, maintenanceRequests, requestAgeDays, REQUEST_SOURCES,
     validDate, addDaysIso, daysBetween, periodDue, maintenanceTabAllowed,
     MAINTENANCE_TIERS, tierByTitle, tierForHours, periodTierTitle, periodTimeEntries, summarizePeriodTime,
@@ -144,6 +144,18 @@ export async function savePeriodClose(period, opts) {
         if (n.error) return { error: friendly(n.error) };
         if (plan.next.grant) { const g = await db.from('hours_grant').insert({ ...plan.next.grant, period_id: n.data.id }); if (g.error) return { error: friendly(g.error) }; }
     } else if (plan.next && plan.next.error) return { error: plan.next.error };
+    return { ok: true };
+}
+
+export async function savePeriodUpgrade(period, grants, opts) {
+    const plan = planUpgradeTier({ period, grants, ...opts });
+    if (plan.error) return { error: plan.error };
+    const u = await db.from('maintenance_plan_period').update(plan.periodUpdate).eq('id', period.id);
+    if (u.error) return { error: friendly(u.error) };
+    if (plan.grantUpdate) { const g = await db.from('hours_grant').update(plan.grantUpdate.patch).eq('id', plan.grantUpdate.id); if (g.error) return { error: friendly(g.error) }; }
+    const n = await db.from('maintenance_plan_period').insert(plan.next.period).select('id').single();
+    if (n.error) return { error: friendly(n.error) };
+    if (plan.next.grant) { const g = await db.from('hours_grant').insert({ ...plan.next.grant, period_id: n.data.id }); if (g.error) return { error: friendly(g.error) }; }
     return { ok: true };
 }
 
@@ -438,6 +450,7 @@ function periodCardHtml(client, slot, ledger) {
                         <input type="checkbox" ${active.renewing ? 'checked' : ''} onchange="OL.setPeriodRenewing('${esc(active.id)}', this.checked)"> Renewing
                     </label>
                     <button class="btn tiny soft" onclick="OL.openEditPeriodModal('${esc(active.id)}')">Edit</button>
+                    <button class="btn tiny soft" onclick="OL.openUpgradeTierModal('${esc(active.id)}')"><i data-lucide="trending-up" style="width:12px;height:12px;"></i> Upgrade tier</button>
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
@@ -783,6 +796,35 @@ export function openClosePeriodModal(periodId) {
 export async function submitClosePeriod(periodId) {
     const { client, period } = findPeriod(periodId); if (!period) return;
     const res = await savePeriodClose(period, { carryoverHours: val('pc-carry'), carryoverExpires: val('pc-carry-exp'), renewNext: checked('pc-next'), nextAllotment: val('pc-allot'), nextRenewing: checked('pc-renew'), nextTier: val('pc-tier') });
+    if (res.error) { alert(res.error); return; }
+    OL.closeModal(); await reloadAndRedraw(client.id);
+}
+
+export function openUpgradeTierModal(periodId) {
+    const { period } = findPeriod(periodId); if (!period) return;
+    const opts = MAINTENANCE_TIERS.map((t) => `<option value="${esc(t.title)}">${esc(t.title)} · ${esc(hoursText(t.hours))}</option>`).join('');
+    openModal(`${modalHead('Upgrade tier')}<div class="modal-body" style="padding-top:14px;">
+        <p class="tiny muted" style="margin-bottom:14px;">The current tier is prorated for the months it ran and ends the day before the upgrade. Hours the old tier went over are covered by the new tier's hours.</p>
+        ${field('Upgrade to', `<select id="ut-tier" class="modal-input" onchange="OL.utRecalc('${esc(periodId)}')">${opts}</select>`)}
+        ${field('Upgrade date', `<input id="ut-date" type="date" class="modal-input" value="${todayIso()}" oninput="OL.utRecalc('${esc(periodId)}')">`)}
+        <label class="tiny" style="display:flex; gap:8px; align-items:flex-start; margin-bottom:8px; cursor:pointer;"><input type="radio" name="ut-mode" value="finish" checked style="width:auto !important; margin-top:2px;" onchange="OL.utRecalc('${esc(periodId)}')"><span><strong>Finish current period</strong><br><span class="muted">The new tier runs to ${esc(niceDate(period.due_date))}, with its hours prorated for the time left.</span></span></label>
+        <label class="tiny" style="display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; cursor:pointer;"><input type="radio" name="ut-mode" value="extend" style="width:auto !important; margin-top:2px;" onchange="OL.utRecalc('${esc(periodId)}')"><span><strong>Extend period</strong><br><span class="muted">The new tier starts on the upgrade date for a full year, with all of its hours.</span></span></label>
+        <div id="ut-preview" class="card tiny" style="padding:12px; margin-bottom:12px;"></div>
+        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitUpgradeTier('${esc(periodId)}')">Upgrade tier</button></div>`);
+    utRecalc(periodId);
+}
+const utOpts = () => ({ newTier: val('ut-tier'), effective: val('ut-date'), mode: document.querySelector('input[name="ut-mode"]:checked')?.value || 'finish' });
+export function utRecalc(periodId) {
+    const { period, grants } = findPeriod(periodId); const box = document.getElementById('ut-preview'); if (!period || !box) return;
+    const plan = planUpgradeTier({ period, grants, ...utOpts() });
+    if (plan.error) { box.innerHTML = `<span class="muted">${esc(plan.error)}</span>`; return; }
+    const mo = (n) => `${Math.round(n * 100) / 100} month${Math.round(n * 100) / 100 === 1 ? '' : 's'}`;
+    box.innerHTML = `<div><strong>${esc(periodTierTitle(period, plan.oldHours) || 'Current tier')}</strong>: ${esc(niceDate(period.start_date))} to ${esc(niceDate(plan.dayBefore))}, ${esc(mo(plan.elapsedMonths))}, <strong>${esc(hoursText(plan.oldProrated))}</strong> of ${esc(hoursText(plan.oldHours))}</div>
+        <div style="margin-top:4px;"><strong>${esc(val('ut-tier'))}</strong>: ${esc(niceDate(plan.newStart))} to ${esc(niceDate(plan.newDue))}${plan.remainingMonths != null ? `, ${esc(mo(plan.remainingMonths))}` : ', full year'}, <strong>${esc(hoursText(plan.newHours))}</strong></div>`;
+}
+export async function submitUpgradeTier(periodId) {
+    const { client, period, grants } = findPeriod(periodId); if (!period) return;
+    const res = await savePeriodUpgrade(period, grants, utOpts());
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
 }
@@ -1133,7 +1175,7 @@ Object.assign(window.OL, {
     prepaidHoursSummary, renderMaintenancePage, renderClientRequests, loadMaintenanceData,
     openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
     openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing, deletePeriod,
-    openClosePeriodModal, submitClosePeriod, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,
+    openClosePeriodModal, submitClosePeriod, openUpgradeTierModal, utRecalc, submitUpgradeTier, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,
     openMaintenanceRequestModal, saveMaintenanceRequest, setMaintenanceRequestDone, deleteMaintenanceRequest,
     maintenanceTabAllowed, migrateClientRequestsToBacklog,
 });
