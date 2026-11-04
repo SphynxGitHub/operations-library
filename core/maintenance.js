@@ -264,6 +264,9 @@ export function planEditPeriod({ period, grants = [], patch }) {
         || grants.find((g) => g.period_id === period.id && g.source === 'plan_allotment');
     if (allot) {
         const p = { granted_on: start, expires_on: due };
+        // A hand-recorded period saved as expired that has not ended yet takes time again once it is edited (nothing was written off).
+        const nowIso = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+        if (allot.status === 'expired' && !(Number(allot.hours_expired) > 0) && due >= nowIso) p.status = 'active';
         if (patch.allotment !== undefined) { const h = cleanHours(patch.allotment); if (h > 0) p.hours_granted = h; }
         // Optional: the allotment also covers hours logged from this earlier date (an upgrade taking over the old tier's overage).
         if (patch.coversFrom !== undefined) {
@@ -326,7 +329,7 @@ export function planPriorPeriod({ clientId, start, due, allotment, used, carryHo
     return {
         period: { client_id: clientId, start_date: start, due_date: end, renewing: !!renewing, status: 'closed', ...(t ? { tier: t } : {}) },
         allotment: {
-            client_id: clientId, source: 'plan_allotment', hours_granted: allotted, granted_on: start, expires_on: end, status: 'expired',
+            client_id: clientId, source: 'plan_allotment', hours_granted: allotted, granted_on: start, expires_on: end, status: today && end >= today ? 'active' : 'expired',   // a period that has not ended yet still takes time
             note: `Earlier plan period, recorded by hand: ${usedHours} of ${allotted} hours used. [manual used: ${usedHours}h]`,
         },
         carryover: carry > 0 ? {
