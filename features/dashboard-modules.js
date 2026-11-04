@@ -53,7 +53,7 @@ function availabilityBody() {
     const days = view.mode === 'today' ? [today] : weekDays(today, view.offset);
     const grid = availabilityGrid({
         people, days,
-        capacityFor: (n, d) => memberDayHours(n, d) - workdayGoneHours(events, n, d),   // today: minus the time already gone
+        capacityFor: (n, d) => (d < today ? 0 : memberDayHours(n, d) - workdayGoneHours(events, n, d)),   // a past day has nothing left to give; today: minus the time already gone
         loadFor: (n, d) => dailyLoadHours(events, tasks, n, d),
     });
     const label = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
