@@ -351,13 +351,13 @@ export function buildSummaryDraft(input) {
     // edited on purpose is kept, and may use {with} for me / us.
     const OLD_INTRO = 'Thanks for taking the time to meet with us on {date}. Below is a summary of what we covered and the next steps.';
     const introTpl = !tpl.intro || String(tpl.intro).trim() === OLD_INTRO ? 'Thank you for meeting with {with} today. Below is a summary of what we covered and the next steps.' : tpl.intro;
-    // The recording line is the SECOND line: the thank-you sentence, then the recording link, then the rest of the intro
-    // ("Below is a summary..."). With no recording the intro stays together as one paragraph.
+    // First paragraph: the thank-you sentence with the recording line right after it (when there is a recording).
+    // The rest of the intro ("Below is a summary...") is its own paragraph, spaced out below.
     const introText = fillT(introTpl, { ...tvars, with: withWho }).trim();
     const firstBreak = introText.search(/[.!?](\s+)/);
-    const intro = recordingUrl && firstBreak > -1
-        ? [introText.slice(0, firstBreak + 1), `${RECORDING_LINE}.`, introText.slice(firstBreak + 1).trim()].filter(Boolean).join('\n')
-        : [introText, ...(recordingUrl ? [`${RECORDING_LINE}.`] : [])].join('\n');
+    const thanks = firstBreak > -1 ? introText.slice(0, firstBreak + 1) : introText;
+    const rest = firstBreak > -1 ? introText.slice(firstBreak + 1).trim() : '';
+    const intro = [[thanks, ...(recordingUrl ? [`${RECORDING_LINE}.`] : [])].join(' '), rest].filter(Boolean).join('\n\n');
     // One line break under a header, not a blank line: the summary starts right beneath SUMMARY.
     const message = [
         `Hi ${joinNames(names) || 'there'},`,
