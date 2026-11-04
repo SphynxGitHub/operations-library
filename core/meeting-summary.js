@@ -6,7 +6,7 @@
 // Layout
 //   Hi <names of the non-Sphynx attendees>,
 //   <intro paragraph>
-//   Here is the recording of our session   only when a recording link exists
+//   Here's a link to the recording of the session   only when a recording link exists
 //                                           (a hyperlink in the sent email)
 //   SUMMARY            the Zoom summary
 //   NEXT STEPS         open tasks from the meeting, grouped Sphynx / client
@@ -274,7 +274,7 @@ export function assembleBody({ message, nextSteps, closing }) {
 
 // The recording line. In the sent email this exact text becomes a link to the recording;
 // the plain-text copy gets the address after it.
-export const RECORDING_LINE = 'Here is the recording of our session';
+export const RECORDING_LINE = "Here's a link to the recording of the session";
 
 const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
