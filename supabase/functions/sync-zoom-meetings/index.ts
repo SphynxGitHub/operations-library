@@ -504,6 +504,9 @@ serve(async (req) => {
                 if (report) report.recording = `saved to the client's Drive (Zoom Recordings folder)${r.data?.webViewLink ? ': ' + r.data.webViewLink : ''}`;
               } else {
                 driveErrors++;
+                // Stop the background sync retrying (each try streams the whole recording out of Supabase, which is
+                // billed egress). Re-check Zoom on the meeting clears this and tries once more.
+                patch.zoom_recording_status = "failed";
                 driveErrorText = `Recording → Drive failed: ${r.data?.message || r.data?.error || 'unknown error'}`;
                 if (report) report.recording = `found, but saving to Drive failed: ${r.data?.message || r.data?.error || 'unknown error'}`;
               }

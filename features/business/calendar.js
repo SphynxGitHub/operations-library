@@ -2160,7 +2160,7 @@ OL.zoomStatusLine = function(evt) {
         if (evt.zoom_summary) bits.push(`${n} action item${n === 1 ? '' : 's'}${n && evt.zoom_tasks_created ? ' → tasks ✓' : ''}`);
         bits.push(evt.zoom_recording_status === 'saved'
             ? (evt.zoom_recording_drive_url ? `<a href="${esc(evt.zoom_recording_drive_url)}" target="_blank" rel="noopener">Recording in Drive ✓</a>` : 'Recording in Drive ✓')
-            : evt.zoom_recording_status === 'none' ? 'No recording' : 'Recording: pending');
+            : evt.zoom_recording_status === 'none' ? 'No recording' : evt.zoom_recording_status === 'failed' ? 'Recording: copy to Drive failed (use Re-check Zoom to retry)' : 'Recording: pending');
         if (evt.zoom_recording_url) bits.push(`<a href="${esc(evt.zoom_recording_url)}" target="_blank" rel="noopener">Zoom link</a>`);
     }
     const line = bits.map(b => b.startsWith('<a ') ? b : esc(b)).join(' · ');
