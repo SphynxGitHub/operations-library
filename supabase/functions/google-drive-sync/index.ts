@@ -240,7 +240,8 @@ serve(async (req) => {
       // copying everything on every network read (~64 KB), so each 8 MB
       // chunk meant hundreds of MB of copying -- that's what exhausted the
       // function's CPU/memory ("not enough compute resources").
-      const CHUNK = 8 * 1024 * 1024; // must be a multiple of 256 KB
+      const CHUNK = 4 * 1024 * 1024; // must be a multiple of 256 KB (4 MB keeps peak memory low)
+      console.log(`[zoom-recording] start: ${fileName}, size ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "unknown"}`);
       const buf = new Uint8Array(CHUNK);
       let filled = 0;
       const reader = zoomRes.body.getReader();
@@ -274,6 +275,10 @@ serve(async (req) => {
               if (filled === CHUNK) {
                 await sendChunk(buf, false);
                 filled = 0;
+                if ((offset / CHUNK) % 10 === 0) {
+                  let mem = ""; try { mem = ` heap ${Math.round((Deno as any).memoryUsage().rss / 1048576)} MB rss`; } catch (_) {}
+                  console.log(`[zoom-recording] sent ${Math.round(offset / 1048576)} MB of ${totalSize ? Math.round(totalSize / 1048576) : "?"} MB,${mem}, ${Math.round((Date.now() - startedAt) / 1000)}s`);
+                }
                 if (Date.now() - startedAt > TIME_BUDGET_MS) {
                   await reader.cancel().catch(() => {});
                   throw new Error(`recording is too large to copy within one run (stopped after ${Math.round(offset / 1048576)} MB of ${totalSize ? Math.round(totalSize / 1048576) + " MB" : "?"})`);
@@ -285,6 +290,7 @@ serve(async (req) => {
         }
         await sendChunk(buf.subarray(0, filled), true);
       } catch (e: any) {
+        console.error(`[zoom-recording] failed after ${Math.round(offset / 1048576)} MB: ${e.message}`);
         return new Response(JSON.stringify({ error: "drive_upload_failed", message: e.message }), { status: 502, headers: corsHeaders });
       }
 
