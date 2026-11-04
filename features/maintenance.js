@@ -274,8 +274,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
     // Newest block on top, oldest at the bottom (latest start first, then latest expiry).
     // (A plan allotment is placed by its own start, not by an earlier covers-from date, so an upgraded period stays on top.)
-    const shownStart = (g) => (g.source === 'plan_allotment' ? String(g.granted_on || '').slice(0, 10) : grantStart(g));
-    const newestFirst = gs.slice().sort((a, b) => shownStart(b).localeCompare(shownStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on)));
+    const newestFirst = gs.slice().sort(newestBlockFirst);
     const rows = newestFirst.map((g) => {
         const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
         const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
@@ -335,15 +334,17 @@ function grantCardHtml(client, g, ledger, gt) {
         </div>`;
 }
 
+// Blocks are listed newest first, by start date (a plan allotment by its own start, not an earlier covers-from date), then by expiry.
+const blockStart = (g) => (g.source === 'plan_allotment' ? String(g.granted_on || '').slice(0, 10) : grantStart(g));
+const newestBlockFirst = (a, b) => blockStart(b).localeCompare(blockStart(a)) || String(b.expires_on).localeCompare(String(a.expires_on));
+
 function grantCardsHtml(client, slot, ledger) {
     if (!slot.grants.length) return '<div class="tiny muted">No hours grants yet.</div>';
     const gt = grantTasks(ledger);
     // Blocks with hours left stay up top; used-up blocks go in the collapsed list with the expired ones.
-    const heldSet = new Set((ledger.held || []).map((g) => String(g.id)));
-    const live = ledger.current.filter((g) => !isBlockClosed(ledger, g)).sort((a, b) => (heldSet.has(String(a.id)) ? 1 : 0) - (heldSet.has(String(b.id)) ? 1 : 0));
+    const live = ledger.current.filter((g) => !isBlockClosed(ledger, g)).sort(newestBlockFirst);
     const liveIds = new Set(live.map((g) => String(g.id)));
-    const earlier = slot.grants.filter((g) => !liveIds.has(String(g.id)))
-        .sort((a, b) => String(b.expires_on).localeCompare(String(a.expires_on)));
+    const earlier = slot.grants.filter((g) => !liveIds.has(String(g.id))).sort(newestBlockFirst);
     const showEarlier = !!OL._maintShowEarlierGrants;
     return `${live.length ? live.map((g) => grantCardHtml(client, g, ledger, gt)).join('') : (ledger.current.length ? '<div class="tiny muted" style="margin-top:6px;">Every block is used up. Closed blocks are listed below.</div>' : '')}
         ${earlier.length ? `<div class="tiny muted" style="margin-top:14px; cursor:pointer;" onclick="OL._maintShowEarlierGrants = !OL._maintShowEarlierGrants; OL.renderMaintenancePage()">${showEarlier ? '▾' : '▸'} Closed, expired and earlier blocks (${earlier.length})</div>
