@@ -1,5 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
-import { taskEstimatedHours, memberDayHours, dailyLoadHours, taskDaySlots, taskRemainingSlots } from '../../core/scheduling.js';
+import { taskEstimatedHours, memberDayHours, dailyLoadHours, taskDaySlots, taskRemainingSlots, workdayGoneHours } from '../../core/scheduling.js';
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -99,7 +99,7 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
         if (people.length) {
             const events = OL._dashboardEventsCache || [];
             const allTasks = Object.values(state.clients || {}).filter(c => c && c.projectData && !c._metaOnly).flatMap(c => c.projectData.clientTasks || []);
-            const free = people.reduce((sum, n) => sum + Math.max(0, memberDayHours(n, day) - dailyLoadHours(events, allTasks, n, day)), 0);
+            const free = people.reduce((sum, n) => sum + Math.max(0, memberDayHours(n, day) - workdayGoneHours(events, n, day) - dailyLoadHours(events, allTasks, n, day)), 0);
             openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'} for ${esc(people.join(', '))}, after meetings and tasks. Same number as the Availability table.">Free ${scope} <strong style="font-size:12px; color:${(() => { const h = Math.round(free * 10) / 10; return h <= 0 ? '#f87171' : h <= 2 ? '#f5b942' : '#2dd4bf'; })()};">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
         }
     }

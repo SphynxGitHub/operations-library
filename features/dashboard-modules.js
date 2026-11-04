@@ -9,7 +9,7 @@
 import { state, esc, db, getCurrentUserName } from '../core/data.js';
 import { roundStatusOf } from '../core/requests.js';
 import { isClientWaitingStatus } from '../core/work-status.js';
-import { memberDayHours, dailyLoadHours } from '../core/scheduling.js';
+import { memberDayHours, dailyLoadHours, workdayGoneHours } from '../core/scheduling.js';
 import {
     MODULES, DEFAULT_ON, TEAM_PRESET, weekDays, availabilityGrid, pendingReviewRollup, readyNotSent, leadsWaiting,
     followUpsDue, waitingByAge, hoursBlocksNearing, reviewsEnding,
@@ -53,7 +53,7 @@ function availabilityBody() {
     const days = view.mode === 'today' ? [today] : weekDays(today, view.offset);
     const grid = availabilityGrid({
         people, days,
-        capacityFor: (n, d) => memberDayHours(n, d),
+        capacityFor: (n, d) => memberDayHours(n, d) - workdayGoneHours(events, n, d),   // today: minus the time already gone
         loadFor: (n, d) => dailyLoadHours(events, tasks, n, d),
     });
     const label = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });

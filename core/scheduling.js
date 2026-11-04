@@ -198,6 +198,38 @@ export function dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeT
     return meetingHoursForDay(calendarEvents, assignee, dayKey) + queuedTaskHoursForDay(tasks, assignee, dayKey, excludeTaskId);
 }
 
+// ---- How much of today's workday is already gone ----
+// Today's availability is also a function of the time left in the workday: at midday a 7h day has about 3.5h left, however
+// empty the calendar is. The workday starts at scheduling.workdayStart (default 09:00) and is as long as the person's hours
+// that day, so it ends that many hours later. Meeting time that has already happened is part of the time gone, so it is
+// not counted twice (it is also in the day's load).
+// Returns the hours of today to add to the load to account for time that has passed (0 for any other day).
+export function workdayGoneHours(calendarEvents, assignee, dayKey, cfg = getOlSettings().scheduling, nowMs = Date.now()) {
+    if (!assignee || dayKey !== toDayKey(new Date(nowMs))) return 0;
+    const cap = memberDayHours(assignee, dayKey, cfg);
+    if (cap <= 0) return 0;
+    const m = /^(\d{1,2}):(\d{2})/.exec(String(cfg?.workdayStart || '09:00'));
+    const startH = m ? Math.min(23, Number(m[1])) + Number(m[2]) / 60 : 9;
+    const now = new Date(nowMs);
+    const sinceStart = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600 - startH;
+    const gone = Math.min(cap, Math.max(0, sinceStart));
+    if (gone <= 0) return 0;
+    // meeting time already behind us today (it is in the day's load as well as in the time gone)
+    const dayStartMs = new Date(`${dayKey}T00:00:00`).getTime();
+    const goneUntilMs = dayStartMs + (startH + gone) * 3600000;
+    const winStartMs = dayStartMs + startH * 3600000;
+    let pastMeet = 0;
+    for (const evt of (calendarEvents || [])) {
+        if (!evt || !evt.start || evt.all_day) continue;
+        const onAssignee = evt.assignee === assignee || (Array.isArray(evt.assignees) && evt.assignees.includes(assignee));
+        if (!onAssignee || toDayKey(new Date(evt.start)) !== dayKey) continue;
+        const st = new Date(evt.start).getTime(), en = evt.end ? new Date(evt.end).getTime() : st;
+        const overlap = Math.min(en, goneUntilMs) - Math.max(st, winStartMs);
+        if (overlap > 0) pastMeet += overlap / 3600000;
+    }
+    return Math.max(0, gone - pastMeet);
+}
+
 // ---- Per-person availability ----
 // Each team member can have a schedule on their profile card (Sphynx Team): member.schedule =
 //   { hours: { mon: 7, tue: 7, wed: 0, ... },   // hours available that weekday; blank = the standard day; 0 = does not work it
@@ -335,7 +367,7 @@ export function findFirstAvailableDate({ calendarEvents, tasks, assignee, estima
         {
             const dayKey = toDayKey(cursor);
             if (memberDayHours(assignee, dayKey, cfg) > 0) {
-                const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId);
+                const load = dailyLoadHours(calendarEvents, tasks, assignee, dayKey, excludeTaskId) + workdayGoneHours(calendarEvents, assignee, dayKey, cfg);   // today: the time already gone counts
                 const tier = loadTierFor(load, assignee, dayKey, cfg);
                 if (tier !== 'closed' && tierIndex(tier) <= tierIndex(limit)) {
                     const put = Math.min(cap, remaining);

@@ -104,6 +104,7 @@ OL.renderOlSettingsPanel = function() {
             `</div>` +
             `<div class="os-row">${field('Look ahead (working days)', numIn('os-sc-window', sc.windowDays), 'Starts today, then each next day.')}` +
                 field('Move tasks to a later day once a day reaches (hours)', numIn('os-sc-roll', sc.rollOverHours), 'Meetings + tasks. The newest not-started tasks on that day move on until it is back under. 0 = off.') +
+                field('Workday starts at', `<input id="os-sc-start" type="time" class="modal-input" value="${esc(sc.workdayStart || '09:00')}">`, 'Today\'s availability shrinks as the workday goes: the hours since this time count as gone, up to the person\'s hours that day.') +
                 field('Most hours of one task per day', numIn('os-sc-maxday', sc.maxHoursPerDay), 'A task estimated longer than this is spread over several working days, this many hours each. 0 = never split.') +
                 field('Follow-up task estimate (hours)', numIn('os-sc-fuhrs', sc.followUpEstimateHours), 'Used for follow-up tasks that have no estimate of their own. Other tasks without one count 1h.') +
                 field('Fee per estimated hour ($)', numIn('os-sc-feehr', sc.feePerEstimatedHour), 'A task\'s estimated hours = its fee ÷ this. Set 200 against a higher billing rate for a buffer.') +
@@ -161,6 +162,7 @@ OL.saveOlSettings = function() {
             followUpEstimateHours: Math.max(0, num('os-sc-fuhrs', d.scheduling.followUpEstimateHours)),
             maxHoursPerDay: Math.max(0, num('os-sc-maxday', d.scheduling.maxHoursPerDay)),
             rollOverHours: Math.max(0, num('os-sc-roll', d.scheduling.rollOverHours)),
+            workdayStart: /^\d{1,2}:\d{2}$/.test(v('os-sc-start')) ? v('os-sc-start') : d.scheduling.workdayStart,
             windowDays: Math.max(1, Math.round(num('os-sc-window', d.scheduling.windowDays))), reviewer: v('os-sc-reviewer'), fallbackReviewer: v('os-sc-fallback'),
         },
         emailLinkableResourceTypes: [...document.querySelectorAll('.os-link-type:checked')].map((el) => el.dataset.type),

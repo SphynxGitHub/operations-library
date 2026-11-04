@@ -1,5 +1,5 @@
 import { esc, state, db, updateAndSync, uid, isInBusinessScope, scopeQueryToBusinessClients, getBusinessScopedClients, getBusinessScopeClientIds } from '../../core/data.js';
-import { meetingHoursForDay, queuedTaskHoursForDay, loadTierFor, memberDayHours, standardDayHours, maxTierFor, TIER_ORDER } from '../../core/scheduling.js';
+import { meetingHoursForDay, queuedTaskHoursForDay, loadTierFor, memberDayHours, standardDayHours, maxTierFor, TIER_ORDER, workdayGoneHours } from '../../core/scheduling.js';
 import { isGenericAssignee } from '../../core/task-assignees.js';
 import { loadWorkload, loadAllMeetings, loadAllTasks } from '../../core/workload.js';
 import { planRollovers } from '../../core/rebalance.js';
@@ -816,7 +816,7 @@ OL.renderCalendarAvailability = function() {
         const rows = people.map(name => {
             const meet = meetingHoursForDay(events, name, key);
             const queued = queuedTaskHoursForDay(tasks, name, key);
-            const hours = meet + queued;
+            const hours = meet + queued + workdayGoneHours(events, name, key, cfg);   // today: the time already gone counts as booked
             const cap = memberDayHours(name, key, cfg);
             const tier = loadTierFor(hours, name, key, cfg);
             return { name, hours, meet, queued, tier, cap, off: cap <= 0 };

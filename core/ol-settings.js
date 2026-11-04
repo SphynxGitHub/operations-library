@@ -88,6 +88,9 @@ export const DEFAULT_OL_SETTINGS = {
         // Once a person's total for a day (meetings + tasks) reaches this many hours, tasks on that day move to a later day
         // until it is back under. Meetings never move. 0 = off.
         rollOverHours: 7,
+        // When the workday starts. Today's availability counts the time since then as gone (a workday is as long as the person's
+        // hours that day), so a mostly-over day no longer shows as free.
+        workdayStart: '09:00',
         windowDays: 14,       // working days to look ahead (today, then the next day, and so on) before handing it to a person
         // When nothing fits, who is asked to place it by hand: this person if set; otherwise whoever the task is
         // assigned to (approving their own task); otherwise the fallback.
