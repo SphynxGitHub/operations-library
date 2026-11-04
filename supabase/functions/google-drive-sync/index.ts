@@ -209,6 +209,7 @@ serve(async (req) => {
       if (!fileUrl) {
         return new Response(JSON.stringify({ error: "missing_file_url" }), { status: 400, headers: corsHeaders });
       }
+      console.log(`[zoom-recording] begin ${fileName} (declared ${fileSize ? Math.round(Number(fileSize) / 1048576) + " MB" : "unknown size"})`);
       const zoomRes = await fetch(fileUrl, {
         headers: zoomAccessToken ? { Authorization: `Bearer ${zoomAccessToken}` } : {},
         redirect: "follow"
@@ -216,6 +217,7 @@ serve(async (req) => {
       if (!zoomRes.ok || !zoomRes.body) {
         return new Response(JSON.stringify({ error: "zoom_download_failed", message: `Zoom answered HTTP ${zoomRes.status}` }), { status: 502, headers: corsHeaders });
       }
+      console.log(`[zoom-recording] zoom answered HTTP ${zoomRes.status}, content-length ${zoomRes.headers.get("content-length")}`);
       const totalSize = Number(fileSize) || Number(zoomRes.headers.get("content-length")) || 0;
       const contentType = mimeType || zoomRes.headers.get("content-type") || "video/mp4";
 
