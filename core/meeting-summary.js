@@ -357,7 +357,10 @@ export function buildSummaryDraft(input) {
     const firstBreak = introText.search(/[.!?](\s+)/);
     const thanks = firstBreak > -1 ? introText.slice(0, firstBreak + 1) : introText;
     const rest = firstBreak > -1 ? introText.slice(firstBreak + 1).trim() : '';
-    const intro = [[thanks, ...(recordingUrl ? [`${RECORDING_LINE}.`] : [])].join(' '), rest].filter(Boolean).join('\n\n');
+    // With no recording there is nothing to set apart, so the whole intro stays one paragraph.
+    const intro = recordingUrl
+        ? [[thanks, `${RECORDING_LINE}.`].join(' '), rest].filter(Boolean).join('\n\n')
+        : introText;
     // One line break under a header, not a blank line: the summary starts right beneath SUMMARY.
     const message = [
         `Hi ${joinNames(names) || 'there'},`,
