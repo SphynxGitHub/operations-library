@@ -575,6 +575,7 @@ export async function sync() {
                     businessModules: c.business_modules || {},
                     authUserId: c.auth_user_id || null
                 };
+                noteRowVersion(clientId, c.updated_at);
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         }
@@ -645,6 +646,16 @@ export async function sync() {
 }
 
 // ---- loadFullClient: lazy-load one client's full project data ----
+// The last-changed time each project had when this tab last read it (workspace_clients.updated_at, from the 2026_11e migration).
+// The background check compares against it so it only downloads projects that changed. Empty until the column exists.
+export function noteRowVersion(id, updatedAt) {
+    if (!id || !updatedAt) return;
+    const g = (typeof window !== 'undefined' ? window : globalThis);
+    g.OL = g.OL || {};
+    g.OL._rowVersions = g.OL._rowVersions || {};
+    g.OL._rowVersions[id] = updatedAt;
+}
+
 export async function loadFullClient(clientId) {
     if (state.clients[clientId] && !state.clients[clientId]._metaOnly && state.clients[clientId].projectData) {
         return state.clients[clientId];
@@ -674,6 +685,7 @@ export async function loadFullClient(clientId) {
             businessModules: data.business_modules || state.clients[clientId]?.businessModules || {}
         };
         delete state.clients[clientId]._metaOnly;
+        noteRowVersion(clientId, data.updated_at);
 
         // Cards saved before the emoji clean-up carry names like "Cal: Intro Call"; strip them in memory (saved with the next write).
         try { if (typeof window !== 'undefined' && typeof window.OL?.cleanLegacyResourceNames === 'function') window.OL.cleanLegacyResourceNames(state.clients[clientId]); } catch (e) { console.warn('Name clean-up skipped:', e); }

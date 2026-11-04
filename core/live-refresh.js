@@ -15,7 +15,7 @@
 // the redraw waits until you leave it. Scroll position is kept. The flow
 // visualizer and the how-to guide editor are never redrawn from here (they manage their own state).
 
-import { db, state, ensureProjectLists, isEchoOfOwnSave } from './data.js';
+import { db, state, ensureProjectLists, isEchoOfOwnSave, noteRowVersion } from './data.js';
 
 let timer = null;
 let waitingForBlur = false;
@@ -138,7 +138,9 @@ function startRealtime() {
                 const { data } = await db.from('workspace_clients').select('id, meta, project_data').eq('id', row.id).maybeSingle();
                 row = data || row;
             }
-            if (mergeClientRow(row)) scheduleViewRefresh(600);
+            const merged = mergeClientRow(row);
+            if (row?.id && !hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at);   // so the background check does not fetch it again
+            if (merged) scheduleViewRefresh(600);
         });
         ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'workspace_masters' }, (p) => {
             if (mergeMasterRow(p.new)) scheduleViewRefresh(600);
@@ -173,9 +175,27 @@ async function poll(fromFocus = false) {
     try {
         const loadedIds = Object.keys(state.clients || {}).filter(id => state.clients[id] && !state.clients[id]._metaOnly);
         let changed = false;
-        for (let i = 0; i < loadedIds.length; i += 25) {
-            const { data } = await db.from('workspace_clients').select('id, meta, project_data').in('id', loadedIds.slice(i, i + 25));
-            (data || []).forEach(row => { if (mergeClientRow(row)) changed = true; });
+        // Ask the database only when each project last changed (a few KB), then download just the ones that did. If that is not
+        // possible (the updated_at column from the 2026_11e migration is not there yet), every loaded project is downloaded as before.
+        let toFetch = loadedIds;
+        const known = (window.OL && window.OL._rowVersions) || {};
+        if (loadedIds.length && Object.keys(known).length) {
+            const stamps = [];
+            let stampErr = null;
+            for (let i = 0; i < loadedIds.length && !stampErr; i += 100) {
+                const { data, error } = await db.from('workspace_clients').select('id, updated_at').in('id', loadedIds.slice(i, i + 100));
+                if (error) stampErr = error; else stamps.push(...(data || []));
+            }
+            if (!stampErr && stamps.every(r => r.updated_at)) {
+                toFetch = stamps.filter(r => known[r.id] !== r.updated_at).map(r => r.id);
+            }
+        }
+        for (let i = 0; i < toFetch.length; i += 25) {
+            const { data } = await db.from('workspace_clients').select('id, meta, project_data, updated_at').in('id', toFetch.slice(i, i + 25));
+            (data || []).forEach(row => {
+                if (mergeClientRow(row)) changed = true;
+                if (!hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at);
+            });
         }
         const { data: m } = await db.from('workspace_masters').select('sphynx_team').eq('id', 'main_state').maybeSingle();
         if (mergeMasterRow(m)) changed = true;
