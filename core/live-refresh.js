@@ -16,6 +16,7 @@
 // visualizer and the how-to guide editor are never redrawn from here (they manage their own state).
 
 import { db, state, ensureProjectLists, isEchoOfOwnSave, noteRowVersion } from './data.js';
+import { keepLocalBlobs } from './resource-blobs.js';
 
 let timer = null;
 let waitingForBlur = false;
@@ -95,7 +96,8 @@ function mergeClientRow(row) {
     if (row.project_data && isEchoOfOwnSave(row.id, row.project_data)) return false;
     // Normalise the incoming copy the same way loading does, so a project that is merely missing empty lists in the
     // database doesn't look "changed" against the in-memory copy (which has them) on every check.
-    const incomingData = row.project_data ? ensureProjectLists({ ...row.project_data }) : null;
+    // A saved project row no longer carries the heavy resource fields (resource_blobs); keep the ones this tab has loaded.
+    const incomingData = row.project_data ? keepLocalBlobs(c.projectData, ensureProjectLists({ ...row.project_data })) : null;
     const incoming = JSON.stringify(incomingData || {});
     if (incoming === JSON.stringify(c.projectData || {}) && JSON.stringify(row.meta || {}) === JSON.stringify(c.meta || {})) return false;
     if (incomingData) c.projectData = incomingData;

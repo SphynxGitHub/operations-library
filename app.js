@@ -874,6 +874,16 @@ window.handleRoute = function () {
         }
     }
 
+    // The open project's heavy resource fields (edit history, email bodies, form details) are stored in their own table and
+    // loaded here, once, the first time the project is shown; the screen is then drawn with them in place.
+    {
+        const ac = state.activeClientId && state.clients?.[state.activeClientId];
+        if (ac && ac.projectData && !ac._blobsHydrated && !ac._blobHydrateFailed && typeof OL.hydrateClientBlobs === 'function') {
+            OL.hydrateClientBlobs(state.activeClientId).then(() => window.handleRoute());
+            return;
+        }
+    }
+
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
     

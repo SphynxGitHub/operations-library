@@ -5,6 +5,7 @@ import { mirrorClientRequests } from './requests.js';
 import { isMaintenanceSheet } from './maintenance.js';
 import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } from './preview.js';
 import { stampChangedResources } from './change-stamps.js';
+import { BLOB_FIELDS, splitBlobs } from './resource-blobs.js';
 
 // ---- small value helpers used throughout the data layer ----
 export const val = (v) => (v === undefined || v === null) ? "" : v;
@@ -371,6 +372,10 @@ function persistNow() {
                     console.warn('Testing checklist update failed:', testingErr);
                 }
 
+                // Make sure this project's heavy resource fields (edit history, email bodies, form details) are loaded before saving, so
+                // an unloaded copy can never be written over what is stored. (Normally already done when the project was opened.)
+                try { await hydrateClientBlobs(activeId); } catch (e) { /* falls back to saving everything on the project row */ }
+
                 const clientCopy = JSON.parse(JSON.stringify(client));
                 if (clientCopy.projectData) {
                     delete clientCopy.projectData.resources;
@@ -382,14 +387,40 @@ function persistNow() {
                     continue;
                 }
 
-                rememberSavedProject(activeId, clientCopy.projectData || {});
+                // Heavy resource fields go to their own table (resource_blobs); the project row keeps the slim copy. Only for a project
+                // whose heavy fields were loaded in this tab, and only the resources whose heavy fields changed are written. They are
+                // written FIRST: if that fails, the project row is saved with everything still inside it, so nothing can be lost.
+                let projectDataToSave = clientCopy.projectData;
+                if (client._blobsHydrated === true) {
+                    const { slim, rows } = splitBlobs(clientCopy.projectData);
+                    const hashes = client._blobHashes || (client._blobHashes = {});
+                    const changed = rows
+                        .map((r) => ({ id: r.id, blobs: r.blobs, hash: canonicalJson(r.blobs) }))
+                        .filter((r) => hashes[r.id] !== r.hash);
+                    // a resource that had heavy fields before and has none now: store an empty set so they do not come back
+                    const nowIds = new Set(rows.map((r) => r.id));
+                    Object.keys(hashes).forEach((rid) => {
+                        if (!nowIds.has(rid) && hashes[rid] !== '{}') changed.push({ id: rid, blobs: {}, hash: '{}' });
+                    });
+                    let blobsOk = true;
+                    for (let i = 0; i < changed.length && blobsOk; i += 20) {
+                        const chunk = changed.slice(i, i + 20);
+                        const { error: blobErr } = await db.from('resource_blobs')
+                            .upsert(chunk.map((r) => ({ client_id: activeId, resource_id: r.id, blobs: r.blobs })), { onConflict: 'client_id,resource_id' });
+                        if (blobErr) { blobsOk = false; console.warn(`Could not save resource details for ${activeId}; saving them on the project row instead:`, blobErr.message); }
+                        else chunk.forEach((r) => { hashes[r.id] = r.hash; });
+                    }
+                    if (blobsOk) projectDataToSave = slim;
+                }
+
+                rememberSavedProject(activeId, projectDataToSave || {});
                 const clientPayload = {
                     id: activeId,
                     public_token: clientCopy.publicToken || null,
                     meta: clientCopy.meta || {},
                     modules: clientCopy.modules || {},
                     permissions: clientCopy.permissions || {},
-                    project_data: clientCopy.projectData || {},
+                    project_data: projectDataToSave || {},
                     shared_master_ids: clientCopy.sharedMasterIds || []
                 };
                 // The partner Business Manager tab settings. Staff only, and only once the column exists
@@ -758,6 +789,47 @@ export function noteRowVersion(id, updatedAt) {
     g.OL._rowVersions[id] = updatedAt;
 }
 
+// ---- heavy resource fields (resource_blobs) ----
+// Edit history, email bodies and form details are stored in their own table, one row per resource (migrations/2026_11f), so the
+// project row stays small. They are loaded the first time a project is opened (see window.handleRoute) and put back onto its
+// resources, so every screen reads them exactly as before. A field already on the resource wins (a copy not moved yet, or an edit
+// made before loading finished). If the table can't be read, the project is simply used as it is and is never saved in slim form.
+export async function hydrateClientBlobs(clientId) {
+    const c = state.clients?.[clientId];
+    if (!c || !c.projectData || c._blobsHydrated || c._blobHydrateFailed) return c;
+    if (c._blobHydrating) return c._blobHydrating;
+    c._blobHydrating = (async () => {
+        try {
+            const rows = [];
+            for (let from = 0; ; from += 500) {
+                const { data, error } = await db.from('resource_blobs').select('resource_id, blobs')
+                    .eq('client_id', clientId).order('resource_id').range(from, from + 499);
+                if (error) throw error;
+                rows.push(...(data || []));
+                if (!data || data.length < 500) break;
+            }
+            const byId = new Map(rows.map((r) => [String(r.resource_id), r.blobs || {}]));
+            const hashes = {};
+            (c.projectData.localResources || []).forEach((res) => {
+                if (!res || res.id == null) return;
+                const b = byId.get(String(res.id));
+                if (!b) return;
+                BLOB_FIELDS.forEach((f) => { if (b[f] !== undefined && res[f] === undefined) res[f] = b[f]; });
+                hashes[String(res.id)] = canonicalJson(b);
+            });
+            c._blobHashes = hashes;
+            c._blobsHydrated = true;
+        } catch (e) {
+            c._blobHydrateFailed = true;   // table missing or unreachable: carry on with what the project row holds
+            console.warn('Resource details not loaded separately:', e?.message || e);
+        } finally {
+            delete c._blobHydrating;
+        }
+        return c;
+    })();
+    return c._blobHydrating;
+}
+
 export async function loadFullClient(clientId) {
     if (state.clients[clientId] && !state.clients[clientId]._metaOnly && state.clients[clientId].projectData) {
         return state.clients[clientId];
@@ -1004,6 +1076,25 @@ export async function exportMasterBackup() {
             .select('*');
 
         if (error) throw error;
+
+        // Put each resource's heavy fields (resource_blobs) back in, so the backup is complete whether or not they are still on the row.
+        try {
+            const blobRows = [];
+            for (let from = 0; ; from += 1000) {
+                const { data: part, error: blobErr } = await db.from('resource_blobs').select('client_id, resource_id, blobs')
+                    .order('client_id').order('resource_id').range(from, from + 999);
+                if (blobErr) throw blobErr;
+                blobRows.push(...(part || []));
+                if (!part || part.length < 1000) break;
+            }
+            const byKey = new Map(blobRows.map((b) => [`${b.client_id}\u0001${b.resource_id}`, b.blobs || {}]));
+            (clientRows || []).forEach((row) => {
+                (row.project_data?.localResources || []).forEach((res) => {
+                    const b = res && res.id != null ? byKey.get(`${row.id}\u0001${res.id}`) : null;
+                    if (b) BLOB_FIELDS.forEach((f) => { if (b[f] !== undefined && res[f] === undefined) res[f] = b[f]; });
+                });
+            });
+        } catch (e) { console.warn('Backup: resource details table not included:', e?.message || e); }
 
         const clients = (clientRows || []).map(row => ({
             _id: row.id,
@@ -1888,7 +1979,7 @@ Object.assign(window.OL, {
     getPortfolioClients,
     getCurrentUserName,
     markClientDirty,
-    state, persist, sync, loadFullClient, switchClient, updateAndSync,
+    state, persist, sync, loadFullClient, hydrateClientBlobs, switchClient, updateAndSync,
     exportMasterBackup, importMasterBackup, convertTaskToResource: OL.convertTaskToResource,
   convertTaskToRequirement: OL.convertTaskToRequirement
 });
