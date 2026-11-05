@@ -398,9 +398,14 @@ function persistNow() {
                     clientPayload.business_modules = clientCopy.businessModules || {};
                 }
 
-                const { error: clientErr } = await db
+                // Ask for just the new updated_at back (a few bytes). It is recorded below so this tab can tell that the live-update
+                // message about this save is its own, and does not download the whole project again to "catch up" with itself.
+                const { data: savedStamp, error: clientErr } = await db
                     .from('workspace_clients')
-                    .upsert(clientPayload, { onConflict: 'id' });
+                    .upsert(clientPayload, { onConflict: 'id' })
+                    .select('updated_at');
+
+                if (!clientErr) noteRowVersion(activeId, savedStamp?.[0]?.updated_at);
 
                 if (clientErr) {
                     console.error(`❌ Client Persist Error [${activeId}]:`, clientErr.message);

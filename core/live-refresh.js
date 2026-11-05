@@ -145,6 +145,14 @@ function startRealtime() {
             pendingFetch[id] = setTimeout(async () => {
                 delete pendingFetch[id];
                 if (document.hidden) { lastPollAt = 0; return; }   // makes the check on returning to the tab run straight away
+                // Ask only "when did this project last change?" first (a few bytes). If it is the version this tab already has
+                // (its own save, or one it already downloaded) there is nothing to fetch. Projects over 1 MB always arrive here
+                // without their data, so without this check every save re-downloaded the whole project in every open tab.
+                const known = (window.OL && window.OL._rowVersions) || {};
+                try {
+                    const { data: stamp, error: stampErr } = await db.from('workspace_clients').select('id, updated_at').eq('id', id).maybeSingle();
+                    if (!stampErr && stamp?.updated_at && known[id] === stamp.updated_at) return;
+                } catch (e) { /* fall through to the full fetch */ }
                 const { data } = await db.from('workspace_clients').select('id, meta, project_data, updated_at').eq('id', id).maybeSingle();
                 if (data) applyClientRow(data);
             }, 8000);
