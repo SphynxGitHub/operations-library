@@ -2321,8 +2321,10 @@ export function _fvRenderSteps(resources) {
   const stages    = data.stages || [];
   const wfAll     = OL.getWorkflows() || [];
   const STEP_GAP  = 14;
-  const DRAFT_GAP = 28;   // processes made in Frame-out get more room between cards, so the arrows and the Yes / No words fit
-  const gapFor    = (res) => (res && res.isDraft && res.source === 'frameout' ? DRAFT_GAP : STEP_GAP);
+  const LANE_GAP  = 48;   // imported Zaps: room between stacked cards for the arrow and the branch / filter label pill that sits on it
+  const DRAFT_GAP = 56;   // processes made in Frame-out get more room between cards, so the arrows and the Yes / No words fit
+  // gapFor is only used for lane (imported Zap / Frame-out) stacking; classic columns keep STEP_GAP
+  const gapFor    = (res) => (res && res.isDraft && res.source === 'frameout' ? DRAFT_GAP : LANE_GAP);
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
