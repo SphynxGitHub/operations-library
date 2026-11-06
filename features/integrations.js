@@ -4,7 +4,7 @@
 // through the PDF/print export functions at the tail of the file, which
 // were grouped in here since nothing else referenced them either).
 // Owns: Zap JSON import, and external service syncs (Wealthbox, Jotform,
-// Calendly, ActiveCampaign, MailerLite, YouCanBookMe, Redtail, Process
+// Calendly, ActiveCampaign, MailerLite, Mailchimp, YouCanBookMe, Redtail, Process
 // Street), plus the Flow Map PDF export.
 //
 // NOTE: a genuine bug was found and fixed during this extraction — the
@@ -747,6 +747,7 @@ const HUB_GROUPS = [
     { title: 'Email automation', items: [
         { key: 'activecampaign', name: 'ActiveCampaign', desc: 'Automations', icon: 'mail', creds: 'activecampaign' },
         { key: 'mailerlite', name: 'MailerLite', desc: 'Sequences', icon: 'send', creds: 'mailerlite' },
+        { key: 'mailchimp', name: 'Mailchimp', desc: 'Classic automations', icon: 'mail-open', creds: 'mailchimp' },
         { key: 'keap', name: 'Keap', desc: 'Campaigns and sequences', icon: 'megaphone', creds: 'keap' },
     ] },
     { title: 'Checklists and tasks', items: [
@@ -770,7 +771,7 @@ function timeAgo(iso) {
 const SYNC_FN = {
     wealthbox: (c, o) => syncWealthbox(c, o), redtail: (c, o) => syncRedtail(c, o), jotform: (c, o) => importJotform(c, o),
     calendly: (c, o) => importCalendly(c, o), ycbm: (c, o) => importYCBM(c, o), activecampaign: (c, o) => importActiveCampaign(c, o),
-    mailerlite: (c, o) => importMailerLite(c, o), keap: (c, o) => importKeap(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
+    mailerlite: (c, o) => importMailerLite(c, o), mailchimp: (c, o) => importMailchimp(c, o), keap: (c, o) => importKeap(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
 };
 const emptySummary = (key) => ({ source: key, total: 0, added: [], renamed: [], changed: [], missing: [], restored: [], emptyPull: false });
 const changeCount = (s) => (s ? s.added.length + s.renamed.length + s.changed.length + s.missing.length + s.restored.length : 0);
@@ -1180,6 +1181,57 @@ export async function importMailerLite(client, opts = {}) {
     return commitPull(client, 'mailerlite', items);
 };
 
+// Mailchimp: classic automations and the emails inside them. Mailchimp's API does not list the newer Customer Journeys, so those
+// are not pulled. Each automation becomes an Email Campaign card with a trigger step and one step per email (its subject, and
+// how long after the previous step it goes out); a paused or draft automation is marked as not active.
+const MC_TRIGGER = {
+    abandonedCart: 'Abandoned cart', abandonedBrowse: 'Abandoned browse', birthday: 'Birthday', emailFollowup: 'Email follow-up',
+    emailSeries: 'Email series', groupAdd: 'Added to a group', groupRemove: 'Removed from a group', api: 'API trigger', signup: 'Subscriber signs up',
+};
+const mcDelay = (d) => {
+    if (!d || !Number(d.amount)) return 'Sent right away';
+    const n = Number(d.amount), unit = String(d.type || 'day').toLowerCase();
+    const after = String(d.direction || 'after').toLowerCase() === 'before' ? 'before' : 'after';
+    const action = String(d.action || '').replace(/_/g, ' ').trim();
+    return `Sent ${n} ${unit}${n === 1 ? '' : 's'} ${after}${action ? ' ' + action : ' the previous step'}`;
+};
+
+export async function importMailchimp(client, opts = {}) {
+    const creds = OL.getCredsForApp(client, 'mailchimp');
+    if (!hasKey(creds)) throw new Error("Mailchimp API Key missing.");
+    await secureEntry(client, creds);
+
+    const data = await importFrom('mailchimp', client.id, creds.id);
+    const automations = data.automations || [];
+
+    const items = automations.map((a) => {
+        const trig = a.trigger_settings || {};
+        const status = String(a.status || '');
+        const active = status === 'sending';
+        const label = trig.workflow_title || MC_TRIGGER[trig.workflow_type] || trig.workflow_type || 'Subscriber joins';
+        const emails = Array.isArray(a.emails) ? a.emails : [];
+        const steps = [{ id: `mc-${a.id}-s0`, name: `Trigger: ${label}`, appName: 'Mailchimp' }];
+        if (emails.length) {
+            emails.forEach((e, i) => {
+                const subject = (e.settings && (e.settings.subject_line || e.settings.title)) || `Email ${i + 1}`;
+                steps.push({ id: `mc-${a.id}-e${e.id || i}`, name: `Email ${i + 1}: ${subject}`, appName: 'Mailchimp', description: mcDelay(e.delay) });
+            });
+        } else {
+            steps.push({ id: `mc-${a.id}-s1`, name: 'Automation Flow', appName: 'Mailchimp', description: a.emailsError ? 'The emails in this automation could not be read from Mailchimp.' : '' });
+        }
+        const list = a.recipients && a.recipients.list_name;
+        return {
+            externalId: a.id, name: (a.settings && a.settings.title) || trig.workflow_title || `Automation ${a.id}`,
+            type: 'Email Campaign', archetype: 'Multi-Level', serviceActive: active,
+            description: `Mailchimp automation (${active ? 'active' : status === 'paused' ? 'paused' : 'not sending'})${list ? `, audience: ${list}` : ''}${a.start_time ? `, started ${String(a.start_time).slice(0, 10)}` : ''}.`,
+            steps,
+        };
+    });
+    const out = await commitPull(client, 'mailchimp', items);
+    if (data.truncated && out && typeof out === 'object') out.note = 'Only the first 500 automations were read.';
+    return out;
+};
+
 // Keap: campaigns and the sequences inside them. Keap's API does not give the campaign canvas or email text, so each
 // campaign becomes an Email Campaign card with a start step and one step per sequence, plus whether it is published.
 export async function importKeap(client, opts = {}) {
@@ -1434,7 +1486,7 @@ export async function syncRedtail(client, opts = {}) {
 // Which access entry holds the key for an outside system: the entry whose app name matches, preferring
 // one that actually has a key (stored securely, or still in plain text from before secure storage).
 const APP_NAME_HINTS = {
-    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'], keap: ['keap', 'infusionsoft'],
+    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'], mailchimp: ['mailchimp'], keap: ['keap', 'infusionsoft'],
     jotform: ['jotform'], activecampaign: ['activecampaign', 'active campaign'],
     youcanbookme: ['youcanbook', 'ycbm'], ycbm: ['youcanbook', 'ycbm'],
     processstreet: ['processstreet', 'process street']
@@ -1965,7 +2017,7 @@ Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
-    importYCBM, importActiveCampaign, importMailerLite, importKeap, importJotform, jotformRegionOf,
+    importYCBM, importActiveCampaign, importMailerLite, importMailchimp, importKeap, importJotform, jotformRegionOf,
     syncProcessStreet, syncRedtail, syncAllIntegrations, autoPullIntegrations, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
     openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,

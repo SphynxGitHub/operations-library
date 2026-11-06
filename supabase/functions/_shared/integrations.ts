@@ -7,7 +7,7 @@
 //   - errors are trimmed and have the key removed before they are sent back.
 // Pure code apart from the fetch function that is passed in, so it can be tested on its own.
 
-export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "keap", "ycbm", "redtail", "processstreet"] as const;
+export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "mailchimp", "keap", "ycbm", "redtail", "processstreet"] as const;
 export type Service = typeof SERVICES[number];
 
 export class UpstreamError extends Error {
@@ -31,6 +31,14 @@ async function getJson(f: FetchFn, url: string, headers: Record<string, string>,
   const text = await res.text();
   if (!res.ok) { const e = new UpstreamError(res.status, redact(text, key)); e.url = url.split("?")[0].replace(/^https:\/\//, ""); throw e; }
   try { return JSON.parse(text); } catch { throw new UpstreamError(502, "The service did not return JSON."); }
+}
+
+// Mailchimp keys end with the data centre the account lives on ("...-us21"); the API address is built from it. Only that
+// shape is accepted, so the address can only ever be https://<dc>.api.mailchimp.com.
+export function mailchimpBase(rawKey: unknown): string {
+  const m = /^[A-Za-z0-9]{16,64}-([a-z]{2,4}\d{1,3})$/.exec(String(rawKey ?? "").trim());
+  if (!m) throw new BadRequest("A Mailchimp API key ends with a dash and a code like -us21. Check that the whole key was entered.");
+  return `https://${m[1]}.api.mailchimp.com/3.0`;
 }
 
 // ActiveCampaign accounts live at https://<account>.api-us1.com (or .activehosted.com). Anything else is refused.
@@ -128,6 +136,41 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
     }
     case "mailerlite":
       return await getJson(f, "https://connect.mailerlite.com/api/automations", { Authorization: `Bearer ${key}` }, key);
+    case "mailchimp": {
+      // Classic Automations (Marketing API v3) with each automation's emails. Mailchimp's newer Customer Journeys builder is not
+      // listed by this API, so only classic automations come back. Basic login: any user name, the API key as the password.
+      const base = mailchimpBase(key);
+      const auth = { Authorization: `Basic ${btoa(`sphynx:${key.trim()}`)}` };
+      const aFields = "total_items,automations.id,automations.status,automations.create_time,automations.start_time,automations.settings.title,automations.trigger_settings.workflow_type,automations.trigger_settings.workflow_title,automations.recipients.list_name";
+      let automations: any[] = [];
+      let truncated = false;
+      for (let offset = 0, pages = 0; ; pages++, offset += 100) {
+        if (pages >= 5) { truncated = true; break; }
+        const data = await getJson(f, `${base}/automations?count=100&offset=${offset}&fields=${aFields}`, auth, key);
+        const page: any[] = data.automations || [];
+        automations = automations.concat(page);
+        if (page.length < 100 || automations.length >= (data.total_items ?? 0)) break;
+      }
+      // The emails inside each automation are one call each, a few at a time. A failure on one automation (for example
+      // Mailchimp refusing that one) leaves it without emails and flagged, instead of failing the whole pull.
+      const eFields = "emails.id,emails.position,emails.status,emails.delay,emails.settings.title,emails.settings.subject_line";
+      let next = 0;
+      const worker = async () => {
+        while (next < automations.length) {
+          const a = automations[next++];
+          if (!/^[A-Za-z0-9]{4,40}$/.test(String(a?.id ?? ""))) { a.emails = []; continue; }
+          try {
+            const d = await getJson(f, `${base}/automations/${a.id}/emails?fields=${eFields}`, auth, key);
+            a.emails = (d.emails || []).slice().sort((x: any, y: any) => (x.position ?? 0) - (y.position ?? 0));
+          } catch (e) {
+            if (e instanceof UpstreamError && (e.status === 401)) throw e;
+            a.emails = []; a.emailsError = true;
+          }
+        }
+      };
+      await Promise.all([worker(), worker(), worker(), worker(), worker()]);
+      return { automations, truncated };
+    }
     case "keap": {
       // Keap (Infusionsoft) REST v1 with a Service Account Key sent as a Bearer token (developer.keap.com/pat-and-sak). Campaigns come back a page at a time with the
       // names of their sequences; the steps inside a sequence are not available through the API.
