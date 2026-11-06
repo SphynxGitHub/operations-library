@@ -199,7 +199,16 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
         }
         if (page >= Number(data.pagination?.total_pages || 1)) break;
       }
-      return { templates, truncated };
+      // Slant's automations come back as just an id and a name (no triggers or actions), so only those two are kept. If this list
+      // cannot be read the whole pull fails, so existing cards are never wrongly reported as removed.
+      const automations: any[] = [];
+      for (let page = 1; ; page++) {
+        if (page > 10) { truncated = true; break; }
+        const data = await getJson(f, `${SLANT}/automations?page=${page}&per_page=100`, auth, key);
+        for (const a of (data.data || [])) automations.push({ id: a.id, name: a.name });
+        if (page >= Number(data.pagination?.total_pages || 1)) break;
+      }
+      return { templates, automations, truncated };
     }
     case "keap": {
       // Keap (Infusionsoft) REST v1 with a Service Account Key sent as a Bearer token (developer.keap.com/pat-and-sak). Campaigns come back a page at a time with the

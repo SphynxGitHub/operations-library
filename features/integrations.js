@@ -737,7 +737,7 @@ export function upsertExternalResource(client, data) {
 const HUB_GROUPS = [
     { title: 'CRM workflows', items: [
         { key: 'wealthbox', name: 'Wealthbox', desc: 'Workflow templates', icon: 'network', creds: 'wealthbox' },
-        { key: 'slant', name: 'Slant', desc: 'Workflows (project templates)', icon: 'workflow', creds: 'slant' },
+        { key: 'slant', name: 'Slant', desc: 'Workflows and automations', icon: 'workflow', creds: 'slant' },
         { key: 'redtail', name: 'Redtail', desc: 'CRM workflow templates', icon: 'contact', creds: 'redtail' },
     ] },
     { title: 'Forms and scheduling', items: [
@@ -1233,9 +1233,9 @@ export async function importMailchimp(client, opts = {}) {
     return out;
 };
 
-// Slant: its workflows are "project templates". Each template becomes a Workflow card with one step per milestone (in order), and
+// Slant: its workflows are "project templates"; its automations come in by name only (see below). Each template becomes a Workflow card with one step per milestone (in order), and
 // each step says what moves it on, the outcomes it offers and the form fields it asks for. Slant's API does not give the tasks
-// inside a milestone, and has nothing for Sequences (its email campaigns), so those are not pulled.
+// inside a milestone, and has nothing for Sequences (its email campaigns), so those are not pulled. Automations are listed by name only.
 const slText = (v) => (typeof v === 'string' && v.trim() && v.trim() !== '<string>' ? v.trim() : '');
 export async function importSlant(client, opts = {}) {
     const creds = OL.getCredsForApp(client, 'slant');
@@ -1270,8 +1270,17 @@ export async function importSlant(client, opts = {}) {
             steps: steps.length ? steps : [placeholderStep('slant', t.id, 'Workflow Template', 'Slant')],
         };
     });
+    // Slant automations: the API gives only a name, so each is an inventory card with one placeholder step (the steps inside are
+    // not available). Their ids carry "auto:" so they can never be mistaken for a template's id.
+    (data.automations || []).filter((a) => a && a.id != null && String(a.name || '').trim()).forEach((a) => {
+        items.push({
+            externalId: `auto:${a.id}`, name: a.name, type: 'Automation', category: 'Flows', archetype: 'Multi-Level',
+            description: "Slant automation. Slant does not share what is inside an automation, so its steps are not shown here.",
+            steps: [placeholderStep('slant', `auto-${a.id}`, 'Slant Automation', 'Slant')],
+        });
+    });
     const out = await commitPull(client, 'slant', items);
-    if (data.truncated && out && typeof out === 'object') out.note = 'Only the first 1000 templates were read.';
+    if (data.truncated && out && typeof out === 'object') out.note = 'Only the first 1000 templates or automations were read.';
     return out;
 };
 
