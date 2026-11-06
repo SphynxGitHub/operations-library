@@ -1,6 +1,6 @@
 //======================= CORE / EXTERNAL SYNC =======================//
 // What happens to the things pulled from outside services (Calendly event types, Wealthbox and Redtail workflow
-// templates, Jotform forms, ActiveCampaign, MailerLite and Mailchimp automations, YouCanBook.me profiles, Process Street checklists)
+// templates, Jotform forms, ActiveCampaign, MailerLite and Mailchimp automations, YouCanBook.me profiles, Process Street checklists, Slant workflows)
 // after the service has answered. Pure functions on the project's card library: no database, no page.
 //
 //   1. reconcileExternal()   merges one service's pull into the cards already on the map. A card is matched by the
@@ -23,6 +23,7 @@ export const EXTERNAL_SOURCES = {
   activecampaign: { label: 'ActiveCampaign', idPrefix: 'ac',   legacyPrefixes: ['ac-'],             stepName: 'Automation Flow',     global: false },
   mailerlite:     { label: 'MailerLite',     idPrefix: 'ml',   legacyPrefixes: [],                  stepName: 'Automation Flow',     global: false },
   mailchimp:      { label: 'Mailchimp',      idPrefix: 'mc',   legacyPrefixes: [],                  stepName: 'Automation Flow',     global: false },
+  slant:          { label: 'Slant',          idPrefix: 'sl',   legacyPrefixes: [],                  stepName: 'Workflow Template',   global: false },
   keap:           { label: 'Keap',           idPrefix: 'kp',   legacyPrefixes: [],                  stepName: 'Campaign Sequence',   global: false },
   processstreet:  { label: 'Process Street', idPrefix: 'ps',   legacyPrefixes: ['ps-'],             stepName: 'Checklist Template',  global: false },
 };
@@ -184,11 +185,11 @@ export function logExternalPull(pd, summary, now = new Date().toISOString()) {
 
 const APP_SOURCE = [
   [/jotform/i, 'jotform'], [/calendly/i, 'calendly'], [/wealthbox/i, 'wealthbox'], [/redtail/i, 'redtail'],
-  [/active\s*campaign/i, 'activecampaign'], [/mailerlite/i, 'mailerlite'], [/mailchimp/i, 'mailchimp'], [/keap|infusionsoft/i, 'keap'], [/youcanbook|ycbm/i, 'ycbm'], [/process\s*street/i, 'processstreet'],
+  [/active\s*campaign/i, 'activecampaign'], [/mailerlite/i, 'mailerlite'], [/mailchimp/i, 'mailchimp'], [/\bslant\b/i, 'slant'], [/keap|infusionsoft/i, 'keap'], [/youcanbook|ycbm/i, 'ycbm'], [/process\s*street/i, 'processstreet'],
 ];
 const URL_SOURCE = [
   [/jotform\.com/i, 'jotform'], [/calendly\.com/i, 'calendly'], [/youcanbook\.me/i, 'ycbm'],
-  [/activehosted\.com|activecampaign\.com/i, 'activecampaign'], [/mailchimp\.com|list-manage\.com|mailchi\.mp/i, 'mailchimp'], [/keap\.app|infusionsoft\.com|keap\.com/i, 'keap'], [/processstreet\.com/i, 'processstreet'],
+  [/activehosted\.com|activecampaign\.com/i, 'activecampaign'], [/mailchimp\.com|list-manage\.com|mailchi\.mp/i, 'mailchimp'], [/slant\.app/i, 'slant'], [/keap\.app|infusionsoft\.com|keap\.com/i, 'keap'], [/processstreet\.com/i, 'processstreet'],
   [/wealthbox\.com/i, 'wealthbox'], [/redtail(technology|crm)?\.com/i, 'redtail'],
 ];
 // Field names that name a form, template, workflow, event type, automation... (not "email", "name of the contact", "note")

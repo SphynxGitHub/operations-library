@@ -7,7 +7,7 @@
 //   - errors are trimmed and have the key removed before they are sent back.
 // Pure code apart from the fetch function that is passed in, so it can be tested on its own.
 
-export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "mailchimp", "keap", "ycbm", "redtail", "processstreet"] as const;
+export const SERVICES = ["wealthbox", "jotform", "calendly", "activecampaign", "mailerlite", "mailchimp", "slant", "keap", "ycbm", "redtail", "processstreet"] as const;
 export type Service = typeof SERVICES[number];
 
 export class UpstreamError extends Error {
@@ -170,6 +170,36 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       };
       await Promise.all([worker(), worker(), worker(), worker(), worker()]);
       return { automations, truncated };
+    }
+    case "slant": {
+      // Slant "project templates" are its workflows: each has milestones (the stages), with outcomes and form fields. Personal access
+      // tokens are read-only by default, which is all this needs. Pages of up to 100; only the fields the app uses are passed on
+      // (the attachments' signed download links are left out on purpose).
+      const SLANT = "https://api.slant.app/v1";
+      const auth = { Authorization: `Bearer ${key.trim()}` };
+      let templates: any[] = [];
+      let truncated = false;
+      for (let page = 1; ; page++) {
+        if (page > 10) { truncated = true; break; }
+        const data = await getJson(f, `${SLANT}/project-templates?page=${page}&per_page=100`, auth, key);
+        for (const t of (data.data || [])) {
+          templates.push({
+            id: t.id, title: t.title, description: t.description, archived_at: t.archived_at, projectable_kind: t.projectable_kind,
+            enforce_sequential_milestones: t.enforce_sequential_milestones, company_wide: t.company_wide, updated_at: t.updated_at,
+            project_milestones: (t.project_milestones || []).map((m: any) => ({
+              id: m.id, title: m.title, sort_order: m.sort_order, auto_advance_trigger: m.auto_advance_trigger, auto_complete_tasks: m.auto_complete_tasks,
+              project_milestone_outcomes: (m.project_milestone_outcomes || []).map((o: any) => ({
+                id: o.id, label: o.label, destination: o.destination, sort_order: o.sort_order, target_project_milestone_id: o.target_project_milestone_id,
+              })),
+              project_milestone_form_fields: (m.project_milestone_form_fields || []).map((x: any) => ({
+                id: x.id, label: x.label, field_type: x.field_type, required: x.required, sort_order: x.sort_order, select_options: x.select_options,
+              })),
+            })),
+          });
+        }
+        if (page >= Number(data.pagination?.total_pages || 1)) break;
+      }
+      return { templates, truncated };
     }
     case "keap": {
       // Keap (Infusionsoft) REST v1 with a Service Account Key sent as a Bearer token (developer.keap.com/pat-and-sak). Campaigns come back a page at a time with the

@@ -44,6 +44,7 @@ const SYNC_SYSTEMS = [
     { id: 'activecampaign', name: 'ActiveCampaign', hints: ['activecampaign', 'active campaign'], pulls: 'your automations', extra: { label: 'ActiveCampaign API URL', placeholder: 'https://youraccount.api-us1.com' } },
     { id: 'mailerlite', name: 'MailerLite', hints: ['mailerlite'], pulls: 'your automations' },
     { id: 'mailchimp', name: 'Mailchimp', hints: ['mailchimp'], pulls: 'your automations' },
+    { id: 'slant', name: 'Slant', hints: ['slant'], pulls: 'your workflows' },
     { id: 'keap', name: 'Keap', hints: ['keap', 'infusionsoft'], pulls: 'your campaigns and sequences' },
     { id: 'ycbm', name: 'YouCanBook.me', hints: ['youcanbook', 'ycbm'], pulls: 'your booking pages', extra: { label: 'YouCanBook.me account email', placeholder: 'you@firm.com' } },
     { id: 'processstreet', name: 'Process Street', hints: ['processstreet', 'process street'], pulls: 'your workflows and their tasks' },

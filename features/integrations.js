@@ -4,7 +4,7 @@
 // through the PDF/print export functions at the tail of the file, which
 // were grouped in here since nothing else referenced them either).
 // Owns: Zap JSON import, and external service syncs (Wealthbox, Jotform,
-// Calendly, ActiveCampaign, MailerLite, Mailchimp, YouCanBookMe, Redtail, Process
+// Calendly, ActiveCampaign, MailerLite, Mailchimp, Slant, YouCanBookMe, Redtail, Process
 // Street), plus the Flow Map PDF export.
 //
 // NOTE: a genuine bug was found and fixed during this extraction — the
@@ -737,6 +737,7 @@ export function upsertExternalResource(client, data) {
 const HUB_GROUPS = [
     { title: 'CRM workflows', items: [
         { key: 'wealthbox', name: 'Wealthbox', desc: 'Workflow templates', icon: 'network', creds: 'wealthbox' },
+        { key: 'slant', name: 'Slant', desc: 'Workflows (project templates)', icon: 'workflow', creds: 'slant' },
         { key: 'redtail', name: 'Redtail', desc: 'CRM workflow templates', icon: 'contact', creds: 'redtail' },
     ] },
     { title: 'Forms and scheduling', items: [
@@ -771,7 +772,7 @@ function timeAgo(iso) {
 const SYNC_FN = {
     wealthbox: (c, o) => syncWealthbox(c, o), redtail: (c, o) => syncRedtail(c, o), jotform: (c, o) => importJotform(c, o),
     calendly: (c, o) => importCalendly(c, o), ycbm: (c, o) => importYCBM(c, o), activecampaign: (c, o) => importActiveCampaign(c, o),
-    mailerlite: (c, o) => importMailerLite(c, o), mailchimp: (c, o) => importMailchimp(c, o), keap: (c, o) => importKeap(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
+    mailerlite: (c, o) => importMailerLite(c, o), mailchimp: (c, o) => importMailchimp(c, o), slant: (c, o) => importSlant(c, o), keap: (c, o) => importKeap(c, o), processstreet: (c, o) => syncProcessStreet(c, o),
 };
 const emptySummary = (key) => ({ source: key, total: 0, added: [], renamed: [], changed: [], missing: [], restored: [], emptyPull: false });
 const changeCount = (s) => (s ? s.added.length + s.renamed.length + s.changed.length + s.missing.length + s.restored.length : 0);
@@ -1232,6 +1233,48 @@ export async function importMailchimp(client, opts = {}) {
     return out;
 };
 
+// Slant: its workflows are "project templates". Each template becomes a Workflow card with one step per milestone (in order), and
+// each step says what moves it on, the outcomes it offers and the form fields it asks for. Slant's API does not give the tasks
+// inside a milestone, and has nothing for Sequences (its email campaigns), so those are not pulled.
+const slText = (v) => (typeof v === 'string' && v.trim() && v.trim() !== '<string>' ? v.trim() : '');
+export async function importSlant(client, opts = {}) {
+    const creds = OL.getCredsForApp(client, 'slant');
+    if (!hasKey(creds)) throw new Error("Slant API token missing in Credentials.");
+    await secureEntry(client, creds);
+
+    const data = await importFrom('slant', client.id, creds.id);
+    const templates = (data.templates || []).filter((t) => t && t.id != null);
+
+    const items = templates.map((t) => {
+        const ms = (Array.isArray(t.project_milestones) ? t.project_milestones : []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        const titleOf = new Map(ms.map((m) => [String(m.id), m.title || 'a milestone']));
+        const steps = ms.map((m) => {
+            const bits = [];
+            if (m.auto_advance_trigger) bits.push(`Moves on: ${String(m.auto_advance_trigger).replace(/_/g, ' ')}`);
+            (m.project_milestone_outcomes || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).forEach((o) => {
+                const dest = o.target_project_milestone_id && titleOf.get(String(o.target_project_milestone_id))
+                    || String(o.destination || '').replace(/_/g, ' ');
+                bits.push(`Outcome: ${o.label || 'Done'}${dest ? ' \u2192 ' + dest : ''}`);
+            });
+            const fields = (m.project_milestone_form_fields || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+                .map((f) => `${f.label || 'Field'}${f.field_type ? ' (' + f.field_type + (f.required ? ', required' : '') + ')' : (f.required ? ' (required)' : '')}`);
+            if (fields.length) bits.push(`Asks: ${fields.join(', ')}`);
+            return { id: `sl-${t.id}-m${m.id}`, name: m.title || 'Milestone', appName: 'Slant', description: bits.join(' \u00b7 ') };
+        });
+        const archived = !!t.archived_at;
+        const about = slText(t.description);
+        return {
+            externalId: t.id, name: t.title || `Workflow ${t.id}`, type: 'Workflow', category: 'Flows', archetype: 'Multi-Level',
+            serviceActive: !archived,
+            description: `Slant workflow${archived ? ' (archived)' : ''}${t.projectable_kind ? `, for ${t.projectable_kind}s` : ''}${t.enforce_sequential_milestones ? ', milestones in order' : ''}.${about ? ' ' + about : ''}`,
+            steps: steps.length ? steps : [placeholderStep('slant', t.id, 'Workflow Template', 'Slant')],
+        };
+    });
+    const out = await commitPull(client, 'slant', items);
+    if (data.truncated && out && typeof out === 'object') out.note = 'Only the first 1000 templates were read.';
+    return out;
+};
+
 // Keap: campaigns and the sequences inside them. Keap's API does not give the campaign canvas or email text, so each
 // campaign becomes an Email Campaign card with a start step and one step per sequence, plus whether it is published.
 export async function importKeap(client, opts = {}) {
@@ -1486,7 +1529,7 @@ export async function syncRedtail(client, opts = {}) {
 // Which access entry holds the key for an outside system: the entry whose app name matches, preferring
 // one that actually has a key (stored securely, or still in plain text from before secure storage).
 const APP_NAME_HINTS = {
-    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'], mailchimp: ['mailchimp'], keap: ['keap', 'infusionsoft'],
+    wealthbox: ['wealthbox'], redtail: ['redtail'], calendly: ['calendly'], mailerlite: ['mailerlite'], mailchimp: ['mailchimp'], slant: ['slant'], keap: ['keap', 'infusionsoft'],
     jotform: ['jotform'], activecampaign: ['activecampaign', 'active campaign'],
     youcanbookme: ['youcanbook', 'ycbm'], ycbm: ['youcanbook', 'ycbm'],
     processstreet: ['processstreet', 'process street']
@@ -2017,7 +2060,7 @@ Object.assign(window.OL, zapImport.api);
 Object.assign(window.OL, {
     processZapLogic, bulkImportZaps, syncWealthbox, openImportHub,
     upsertExternalResource, cleanLegacyResourceNames, syncExternalIntegrations, importCalendly,
-    importYCBM, importActiveCampaign, importMailerLite, importMailchimp, importKeap, importJotform, jotformRegionOf,
+    importYCBM, importActiveCampaign, importMailerLite, importMailchimp, importSlant, importKeap, importJotform, jotformRegionOf,
     syncProcessStreet, syncRedtail, syncAllIntegrations, autoPullIntegrations, getCredsForApp, printFlowMap,
     _printIcon, _printFlowchartHtml, _printCard, _printListHtml, _printStepsHtml,
     openClickUpImportModal, handleClickUpCSVFile, renderClickUpImportStep,
