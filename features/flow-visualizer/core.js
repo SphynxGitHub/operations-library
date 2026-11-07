@@ -2295,7 +2295,7 @@ export function printFlowDiagram(orientation) {
   el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
   el.innerHTML = `<div style="background:var(--panel);color:var(--text);border:1px solid var(--panel-border);border-radius:14px;width:min(760px,94vw);padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5);">
     <div style="font-size:17px;font-weight:800;margin-bottom:4px;">Print the flow map</div>
-    <div style="font-size:12px;opacity:.7;margin-bottom:14px;">Choose what goes in this printout. Print the parts together or one at a time.</div>
+    <div style="font-size:12px;opacity:.7;margin-bottom:14px;">Choose what goes in this printout. Print the parts together or one at a time.<br>To save a PDF, pick <b>Save as PDF</b> as the destination in the print window. Do not use <b>Microsoft Print to PDF</b>: it turns every page into a large picture and the file often will not open.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       ${row('diagram', 'Flow diagram', 'The step cards and arrows (' + orientation + ').')}
       ${row('items', 'Questions, action items and notes', 'Numbered flags on the cards plus the list at the end.')}
