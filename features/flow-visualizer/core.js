@@ -2879,9 +2879,11 @@ export function _fvRenderSteps(resources) {
           const cardY   = estY;
 
           // Use first member's type color and step name — all members share the same step
-          const consolTc   = OL._fvGetType(members[0].res.type);
-          const consolName = members[0].step.name || 'Unnamed Step';
-          const consolApp  = members[0].step.appName || '';
+          // the step marked as the group's title (button on each step when the card is open) names the card; otherwise the first
+          const titleM     = members.find(m => m.step.groupTitle) || members[0];
+          const consolTc   = OL._fvGetType(titleM.res.type);
+          const consolName = titleM.step.name || 'Unnamed Step';
+          const consolApp  = titleM.step.appName || '';
 
           const consolEl = document.createElement('div');
           consolEl.className = 'fv-step-card';
@@ -2921,6 +2923,10 @@ export function _fvRenderSteps(resources) {
                   <div style="font-size:9px;font-weight:700;color:${tc.color};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">${esc(m.res.name)}</div>
                   <div style="font-size:11px;color:var(--text-main);line-height:1.3;">${esc(m.step.name||'Unnamed Step')}</div>
                   ${appBadge}
+                  ${m === titleM
+                    ? `<div style="font-size:9px;font-weight:700;color:var(--accent);margin-top:4px;">Card title</div>`
+                    : `<button class="fv-col-btn no-print" style="margin-top:4px;width:auto;padding:1px 6px;font-size:9px;" title="Name the card after this step"
+                         onclick="event.stopPropagation();OL._fvSetGroupTitle('${m.res.id}','${m.step.id}')">Use as card title</button>`}
                 </div>`;
               }).join('')}
             </div>`;
@@ -3250,6 +3256,19 @@ export function _fvToggleConsolidated(headerEl) {
   }
   // Re-render so the measurement pass uses the correct expanded card height
   // and repositions all cards below it correctly
+  OL.renderVisualizer();
+};
+
+// Make this step the one that names its group's combined card
+export function _fvSetGroupTitle(resId, stepId) {
+  const data = OL.getCurrentProjectData();
+  const all  = data.localResources || data.resources || [];
+  const res  = all.find(r => String(r.id) === String(resId));
+  const step = res && (res.steps || []).find(s => String(s.id) === String(stepId));
+  if (!step || !step.stepGroup) return;
+  all.forEach(r => (r.steps || []).forEach(s => { if (s.stepGroup === step.stepGroup) delete s.groupTitle; }));
+  step.groupTitle = true;
+  OL.persist();
   OL.renderVisualizer();
 };
 
@@ -9908,7 +9927,7 @@ Object.assign(window.OL, {
     _fvRenderList, _fvBuildFlowchartShell, _fvDropAtIndex, _fvRailDrop,
     _fvLaneDragOver, _fvLaneDragLeave, _fvLaneDrop, _fvComputeLayout,
     getLucideSVG, _fvBuildCard, _fvCardDragStart, _fvCardDragEnd,
-    _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup,
+    _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, _fvSetGroupTitle,
     _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, fvSetFlowShape, printFlowDiagram,
     _fvDrawStepConnections, _fvSetupCardDrag, _fvEditStageName, _fvJumpToLane,
     _fvSyncRailHeights, _fvDrawConnections, _fvHighlightGlobalConnections, _fvTidy,
