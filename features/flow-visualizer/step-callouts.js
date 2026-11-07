@@ -471,19 +471,26 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     const d = lib.description || lib.notes; if (d) bits.push(`<div class="apx-where">${e2(clip(plain(d), 300))}</div>`);
     if (lib.emailSubject) bits.push(`<div class="apx-where"><b>Subject:</b> ${e2(lib.emailSubject)}</div>`);
     // the email as written, with its formatting (cleaned the same way the app cleans other pasted HTML)
-    if (snapshots && lib.emailBody) {
-      const clean = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(String(lib.emailBody).replace(/<img\b[^>]*>/gi, ''), { images: false }) : esc(plain(lib.emailBody)).replace(/\n/g, '<br>');
-      bits.push(`<div class="apx-email">${clean}</div>`);
-    }
     return bits.join('');
+  };
+  // The email as written, on its own full-width row under its item. Styles, scripts, head and images are dropped first (an email's own
+  // <style> block would print as text); an email too long to be a snapshot is cut to its first part as plain text.
+  const snapshotOf = (e) => {
+    if (!snapshots) return '';
+    const lib = e.libId ? libById(e.libId) : null; if (!lib || !lib.emailBody) return '';
+    const raw = String(lib.emailBody).replace(/<!--[\s\S]*?-->/g, '').replace(/<(style|script|head|title|svg|noscript)\b[\s\S]*?<\/\1>/gi, '').replace(/<(meta|link|base)\b[^>]*>/gi, '').replace(/<img\b[^>]*>/gi, '');
+    let inner;
+    if (raw.length > 9000) inner = esc(clip(plain(raw), 2500)).replace(/\n/g, '<br>') + '<br><i>(shortened: open the template for the full email)</i>';
+    else inner = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(raw, { images: false }) : esc(plain(raw)).replace(/\n/g, '<br>');
+    return `<tr class="apx-row apx-row-long apx-snap"><td></td><td colspan="3"><div class="apx-email">${inner}</div></td></tr>`;
   };
   const rows = entries.map((e) => {
     const k = KIND[e.kind] || KIND.other;
-    return `<tr class="apx-row${snapshots && e.libId && (libById(e.libId) || {}).emailBody ? ' apx-row-long' : ''}">
+    return `<tr class="apx-row">
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
-      <td class="apx-link">${e.url ? e2(clip(e.url, 240)) : '<span class="apx-none">No link</span>'}</td></tr>`;
+      <td class="apx-link">${e.url ? e2(clip(e.url, 240)) : '<span class="apx-none">No link</span>'}</td></tr>${snapshotOf(e)}`;
   }).join('');
   return `<section class="apx apx-collateral">
     <div class="apx-head"><span class="apx-title">${e2(title)}</span><span class="apx-sub">${e2(sub)}</span></div>

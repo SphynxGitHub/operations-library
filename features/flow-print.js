@@ -97,6 +97,7 @@ export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight, 
     if (isBackground(el)) return;
     const top = num(el.style.top); const h = heightOf(el);
     let t = top; let b = top + h;
+    if (canMeasure && h > 0) { const sr = el.getBoundingClientRect(); if (sr.height) { t = Math.min(t, (sr.top - cRect.top) / k); b = Math.max(b, (sr.bottom - cRect.top) / k); } }
     if (canMeasure && typeof el.querySelectorAll === 'function' && h > 0) {
       el.querySelectorAll('*').forEach((d) => {
         const r = d.getBoundingClientRect();
@@ -300,7 +301,9 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .apx-email { margin: 6px 0; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0f172a; font-size: 11px; line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }
 .apx-email img, .apx-email table { max-width: 100% !important; height: auto; }
 .apx-email p { margin: 0 0 8px; } .apx-email a { color: #0f766e; text-decoration: underline; }
-.apx-email, .apx-email * { white-space: normal; }
+.apx-email, .apx-email * { white-space: normal; max-width: 100% !important; }
+.apx-email table, .apx-email thead, .apx-email tbody, .apx-email tr, .apx-email td, .apx-email th { display: block !important; width: auto !important; height: auto !important; }
+.apx-snap td { border-bottom: 1px solid #e2e8f0; padding: 0 6px 8px; }
 .apx-row.apx-row-long { break-inside: auto; page-break-inside: auto; }
 .apx-ctype { width: 96px; font-size: 11px; color: #475569; }
 .apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }

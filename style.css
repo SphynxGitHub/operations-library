@@ -2301,7 +2301,7 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 .modal-box.modal-wide > * { min-width: 0; max-width: 100%; }
 
 /* a jump drawn as its own small card beside the step (Steps view; features/flow-visualizer/references.js, jumpCardHtml) */
-.fv-jump-card { position: absolute; box-sizing: border-box; padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(61, 217, 197, 0.45); border-top: 3px solid #3dd9c5; background: rgba(61, 217, 197, 0.07); color: var(--accent); cursor: pointer; overflow: hidden; text-align: left; display: block; z-index: 2; }
+.fv-jump-card { position: absolute; margin: 0; box-sizing: border-box; padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(61, 217, 197, 0.45); border-top: 3px solid #3dd9c5; background: rgba(61, 217, 197, 0.07); color: var(--accent); cursor: pointer; overflow: hidden; text-align: left; display: block; z-index: 2; }
 .fv-jump-card:hover, .fv-jump-card:focus-visible { background: rgba(61, 217, 197, 0.18); outline: none; }
 .fv-jump-card.is-missing { border-color: rgba(239, 68, 68, 0.5); border-top-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.08); }
 .fv-jump-card .fv-jc-when { display: block; font-size: 10px; font-weight: 600; line-height: 1.3; opacity: .85; }
