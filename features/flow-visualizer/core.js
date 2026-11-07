@@ -2999,7 +2999,11 @@ export function _fvRenderSteps(resources) {
       wfMetaList.forEach(({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth }) => {
         const layoutOf = new Map((resMeta || []).map(rm => [rm.res, rm.layout]));
         const wfTop     = wfY;
-        const actualColY = wfTop + WF_PAD + WF_HDR + RES_HDR;
+        // Room under the headings = the tallest heading in THIS workflow as drawn (its title lines, notes / collateral chips, "used in" chip)
+        // plus a little air, instead of the allowance made for the tallest heading anywhere on the map.
+        const _hdrTall = Math.max(0, ...(resMeta || []).map(({ hdrEl }) => (hdrEl && hdrEl.offsetHeight) || 0));
+        const resHdrUsed = _hdrTall > 0 ? Math.min(RES_HDR, 2 + _hdrTall + 14) : RES_HDR;
+        const actualColY = wfTop + WF_PAD + WF_HDR + resHdrUsed;
 
         if (wfLblEl) wfLblEl.style.top = (wfTop + 9) + 'px';
         if (wfBgEl)  wfBgEl.style.top  = wfTop + 'px';
