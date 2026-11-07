@@ -303,7 +303,8 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .apx-email p { margin: 0 0 8px; } .apx-email a { color: #0f766e; text-decoration: underline; }
 .apx-email, .apx-email * { white-space: normal; max-width: 100% !important; }
 .apx-email table, .apx-email thead, .apx-email tbody, .apx-email tr, .apx-email td, .apx-email th { display: block !important; width: auto !important; height: auto !important; }
-.apx-snap td { border-bottom: 1px solid #e2e8f0; padding: 0 6px 8px; }
+.apx-snapblock { margin: 0 0 12px; }
+.apx-snaphead { font-size: 11px; font-weight: 700; margin: 0 0 3px; break-after: avoid; } .apx-snaphead b { color: #0f766e; margin-right: 6px; }
 .apx-row.apx-row-long { break-inside: auto; page-break-inside: auto; }
 .apx-ctype { width: 96px; font-size: 11px; color: #475569; }
 .apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }

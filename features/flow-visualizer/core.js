@@ -3097,6 +3097,7 @@ export function _fvRenderSteps(resources) {
 
             // Pass 3: position each column, honouring minY constraints as steps are stacked
             let maxBottom = y;
+            const classicRuns = [];
             byRes.forEach((cards, res) => {
                  const lay = layoutOf.get(res);
                  if (isLaneLayout(lay)) {   // imported Zap: paths sit side by side, each lane stacks down from its path step
@@ -3109,7 +3110,6 @@ export function _fvRenderSteps(resources) {
                 maxBottom = Math.max(maxBottom, out.bottom);
                 return;
               }
-              let ry = y;
               // A step and the branch steps that hang off it share a layout row (_fvLayoutResource) and sit SIDE BY SIDE,
               // like the flowchart view already does. This used to stack every card one under the other in array order,
               // so branch steps (which are already shifted to the right) stepped down diagonally and the lines crossed cards.
@@ -3120,38 +3120,59 @@ export function _fvRenderSteps(resources) {
                 if (!rowsMap.has(key)) rowsMap.set(key, []);
                 rowsMap.get(key).push(c);
               });
-              [...rowsMap.keys()].sort((a, b) => a - b).forEach(key => {
-                const rowCards = rowsMap.get(key);
-                let rowTop = ry;
-                rowCards.forEach(({ el }) => {
-                  const constraint = minY.get(el);
-                  if (constraint !== undefined && constraint > rowTop) rowTop = constraint;
-                });
-                let rowH = 0;
-                rowCards.forEach(({ step, el }) => {
-                  { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
-                  rowH = Math.max(rowH, hOf(el));
-                });
-                // Leave room under this row for the lines that run down to the next one: a plain arrow needs a little,
-                // a link with logic (the lambda badge) needs more so the badge and arrowhead aren't squeezed between cards.
-                let gapAfter = STEP_GAP;
-                rowCards.forEach(({ step }) => {
-                  _fvGetEffectiveOut(step, res).forEach(l => {
-                    if (!l.targetId) return;
-                    const k = OL._refSplitIdx(l.targetId);
-                    if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
-                    const tRow = lay && lay[l.targetId.substring(k + 1)] ? lay[l.targetId.substring(k + 1)].row : undefined;
-                    if (tRow === undefined || tRow <= key) return;   // sideways / upward links don't need vertical room
-                    const types = l.types || [l.type || 'next'];
-                    const hasLogic = types.some(t => ['condition', 'loop', 'delay'].includes(t))
-                        || (l.rule || '').toString().trim() || (l.loopLimit || '').toString().trim() || (l.delayValue || '').toString().trim();
-                    gapAfter = Math.max(gapAfter, hasLogic ? Math.max(64, ruleTagH(l.rule) + 30) : 40);
-                  });
-                });
-                ry = rowTop + rowH + gapAfter;
-                maxBottom = Math.max(maxBottom, rowTop + rowH);
-              });
+              classicRuns.push({ res, lay, rowsMap, keys: [...rowsMap.keys()].sort((x, y2) => x - y2), ry: y });
             });
+
+            // Put one row of cards at its top and work out where the next row of that process starts. Room is left under the row for the
+            // lines that run down to the next one: a plain arrow needs a little, a link with logic (the lambda badge) needs more so the
+            // badge and arrowhead aren't squeezed between cards.
+            const rowFloor = (rowCards, ry) => {
+              let rowTop = ry;
+              rowCards.forEach(({ el }) => { const constraint = minY.get(el); if (constraint !== undefined && constraint > rowTop) rowTop = constraint; });
+              return rowTop;
+            };
+            const placeRow = (run, key, rowTop) => {
+              const rowCards = run.rowsMap.get(key); const { res, lay } = run;
+              let rowH = 0;
+              rowCards.forEach(({ step, el }) => {
+                { el.style.top = rowTop + 'px'; step.coords.y = rowTop; }
+                rowH = Math.max(rowH, hOf(el));
+              });
+              let gapAfter = STEP_GAP;
+              rowCards.forEach(({ step }) => {
+                _fvGetEffectiveOut(step, res).forEach(l => {
+                  if (!l.targetId) return;
+                  const k = OL._refSplitIdx(l.targetId);
+                  if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
+                  const tRow = lay && lay[l.targetId.substring(k + 1)] ? lay[l.targetId.substring(k + 1)].row : undefined;
+                  if (tRow === undefined || tRow <= key) return;   // sideways / upward links don't need vertical room
+                  const types = l.types || [l.type || 'next'];
+                  const hasLogic = types.some(t => ['condition', 'loop', 'delay'].includes(t))
+                      || (l.rule || '').toString().trim() || (l.loopLimit || '').toString().trim() || (l.delayValue || '').toString().trim();
+                  gapAfter = Math.max(gapAfter, hasLogic ? Math.max(64, ruleTagH(l.rule) + 30) : 40);
+                });
+              });
+              maxBottom = Math.max(maxBottom, rowTop + rowH);
+              return rowTop + rowH + gapAfter;
+            };
+            if (PRINTING && classicRuns.length > 1) {
+              // On paper the processes side by side share their rows: the 1st step of each starts at one height, then the 2nd, and so on.
+              // Pages are cut along a straight line between rows, and with every column on its own stagger there was no such line,
+              // so pages ended early with a blank bottom.
+              let shared = y;
+              const most = Math.max(...classicRuns.map((r) => r.keys.length));
+              for (let i = 0; i < most; i++) {
+                const live = classicRuns.filter((r) => r.keys[i] !== undefined);
+                const top = Math.max(shared, ...live.map((r) => rowFloor(r.rowsMap.get(r.keys[i]), shared)));
+                const nexts = live.map((r) => placeRow(r, r.keys[i], top));
+                shared = Math.max(shared, ...nexts);
+              }
+            } else {
+              classicRuns.forEach((run) => {
+                let ry = run.ry;
+                run.keys.forEach((key) => { const top = rowFloor(run.rowsMap.get(key), ry); ry = placeRow(run, key, top); });
+              });
+            }
 
             y = maxBottom + STEP_GAP;
             wfBottom = Math.max(wfBottom, maxBottom);

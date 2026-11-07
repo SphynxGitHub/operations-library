@@ -475,6 +475,8 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
   };
   // The email as written, on its own full-width row under its item. Styles, scripts, head and images are dropped first (an email's own
   // <style> block would print as text); an email too long to be a snapshot is cut to its first part as plain text.
+  // run through the parser once so every tag is closed: an email with stray or missing tags must not pull the page apart
+  const balanced = (h) => { try { const t = document.createElement('template'); t.innerHTML = h; const d = document.createElement('div'); d.appendChild(t.content.cloneNode(true)); return d.innerHTML; } catch (err) { return esc(plain(h)); } };
   const snapshotOf = (e) => {
     if (!snapshots) return '';
     const lib = e.libId ? libById(e.libId) : null; if (!lib || !lib.emailBody) return '';
@@ -482,7 +484,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     let inner;
     if (raw.length > 9000) inner = esc(clip(plain(raw), 2500)).replace(/\n/g, '<br>') + '<br><i>(shortened: open the template for the full email)</i>';
     else inner = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(raw, { images: false }) : esc(plain(raw)).replace(/\n/g, '<br>');
-    return `<tr class="apx-row apx-row-long apx-snap"><td></td><td colspan="3"><div class="apx-email">${inner}</div></td></tr>`;
+    return `<div class="apx-snapblock"><div class="apx-snaphead"><b>${e2(e.label)}</b> ${e2(e.name)}</div><div class="apx-email">${balanced(inner)}</div></div>`;
   };
   const rows = entries.map((e) => {
     const k = KIND[e.kind] || KIND.other;
@@ -490,13 +492,14 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
-      <td class="apx-link">${e.url ? e2(clip(e.url, 240)) : '<span class="apx-none">No link</span>'}</td></tr>${snapshotOf(e)}`;
+      <td class="apx-link">${e.url ? e2(clip(e.url, 240)) : '<span class="apx-none">No link</span>'}</td></tr>`;
   }).join('');
+  const snaps = entries.map(snapshotOf).join('');
   return `<section class="apx apx-collateral">
     <div class="apx-head"><span class="apx-title">${e2(title)}</span><span class="apx-sub">${e2(sub)}</span></div>
     <div class="apx-group"><table class="apx-table">
       <tr class="apx-th"><th>No.</th><th>Type</th><th>Name and where it is used</th><th>Link</th></tr>
-      ${rows}</table></div></section>`;
+      ${rows}</table></div>${snaps ? `<div class="apx-group"><div class="apx-h2">Email snapshots</div>${snaps}</div>` : ''}</section>`;
 }
 
 window.OL = window.OL || {};
