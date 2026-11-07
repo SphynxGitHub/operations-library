@@ -178,10 +178,11 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
   const svgParts = [];
   if (svgEl) {
     const sRect = typeof svgEl.getBoundingClientRect === 'function' ? svgEl.getBoundingClientRect() : null;
+    const zk = sRect && height ? (sRect.height / height) || 1 : 1;               // the screen may be zoomed
     Array.from(svgEl.children).forEach((ch) => {
       let top = -Infinity; let bottom = Infinity;
       if (sRect && !/^(defs|style|marker|symbol|lineargradient|radialgradient|clippath|mask|pattern)$/i.test(ch.tagName)) {
-        try { const r = ch.getBoundingClientRect(); if (r.width || r.height) { top = r.top - sRect.top - 6; bottom = r.bottom - sRect.top + 6; } } catch (e) { /* keep on every page */ }
+        try { const r = ch.getBoundingClientRect(); if (r.width || r.height) { top = (r.top - sRect.top) / zk - 6; bottom = (r.bottom - sRect.top) / zk + 6; } } catch (e) { /* keep on every page */ }
       }
       svgParts.push({ html: ch.outerHTML, top, bottom });
     });
@@ -386,6 +387,7 @@ export async function printFlowDiagram(deps, opts = {}) {
       title: client, subtitle: inc.diagram ? `Flow diagram (${orientation})` : 'Flow map lists', date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       headHtml: collectHeadHtml(doc), inherit: contentEl ? readInheritedText(contentEl, win) : null,
     });
+    try { console.info(`[flow print] ${pages.length} diagram pages, document ${(html.length / 1048576).toFixed(1)} MB (diagram ${inc.diagram}, items ${inc.items}, collateral ${inc.collateral}, snapshots ${inc.snapshots})`); } catch (e) { /* ignore */ }
     popup.document.open(); popup.document.write(html); popup.document.close();
     popup.focus();
     setTimeout(() => popup.print(), 900);
