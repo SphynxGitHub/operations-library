@@ -237,6 +237,8 @@ html, body { background: #fff !important; margin: 0; padding: 0; height: auto !i
 body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* one section per sheet of paper, never taller than the printable area, so the browser never has to split it */
 .pg { height: ${pageContentH - 3}px; overflow: hidden !important; break-inside: avoid; page-break-after: always; break-after: page; padding: 0; box-sizing: border-box; }
+/* effects the PDF would have to rasterize page by page (this is what makes a PDF huge) */
+.pg, .pg * { box-shadow: none !important; text-shadow: none !important; filter: none !important; backdrop-filter: none !important; animation: none !important; transition: none !important; }
 .pg:last-child { page-break-after: auto; break-after: auto; }
 .pg-head { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; display: flex; gap: 12px; align-items: baseline; height: ${PRINT_HEADER - 8}px; border-bottom: 1.5px solid #0f172a; margin-bottom: 8px; color: #0f172a; }
 .pg-title { font-size: 14px; font-weight: 800; }

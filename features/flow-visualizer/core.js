@@ -24,7 +24,7 @@ import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
 import { layoutDraft, routeDraftLink, edgesOf } from '../../core/frameout.js';
 const isDraftLayoutResource = (res) => !!(res && res.isDraft && res.source === 'frameout' && (res.steps || []).length);
-import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js';
+import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js?v=20261107b';
 
 //===========================INFINITE GRID (V2 CONSOLIDATED)===========================
 state.v2 = {
