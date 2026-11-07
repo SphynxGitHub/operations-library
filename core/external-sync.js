@@ -48,19 +48,27 @@ const hasHandLogic = (step) => !!step && (((step.logic && step.logic.out) || [])
 
 // Carries what a person did on an existing step onto the matching new one. Matching: same id (ids are stable per item),
 // else same name.
-function mergeSteps(oldSteps, newSteps) {
+//  - A step a person renamed keeps their name: each step remembers the name the service last gave it (_importName), and the
+//    service's name is only applied when the person has not changed it since.
+//  - A step a person deleted stays deleted: the card remembers every step id the service has delivered (_seenStepIds); an id
+//    in that list that is no longer on the card is not added back. `seen` is that list as a Set, or null for a card that has
+//    no record yet (it gets one on this pull).
+function mergeSteps(oldSteps, newSteps, seen = null) {
   const olds = oldSteps || [];
   const used = new Set();
   const merged = (newSteps || []).map((ns) => {
     const os = olds.find((o) => o && o.id === ns.id) || olds.find((o) => o && !used.has(o.id) && o.name === ns.name);
-    if (!os) return ns;
+    if (!os) return seen && seen.has(ns.id) ? null : { ...ns, _importName: ns.name };
     used.add(os.id);
     // Data tags the service reports are added to the step; tags a person added by hand stay.
     let tags = ns.datapoints ? [...(os.datapoints || []), ...ns.datapoints.filter((d) => !(os.datapoints || []).some((x) => x.id === d.id))] : os.datapoints;
     // tags an earlier pull made that this one replaces (a single full name becoming first and last name)
     if (tags && ns.dropTagNames && ns.dropTagNames.length) { const drop = ns.dropTagNames.map((n) => norm(n)); tags = tags.filter((d) => !drop.includes(norm(d && d.name))); }
-    return { ...os, name: ns.name, appName: ns.appName || os.appName, description: os.description || ns.description, id: os.id, ...(tags ? { datapoints: tags } : {}) };
+    const keepName = os._importName !== undefined ? os.name !== os._importName : os.name !== ns.name;
+    return { ...os, name: keepName ? os.name : ns.name, _importName: ns.name, appName: ns.appName || os.appName, description: os.description || ns.description, id: os.id, ...(tags ? { datapoints: tags } : {}) };
   });
+  const kept = merged.filter(Boolean);
+  merged.length = 0; merged.push(...kept);
   // a step the service no longer has: dropped, unless someone connected it to something by hand
   olds.forEach((o) => { if (o && !used.has(o.id) && hasHandLogic(o)) merged.push({ ...o, removedUpstream: true }); });
   return merged;
@@ -96,7 +104,7 @@ export function reconcileExternal(library, source, items, opts = {}) {
       if (item.keepSteps || item.seedSteps) {
         // Steps a person added or reordered stay (an import-made flow is a starting point, not a mirror of the service).
         // seedSteps are the default flow: added once, to a card that has not had them yet.
-        const merged = mergeSteps(old.steps, item.steps);
+        const merged = mergeSteps(old.steps, item.steps, Array.isArray(old._seenStepIds) ? new Set(old._seenStepIds) : null);
         const byId = new Map(merged.map((s) => [s.id, s]));
         const steps = [];
         (old.steps || []).forEach((o) => { if (!o) return; steps.push(byId.get(o.id) || o); byId.delete(o.id); });
@@ -107,8 +115,9 @@ export function reconcileExternal(library, source, items, opts = {}) {
         }
         next.steps = steps;
       } else {
-        next.steps = mergeSteps(old.steps, item.steps);
+        next.steps = mergeSteps(old.steps, item.steps, Array.isArray(old._seenStepIds) ? new Set(old._seenStepIds) : null);
       }
+      next._seenStepIds = [...new Set([...(old._seenStepIds || []), ...(item.steps || []).map((x) => x && x.id)])].filter((x) => x != null);
       // The service's on/off switch. A card is archived when the service turns it off (or when first seen off) and
       // unarchived when it is turned back on; between changes, a person's own archive choice stays.
       if (item.serviceActive !== undefined) {
@@ -147,6 +156,8 @@ export function reconcileExternal(library, source, items, opts = {}) {
     };
     if (item.defaults) { Object.assign(card, item.defaults); delete card.defaults; }
     if (item.description !== undefined) card._importDescription = item.description;
+    card._seenStepIds = (item.steps || []).map((x) => x && x.id).filter((x) => x != null);
+    (card.steps || []).forEach((st) => { if (st && st._importName === undefined) st._importName = st.name; });
     if (item.seedSteps) { card.steps = [...(item.steps || []), ...item.seedSteps]; card.flowSeeded = true; delete card.seedSteps; }
     delete card.keepSteps;
     if (item.serviceActive === false) { card.isArchived = true; card.autoArchived = true; }
