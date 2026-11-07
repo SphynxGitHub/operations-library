@@ -22,6 +22,7 @@
 // ================================================================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadClientTeams } from "../_shared/project-rules.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkWebhookSecret } from "../_shared/webhook-auth.ts";
 import { matchResourceByRootId } from "../_shared/resource-match.ts";
@@ -131,9 +132,9 @@ serve(async (req) => {
     // 2. Email against each project's Team tab addresses.
     if (!clientId && clientEmail) {
       const target = String(clientEmail).trim().toLowerCase();
-      const { data } = await supabase.from("workspace_clients").select("id, project_data");
+      const { data } = await loadClientTeams(supabase);
       const match = (data || []).find((c: any) =>
-        (c.project_data?.teamMembers || []).some((m: any) => (m?.email || "").trim().toLowerCase() === target)
+        (c.team || []).some((m: any) => (m?.email || "").trim().toLowerCase() === target)
       );
       if (match) clientId = match.id;
     }

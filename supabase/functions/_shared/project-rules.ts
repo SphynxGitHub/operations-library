@@ -6,6 +6,21 @@ export interface ProjectRule {
   emails: Set<string>;
 }
 
+// Every project's Team tab (project_data.teamMembers) and, when asked, its meta, WITHOUT downloading the rest of each project.
+// A whole project is 100 KB to 3 MB and a full pass over them all is ~28 MB; the scheduled sync runs this every few minutes, so
+// reading everything just to get email addresses cost gigabytes of egress a day. If Supabase ever rejects the narrow form it falls
+// back to the old full read, so matching keeps working (at the old cost) rather than silently stopping.
+export async function loadClientTeams(supabase: any, withMeta = false): Promise<{ data: any[] | null; error: any }> {
+  const narrow = await supabase.from("workspace_clients").select(withMeta ? "id, meta, team:project_data->teamMembers" : "id, team:project_data->teamMembers");
+  if (!narrow.error) {
+    return { data: (narrow.data || []).map((r: any) => ({ ...r, team: Array.isArray(r.team) ? r.team : [] })), error: null };
+  }
+  console.warn("Narrow Team tab read failed, using the full read:", narrow.error.message);
+  const full = await supabase.from("workspace_clients").select(withMeta ? "id, meta, project_data" : "id, project_data");
+  if (full.error) return { data: null, error: full.error };
+  return { data: (full.data || []).map((r: any) => ({ id: r.id, meta: r.meta, team: r.project_data?.teamMembers || [] })), error: null };
+}
+
 // Every client with at least one Team tab email gets a matching rule here —
 // matching itself is NOT gated behind the Gmail-label toggle (that toggle
 // only controls whether get-gmail-messages also applies a literal label in
@@ -14,7 +29,7 @@ export interface ProjectRule {
 // Gmail labels — silently did nothing for any client that hadn't opted
 // into Gmail labeling specifically.
 export async function loadProjectRules(supabase: any): Promise<ProjectRule[]> {
-  const { data, error } = await supabase.from("workspace_clients").select("id, meta, project_data");
+  const { data, error } = await loadClientTeams(supabase, true);
   if (error) throw new Error(`Failed to load client label rules: ${error.message}`);
 
   const rules: ProjectRule[] = [];
@@ -22,7 +37,7 @@ export async function loadProjectRules(supabase: any): Promise<ProjectRule[]> {
     const meta = row.meta || {};
     const clientName = (meta.name || "").trim();
 
-    const teamMembers = row.project_data?.teamMembers || [];
+    const teamMembers = row.team || [];
     const emails = new Set<string>(
       teamMembers.map((m: any) => (m?.email || "").trim().toLowerCase()).filter(Boolean)
     );
