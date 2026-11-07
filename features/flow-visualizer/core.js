@@ -2283,8 +2283,45 @@ export function fvSetFlowShape(shape) {
 
 // Print the real diagram (see features/flow-print.js)
 export function printFlowDiagram(orientation) {
-  const client = getActiveClient();
-  return _printFlowDiagram({ OL, document, window }, { orientation, title: (client && client.meta && client.meta.name) || 'Flow map' });
+  let saved = {};
+  try { saved = JSON.parse(sessionStorage.getItem('fv_print_inc') || '{}'); } catch (e) { /* ignore */ }
+  const inc = { diagram: true, items: true, collateral: true, snapshots: false, ...saved };
+  document.getElementById('fv-print-dlg')?.remove();
+  const row = (k, t, d) => `<label style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--panel-border);border-radius:10px;cursor:pointer;">
+      <input type="checkbox" data-k="${k}" ${inc[k] ? 'checked' : ''} style="margin-top:3px;">
+      <span><b style="font-size:14px;">${t}</b><br><span style="font-size:12px;opacity:.75;">${d}</span></span></label>`;
+  const el = document.createElement('div');
+  el.id = 'fv-print-dlg';
+  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
+  el.innerHTML = `<div style="background:var(--panel);color:var(--text);border:1px solid var(--panel-border);border-radius:14px;width:min(760px,94vw);padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px;">Print the flow map</div>
+    <div style="font-size:12px;opacity:.7;margin-bottom:14px;">Choose what goes in this printout. Print the parts together or one at a time.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${row('diagram', 'Flow diagram', 'The step cards and arrows (' + orientation + ').')}
+      ${row('items', 'Questions, action items and notes', 'Numbered flags on the cards plus the list at the end.')}
+      ${row('collateral', 'Collateral and templates', 'Numbered tags on the cards plus a list with names and links.')}
+      ${row('snapshots', 'Snapshots of email templates', 'Include each email as written. Links only when off; much smaller file.')}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+      <button type="button" data-a="cancel" class="btn btn-secondary" style="padding:8px 16px;">Cancel</button>
+      <button type="button" data-a="go" class="btn btn-primary" style="padding:8px 18px;">Print</button>
+    </div></div>`;
+  document.body.appendChild(el);
+  const snap = el.querySelector('[data-k="snapshots"]'); const col = el.querySelector('[data-k="collateral"]');
+  const sync = () => { snap.disabled = !col.checked; snap.parentElement.style.opacity = col.checked ? '1' : '.45'; };
+  col.addEventListener('change', sync); sync();
+  el.addEventListener('click', (ev) => {
+    const a = ev.target.closest && ev.target.closest('[data-a]');
+    if (ev.target === el || (a && a.dataset.a === 'cancel')) { el.remove(); return; }
+    if (!a) return;
+    const out = {};
+    el.querySelectorAll('input[data-k]').forEach((i) => { out[i.dataset.k] = i.checked; });
+    if (!out.diagram && !out.items && !out.collateral) { alert('Choose at least one part to print.'); return; }
+    try { sessionStorage.setItem('fv_print_inc', JSON.stringify(out)); } catch (e) { /* ignore */ }
+    el.remove();
+    const client = getActiveClient();
+    _printFlowDiagram({ OL, document, window }, { orientation, include: out, title: (client && client.meta && client.meta.name) || 'Flow map' });
+  });
 }
 
 // A resource placed in several workflows is drawn once per workflow. The extra copies are lightweight views of the real resource

@@ -169,7 +169,7 @@ export function annotateRefs(el, pageNo, plan) {
 // which cut cards in half, scattered arrows and added extra pages.)
 export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, orientation, title, subtitle, date, headHtml = '', heightOf, inherit, itemNo = null, collateralNo = null, appendixHtml = '' }) {
   const hOf = heightOf || ((el) => el.offsetHeight);
-  const kids = Array.from(contentEl.children).map((el) => {
+  const kids = !contentEl ? [] : Array.from(contentEl.children).map((el) => {
     const bg = isBackground(el);
     return { el, top: num(el.style.top), h: bg ? num(el.style.height) : hOf(el), bg };
   });
@@ -347,40 +347,44 @@ export async function printFlowDiagram(deps, opts = {}) {
   const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
   const box = pageBox(orientation);
   const prev = { layout: OL._fv.layout, override: OL._fv._colsOverride, laneCols: OL._fv._laneCols, renderedCols: OL._fv._renderedCols };
+  const inc = { diagram: true, items: true, collateral: true, snapshots: false, ...(opts.include || {}) };
   const popup = win.open('', '_blank', 'width=1000,height=800');
   if (!popup) { win.alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return false; }
   popup.document.write('<p style="font-family:sans-serif;padding:24px;color:#475569;">Preparing the diagram&hellip;</p>');
   try {
-    OL._fv.layout = 'steps';
-    OL._fv._printing = true;                                                       // the print drawing is a little tighter (see _fvRenderSteps)
-    const fitCols = chooseCols(null, box.w / PRINT_TARGET_SCALE);                 // as many columns as fit the paper ...
-    const capCols = typeof OL._fv.flowShape === 'number' ? OL._fv.flowShape : Infinity;   // ... but never more than the "Up to N columns" choice
-    OL._fv._colsOverride = Math.min(fitCols, capCols);                            // re-arrange to fit the paper
-    OL.renderVisualizer();
-    const ready = await waitForDiagram(doc);
-    const contentEl = doc.getElementById('fv-content');
-    if (!ready || !contentEl) throw new Error('The diagram did not finish drawing. Switch to Steps view and try again.');
-    const svgEl = doc.getElementById('fv-svg-layer');
-    const width = num(contentEl.style.width) || contentEl.scrollWidth;
-    const height = num(contentEl.style.height) || contentEl.scrollHeight;
-    const scale = fitScale(box.w, width, 1);
-    const pages = planPageBreaks(collectIntervals(contentEl, undefined, svgEl), height, (box.h - PRINT_SLACK) / scale);
+    let contentEl = null; let svgEl = null; let width = 0; let height = 0; let scale = 1; let pages = [];
+    if (inc.diagram) {
+      OL._fv.layout = 'steps';
+      OL._fv._printing = true;                                                       // the print drawing is a little tighter (see _fvRenderSteps)
+      const fitCols = chooseCols(null, box.w / PRINT_TARGET_SCALE);                 // as many columns as fit the paper ...
+      const capCols = typeof OL._fv.flowShape === 'number' ? OL._fv.flowShape : Infinity;   // ... but never more than the "Up to N columns" choice
+      OL._fv._colsOverride = Math.min(fitCols, capCols);                            // re-arrange to fit the paper
+      OL.renderVisualizer();
+      const ready = await waitForDiagram(doc);
+      contentEl = doc.getElementById('fv-content');
+      if (!ready || !contentEl) throw new Error('The diagram did not finish drawing. Switch to Steps view and try again.');
+      svgEl = doc.getElementById('fv-svg-layer');
+      width = num(contentEl.style.width) || contentEl.scrollWidth;
+      height = num(contentEl.style.height) || contentEl.scrollHeight;
+      scale = fitScale(box.w, width, 1);
+      pages = planPageBreaks(collectIntervals(contentEl, undefined, svgEl), height, (box.h - PRINT_SLACK) / scale);
+    }
     const client = opts.title || 'Flow map';
     const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     // questions, action items and notes: numbered flags on the cards and the list at the end
     const entries = typeof OL.fvCollectItems === 'function' ? OL.fvCollectItems() : [];
     const itemNo = { byStep: {}, byId: {} };
     entries.filter((e) => !e.item.done).forEach((e) => { const k = `${e.res.id}|${e.step.id}`; (itemNo.byStep[k] = itemNo.byStep[k] || []).push(e.label); });
-    const appendixHtml = entries.length && typeof OL.fvItemsAppendixHtml === 'function' ? OL.fvItemsAppendixHtml(entries, { title: 'Questions and Action Items', sub: `${client}  \u00b7  ${today}` }) : '';
+    const appendixHtml = inc.items && entries.length && typeof OL.fvItemsAppendixHtml === 'function' ? OL.fvItemsAppendixHtml(entries, { title: 'Questions and Action Items', sub: `${client}  \u00b7  ${today}` }) : '';
     // collateral (forms, email templates, sheets, docs): numbered tags on the cards and a list with the links at the end
     const coEntries = typeof OL.fvCollectCollateral === 'function' ? OL.fvCollectCollateral() : [];
-    const collateralNo = typeof OL.fvCollateralNumbers === 'function' ? OL.fvCollateralNumbers(coEntries) : null;
-    const collateralHtml = coEntries.length && typeof OL.fvCollateralAppendixHtml === 'function' ? OL.fvCollateralAppendixHtml(coEntries, { title: 'Collateral and Templates', sub: `${client}  \u00b7  ${today}` }) : '';
+    const collateralNo = inc.collateral && typeof OL.fvCollateralNumbers === 'function' ? OL.fvCollateralNumbers(coEntries) : null;
+    const collateralHtml = inc.collateral && coEntries.length && typeof OL.fvCollateralAppendixHtml === 'function' ? OL.fvCollateralAppendixHtml(coEntries, { snapshots: inc.snapshots, title: 'Collateral and Templates', sub: `${client}  \u00b7  ${today}` }) : '';
     const html = buildPrintHtml({
-      itemNo, collateralNo, appendixHtml: appendixHtml + collateralHtml,
+      itemNo: inc.items ? itemNo : null, collateralNo, appendixHtml: appendixHtml + collateralHtml,
       contentEl, svgEl, width, height, pages, scale, orientation,
-      title: client, subtitle: `Flow diagram (${orientation})`, date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      headHtml: collectHeadHtml(doc), inherit: readInheritedText(contentEl, win),
+      title: client, subtitle: inc.diagram ? `Flow diagram (${orientation})` : 'Flow map lists', date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      headHtml: collectHeadHtml(doc), inherit: contentEl ? readInheritedText(contentEl, win) : null,
     });
     popup.document.open(); popup.document.write(html); popup.document.close();
     popup.focus();

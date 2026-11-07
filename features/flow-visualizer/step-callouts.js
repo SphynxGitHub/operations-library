@@ -461,7 +461,7 @@ export function annotateCollateral(el, numbers) {
   });
 }
 
-export function collateralAppendixHtml(entries, { title = 'Collateral and Templates', sub = '' } = {}) {
+export function collateralAppendixHtml(entries, { title = 'Collateral and Templates', sub = '', snapshots = true } = {}) {
   if (!entries || !entries.length) return '';
   const e2 = (s) => esc(s);
   const plain = (h) => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
@@ -473,7 +473,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     const d = lib.description || lib.notes; if (d) bits.push(`<div class="apx-where">${e2(clip(plain(d), 300))}</div>`);
     if (lib.emailSubject) bits.push(`<div class="apx-where"><b>Subject:</b> ${e2(lib.emailSubject)}</div>`);
     // the email as written, with its formatting (cleaned the same way the app cleans other pasted HTML)
-    if (lib.emailBody) {
+    if (snapshots && lib.emailBody) {
       const clean = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(String(lib.emailBody), { images: true }) : esc(plain(lib.emailBody)).replace(/\n/g, '<br>');
       bits.push(`<div class="apx-email">${clean}</div>`);
     }
@@ -481,7 +481,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
   };
   const rows = entries.map((e) => {
     const k = KIND[e.kind] || KIND.other;
-    return `<tr class="apx-row${e.libId && (libById(e.libId) || {}).emailBody ? ' apx-row-long' : ''}">
+    return `<tr class="apx-row${snapshots && e.libId && (libById(e.libId) || {}).emailBody ? ' apx-row-long' : ''}">
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
