@@ -173,7 +173,19 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
     const bg = isBackground(el);
     return { el, top: num(el.style.top), h: bg ? num(el.style.height) : hOf(el), bg };
   });
-  const svgInner = svgEl ? svgEl.innerHTML : '';
+  // Each page used to carry a copy of EVERY arrow in the diagram (clipped by its window). With hundreds of arrows and dozens of
+  // pages that made a print file so heavy the PDF would not open. Now a page gets only the arrows that touch its slice.
+  const svgParts = [];
+  if (svgEl) {
+    const sRect = typeof svgEl.getBoundingClientRect === 'function' ? svgEl.getBoundingClientRect() : null;
+    Array.from(svgEl.children).forEach((ch) => {
+      let top = -Infinity; let bottom = Infinity;
+      if (sRect && !/^(defs|style|marker|symbol|lineargradient|radialgradient|clippath|mask|pattern)$/i.test(ch.tagName)) {
+        try { const r = ch.getBoundingClientRect(); if (r.width || r.height) { top = r.top - sRect.top - 6; bottom = r.bottom - sRect.top + 6; } } catch (e) { /* keep on every page */ }
+      }
+      svgParts.push({ html: ch.outerHTML, top, bottom });
+    });
+  }
   // where each shared process and each "See ..." step ended up, so the callouts can name the page
   const refPlan = planRefPages(kids.filter((k) => !k.bg).map((k) => {
     const cls = (k.el.className || '').toString();
@@ -202,7 +214,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
       parts.push(c.outerHTML);
     }
     const svg = svgEl
-      ? `<svg id="fv-svg-layer" xmlns="http://www.w3.org/2000/svg" viewBox="0 ${pg.y0} ${width} ${winH}" width="${width}" height="${winH}" style="position:absolute;left:0;top:0;width:${width}px;height:${winH}px;overflow:hidden;">${svgInner}</svg>`
+      ? `<svg id="fv-svg-layer" xmlns="http://www.w3.org/2000/svg" viewBox="0 ${pg.y0} ${width} ${winH}" width="${width}" height="${winH}" style="position:absolute;left:0;top:0;width:${width}px;height:${winH}px;overflow:hidden;">${svgParts.filter((q) => q.bottom > pg.y0 && q.top < pg.y1).map((q) => q.html).join('')}</svg>`
       : '';
     return `<section class="pg">
   <div class="pg-head"><span class="pg-title">${esc(title)}</span><span class="pg-sub">${esc(subtitle)}</span><span class="pg-meta">${esc(date)} &middot; page ${i + 1} of ${pages.length}</span></div>
@@ -274,6 +286,12 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* collateral chips print as numbered tags; the list at the end carries the names and links */
 .fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 1px 6px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
 .fv-co-no { font-weight: 800; color: #0f766e; }
+.fv-co-print span { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; max-width: none !important; }
+.apx-email { margin: 6px 0; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0f172a; font-size: 11px; line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }
+.apx-email img, .apx-email table { max-width: 100% !important; height: auto; }
+.apx-email p { margin: 0 0 8px; } .apx-email a { color: #0f766e; text-decoration: underline; }
+.apx-email, .apx-email * { white-space: normal; }
+.apx-row.apx-row-long { break-inside: auto; page-break-inside: auto; }
 .apx-ctype { width: 96px; font-size: 11px; color: #475569; }
 .apx-link { width: 34%; font-size: 10.5px; word-break: break-all; color: #0f766e; }
 .apx-none { color: #94a3b8; }
