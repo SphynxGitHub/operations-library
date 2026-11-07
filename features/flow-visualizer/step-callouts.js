@@ -474,7 +474,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
     if (lib.emailSubject) bits.push(`<div class="apx-where"><b>Subject:</b> ${e2(lib.emailSubject)}</div>`);
     // the email as written, with its formatting (cleaned the same way the app cleans other pasted HTML)
     if (snapshots && lib.emailBody) {
-      const clean = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(String(lib.emailBody), { images: true }) : esc(plain(lib.emailBody)).replace(/\n/g, '<br>');
+      const clean = typeof OL().sanitizeCommentHtml === 'function' ? OL().sanitizeCommentHtml(String(lib.emailBody).replace(/<img\b[^>]*>/gi, ''), { images: false }) : esc(plain(lib.emailBody)).replace(/\n/g, '<br>');
       bits.push(`<div class="apx-email">${clean}</div>`);
     }
     return bits.join('');
@@ -485,7 +485,7 @@ export function collateralAppendixHtml(entries, { title = 'Collateral and Templa
       <td class="apx-no">${e2(e.label)}</td>
       <td class="apx-ctype">${e2(typeOf(e))}</td>
       <td><div><b>${e2(e.name)}</b></div>${e.note ? `<div class="apx-where">${e2(clip(e.note, 300))}</div>` : ''}${detail(e)}<div class="apx-where">${e2(e.where)}</div></td>
-      <td class="apx-link">${e.url ? e2(e.url) : '<span class="apx-none">No link</span>'}</td></tr>`;
+      <td class="apx-link">${e.url ? e2(clip(e.url, 240)) : '<span class="apx-none">No link</span>'}</td></tr>`;
   }).join('');
   return `<section class="apx apx-collateral">
     <div class="apx-head"><span class="apx-title">${e2(title)}</span><span class="apx-sub">${e2(sub)}</span></div>

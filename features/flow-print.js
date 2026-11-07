@@ -389,7 +389,7 @@ export async function printFlowDiagram(deps, opts = {}) {
       title: client, subtitle: inc.diagram ? `Flow diagram (${orientation})` : 'Flow map lists', date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       headHtml: collectHeadHtml(doc), inherit: contentEl ? readInheritedText(contentEl, win) : null,
     });
-    try { console.info(`[flow print] ${pages.length} diagram pages, document ${(html.length / 1048576).toFixed(1)} MB (diagram ${inc.diagram}, items ${inc.items}, collateral ${inc.collateral}, snapshots ${inc.snapshots})`); } catch (e) { /* ignore */ }
+    try { console.warn(`[flow print] ${pages.length} diagram pages, document ${(html.length / 1048576).toFixed(1)} MB (diagram ${inc.diagram}, items ${inc.items}, collateral ${inc.collateral}, snapshots ${inc.snapshots})`); } catch (e) { /* ignore */ }
     popup.document.open(); popup.document.write(html); popup.document.close();
     popup.focus();
     setTimeout(() => popup.print(), 900);
