@@ -305,14 +305,19 @@ export function mergeIntoExisting(oldRes, newRes) {
   const oldByName = new Map();
   (oldRes.steps || []).forEach((s) => { if (s.zap && s.zap.stepId) oldByZapId.set(String(s.zap.stepId), s); else oldByName.set(s.name, s); });
 
+  // A step a person deleted stays deleted (the card remembers every Zap step it has been given), and a step a person renamed keeps
+  // their name (each step remembers the name Zapier last gave it).
+  const seen = Array.isArray(oldRes._seenZapStepIds) ? new Set(oldRes._seenZapStepIds.map(String)) : null;
   const newIdFor = new Map();
   merged.steps = newRes.steps.map((ns) => {
     const os = oldByZapId.get(String(ns.zap.stepId)) || oldByName.get(ns.name);
-    if (!os) return ns;
+    if (!os) return seen && seen.has(String(ns.zap.stepId)) ? null : { ...ns, _importName: ns.name };
+    const keepName = os._importName !== undefined ? os.name !== os._importName : os.name !== ns.name;
     newIdFor.set(ns.id, os.id);
     const hand = (os.logic && os.logic.out ? os.logic.out : []).filter((l) => l.targetId && !l._auto);
     return {
       ...ns,
+      name: keepName ? os.name : ns.name, _importName: ns.name,
       id: os.id,                                           // the old id keeps links from other cards working
       assignees: os.assignees && os.assignees.length ? os.assignees : ns.assignees,
       links: os.links || [],
@@ -320,6 +325,8 @@ export function mergeIntoExisting(oldRes, newRes) {
       logic: { in: [], out: [...ns.logic.out, ...hand] },
     };
   });
+  merged.steps = merged.steps.filter(Boolean);
+  merged._seenZapStepIds = [...new Set([...(oldRes._seenZapStepIds || []).map(String), ...newRes.steps.map((x) => String(x.zap.stepId))])];
   // the auto links were written with the new card's id and new step ids; point them at the kept ones
   const newPrefix = `${newRes.id}-`;
   const prefix = `${merged.id}-`;
@@ -329,6 +336,9 @@ export function mergeIntoExisting(oldRes, newRes) {
     const tail = t.startsWith(newPrefix) ? t.slice(newPrefix.length) : t.slice(t.lastIndexOf('-') + 1);
     l.targetId = `${prefix}${newIdFor.get(tail) || tail}`;
   }));
+  // an automatic link to a step that was deleted by hand has nothing to point at
+  const have = new Set(merged.steps.map((st) => `${prefix}${st.id}`));
+  merged.steps.forEach((st) => { st.logic.out = st.logic.out.filter((l) => !l._auto || !l.targetId || have.has(String(l.targetId)) || !String(l.targetId).startsWith(prefix)); });
   return merged;
 }
 
