@@ -24,7 +24,7 @@ import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
 import { layoutDraft, routeDraftLink, edgesOf } from '../../core/frameout.js';
 const isDraftLayoutResource = (res) => !!(res && res.isDraft && res.source === 'frameout' && (res.steps || []).length);
-import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js?v=20261107d';
+import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js?v=20261107e';
 
 //===========================INFINITE GRID (V2 CONSOLIDATED)===========================
 state.v2 = {
@@ -2957,6 +2957,36 @@ export function _fvRenderSteps(resources) {
     const hOf = (el) => (_heights.has(el) ? _heights.get(el) : el.offsetHeight);
     _heights.forEach((h, el) => _fvStepHeights.set(el, h));   // the line drawer reuses these
 
+    // Height of the condition tag that sits on a line (the same wrapping the tag drawing uses): on screen a one-line pill, on paper the
+    // whole condition wrapped onto as many lines as it needs. Cards are spaced so the tag fits between them.
+    const ruleTagH = (rule) => {
+      const txt = String(rule || '').trim();
+      if (!txt || !(OL._fv && OL._fv._printing)) return 20;
+      let lines = 0; let cur = '';
+      txt.split(/\s+/).forEach((word) => { if (cur && (cur + ' ' + word).length > 28) { lines++; cur = word; } else cur = cur ? cur + ' ' + word : word; });
+      if (cur) lines++;
+      return Math.max(20, Math.max(16, lines * 11.5 + 6));
+    };
+    // extra room (beyond the usual gap) each lane card needs under it for the tag on its line down to the card below in the same column
+    const laneExtraOf = (res, cards, lay, gap) => {
+      const extra = new Map();
+      cards.forEach(({ step, el }) => {
+        const from = lay && lay[String(step.id)]; if (!from) return;
+        let need = 0;
+        _fvGetEffectiveOut(step, res).forEach((l) => {
+          if (!l.targetId || l._implicit) return;
+          const rule = String(l.rule || '').trim(); if (!rule) return;
+          const k = OL._refSplitIdx(l.targetId);
+          if (String(l.targetId.substring(0, k)) !== String(res.id)) return;
+          const to = lay[l.targetId.substring(k + 1)];
+          if (!to || to.colOffset !== from.colOffset) return;
+          need = Math.max(need, ruleTagH(rule) + 18 - gap);
+        });
+        if (need > 0) extra.set(el, Math.ceil(need));
+      });
+      return extra;
+    };
+
     let curStageY = PAD_Y;
 
     stageMeta.forEach(({ stageBgEl, stageLblEl, stage, stageTop, wfMetaList }) => {
@@ -2998,7 +3028,8 @@ export function _fvRenderSteps(resources) {
             byRes.forEach((cards, res) => {
               const lay = layoutOf.get(res);
               if (isLaneLayout(lay)) {   // imported Zap: every column (lane) stacks on its own
-                stackColumns(cards, lay, y, gapFor(res), hOf).tops.forEach((t, el) => naturalTopY.set(el, t));
+                const _ex1 = laneExtraOf(res, cards, lay, gapFor(res));
+                stackColumns(cards, lay, y, gapFor(res), (el) => hOf(el) + (_ex1.get(el) || 0)).tops.forEach((t, el) => naturalTopY.set(el, t));
                 return;
               }
               let ry = y;
@@ -3024,7 +3055,8 @@ export function _fvRenderSteps(resources) {
             byRes.forEach((cards, res) => {
                  const lay = layoutOf.get(res);
                  if (isLaneLayout(lay)) {   // imported Zap: paths sit side by side, each lane stacks down from its path step
-                     const out = stackColumns(cards, lay, y, gapFor(res), hOf, (el) => minY.get(el));
+                     const _ex2 = laneExtraOf(res, cards, lay, gapFor(res));
+                     const out = stackColumns(cards, lay, y, gapFor(res), (el) => hOf(el) + (_ex2.get(el) || 0), (el) => minY.get(el));
                      cards.forEach(({ step, el }) => {
                          const top = out.tops.get(el);
                           { el.style.top = top + 'px'; step.coords.y = top; }   // pins are ignored here: the layout always decides
@@ -3068,7 +3100,7 @@ export function _fvRenderSteps(resources) {
                     const types = l.types || [l.type || 'next'];
                     const hasLogic = types.some(t => ['condition', 'loop', 'delay'].includes(t))
                         || (l.rule || '').toString().trim() || (l.loopLimit || '').toString().trim() || (l.delayValue || '').toString().trim();
-                    gapAfter = Math.max(gapAfter, hasLogic ? 64 : 40);
+                    gapAfter = Math.max(gapAfter, hasLogic ? Math.max(64, ruleTagH(l.rule) + 30) : 40);
                   });
                 });
                 ry = rowTop + rowH + gapAfter;
