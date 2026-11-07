@@ -451,9 +451,7 @@ export function annotateCollateral(el, numbers) {
       const tag = chip.ownerDocument.createElement('span');
       tag.className = chip.className.replace('is-open', '').trim() + ' fv-co-print';
       // the screen chip cuts a long name short; the printed tag carries all of it (the title is "Type: Full name")
-      const full = String(chip.getAttribute('title') || '').replace(/^[^:]*:\s*/, '');
       const inner = chip.ownerDocument.createElement('div'); inner.innerHTML = chip.innerHTML;
-      const sp = inner.querySelector('span'); if (sp && full) sp.textContent = full;
       tag.innerHTML = `<b class="fv-co-no">${label}</b>${inner.innerHTML}`;
       chip.replaceWith(tag); kept++;
     });

@@ -104,7 +104,15 @@ export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight, 
         t = Math.min(t, (r.top - cRect.top) / k); b = Math.max(b, (r.bottom - cRect.top) / k);
       });
     }
-    if (h > 0) out.push({ top: t, bottom: b });
+    if (h > 0) out.push({ top: t, bottom: b, card: !!(el.classList && el.classList.contains('fv-step-card')) });
+  });
+  // a heading (stage, workflow, process title) stays with the first card under it: its box is stretched down over that card,
+  // so a page never ends on a heading with its cards on the next page
+  const cardBoxes = out.filter((i) => i.card).sort((a, b) => a.top - b.top);
+  out.forEach((i) => {
+    if (i.card) return;
+    const first = cardBoxes.find((c) => c.top >= i.bottom - 1);
+    if (first) i.bottom = Math.max(i.bottom, first.bottom);
   });
   // logic tags: the icon pill and the condition pill (and any wrapped lines of it), measured where they really are
   if (svgEl && cRect && typeof svgEl.querySelectorAll === 'function') {
@@ -287,9 +295,8 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .fv-steps-res-head [style*="#e8a83a"], .fv-step-card [style*="color:#e8a83a"] { color: #1e3a8a !important; }
 .fv-steps-res-head [style*="background:#e8a83a"] { background: #1e3a8a !important; }
 /* collateral chips print as numbered tags; the list at the end carries the names and links */
-.fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 1px 6px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
+.fv-co-print { display: inline-flex !important; align-items: center; gap: 4px; padding: 2px 7px; border: 1.2px solid #334155; border-radius: 6px; background: #fff !important; color: #0f172a !important; font-size: 10px; font-weight: 600; max-width: 100%; }
 .fv-co-no { font-weight: 800; color: #0f766e; }
-.fv-co-print span { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; max-width: none !important; }
 .apx-email { margin: 6px 0; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0f172a; font-size: 11px; line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }
 .apx-email img, .apx-email table { max-width: 100% !important; height: auto; }
 .apx-email p { margin: 0 0 8px; } .apx-email a { color: #0f766e; text-decoration: underline; }

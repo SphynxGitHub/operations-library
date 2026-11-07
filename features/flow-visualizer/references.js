@@ -148,7 +148,7 @@ function oneRow(step, res, j) {
   const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}','${esc(j.id)}')`;
   const head = j.label ? `<span class="fv-jump-when">${esc(j.label)}</span>` : '';
   const to = `<span class="fv-jump-to">${j.label ? '' : 'See '}${esc(name)}</span>`;
-  return `<div class="fv-jump-row fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${head}${to}</span><span class="fv-ref-pg"></span></span></div>`;
+  return `<div class="fv-jump-row fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${head}${to}</span><span class="fv-ref-pg">${OL()._fv && OL()._fv._printing ? '&nbsp;' : ''}</span></span></div>`;
 }
 // The rows for a step's jumps (without the wrapper; see jumpRows).
 export function refChip(step, res) {
