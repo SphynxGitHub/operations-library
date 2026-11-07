@@ -2395,6 +2395,8 @@ export function _fvRenderSteps(resources) {
 
   const CARD_W    = 180;
   const COL_GAP   = 52;
+  const SIDE_W    = 150;  // a step's jumps are drawn as small cards beside it (width) ...
+  const SIDE_GAP  = 30;   // ... with room for the arrow between the step and them
   const ZONE_PAD  = 20;
   // While the printout is being drawn the layout is tightened: no stage label when there is only one stage, and a short
   // process heading (the draft chip is not printed, so its room is given back).
@@ -2693,15 +2695,17 @@ export function _fvRenderSteps(resources) {
         }));
         return Math.min(need, 300);
       };
+      // a process with jumps keeps a lane for their cards to the right of each of its columns
+      const sideOfRes = (res) => ((res.steps || []).some((st) => typeof OL.fvJumpCardsOf === 'function' && OL.fvJumpCardsOf(st, res).length) ? SIDE_W + SIDE_GAP : 0);
       let cumX = PAD_X;
       wfRes.forEach(r => {
         const rLayout = OL._fvLayoutResource(r);
         resLayouts.set(r, rLayout);
         resBaseX.set(r, cumX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
-        const g = gapFor(r, rLayout);
+        const g = gapFor(r, rLayout) + sideOfRes(r);
         resGap.set(r, g);
-        cumX += maxOff * (CARD_W + g) + CARD_W + COL_GAP;
+        cumX += maxOff * (CARD_W + g) + CARD_W + COL_GAP + sideOfRes(r);
       });
       const wfWidth = Math.max(cumX - PAD_X - COL_GAP + 28, 60);
       const wfRight = PAD_X + wfWidth;
@@ -2838,7 +2842,7 @@ export function _fvRenderSteps(resources) {
                   </div>
                   ${typeof OL.fvStepCalloutStrip === 'function' ? OL.fvStepCalloutStrip(step, res, 'card') : ''}
                 </div>
-                ${typeof OL.fvJumpRowsOut === 'function' ? OL.fvJumpRowsOut(step, res) : ''}
+                <!-- the ways out are drawn as small cards beside this one (see sideInfo in _fvRenderSteps), not as rows here -->
                 <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
                      showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
               if (!res._inst) OL._fvSetupCardDrag(div, res.id, step.id);   // copies are placed by the layout; moving one would move the real step
@@ -2954,8 +2958,45 @@ export function _fvRenderSteps(resources) {
       if (item.type === 'consolidated' && item.el && !_heights.has(item.el)) _heights.set(item.el, item.el.offsetHeight);
       (item.sectionCards || []).forEach(sc => { if (sc.el && !_heights.has(sc.el)) _heights.set(sc.el, sc.el.offsetHeight); });
     })));
-    const hOf = (el) => (_heights.has(el) ? _heights.get(el) : el.offsetHeight);
+    const hOfRaw = (el) => (_heights.has(el) ? _heights.get(el) : el.offsetHeight);
     _heights.forEach((h, el) => _fvStepHeights.set(el, h));   // the line drawer reuses these
+
+    // The ways out of each step are small cards beside it, joined by an arrow from the tag they belong to (the tag whose name is in the
+    // jump's text, e.g. "Form completed: <form>"). Worked out here, before the cards are stacked, so a step with several of them
+    // gets the room under it for the stack.
+    const sideInfo = new Map();      // card element -> { res, step, items: [{ c, when, relY, h, anchorY, chip }], extra }
+    const sideExtra = new Map();
+    const _norm = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ seqMeta }) => (seqMeta || []).forEach((item) => (item.sectionCards || []).forEach((sc) => {
+      const cards = typeof OL.fvJumpCardsOf === 'function' ? OL.fvJumpCardsOf(sc.step, sc.res) : [];
+      if (!cards.length) return;
+      const cardH = hOfRaw(sc.el);
+      const cr = sc.el.getBoundingClientRect();
+      const kz = sc.el.offsetHeight ? (cr.height / sc.el.offsetHeight) || 1 : 1;
+      const chips = Array.from(sc.el.querySelectorAll('.fv-callout-chip[data-co-key]')).map((chip) => {
+        const name = _norm(String(chip.getAttribute('title') || '').replace(/^[^:]*:\s*/, ''));
+        const r = chip.getBoundingClientRect();
+        return { chip, name, midY: ((r.top + r.bottom) / 2 - cr.top) / kz };
+      }).filter((c) => c.name);
+      const items = []; let nextY = 0;
+      cards.forEach((c) => {
+        const lbl = _norm(c.label);
+        const hit = chips.filter((k) => lbl.includes(k.name)).sort((a, b) => b.name.length - a.name.length)[0] || null;
+        let when = c.label;
+        if (hit) { const stripped = c.label.replace(new RegExp(hit.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '').replace(/^[\s:\u00b7-]+|[\s:\u00b7-]+$/g, ''); if (stripped) when = stripped; }
+        const whenLines = when ? Math.ceil(when.length / 24) : 0;
+        const toLines = Math.ceil(((c.label ? '' : 'See ') + c.name).length / 17);
+        const h = Math.ceil(3 + 14 + whenLines * 13 + (when ? 2 : 0) + toLines * 15 + 13 + 4);
+        const anchorY = hit ? hit.midY : 22;
+        const relY = Math.max(nextY, anchorY - h / 2);
+        items.push({ c, when, relY, h, anchorY, chip: hit ? hit.chip : null });
+        nextY = relY + h + 10;
+      });
+      const extra = Math.max(0, Math.ceil(nextY - 10 - cardH));
+      sideInfo.set(sc.el, { res: sc.res, step: sc.step, items, extra });
+      if (extra) sideExtra.set(sc.el, extra);
+    }))));
+    const hOf = (el) => hOfRaw(el) + (sideExtra.get(el) || 0);
 
     // Height of the condition tag that sits on a line (the same wrapping the tag drawing uses): on screen a one-line pill, on paper the
     // whole condition wrapped onto as many lines as it needs. Cards are spaced so the tag fits between them.
@@ -3144,9 +3185,23 @@ export function _fvRenderSteps(resources) {
       curStageY += actualStageH + STAGE_GAP;
     });
 
-    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
+    // place the side cards now that every card has its final position, and remember the arrows to them
+    const jumpArrows = [];
+    sideInfo.forEach((info, el) => {
+      const cl = parseFloat(el.style.left) || 0, ct = parseFloat(el.style.top) || 0;
+      const sl = cl + CARD_W + SIDE_GAP;
+      info.items.forEach((it) => {
+        const top = Math.round(ct + it.relY);
+        canvas.insertAdjacentHTML('beforeend', OL.fvJumpCardHtml(info.step, info.res, it.c, it.when, { left: sl, top, w: SIDE_W, h: it.h }));
+        if (it.chip) it.chip.classList.add('fv-co-linked');
+        jumpArrows.push({ x1: cl + CARD_W, y1: ct + it.anchorY, x2: sl, y2: top + it.h / 2 });
+      });
+    });
+    OL._fv._jumpArrows = jumpArrows;
+
+    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
-    const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + hOf(el) + 60), 600);
+    const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + (el.classList.contains('fv-jump-card') ? (parseFloat(el.style.height) || 0) : hOf(el)) + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
     canvas.style.height = maxY + 'px';
 
@@ -3208,6 +3263,21 @@ export function _fvDrawStepConnections(resources) {
 
   svg.style.width  = canvas.style.width;
   svg.style.height = canvas.style.height;
+
+  // arrows from a step's tag to the small card of each of its jumps (drawn even when the other connections are hidden)
+  {
+    const g0 = document.getElementById('fv-lines');
+    const ns = 'http://www.w3.org/2000/svg';
+    (OL._fv._jumpArrows || []).forEach((a) => {
+      const mx = Math.round(a.x1 + (a.x2 - a.x1) / 2);
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', Math.abs(a.y2 - a.y1) < 2 ? `M${a.x1} ${a.y1} H${a.x2}` : `M${a.x1} ${a.y1} H${mx} V${a.y2} H${a.x2}`);
+      p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#3dd9c5'); p.setAttribute('stroke-width', '1.6'); p.setAttribute('stroke-linejoin', 'round');
+      p.setAttribute('marker-end', 'url(#fv-arr)');
+      p.style.pointerEvents = 'none';
+      g0.appendChild(p);
+    });
+  }
 
   if (!OL._fv.showConnections) return;
 

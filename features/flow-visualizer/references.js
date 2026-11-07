@@ -150,6 +150,21 @@ function oneRow(step, res, j) {
   const to = `<span class="fv-jump-to">${j.label ? '' : 'See '}${esc(name)}</span>`;
   return `<div class="fv-jump-row fv-ref-chip${t ? '' : ' is-missing'}" role="button" tabindex="0" data-ref-res="${esc(j.resId)}" title="${t ? `Jump to ${esc(name)}` : 'The process this step pointed at was removed'}" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span class="fv-ref-arrow" aria-hidden="true">&#8599;</span><span class="fv-ref-text"><span class="fv-ref-name">${head}${to}</span><span class="fv-ref-pg">${OL()._fv && OL()._fv._printing ? '&nbsp;' : ''}</span></span></div>`;
 }
+// The jumps of a step as plain data for the Steps view, which draws each one as its own small card beside the step.
+export function jumpCardsOf(step, res) {
+  if (!step || !res) return [];
+  return jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => {
+    const t = resById(j.resId);
+    const tStep = t && j.stepId ? stepOf(t, j.stepId) : null;
+    return { id: j.id, resId: String(j.resId), label: j.label || '', name: t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed', missing: !t };
+  });
+}
+// One side card. `when` is the trigger text (the collateral's own name is left out when a tag on the card already shows it).
+export function jumpCardHtml(step, res, c, when, box) {
+  const go = `event.stopPropagation(); OL.fvJumpToRef('${esc(res.id)}','${esc(step.id)}','${esc(c.id)}')`;
+  return `<div class="fv-jump-card fv-ref-chip${c.missing ? ' is-missing' : ''}" role="button" tabindex="0" data-ref-res="${esc(c.resId)}" data-jump-for="${esc(res.id)}|${esc(step.id)}" title="${c.missing ? 'The process this step pointed at was removed' : `Jump to ${esc(c.name)}`}" style="left:${box.left}px;top:${box.top}px;width:${box.w}px;height:${box.h}px;" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}">${when ? `<span class="fv-jc-when">${esc(when)}</span>` : ''}<span class="fv-jc-to">${c.label ? '' : 'See '}${esc(c.name)}<span class="fv-ref-arrow" aria-hidden="true"> &#8599;</span></span><span class="fv-ref-pg">${OL()._fv && OL()._fv._printing ? '&nbsp;' : ''}</span></div>`;
+}
+
 // The rows for a step's jumps (without the wrapper; see jumpRows).
 export function refChip(step, res) {
   if (!step || !res) return '';
@@ -312,6 +327,6 @@ function toast(t) { if (typeof OL().showToast === 'function') OL().showToast(t);
 window.OL = window.OL || {};
 Object.assign(window.OL, {
   fvRefChip: refChip, fvUsedChip: usedChip, fvRefPicker: refPicker, fvRefUsers: usersOf, fvRefTargets: targetsFor,
-  fvAddJump: addJump, fvSetJump: setJump, fvRemoveJump: removeJump, fvJumpEditor: jumpEditor, fvJumpsOf: jumpsOf, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpRowsOut: jumpRowsOut, fvJumpRowsIn: jumpRowsIn, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
+  fvAddJump: addJump, fvSetJump: setJump, fvRemoveJump: removeJump, fvJumpEditor: jumpEditor, fvJumpsOf: jumpsOf, fvRefStepPicker: refStepPicker, fvIncomingChip: incomingChip, fvJumpRowsOut: jumpRowsOut, fvJumpCardsOf: jumpCardsOf, fvJumpCardHtml: jumpCardHtml, fvJumpRowsIn: jumpRowsIn, fvJumpToRef: jumpToRef, fvJumpToStep: jumpToStep, fvBack: back, fvClearBack: clearBack,
   fvShowBackPill: showBackPill, fvShowRefUsers: showRefUsers, fvCloseUsedPop: closeUsedPop,
 });

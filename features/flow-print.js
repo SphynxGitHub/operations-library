@@ -104,7 +104,7 @@ export function collectIntervals(contentEl, heightOf = (el) => el.offsetHeight, 
         t = Math.min(t, (r.top - cRect.top) / k); b = Math.max(b, (r.bottom - cRect.top) / k);
       });
     }
-    if (h > 0) out.push({ top: t, bottom: b, card: !!(el.classList && el.classList.contains('fv-step-card')) });
+    if (h > 0) out.push({ top: t, bottom: b, card: !!(el.classList && (el.classList.contains('fv-step-card') || el.classList.contains('fv-jump-card'))) });
   });
   // a heading (stage, workflow, process title) stays with the first card under it: its box is stretched down over that card,
   // so a page never ends on a heading with its cards on the next page
@@ -148,7 +148,7 @@ export function planRefPages(items, pages) {
 // Writes the page numbers into the copy of an element that goes on page `pageNo`.
 export function annotateRefs(el, pageNo, plan) {
   if (!el || typeof el.querySelectorAll !== 'function' || !plan) return;
-  el.querySelectorAll('.fv-ref-chip[data-ref-res]').forEach((chip) => {
+  [...(el.matches && el.matches('.fv-ref-chip[data-ref-res]') ? [el] : []), ...el.querySelectorAll('.fv-ref-chip[data-ref-res]')].forEach((chip) => {
     const pg = plan.headPage[chip.getAttribute('data-ref-res')];
     const slot = chip.querySelector('.fv-ref-pg');
     if (pg && slot) slot.textContent = pg === pageNo ? ' \u00b7 this page' : ` \u00b7 p. ${pg}`;
@@ -198,7 +198,7 @@ export function buildPrintHtml({ contentEl, svgEl, width, height, pages, scale, 
   // where each shared process and each "See ..." step ended up, so the callouts can name the page
   const refPlan = planRefPages(kids.filter((k) => !k.bg).map((k) => {
     const cls = (k.el.className || '').toString();
-    const chips = typeof k.el.querySelectorAll === 'function' ? Array.from(k.el.querySelectorAll('.fv-ref-chip[data-ref-res]')).map((c) => c.getAttribute('data-ref-res')) : [];
+    const chips = typeof k.el.querySelectorAll === 'function' ? [...(k.el.matches && k.el.matches('.fv-ref-chip[data-ref-res]') ? [k.el] : []), ...k.el.querySelectorAll('.fv-ref-chip[data-ref-res]')].map((c) => c.getAttribute('data-ref-res')) : [];
     return { top: k.top, headOf: /fv-steps-res-head/.test(cls) && k.el.dataset ? k.el.dataset.resId : undefined, refsTo: chips };
   }), pages);
   refPlan.itemNo = itemNo;
