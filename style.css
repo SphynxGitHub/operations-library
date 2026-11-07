@@ -2310,3 +2310,9 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 .fv-jump-card .fv-ref-pg:empty { display: none; }
 /* the tag on a card that a side card belongs to */
 .fv-callout-chip.fv-co-linked, .fv-co-print.fv-co-linked { border-color: #0d9488 !important; background: rgba(61, 217, 197, 0.18) !important; color: #0f766e !important; font-weight: 700; }
+
+/* move a process left / right in the Steps view (features/flow-visualizer/workflows.js, moveWorkflowColumn) */
+.fv-steps-res-head .fv-col-ctl { position: absolute; right: 0; top: -3px; display: flex; gap: 2px; opacity: 0; transition: opacity .12s; z-index: 7; }
+.fv-steps-res-head:hover .fv-col-ctl, .fv-steps-res-head:focus-within .fv-col-ctl { opacity: 1; }
+.fv-col-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border-radius: 6px; border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-dim); cursor: pointer; }
+.fv-col-btn:hover { color: var(--accent); border-color: var(--accent); }

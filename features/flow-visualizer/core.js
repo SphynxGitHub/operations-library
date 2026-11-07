@@ -2386,7 +2386,7 @@ export function _fvRenderSteps(resources) {
         .filter(r => r && (r.steps || []).length > 0)
         .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
-      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) wfGroups.push({ workflow: wf, resources: fvOrderColumns(wfRes) });
+      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered }); }
     });
     if (wfGroups.length > 0 || !(OL._fv && OL._fv._printing)) stageGroups.push({ stage, wfGroups });
   });
@@ -2782,6 +2782,15 @@ export function _fvRenderSteps(resources) {
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
           ${typeof OL.fvUsedChip === 'function' && OL.fvUsedChip(res) ? `<div style="margin-top:4px;">${OL.fvUsedChip(res)}</div>` : ''}
           ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}`;
+        {
+          const _ic = (d) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+          const _rid = esc(String(res.id)), _wid = esc(String(workflow.id));
+          hdrEl.insertAdjacentHTML('beforeend', `<span class="fv-col-ctl" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+            <button type="button" class="fv-col-btn" title="Move this process left" aria-label="Move this process left" onclick="OL.fvMoveColumn('${_wid}','${_rid}',-1)">${_ic('<path d="m15 18-6-6 6-6"/>')}</button>
+            <button type="button" class="fv-col-btn" title="Move this process right" aria-label="Move this process right" onclick="OL.fvMoveColumn('${_wid}','${_rid}',1)">${_ic('<path d="m9 18 6-6-6-6"/>')}</button>
+            ${workflow.lockColumnOrder ? `<button type="button" class="fv-col-btn" title="Back to automatic order" aria-label="Back to automatic order" onclick="OL.fvAutoColumns('${_wid}')">${_ic('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>')}</button>` : ''}
+          </span>`);
+        }
         frag.appendChild(hdrEl);
         resMeta.push({ res, hdrEl, layout: resLayouts.get(res), colX });
       });

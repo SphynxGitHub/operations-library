@@ -128,6 +128,30 @@ export function reorderWorkflowResources(wfId, fromIdx, toIdx) {
     OL.renderVisualizer();
 }
 
+// Move a process one place left or right in the Steps view of its workflow. The Steps view normally places the processes by itself
+// (fewest crossing lines); moving one fixes the order for that workflow (lockColumnOrder) until it is set back to automatic.
+export function moveWorkflowColumn(wfId, resId, dir) {
+    const wf = getWorkflows().find(w => String(w.id) === String(wfId));
+    if (!wf) return;
+    const shown = ((OL._fv && OL._fv._shown && OL._fv._shown[wfId]) || wf.resourceIds || []).map(String);
+    const i = shown.indexOf(String(resId)); const j = i + (dir < 0 ? -1 : 1);
+    if (i < 0 || j < 0 || j >= shown.length) return;
+    [shown[i], shown[j]] = [shown[j], shown[i]];
+    // keep any resource the view did not show (empty ones) at the end, in its old place order
+    const rest = (wf.resourceIds || []).map(String).filter(id => !shown.includes(id));
+    wf.resourceIds = [...shown, ...rest];
+    wf.lockColumnOrder = true;
+    persist();
+    OL.renderVisualizer();
+}
+export function autoWorkflowColumns(wfId) {
+    const wf = getWorkflows().find(w => String(w.id) === String(wfId));
+    if (!wf) return;
+    delete wf.lockColumnOrder;
+    persist();
+    OL.renderVisualizer();
+}
+
 // ---- UI wrappers (thin, but kept alongside the CRUD they call) ----
 
 export function _fvCreateWorkflow(stageId) {
@@ -322,7 +346,7 @@ export async function moveStageIndex(fromIdx, toIdx) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     getWorkflows, createWorkflow, renameWorkflow, deleteWorkflow,
-    addResourceToWorkflow, removeResourceFromWorkflow, reorderWorkflowResources,
+    addResourceToWorkflow, removeResourceFromWorkflow, reorderWorkflowResources, fvMoveColumn: moveWorkflowColumn, fvAutoColumns: autoWorkflowColumns,
     _fvCreateWorkflow, _fvAddResourceToWorkflow,
     insertStage, addStageBetween, _fvDeleteStage, deleteStage,
     renameStage, moveStageIndex
