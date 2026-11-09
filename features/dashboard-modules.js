@@ -214,7 +214,11 @@ export async function loadDashboardModules() {
 }
 
 // ---- customizing ------------------------------------------------------------------------------------------------
-export function dashModulesPreset() { setEnabled(TEAM_PRESET.slice()); loadDashboardModules(); }
+export function dashModulesPreset() {
+    setEnabled(TEAM_PRESET.slice());
+    loadDashboardModules();
+    if (typeof OL.applyTeamMeetingTaskFilters === 'function') OL.applyTeamMeetingTaskFilters();   // also sets the task list: next 2 weeks, everyone, grouped by client
+}
 export function dashModuleToggle(key) {
     const on = enabled();
     setEnabled(on.includes(key) ? on.filter((k) => k !== key) : [...on, key]);

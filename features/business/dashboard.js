@@ -23,6 +23,7 @@ OL.dashboardTaskState = {
     assignees: [],
     status: 'all',
     types: ['task', 'email', 'event', 'comment', 'error', 'request'],
+    undatedWithRange: false, // set by the Team meeting preset: also list items with no due date when a due range is chosen (cleared when the range is changed by hand)
     requestsAdded: true   // saved with the filters so "Requests" is switched on once for people with an older saved selection
 };
 
@@ -385,7 +386,7 @@ OL.renderDailyDashboard = function() {
                             <option value="today" ${OL.dashboardTaskState.dueRange === 'today' ? 'selected' : ''}>Due Today</option>
                             <option value="overdue_today" ${OL.dashboardTaskState.dueRange === 'overdue_today' ? 'selected' : ''}>Overdue + Due Today</option>
                             <option value="week" ${OL.dashboardTaskState.dueRange === 'week' ? 'selected' : ''}>Due This Week</option>
-                            <option value="next2weeks" ${OL.dashboardTaskState.dueRange === 'next2weeks' ? 'selected' : ''}>Due Next 2 Weeks</option>
+                            <option value="next2weeks" ${OL.dashboardTaskState.dueRange === 'next2weeks' ? 'selected' : ''}>Due Next 2 Weeks${OL.dashboardTaskState.undatedWithRange ? ' + no due date' : ''}</option>
                         </select>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center;">
@@ -428,8 +429,25 @@ OL.renderDailyDashboard = function() {
     OL._dashboardHasUnassigned = hasUnassigned;
 };
 
+// The Team meeting preset's task-list settings: everything due in the next 2 weeks plus anything with no due date, every item
+// type, every Sphynx team member plus unassigned items, grouped by client project. (Its dashboard modules are set in
+// features/dashboard-modules.js, which calls this.)
+OL.applyTeamMeetingTaskFilters = function() {
+    const team = [...new Set((state.master?.sphynxTeam || []).map((m) => m.name).filter(Boolean))];
+    Object.assign(OL.dashboardTaskState, {
+        dueRange: 'next2weeks', undatedWithRange: true, showNoDueDate: true, showUnassigned: true,
+        types: ['task', 'email', 'event', 'comment', 'error', 'request'],
+        assignees: [...team, '__unassigned__'],
+        status: 'all', groupBy: 'client', subGroupBy: 'none',
+    });
+    OL._dashboardAssigneeDefaulted = true;
+    OL._saveDashboardTaskState();
+    OL.renderDailyDashboard();
+};
+
 OL.setDashboardTaskFilter = function(key, value) {
     OL.dashboardTaskState[key] = value;
+    if (key === 'dueRange') OL.dashboardTaskState.undatedWithRange = false;   // picking a range by hand goes back to the normal behaviour
     OL._saveDashboardTaskState();
     OL.renderDailyDashboard();
 };
@@ -552,7 +570,7 @@ OL.filterTasksByDueRange = function(items, range) {
 
     return items.filter(item => {
         if (item._type === 'email' || item._type === 'error') return true;
-        if (!item.dueDate) return false;
+        if (!item.dueDate) return OL.dashboardTaskState.undatedWithRange === true;   // otherwise a range hides undated items
         const dueStr = OL.localDayKey(item.dueDate);
         if (range === 'overdue') return dueStr < todayStr;
         if (range === 'today') return dueStr === todayStr;
