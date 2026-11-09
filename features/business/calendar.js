@@ -19,7 +19,7 @@ OL.calendarState = {
     groupBy: 'date',
     callTypeFilter: 'all',
     clientFilter: '',
-    query: '',               // keyword search over title, description and meeting summary
+    query: '',               // keyword search over title, description, summary, call type, invitees and project
     limit: CALENDAR_PAGE_SIZE,
     loadedOnce: false,
     gridMonth: (() => {
@@ -148,7 +148,7 @@ OL.renderBusinessCalendar = function() {
                     </div>
                     ${OL.calendarState.view === 'calendar' && OL.calendarState.calendarSubView === 'availability' ? '' : `
                     <div style="display:flex; gap:6px; align-items:center; flex:1; min-width:200px; max-width:420px;">
-                        <input type="text" id="calendar-search" class="modal-input tiny" style="flex:1;" placeholder="Search title, description, summary..." value="${esc(OL.calendarState.query || '')}" oninput="OL.onCalendarSearchInput(this)">
+                        <input type="text" id="calendar-search" class="modal-input tiny" style="flex:1;" placeholder="Search title, description, invitees, project, type..." value="${esc(OL.calendarState.query || '')}" oninput="OL.onCalendarSearchInput(this)">
                         ${OL.calendarState.query ? `<button class="btn tiny soft" onclick="OL.clearCalendarSearch()" title="Clear search">Clear</button>` : ''}
                     </div>`}
                     <div style="display:flex; gap:8px; align-items:center;">
@@ -472,16 +472,39 @@ OL.renderEventRowHTML = function(evt) {
 };
 
 // Keyword search, done by the database so it covers every event in range (not just the ones already on screen).
-// Matches the title, the description (body) and the meeting summary. Characters that would break the filter
-// syntax are dropped, and LIKE wildcards are escaped so they are searched for literally.
+// Matches the title, the description (body), the meeting summary and the call type, plus:
+//   - project: events linked to any project whose name contains the words;
+//   - invitees: events that include the email of anyone (project contact or Sphynx team member) whose name or email contains
+//     the words, or the exact email typed in full. (Invitees are stored as a list of emails, which the database cannot
+//     search by part of a word, so the people are matched here first.)
+// Characters that would break the filter syntax are dropped, and LIKE wildcards are escaped so they are searched for literally.
 OL._calendarSearchTerm = function() {
-    return String(OL.calendarState.query || '').replace(/[,()"\\*]/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(OL.calendarState.query || '').replace(/[,()"\\*{}]/g, ' ').replace(/\s+/g, ' ').trim();
 };
 OL._applyCalendarSearch = function(query) {
     const term = OL._calendarSearchTerm();
     if (!term) return query;
     const like = '*' + term.replace(/[%_]/g, (c) => '\\' + c) + '*';
-    return query.or(`title.ilike.${like},description.ilike.${like},calendar_summary.ilike.${like}`);
+    const needle = term.toLowerCase();
+    const parts = [`title.ilike.${like}`, `description.ilike.${like}`, `calendar_summary.ilike.${like}`, `call_type.ilike.${like}`];
+
+    const clientIds = Object.values(state.clients || {})
+        .filter((c) => c && c.id && String(c.meta?.name || '').toLowerCase().includes(needle))
+        .map((c) => String(c.id)).filter((id) => /^[A-Za-z0-9_-]+$/.test(id)).slice(0, 200);
+    if (clientIds.length) parts.push(`linked_client_id.in.(${clientIds.join(',')})`);
+
+    const emails = new Set();
+    const consider = (m) => {
+        const email = String(m?.email || '').trim().toLowerCase();
+        if (email && /^[^\s,(){}"]+$/.test(email) && (email.includes(needle) || String(m?.name || '').toLowerCase().includes(needle))) emails.add(email);
+    };
+    Object.values(state.clients || {}).forEach((c) => (c?.projectData?.teamMembers || []).forEach(consider));
+    (state.master?.sphynxTeam || []).forEach(consider);
+    if (/^[^\s,(){}"@]+@[^\s,(){}"@]+$/.test(term)) emails.add(term.toLowerCase());
+    const list = [...emails].slice(0, 200);
+    if (list.length) parts.push(`attendee_emails.ov.{${list.join(',')}}`);
+
+    return query.or(parts.join(','));
 };
 
 OL._reloadCalendarForSearch = function() {

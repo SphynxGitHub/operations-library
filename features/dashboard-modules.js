@@ -11,11 +11,12 @@ import { roundStatusOf } from '../core/requests.js';
 import { isClientWaitingStatus } from '../core/work-status.js';
 import { memberDayHours, dailyLoadHours, workdayGoneHours } from '../core/scheduling.js';
 import {
-    MODULES, DEFAULT_ON, TEAM_PRESET, weekDays, availabilityGrid, pendingReviewRollup, readyNotSent, leadsWaiting,
+    MODULES, DEFAULT_ON, TEAM_PRESET, easternDay, rollingDays, monthWeeks, availabilityGrid, pendingReviewRollup, readyNotSent, leadsWaiting,
     followUpsDue, waitingByAge, hoursBlocksNearing, reviewsEnding,
 } from '../core/dashboard-modules.js';
 
-const view = { mode: 'week', offset: 0 };          // the Availability module
+const view = { mode: 'week', offset: 0 };          // the Availability module: 'today', 'week' (a rolling 5 working days from today) or 'month'
+const MAX_WEEK_OFFSET = 8, MAX_MONTH_OFFSET = 1;   // the dashboard's calendar events only reach about 60 days ahead
 let reviewData = null;                              // { reviews, itemsByReview, reviewedTaskIds, at } once loaded
 
 const todayStr = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -49,28 +50,52 @@ function availabilityBody() {
     if (!people.length) return { count: '', body: empty('No team members yet.'), extra: '' };
     const events = OL._dashboardEventsCache || [];
     const tasks = loadedClients().flatMap((c) => c.projectData.clientTasks || []);
-    const today = todayStr();
-    const days = view.mode === 'today' ? [today] : weekDays(today, view.offset);
+    const today = easternDay();                         // rolls over at midnight Eastern; see the timer at the bottom
+    availabilityDay = today;
+    const month = view.mode === 'month' ? monthWeeks(today, view.offset) : null;
+    const days = view.mode === 'today' ? [today] : month ? month.weeks.flat() : rollingDays(today, view.offset);
     const grid = availabilityGrid({
         people, days,
         capacityFor: (n, d) => (d < today ? 0 : memberDayHours(n, d) - workdayGoneHours(events, n, d)),   // a past day has nothing left to give; today: minus the time already gone
         loadFor: (n, d) => dailyLoadHours(events, tasks, n, d),
     });
-    const label = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+    const short = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const label = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
     const colour = (h) => (h <= 0 ? '#f87171' : h <= 2 ? '#f5b942' : '#2dd4bf');
-    const seg = `<span style="display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:12px;margin-left:auto;">
-        <span onclick="OL.dashAvail('mode','today')" style="padding:3px 10px;cursor:pointer;${view.mode === 'today' ? 'background:rgba(45,212,191,.14);color:#2dd4bf;font-weight:600;' : ''}">Today</span>
-        <span onclick="OL.dashAvail('mode','week')" style="padding:3px 10px;cursor:pointer;${view.mode === 'week' ? 'background:rgba(45,212,191,.14);color:#2dd4bf;font-weight:600;' : ''}">Week</span></span>`;
-    const nav = view.mode === 'week' ? `<button class="btn tiny soft" onclick="OL.dashAvail('offset',${view.offset - 1})">‹</button>
-        <button class="btn tiny soft" onclick="OL.dashAvail('offset',0)">This week</button><button class="btn tiny soft" onclick="OL.dashAvail('offset',${view.offset + 1})">›</button>` : '';
-    const head = `<div style="display:flex;gap:6px;align-items:center;font-size:11.5px;" class="muted"><span style="width:110px;flex:none;"></span>${days.map((d) => `<span style="flex:1;text-align:center;${d === today ? 'color:#2dd4bf;font-weight:700;' : ''}">${esc(label(d))}</span>`).join('')}${view.mode === 'week' ? '<span style="width:54px;text-align:right;">Week</span>' : ''}</div>`;
-    const rows = grid.map((g) => `<div style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px;"><span style="width:110px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name)}</span>
-        ${g.days.map((c) => `<span style="flex:1;text-align:center;background:${colour(c.free)}22;color:${colour(c.free)};border-radius:7px;padding:4px 0;font-size:12.5px;font-weight:600;">${c.free} h</span>`).join('')}
-        ${view.mode === 'week' ? `<span class="muted" style="width:54px;text-align:right;">${g.total} h</span>` : ''}</div>`).join('');
-    return { count: '', body: `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">${nav}</div>${head}${rows}<div class="tiny muted" style="margin-top:8px;">Hours free after meetings and scheduled tasks. Days off and part-days come from each person's schedule.</div>`, extra: seg };
+    // Columns: one per day, or one per week in the month view (each week's free hours added up; coloured by the daily average).
+    const cols = month
+        ? month.weeks.map((w) => ({ title: w.length > 1 ? `${short(w[0])}–${short(w[w.length - 1])}` : short(w[0]), days: w, now: w.includes(today) }))
+        : days.map((d) => ({ title: label(d), days: [d], now: d === today }));
+    const seg1 = (key, text) => `<span onclick="OL.dashAvail('mode','${key}')" style="padding:3px 10px;cursor:pointer;${view.mode === key ? 'background:rgba(45,212,191,.14);color:#2dd4bf;font-weight:600;' : ''}">${text}</span>`;
+    const seg = `<span style="display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:12px;margin-left:auto;">${seg1('today', 'Today')}${seg1('week', 'Week')}${seg1('month', 'Month')}</span>`;
+    const maxOffset = view.mode === 'month' ? MAX_MONTH_OFFSET : MAX_WEEK_OFFSET;
+    const nav = view.mode === 'today' ? '' : `<button class="btn tiny soft" ${view.offset <= 0 ? 'disabled' : ''} onclick="OL.dashAvail('offset',${view.offset - 1})">‹</button>
+        <button class="btn tiny soft" onclick="OL.dashAvail('offset',0)">${month ? (view.offset === 0 ? 'This month' : esc(month.label)) : (view.offset === 0 ? 'Next 5 days' : `${esc(short(days[0]))} – ${esc(short(days[days.length - 1]))}`)}</button>
+        <button class="btn tiny soft" ${view.offset >= maxOffset ? 'disabled' : ''} onclick="OL.dashAvail('offset',${view.offset + 1})">›</button>${month && view.offset !== 0 ? '' : month ? `<span class="tiny muted" style="margin-left:4px;">${esc(month.label)}</span>` : ''}`;
+    const showTotal = view.mode !== 'today';
+    const head = `<div style="display:flex;gap:6px;align-items:center;font-size:11.5px;" class="muted"><span style="width:110px;flex:none;"></span>${cols.map((c) => `<span style="flex:1;text-align:center;${c.now ? 'color:#2dd4bf;font-weight:700;' : ''}">${esc(c.title)}</span>`).join('')}${showTotal ? '<span style="width:54px;text-align:right;">Total</span>' : ''}</div>`;
+    const rows = grid.map((g) => {
+        const byDay = new Map(g.days.map((c) => [c.day, c.free]));
+        const cells = cols.map((c) => {
+            const free = Math.round(c.days.reduce((t, d) => t + (byDay.get(d) || 0), 0) * 10) / 10;
+            return { free, tone: free / c.days.length };
+        });
+        return `<div style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px;"><span style="width:110px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name)}</span>
+        ${cells.map((c) => `<span style="flex:1;text-align:center;background:${colour(c.tone)}22;color:${colour(c.tone)};border-radius:7px;padding:4px 0;font-size:12.5px;font-weight:600;">${c.free} h</span>`).join('')}
+        ${showTotal ? `<span class="muted" style="width:54px;text-align:right;">${g.total} h</span>` : ''}</div>`;
+    }).join('');
+    const note = month ? 'Hours free per week, after meetings and scheduled tasks. Days already past count as zero.' : 'Hours free after meetings and scheduled tasks.';
+    return { count: '', body: `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">${nav}</div>${head}${rows}<div class="tiny muted" style="margin-top:8px;">${note} Days off and part-days come from each person's schedule.</div>`, extra: seg };
 }
 
 export function dashAvail(key, value) { view[key] = value; if (key === 'mode') view.offset = 0; paint(); }
+
+// The table is a rolling window from today, so it has to move on by itself when the day changes at midnight Eastern, even if the
+// dashboard is left open overnight. Checked every 30 seconds (also catches a computer waking from sleep).
+let availabilityDay = '';
+if (typeof setInterval === 'function' && typeof document !== 'undefined') {
+    setInterval(() => { if (availabilityDay && easternDay() !== availabilityDay) { availabilityDay = easternDay(); paint(); } }, 30 * 1000);
+}
 
 // ---- the other modules ------------------------------------------------------------------------------------------
 function bodyFor(key) {

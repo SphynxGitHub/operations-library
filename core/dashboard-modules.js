@@ -34,6 +34,46 @@ export function weekDays(anchorDay, weekOffset = 0) {
     return Array.from({ length: 5 }, (_, i) => { const x = new Date(d); x.setUTCDate(d.getUTCDate() + i); return x.toISOString().slice(0, 10); });
 }
 
+// Today's date (YYYY-MM-DD) in US Eastern time, so a day rolls over at midnight Eastern whatever the browser's own clock says.
+export function easternDay(date = new Date()) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+const isWeekendUtc = (d) => { const w = d.getUTCDay(); return w === 0 || w === 6; };
+function stepWeekdays(d, n) {
+    const step = n < 0 ? -1 : 1;
+    for (let left = Math.abs(n); left > 0;) { d.setUTCDate(d.getUTCDate() + step); if (!isWeekendUtc(d)) left--; }
+    return d;
+}
+
+// A rolling run of `count` working days (Monday to Friday) that STARTS on anchorDay, or on the next Monday when
+// anchorDay is a weekend. offset moves the whole run by that many runs (1 = the next `count` working days).
+export function rollingDays(anchorDay, offset = 0, count = 5) {
+    const d = new Date(`${anchorDay}T00:00:00Z`);
+    while (isWeekendUtc(d)) d.setUTCDate(d.getUTCDate() + 1);
+    if (offset) stepWeekdays(d, offset * count);
+    const out = [d.toISOString().slice(0, 10)];
+    while (out.length < count) { stepWeekdays(d, 1); out.push(d.toISOString().slice(0, 10)); }
+    return out;
+}
+
+// The working days of the calendar month that holds anchorDay (moved by monthOffset months), grouped into Monday-to-Friday
+// weeks. Returns { label: 'November 2026', weeks: [[day, ...], ...] }; the first and last week may be short.
+export function monthWeeks(anchorDay, monthOffset = 0) {
+    const a = new Date(`${anchorDay}T00:00:00Z`);
+    const first = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + monthOffset, 1));
+    const month = first.getUTCMonth();
+    const weeks = [];
+    let cur = [];
+    for (const d = new Date(first); d.getUTCMonth() === month; d.setUTCDate(d.getUTCDate() + 1)) {
+        if (isWeekendUtc(d)) continue;
+        if (d.getUTCDay() === 1 && cur.length) { weeks.push(cur); cur = []; }
+        cur.push(d.toISOString().slice(0, 10));
+    }
+    if (cur.length) weeks.push(cur);
+    return { label: first.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }), weeks };
+}
+
 // people: names. capacityFor(name, day) -> hours available; loadFor(name, day) -> hours already spoken for.
 // Returns [{ name, days: [{ day, free }], total }]. free is never below 0.
 export function availabilityGrid({ people, days, capacityFor, loadFor }) {
