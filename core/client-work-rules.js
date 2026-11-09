@@ -549,6 +549,19 @@ const requestDates = (client) => {
     return dates;
 };
 
+// Whether the Monthly hours check-in belongs on this client right now: only while the plan has NOT expired
+// (an active plan period whose end date is today or later), or, once it has, only if the latest period is
+// marked Renewing. periods is null when they have not been read yet (then nothing changes) and empty when no
+// plan period was ever started (the setup task is about to start one, so the check-in stays).
+export function checkInWanted(periods, today) {
+    if (!Array.isArray(periods) || !periods.length) return true;
+    const dated = periods.filter((p) => p && p.due_date);
+    if (!dated.length) return true;
+    if (dated.some((p) => p.status === 'active' && day(p.due_date) >= today)) return true;
+    const latest = [...dated].sort((a, b) => day(b.start_date).localeCompare(day(a.start_date)))[0];
+    return !!latest.renewing;
+}
+
 export function reconcileMaintenance(client, ctx) {
     const out = { created: [] };
     const pd = client?.projectData;
@@ -574,12 +587,26 @@ export function reconcileMaintenance(client, ctx) {
             description: 'Start the plan period and confirm the hours tier (Maintenance & Hours). Check that error reports reach this project: the project ID or tracking sheet ID is set for the Zaps, and errors arrive in Error Tracking.',
         }).id;
     }
-    if (!setup.touchBaseTaskId) {
-        setup.touchBaseTaskId = make({
-            title: `Monthly hours check-in: ${client.meta?.name || 'client'}`, dueDate: addMonths(ctx.today, 1),
-            description: 'Review the hours used against the plan (Maintenance & Hours), log any time still missing, and send the client a short update.',
-            recurrenceTag: 'monthly-touch-base', recurrence: { freq: 'monthly', interval: 1 },
-        }).id;
+    const periods = ctx.periodsFor ? ctx.periodsFor(client) : null;
+    if (periods && !checkInWanted(periods, ctx.today)) {
+        // The plan has expired and the client is not marked Renewing: no Monthly hours check-in. Any open one is
+        // closed (like the quarterly ones are), the series stops, and a new one starts if the client renews.
+        setup.checkInPaused = true;
+        pd.clientTasks.forEach((t) => {
+            if (!t || t.recurrenceTag !== 'monthly-touch-base') return;
+            if (isOpen(t, ctx)) { t.status = closedList(ctx)[0]; t.completedAt = ctx.now; t.cancelledAt = ctx.now; }
+            if (!t.recurrenceNextId) t.recurrenceNextId = 'ended';
+        });
+        setup.touchBaseTaskId = null;
+    } else {
+        if (setup.checkInPaused) setup.checkInPaused = false;
+        if (!setup.touchBaseTaskId) {
+            setup.touchBaseTaskId = make({
+                title: `Monthly hours check-in: ${client.meta?.name || 'client'}`, dueDate: addMonths(ctx.today, 1),
+                description: 'Review the hours used against the plan (Maintenance & Hours), log any time still missing, and send the client a short update.',
+                recurrenceTag: 'monthly-touch-base', recurrence: { freq: 'monthly', interval: 1 },
+            }).id;
+        }
     }
 
     // 60 days without a new request: prompt once per quiet stretch. A new request moves the last date forward,
@@ -901,7 +928,10 @@ function contextNow(extra = {}) {
         thirdPartyStatusNoteAssignee: state.master?.thirdPartyStatusNoteAssignee || 'Anthony',
         drafting: getOlSettings().draftingFollowUp,
         zapRepull: getOlSettings().zapRepull,
-        isOngoing, ...extra,
+        isOngoing,
+        // Plan periods as last read from the database for this client; null until they have been read.
+        periodsFor: (c) => { const slot = window.OL?._maint?.[c?.id]; return slot && slot.loaded && !slot.error ? slot.periods : null; },
+        ...extra,
     };
 }
 

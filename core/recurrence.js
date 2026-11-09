@@ -88,6 +88,8 @@ export function spawnRecurringTasksFor(client) {
 
     tasks.forEach((t) => {
         if (!t?.recurrence?.freq || t.recurrenceNextId || !closed.has(t.status)) return;
+        // Monthly hours check-in: no next one while the plan has expired and the client is not renewing (see checkInWanted).
+        if (t.recurrenceTag === 'monthly-touch-base' && client?.projectData?.maintenanceSetup?.checkInPaused) { t.recurrenceNextId = 'ended'; return; }
         if (t.recurrence.until && String(t.recurrence.until) < today) { t.recurrenceNextId = 'ended'; return; }
         const nextId = 'tk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
         const due = nextDueDate(t.dueDate || today, t.recurrence, today);
