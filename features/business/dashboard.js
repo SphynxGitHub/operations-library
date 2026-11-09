@@ -609,7 +609,7 @@ OL.renderDashboardTaskStream = function(allItems) {
     const renderItem = item => {
         if (item._type === 'event') return OL.renderEventRowHTML(item);
         if (item._type === 'email') return OL.renderDashboardEmailRowHTML(item);
-        if (item._type === 'error') return OL.renderErrorLogRow(item, false);
+        if (item._type === 'error') return OL.renderErrorLogRow(item, false, { selectable: false });
         if (item._type === 'request') return OL.renderDashboardRequestRowHTML(item);
         return OL.renderTaskRowWithMentions(item, todayStr, false);
     };

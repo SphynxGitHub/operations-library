@@ -256,7 +256,9 @@ OL.groupErrorRows = function(rows, groupBy) {
 // cause/resolution/resolved-date (muted placeholders when empty).
 // Click anywhere on the card for the full structured modal.
 // -------------------------------------------------------------
-OL.renderErrorLogRow = function(r, locked) {
+OL.renderErrorLogRow = function(r, locked, opts = {}) {
+    // Bulk-select tickbox only on the Error Manager page; the Dashboard feed passes { selectable: false }.
+    const selectable = opts.selectable !== false;
     const isResolved = r.status === 'resolved';
     const accentColor = isResolved ? '#22c55e' : '#f59e0b';
     const statusBg = isResolved ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
@@ -269,7 +271,7 @@ OL.renderErrorLogRow = function(r, locked) {
     return `
         <div class="card-section" style="border-color: var(--line); background: rgba(255,255,255,0.02); border-left:3px solid ${accentColor}; border-radius:0 8px 8px 0; cursor:pointer; min-width:0; overflow-wrap:anywhere;" onclick="OL.openErrorDetailModal('${r.id}')">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
-                <label style="display:flex !important; align-items:flex-start; gap:8px; margin:0 !important; min-width:0; flex:1;" onclick="event.stopPropagation();"><input type="checkbox" style="width:auto !important; display:inline-block !important; margin-top:3px; flex-shrink:0;" ${OL.errorLogState.selected.has(String(r.id)) ? 'checked' : ''} onchange="OL.toggleErrorSelected('${r.id}', this.checked)" title="Select for bulk update"><strong style="font-size:14px; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.35;">${esc(r.title || 'Untitled Error')}</strong></label>
+                ${selectable ? `<label style="display:flex !important; align-items:flex-start; gap:8px; margin:0 !important; min-width:0; flex:1;" onclick="event.stopPropagation();"><input type="checkbox" style="width:auto !important; display:inline-block !important; margin-top:3px; flex-shrink:0;" ${OL.errorLogState.selected.has(String(r.id)) ? 'checked' : ''} onchange="OL.toggleErrorSelected('${r.id}', this.checked)" title="Select for bulk update"><strong style="font-size:14px; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.35;">${esc(r.title || 'Untitled Error')}</strong></label>` : `<strong style="font-size:14px; min-width:0; flex:1; white-space:normal; overflow-wrap:anywhere; line-height:1.35;">${esc(r.title || 'Untitled Error')}</strong>`}
                 <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" onclick="event.stopPropagation();">
                     ${OL.renderErrorTaskButton(r)}
                     <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${accentColor}; font-weight:bold; flex-shrink:0;" onchange="OL.onErrorStatusSelect(this, '${r.id}')">
