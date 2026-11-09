@@ -4,7 +4,9 @@
 // WHAT IT DOES:   Archives one email in the real Gmail account by removing its Inbox
 //                 label, and marks the stored copy as archived in Gmail.
 //
-// CALLED BY:      The Archive button on an email in Communications.
+// CALLED BY:      The Archive button on an email in Communications, the "Archive this
+//                 email?" prompt, and the thread follow-up suggestions. The app sends
+//                 { id } with no mode, so every one of these is message-level.
 //
 // WHO CAN CALL:   A signed-in Sphynx admin or team member (the app sends the login
 //                 token). Anyone else gets 401 or 403 and nothing happens.
@@ -12,12 +14,15 @@
 // READS/CHANGES:  Gmail: removes the INBOX label. Database: sets archived_in_gmail =
 //                 true on the gmail_messages row.
 //
-// MODES:          mode "message" (default): removes INBOX from this one message only.
-//                 mode "thread_if_latest" (the Archive button): looks at the whole
+// MODES:          mode "message" (default, what the app uses): removes INBOX from this
+//                 one message only. Gmail keeps a conversation in the inbox while any of
+//                 its messages still has the INBOX label, so the conversation only
+//                 leaves the Gmail inbox when this was the last message carrying it.
+//                 mode "thread_if_latest" (NOT used by the app today): looks at the whole
 //                 conversation in Gmail. If this email is the most recent message in it
 //                 (drafts, trash and spam ignored), the WHOLE thread is archived in Gmail.
 //                 If a newer message exists, Gmail is left untouched and the response
-//                 says { skipped: "not_latest" } — the email is archived in the app only.
+//                 says { skipped: "not_latest" }.
 //
 // NEEDS:          _shared/google-token.ts (the stored Google connection),
 //                 _shared/auth.ts, _shared/gmail-errors.ts. Needs Google's
