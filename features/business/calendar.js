@@ -19,6 +19,7 @@ OL.calendarState = {
     groupBy: 'date',
     callTypeFilter: 'all',
     clientFilter: '',
+    query: '',               // keyword search over title, description and meeting summary
     limit: CALENDAR_PAGE_SIZE,
     loadedOnce: false,
     gridMonth: (() => {
@@ -145,6 +146,11 @@ OL.renderBusinessCalendar = function() {
                         <button class="btn tiny ${OL.calendarState.filter === 'past' ? 'primary' : 'soft'}" onclick="OL.setCalendarFilter('past')">Past</button>
                         <button class="btn tiny ${OL.calendarState.filter === 'all' ? 'primary' : 'soft'}" onclick="OL.setCalendarFilter('all')">All</button>
                     </div>
+                    ${OL.calendarState.view === 'calendar' && OL.calendarState.calendarSubView === 'availability' ? '' : `
+                    <div style="display:flex; gap:6px; align-items:center; flex:1; min-width:200px; max-width:420px;">
+                        <input type="text" id="calendar-search" class="modal-input tiny" style="flex:1;" placeholder="Search title, description, summary..." value="${esc(OL.calendarState.query || '')}" oninput="OL.onCalendarSearchInput(this)">
+                        ${OL.calendarState.query ? `<button class="btn tiny soft" onclick="OL.clearCalendarSearch()" title="Clear search">Clear</button>` : ''}
+                    </div>`}
                     <div style="display:flex; gap:8px; align-items:center;">
                         <div class="tiny muted" style="margin-right:4px;">Account: <strong style="color:#22c55e;">● Connected</strong></div>
                         
@@ -465,6 +471,53 @@ OL.renderEventRowHTML = function(evt) {
     return rowHTML + subrow;
 };
 
+// Keyword search, done by the database so it covers every event in range (not just the ones already on screen).
+// Matches the title, the description (body) and the meeting summary. Characters that would break the filter
+// syntax are dropped, and LIKE wildcards are escaped so they are searched for literally.
+OL._calendarSearchTerm = function() {
+    return String(OL.calendarState.query || '').replace(/[,()"\\*]/g, ' ').replace(/\s+/g, ' ').trim();
+};
+OL._applyCalendarSearch = function(query) {
+    const term = OL._calendarSearchTerm();
+    if (!term) return query;
+    const like = '*' + term.replace(/[%_]/g, (c) => '\\' + c) + '*';
+    return query.or(`title.ilike.${like},description.ilike.${like},calendar_summary.ilike.${like}`);
+};
+
+OL._reloadCalendarForSearch = function() {
+    if (OL.calendarState.view === 'calendar') {
+        return OL.calendarState.calendarSubView === 'availability' ? Promise.resolve() : OL.loadCalendarGridMonth();
+    }
+    OL.calendarState.limit = CALENDAR_PAGE_SIZE;
+    return OL.loadCalendarEvents();
+};
+
+OL.onCalendarSearchInput = function(el) {
+    OL.calendarState.query = el.value;
+    clearTimeout(OL._calSearchTimer);
+    const seq = OL._calSearchSeq = (OL._calSearchSeq || 0) + 1;
+    OL._calSearchTimer = setTimeout(async () => {
+        await OL._reloadCalendarForSearch();
+        if (seq !== OL._calSearchSeq) return;   // a newer search replaced this one
+        const live = document.getElementById('calendar-search');
+        const start = live && document.activeElement === live ? live.selectionStart : null;
+        const hadFocus = !live || document.activeElement === live || document.activeElement === document.body;
+        OL.renderBusinessCalendar();
+        const next = document.getElementById('calendar-search');
+        if (next && hadFocus) {
+            next.focus();
+            const pos = start !== null ? start : next.value.length;
+            try { next.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
+        }
+    }, 300);
+};
+
+OL.clearCalendarSearch = async function() {
+    OL.calendarState.query = '';
+    await OL._reloadCalendarForSearch();
+    OL.renderBusinessCalendar();
+};
+
 OL.setCalendarFilter = function(filter) {
     OL.calendarState.filter = filter;
     OL.calendarState.limit = CALENDAR_PAGE_SIZE;
@@ -599,12 +652,13 @@ OL.loadCalendarGridMonth = async function() {
         end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
     }
 
-    const { data, error } = await scopeQueryToBusinessClients(db
+    let gridQuery = scopeQueryToBusinessClients(db
         .from('calendar_events')
         .select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, assignees, attendee_emails, billable, logged_hours, duration_hours_snapshot, comments, call_type')
         .gte('start', start.toISOString())
-        .lte('start', end.toISOString()), 'linked_client_id')
-        .order('start', { ascending: true });
+        .lte('start', end.toISOString()), 'linked_client_id');
+    gridQuery = OL._applyCalendarSearch(gridQuery).order('start', { ascending: true });
+    const { data, error } = await gridQuery;
 
     if (error) { 
         console.error('Failed to load calendar events:', error.message); 
@@ -623,6 +677,7 @@ OL.loadCalendarGridMonth = async function() {
 OL.loadCalendarEvents = async function() {
     let query = scopeQueryToBusinessClients(db.from('calendar_events').select('id, title, start, end, all_day, location, link, linked_client_id, calendar_summary, assignee, assignees, attendee_emails, billable, logged_hours, duration_hours_snapshot, comments, call_type'), 'linked_client_id');
 
+    query = OL._applyCalendarSearch(query);
     const nowIso = new Date().toISOString();
     if (OL.calendarState.filter === 'upcoming') {
         query = query.gte('start', nowIso).order('start', { ascending: true });
