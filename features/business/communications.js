@@ -2685,7 +2685,6 @@ OL.openComposeEmailModal = function(options = {}) {
         fromHtml: `<div class="tiny muted" style="margin-bottom:10px;">From <strong>${esc(state.master?.communications?.gmail?.email || 'the connected Gmail account')}</strong>${OL.getCurrentUserName ? ` · signed in as <strong>${esc(OL.getCurrentUserName())}</strong>` : ''}</div>`,
         showBcc: true,
         subject: st.subject,
-        greeting: false,
         messageHtml: startHtml, messageMinHeight: 200, messagePlaceholder: 'Write your message…',
         messageToolbarHtml: `
             <select class="modal-input tiny" style="width:auto !important;" onchange="if(this.value){ OL.applyEmailTemplate(this.value); this.value=''; }">
