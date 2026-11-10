@@ -139,12 +139,14 @@ const meetingReplacedByTask = (e) => {
     return Array.isArray(tasks) && tasks.some(t => t && String(t.meetingSummaryEventId || '') === String(e.id));
 };
 
-// A meeting nobody is assigned to drops off the dashboard an hour after it ends (an hour after it starts if it has no end).
+// A meeting with no project or nobody assigned drops off the dashboard an hour after it ends (an hour after it starts if it has no end).
 // Nobody owns it, so nothing is waiting on it. It stays in the cache, so the day's totals still count it.
 const UNASSIGNED_GRACE_MS = 60 * 60 * 1000;
 const unassignedMeetingExpired = (e) => {
     if (!e || e.all_day) return false;
-    if ((Array.isArray(e.assignees) && e.assignees.length) || e.assignee) return false;
+    // "Unassigned" on the dashboard means either: no project linked (the row's client shows as Unassigned) or nobody assigned.
+    const noAssignee = !((Array.isArray(e.assignees) && e.assignees.length) || e.assignee);
+    if (e.linked_client_id && !noAssignee) return false;
     const endMs = new Date(e.end || e.start).getTime();
     return Number.isFinite(endMs) && endMs + UNASSIGNED_GRACE_MS < Date.now();
 };
