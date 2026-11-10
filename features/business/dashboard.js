@@ -139,8 +139,18 @@ const meetingReplacedByTask = (e) => {
     return Array.isArray(tasks) && tasks.some(t => t && String(t.meetingSummaryEventId || '') === String(e.id));
 };
 
+// A meeting nobody is assigned to drops off the dashboard an hour after it ends (an hour after it starts if it has no end).
+// Nobody owns it, so nothing is waiting on it. It stays in the cache, so the day's totals still count it.
+const UNASSIGNED_GRACE_MS = 60 * 60 * 1000;
+const unassignedMeetingExpired = (e) => {
+    if (!e || e.all_day) return false;
+    if ((Array.isArray(e.assignees) && e.assignees.length) || e.assignee) return false;
+    const endMs = new Date(e.end || e.start).getTime();
+    return Number.isFinite(endMs) && endMs + UNASSIGNED_GRACE_MS < Date.now();
+};
+
 OL.getDashboardEventItems = function() {
-    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id) && !meetingReplacedByTask(e)).map(e => {
+    return (OL._dashboardEventsCache || []).filter(e => isInBusinessScope(e.linked_client_id) && !meetingReplacedByTask(e) && !unassignedMeetingExpired(e)).map(e => {
         // An event can have several assignees (calendar_events.assignees); `assignee` is only the first of them.
         const list = Array.isArray(e.assignees) && e.assignees.length ? e.assignees : (e.assignee ? [e.assignee] : []);
         return {
