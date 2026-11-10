@@ -96,8 +96,12 @@ export function deriveWorkStatus(item, tasks, opts = {}) {
     }
 
     const linked = tasksForItem(tasks, item.id);
-    const openAsks = linked.filter(t => ASK_KEYS.includes(t.askKind) && !isTaskClosed(t, closedNames));
-    const steps = linked.filter(t => !t.askKind);                 // Sphynx's own step tasks
+    // A task for the client counts as an ask even when it has no askKind: tasks made by hand or from a meeting summary are
+    // plain "Client Task" tasks (status Client Task / isClientTask). Without this such a task was counted as one of
+    // Sphynx's own steps, and the request kept saying Pending Sphynx Action while the client was being asked for things.
+    const isAsk = (t) => ASK_KEYS.includes(t.askKind) || (!t.askKind && (t.isClientTask === true || t.status === CLIENT_TASK_STATUS));
+    const openAsks = linked.filter(t => isAsk(t) && !isTaskClosed(t, closedNames));
+    const steps = linked.filter(t => !t.askKind && !isAsk(t));    // Sphynx's own step tasks
     const openSteps = steps.filter(t => !isTaskClosed(t, closedNames));
     const progress = { stepsTotal: steps.length, stepsDone: steps.length - openSteps.length };
 

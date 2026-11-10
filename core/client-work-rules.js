@@ -1140,6 +1140,8 @@ export function followUpEmailData(client, ctx) {
     all.filter((p) => p && p.statusNoteFor).forEach((p) => {
         const target = all.find((x) => x.id === p.statusNoteFor);
         if (!target || !isOpen(target, ctx) || listed.has(String(target.id))) return;
+        // Parked on the client: it is already represented by the client's own asks (or listed under Waiting on the client above).
+        if (isClientWaitingStatus(target.status)) return;
         const note = noteFor(target);
         if (note) addRow(target, note, false);
     });
