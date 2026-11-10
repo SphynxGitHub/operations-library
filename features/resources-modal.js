@@ -947,6 +947,36 @@ export function openResourceModal(targetId, draftObj = null) {
       </aside>
   `;
 
+    // --- UPLOADED FILES (Document and Reference resources) ---
+    // Files live in the private "resource-files" storage bucket; the resource keeps only a small record of each one
+    // (res.attachments). Opening a file asks storage for a short-lived link, so nothing is public.
+    const canAttach = ['document', 'reference'].includes(String(res.type || '').toLowerCase()) || OL.isReferenceResource(res);
+    const attachmentsHtml = canAttach ? `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="paperclip" style="width:14px;height:14px;"></i> UPLOADED FILES
+            </label>
+            <div id="res-files-${esc(res.id)}" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                ${(res.attachments || []).map((f) => `
+                    <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:6px;">
+                        <i data-lucide="file" style="width:14px;height:14px;opacity:0.6;flex-shrink:0;"></i>
+                        <div style="flex:1; min-width:0;">
+                            <div class="tiny bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(f.name)}</div>
+                            <div class="tiny muted">${esc(OL.formatFileSize(f.size))}${f.uploadedBy ? ` &middot; ${esc(f.uploadedBy)}` : ''}${f.uploadedAt ? ` &middot; ${esc(new Date(f.uploadedAt).toLocaleDateString([], { dateStyle: 'short' }))}` : ''}</div>
+                        </div>
+                        <button class="btn tiny soft" onclick="OL.openResourceFile('${esc(res.id)}', '${esc(f.id)}')" title="Open"><i data-lucide="external-link" style="width:12px;height:12px;"></i></button>
+                        <button class="card-delete-btn" style="position:static; opacity:0.6;" onclick="OL.removeResourceFile('${esc(res.id)}', '${esc(f.id)}')" title="Remove"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
+                    </div>
+                `).join('') || '<div class="tiny muted">No files uploaded yet.</div>'}
+            </div>
+            <input type="file" id="res-file-input-${esc(res.id)}" multiple style="display:none;" onchange="OL.uploadResourceFiles('${esc(res.id)}', this.files); this.value='';">
+            <button class="btn tiny soft full-width" style="margin-top:10px; border-style:dashed; display:flex; align-items:center; justify-content:center; gap:6px;"
+                    onclick="document.getElementById('res-file-input-${esc(res.id)}').click()">
+                <i data-lucide="upload" style="width:14px;height:14px;"></i> Upload files (up to ${RESOURCE_FILE_MAX_MB} MB each)
+            </button>
+        </div>
+    ` : '';
+
     let containerHtml = "";
     if (res.isContainer) {
         containerHtml = `
@@ -1490,6 +1520,7 @@ export function openResourceModal(targetId, draftObj = null) {
         
             ${collateralHtml}
             ${containerHtml}
+            ${attachmentsHtml}
         
             ${pathsHtml}
         `;
@@ -2350,6 +2381,59 @@ export function simulateUpload(resId, idx) {
         OL.openResourceModal(resId);
     }
 };
+
+// ---- uploaded files on Document / Reference resources ----
+const RESOURCE_FILE_BUCKET = 'resource-files';
+const RESOURCE_FILE_MAX_MB = 25;
+
+OL.formatFileSize = function(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export async function uploadResourceFiles(resId, fileList) {
+    const client = getActiveClient();
+    const res = OL.getResourceById(resId);
+    const files = Array.from(fileList || []);
+    if (!client || !res || !files.length) return;
+    const who = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
+    if (!Array.isArray(res.attachments)) res.attachments = [];
+    const failed = [];
+    for (const file of files) {
+        if (file.size > RESOURCE_FILE_MAX_MB * 1024 * 1024) { failed.push(`${file.name} (over ${RESOURCE_FILE_MAX_MB} MB)`); continue; }
+        const id = uid();
+        // client / resource first, so access can follow the project (see the storage policies in the migration)
+        const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+        const path = `${client.id}/${res.id}/${id}-${safe}`;
+        const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+        if (error) { console.error('Resource file upload failed:', error.message); failed.push(`${file.name} (${error.message})`); continue; }
+        res.attachments.push({ id, name: file.name, size: file.size, mimeType: file.type || '', path, uploadedAt: new Date().toISOString(), uploadedBy: who });
+    }
+    if (files.length > failed.length) OL.persist();
+    OL.openResourceModal(resId);
+    if (failed.length) alert(`These files were not uploaded:\n${failed.join('\n')}`);
+}
+
+export async function openResourceFile(resId, fileId) {
+    const f = (OL.getResourceById(resId)?.attachments || []).find((x) => x && x.id === fileId);
+    if (!f) return;
+    const { data, error } = await db.storage.from(RESOURCE_FILE_BUCKET).createSignedUrl(f.path, 3600);
+    if (error || !data?.signedUrl) { alert(`Could not open this file: ${error?.message || 'no link returned'}`); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
+}
+
+export async function removeResourceFile(resId, fileId) {
+    const res = OL.getResourceById(resId);
+    const f = (res?.attachments || []).find((x) => x && x.id === fileId);
+    if (!f || !confirm(`Remove "${f.name}"? The file is deleted.`)) return;
+    const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).remove([f.path]);
+    if (error) console.error('Resource file delete failed:', error.message);   // the record goes either way, so a missing file can't pin it
+    res.attachments = res.attachments.filter((x) => x.id !== fileId);
+    OL.persist();
+    OL.openResourceModal(resId);
+}
 
 // Minimal markdown-ish formatting for comments: **bold**, *italic*, "- " bullets, line breaks.
 function formatCommentText(text) {
@@ -3332,7 +3416,7 @@ Object.assign(window.OL, {
     getResourceDatapoints, renderHierarchyTree, addFolderNode, updateTreeNode,
     removeTreeNode, handleTreeDragStart, handleTreeDrop, handleTreeDragOver,
     handleTreeDragLeave, handleConventionUpdate, addResourceDataTag, removeResourceDataTag, addEmailAttachment, removeEmailAttachment, updateContainerFile,
-    addFileToContainer, removeFileFromContainer, simulateUpload,
+    addFileToContainer, removeFileFromContainer, simulateUpload, uploadResourceFiles, openResourceFile, removeResourceFile,
     addResourceComment, wrapCommentSelection, renderResourceMiniMaps, goToResourceInMap,
     navigateBack, trackNav, clearNavHistory, filterSignatureSearch,
     linkSignature, previewEmailTemplate, copyToClipboard, logResourceEdit, trimAllEditHistory,
