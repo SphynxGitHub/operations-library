@@ -1520,7 +1520,6 @@ export function openResourceModal(targetId, draftObj = null) {
         
             ${collateralHtml}
             ${containerHtml}
-            ${attachmentsHtml}
         
             ${pathsHtml}
         `;
@@ -1635,6 +1634,7 @@ export function openResourceModal(targetId, draftObj = null) {
             <!-- Main body -->
             <div style="flex:1.6;overflow-y:auto;padding:16px 20px; height: 100%;">
                 ${bodyContent}
+                ${attachmentsHtml}
             </div>
     
             <!-- Sidebar: the same comment box tasks use (rich text, @mentions, edit/delete, "Client can view"), plus edit history -->
