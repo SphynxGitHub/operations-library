@@ -264,6 +264,13 @@ function persistNow() {
             if (state.masterHasReviewDefaults) masterPayload.review_defaults = masterCopy.reviewDefaults || { days: 30, followUpEveryDays: 10 };
             // ol_settings comes from migrations/2026_10_ol_settings.sql (email wording, follow-up and scheduling settings) — only saved once the column exists.
             if (state.masterHasOlSettings) masterPayload.ol_settings = masterCopy.olSettings || {};
+            // Vault resources go with the master row only when they changed since they were loaded or last saved, so a tab that
+            // never touched them cannot overwrite another tab's additions with its older copy.
+            let masterResourcesJson = null;
+            if (state.masterHasResources) {
+                const json = JSON.stringify(masterCopy.resources || []);
+                if (json !== state._masterResourcesSaved) { masterPayload.resources = masterCopy.resources || []; masterResourcesJson = json; }
+            }
 
             // Only staff write the master row. A partner's or client's copy of it is a limited,
             // read-only view (see sync), and saving it back would overwrite the team roster,
@@ -291,6 +298,7 @@ function persistNow() {
                     .from('workspace_masters')
                     .upsert(masterPayload, { onConflict: 'id' });
 
+            if (!masterErr && masterResourcesJson !== null) state._masterResourcesSaved = masterResourcesJson;
             if (masterErr) {
                 console.error("❌ Master Persist Error:", masterErr.message);
                 showSyncErrorToast(`Some changes couldn't be saved (${masterErr.message}). Your latest edits may not have synced.`);
@@ -665,6 +673,14 @@ export async function sync() {
             if (masterData.assignee_by_type && typeof masterData.assignee_by_type === 'object' && !Array.isArray(masterData.assignee_by_type)) state.master.assigneeByType = masterData.assignee_by_type;
             state.masterHasOlSettings = Object.prototype.hasOwnProperty.call(masterData, 'ol_settings');
             if (masterData.ol_settings && typeof masterData.ol_settings === 'object' && !Array.isArray(masterData.ol_settings)) state.master.olSettings = masterData.ol_settings;
+            // The Master Vault's resources (state.master.resources). They were never part of this row, so a resource made in the vault
+            // lived only in memory and was gone on refresh. The column comes from migrations/2026_11h_master_resources.sql; until it
+            // exists they are not saved (an unknown column would make every master save fail).
+            state.masterHasResources = Object.prototype.hasOwnProperty.call(masterData, 'resources');
+            if (Array.isArray(masterData.resources)) {
+                state.master.resources = masterData.resources;
+                state._masterResourcesSaved = JSON.stringify(masterData.resources);
+            }
             state.masterHasReviewDefaults = Object.prototype.hasOwnProperty.call(masterData, 'review_defaults');
             if (masterData.review_defaults && typeof masterData.review_defaults === 'object' && !Array.isArray(masterData.review_defaults)) state.master.reviewDefaults = masterData.review_defaults;
             console.log(`🏛️ Master Registry Loaded: ${state.master.apps.length} Apps, ${state.master.functions.length} Functions.`);
