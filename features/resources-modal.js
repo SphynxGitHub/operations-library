@@ -2397,7 +2397,11 @@ export async function uploadResourceFiles(resId, fileList) {
     const client = getActiveClient();
     const res = OL.getResourceById(resId);
     const files = Array.from(fileList || []);
-    if (!client || !res || !files.length) return;
+    if (!files.length) return;
+    // In the Master Vault there is no project: its files are kept under "master" (staff only, see the storage policies).
+    const inVault = location.hash.includes('vault') || !client;
+    const scope = inVault ? 'master' : client.id;
+    if (!res) { alert('Could not find this resource to attach the file to. Close it, reopen it and try again.'); return; }
     const who = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
     if (!Array.isArray(res.attachments)) res.attachments = [];
     const failed = [];
@@ -2406,7 +2410,7 @@ export async function uploadResourceFiles(resId, fileList) {
         const id = uid();
         // client / resource first, so access can follow the project (see the storage policies in the migration)
         const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(0, 120);
-        const path = `${client.id}/${res.id}/${id}-${safe}`;
+        const path = `${scope}/${res.id}/${id}-${safe}`;
         const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
         if (error) { console.error('Resource file upload failed:', error.message); failed.push(`${file.name} (${error.message})`); continue; }
         res.attachments.push({ id, name: file.name, size: file.size, mimeType: file.type || '', path, uploadedAt: new Date().toISOString(), uploadedBy: who });
