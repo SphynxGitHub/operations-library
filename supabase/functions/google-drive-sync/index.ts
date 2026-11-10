@@ -408,6 +408,44 @@ serve(async (req) => {
     }
     
     // =========================================================================
+    // Master Vault documents: a file attached to a Master Vault resource (no client). Goes in a "Master Vault Files" folder
+    // and, unlike the SOP snapshots above, is NOT made public: it opens only for people who can open it in Google Drive.
+    // =========================================================================
+    if (action === "upload_vault_file") {
+      const { fileName, fileData, fileType } = body;
+      const rootQuery = `mimeType='application/vnd.google-apps.folder' and name='Master Vault Files' and trashed=false`;
+      const rootSearch = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(rootQuery)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const rootData = await rootSearch.json();
+      let vaultFolderId = rootData.files?.[0]?.id;
+      if (!vaultFolderId) {
+        const createRes = await driveFetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Master Vault Files", mimeType: "application/vnd.google-apps.folder" })
+        });
+        vaultFolderId = (await createRes.json()).id;
+      }
+      const base64Data = String(fileData || "").split(",")[1] || String(fileData || "");
+      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      const blob = new Blob([binaryData], { type: fileType || "application/octet-stream" });
+      const formData = new FormData();
+      formData.append("metadata", new Blob([JSON.stringify({ name: fileName, parents: [vaultFolderId] })], { type: "application/json" }));
+      formData.append("file", blob);
+      const uploadRes = await driveFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.id) {
+        return new Response(JSON.stringify({ error: "upload_failed", message: uploadData.error?.message || "Failed to upload to Google Drive." }), { status: 400, headers: corsHeaders });
+      }
+      return new Response(JSON.stringify({ success: true, fileId: uploadData.id, webViewLink: uploadData.webViewLink }), { status: 200, headers: corsHeaders });
+    }
+
+    // =========================================================================
     // ACTION 3: Get or Create Client Folder Structure
     // =========================================================================
     if (action === "get_or_create_client_folder") {

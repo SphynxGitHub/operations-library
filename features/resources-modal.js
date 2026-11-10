@@ -2383,8 +2383,11 @@ export function simulateUpload(resId, idx) {
 };
 
 // ---- uploaded files on Document / Reference resources ----
+// Files are stored in Google Drive (the project's own folder, "Reference Files" inside it; "Master Vault Files" for vault
+// resources), not in Supabase. The resource keeps a small record of each one (res.attachments) with its Drive link.
+// Records made earlier, when files were kept in Supabase storage, still open (they have a `path` instead of a link).
 const RESOURCE_FILE_BUCKET = 'resource-files';
-const RESOURCE_FILE_MAX_MB = 25;
+const RESOURCE_FILE_MAX_MB = 15;   // files travel to Drive through a function as text, so this is lower than Drive's own limit
 
 OL.formatFileSize = function(bytes) {
     const n = Number(bytes) || 0;
@@ -2393,27 +2396,42 @@ OL.formatFileSize = function(bytes) {
     return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error || new Error('Could not read the file'));
+    r.readAsDataURL(file);
+});
+
 export async function uploadResourceFiles(resId, fileList) {
     const client = getActiveClient();
     const res = OL.getResourceById(resId);
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    // In the Master Vault there is no project: its files are kept under "master" (staff only, see the storage policies).
-    const inVault = location.hash.includes('vault') || !client;
-    const scope = inVault ? 'master' : client.id;
     if (!res) { alert('Could not find this resource to attach the file to. Close it, reopen it and try again.'); return; }
+    const inVault = location.hash.includes('vault') || !client;
     const who = typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '';
     if (!Array.isArray(res.attachments)) res.attachments = [];
     const failed = [];
     for (const file of files) {
         if (file.size > RESOURCE_FILE_MAX_MB * 1024 * 1024) { failed.push(`${file.name} (over ${RESOURCE_FILE_MAX_MB} MB)`); continue; }
-        const id = uid();
-        // client / resource first, so access can follow the project (see the storage policies in the migration)
-        const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(0, 120);
-        const path = `${scope}/${res.id}/${id}-${safe}`;
-        const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-        if (error) { console.error('Resource file upload failed:', error.message); failed.push(`${file.name} (${error.message})`); continue; }
-        res.attachments.push({ id, name: file.name, size: file.size, mimeType: file.type || '', path, uploadedAt: new Date().toISOString(), uploadedBy: who });
+        try {
+            let out;
+            if (inVault) {
+                const { data, error } = await db.functions.invoke('google-drive-sync', {
+                    body: { action: 'upload_vault_file', fileName: file.name, fileType: file.type, fileData: await readAsDataUrl(file) }
+                });
+                if (error || !data?.success) throw new Error(data?.message || error?.message || 'Drive upload failed');
+                out = data;
+            } else {
+                out = await OL.uploadFileToDrive(client.id, file, 'Reference Files');
+            }
+            if (!out?.webViewLink) throw new Error('Drive did not return a link');
+            res.attachments.push({ id: uid(), name: file.name, size: file.size, mimeType: file.type || '', driveFileId: out.fileId || '', url: out.webViewLink, uploadedAt: new Date().toISOString(), uploadedBy: who });
+        } catch (e) {
+            console.error('Resource file upload failed:', e);
+            failed.push(`${file.name} (${e.message || e})`);
+        }
     }
     if (files.length > failed.length) OL.persist();
     OL.openResourceModal(resId);
@@ -2423,6 +2441,8 @@ export async function uploadResourceFiles(resId, fileList) {
 export async function openResourceFile(resId, fileId) {
     const f = (OL.getResourceById(resId)?.attachments || []).find((x) => x && x.id === fileId);
     if (!f) return;
+    if (f.url) { window.open(f.url, '_blank', 'noopener'); return; }
+    // an earlier upload kept in Supabase storage
     const { data, error } = await db.storage.from(RESOURCE_FILE_BUCKET).createSignedUrl(f.path, 3600);
     if (error || !data?.signedUrl) { alert(`Could not open this file: ${error?.message || 'no link returned'}`); return; }
     window.open(data.signedUrl, '_blank', 'noopener');
@@ -2431,9 +2451,11 @@ export async function openResourceFile(resId, fileId) {
 export async function removeResourceFile(resId, fileId) {
     const res = OL.getResourceById(resId);
     const f = (res?.attachments || []).find((x) => x && x.id === fileId);
-    if (!f || !confirm(`Remove "${f.name}"? The file is deleted.`)) return;
-    const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).remove([f.path]);
-    if (error) console.error('Resource file delete failed:', error.message);   // the record goes either way, so a missing file can't pin it
+    if (!f || !confirm(f.url ? `Remove "${f.name}" from this resource? The file stays in Google Drive.` : `Remove "${f.name}"? The file is deleted.`)) return;
+    if (f.path) {
+        const { error } = await db.storage.from(RESOURCE_FILE_BUCKET).remove([f.path]);
+        if (error) console.error('Resource file delete failed:', error.message);   // the record goes either way, so a missing file can't pin it
+    }
     res.attachments = res.attachments.filter((x) => x.id !== fileId);
     OL.persist();
     OL.openResourceModal(resId);
