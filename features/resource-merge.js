@@ -308,6 +308,7 @@ function rmArchive(on) { if (dlg) dlg.archive = !!on; }
 
 async function rmApply() {
     if (!dlg || !dlg.newId) return;
+    try {
     const { oldId, newId, scopeResId } = dlg;
     const client = getActiveClient();
     let stats = null; let archived = false; let full = null;
@@ -324,6 +325,10 @@ async function rmApply() {
     dlg.result = stats || { changed: 0, merged: 0, dropped: 0, skipped: 0 };
     dlg.archived = archived;
     paintDialog();
+    } catch (e) {
+        console.error('Merge failed:', e);
+        alert(`The merge did not finish: ${e && e.message ? e.message : e}`);
+    }
 }
 function rmMapStep(oldStepId, value) { if (!dlg) return; dlg.overrides[oldStepId] = value; paintDialog(); }
 
