@@ -19,6 +19,14 @@
 
 const BRANCH_TYPES = new Set(['condition', 'loop', 'delay']);
 
+// The step a link points at, when it is a step of this same card ("<card id>-<step id>"). Step ids made by hand contain dashes
+// themselves ("step-1699..."), so the id is cut off after the card's own id, not at the last dash: cutting at the last dash
+// read such a step as a different id and dropped every link to it out of the layout.
+const stepIdOf = (res, targetId) => {
+  const t = String(targetId || ''); const pre = `${res.id}-`;
+  return t.startsWith(pre) ? t.slice(pre.length) : null;
+};
+
 export const isLaneResource = (res) => !!(res && (res.zapMeta || res.originalZapId));
 export const isLaneLayout = (layout) => { const first = layout && Object.values(layout)[0]; return !!(first && first.laneMode); };
 
@@ -41,9 +49,8 @@ export function layoutLanes(res, opts = {}) {
   const incoming = new Map();
   steps.forEach((s) => (s.logic && s.logic.out ? s.logic.out : []).forEach((l) => {
     if (!l || !l.targetId) return;
-    const t = String(l.targetId); const i = t.lastIndexOf('-');
-    if (i === -1 || t.slice(0, i) !== String(res.id)) return;
-    const tid = t.slice(i + 1);
+    const tid = stepIdOf(res, l.targetId);
+    if (tid === null) return;
     if (tid !== String(s.id)) incoming.set(tid, (incoming.get(tid) || 0) + 1);
   }));
 
@@ -51,10 +58,8 @@ export function layoutLanes(res, opts = {}) {
     const sid = String(s.id);
     (s.logic && s.logic.out ? s.logic.out : []).forEach((l) => {
       if (!l || !l.targetId) return;
-      const t = String(l.targetId);
-      const i = t.lastIndexOf('-');
-      if (i === -1 || t.slice(0, i) !== String(res.id)) return;           // links to other cards are not part of this layout
-      const tid = t.slice(i + 1);
+      const tid = stepIdOf(res, l.targetId);
+      if (tid === null) return;                                           // links to other cards are not part of this layout
       if (!byId.has(tid) || tid === sid) return;
       const types = l.types || [l.type || 'next'];
       if (types.some((x) => BRANCH_TYPES.has(x))) {
