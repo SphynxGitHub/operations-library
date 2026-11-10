@@ -143,9 +143,18 @@ export function layoutLanes(res, opts = {}) {
     let c = c0; let bandRow = startRow; let bandBottom = startRow - 1; let after = baseAfter.slice();
     kids.forEach((k) => {
       const w = Math.min(width(k), maxCols - c0 > 0 ? maxCols - c0 : maxCols);
-      if (c + w > maxCols && c > c0) {                                   // wrap onto a new band
-        bandRow = bandBottom + 1; c = c0; bandBottom = bandRow - 1;
-        after = baseAfter.concat(placedIds);
+      if (c + w > maxCols && c > c0) {                                   // no room across: wrap
+        // Into the emptiest stretch of columns (the one whose lanes end highest), not under everything in the first
+        // column. A new band below the whole row put the lane at the far end of a long line that ran down through the
+        // cards of the first lane, while columns further along stood empty.
+        let bestC = c0; let bestBottom = Infinity;
+        for (let cc = c0; cc + w <= maxCols; cc++) {
+          let b = startRow - 1;
+          Object.values(layout).forEach((li) => { if (li.colOffset >= cc && li.colOffset < cc + w && li.row > b) b = li.row; });
+          if (b < bestBottom) { bestBottom = b; bestC = cc; }
+        }
+        c = bestC; bandRow = Math.max(startRow, bestBottom + 1); bandBottom = bandRow - 1;
+        after = baseAfter.slice();
       }
       const got = placeLane(k, c, bandRow, m, after);
       got.ids.forEach((x) => placedIds.push(x));
