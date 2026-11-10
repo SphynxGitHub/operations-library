@@ -37,6 +37,16 @@ export function layoutLanes(res, opts = {}) {
   const branchesOf = new Map();   // step -> the first steps of the lanes that branch from it, in order
   const heads = new Set();        // steps that start a lane
 
+  // how many links in this card point at each step (a step nothing else leads to has none)
+  const incoming = new Map();
+  steps.forEach((s) => (s.logic && s.logic.out ? s.logic.out : []).forEach((l) => {
+    if (!l || !l.targetId) return;
+    const t = String(l.targetId); const i = t.lastIndexOf('-');
+    if (i === -1 || t.slice(0, i) !== String(res.id)) return;
+    const tid = t.slice(i + 1);
+    if (tid !== String(s.id)) incoming.set(tid, (incoming.get(tid) || 0) + 1);
+  }));
+
   steps.forEach((s) => {
     const sid = String(s.id);
     (s.logic && s.logic.out ? s.logic.out : []).forEach((l) => {
@@ -54,6 +64,14 @@ export function layoutLanes(res, opts = {}) {
         heads.add(tid);
       } else if (!nextOf.has(sid)) {
         nextOf.set(sid, tid);
+      } else if (nextOf.get(sid) !== tid && incoming.get(tid) === 1) {
+        // A second "next" line out of a step (say "Contact NOT Found") to a step that nothing else leads to: it is a path of
+        // its own, so it runs down a lane beside its step. Without this it was left out of every lane and dropped to the bottom
+        // of the main column, with a long line running all the way down to it.
+        const list = branchesOf.get(sid) || [];
+        if (!list.includes(tid)) list.push(tid);
+        branchesOf.set(sid, list);
+        heads.add(tid);
       }
     });
   });
