@@ -1138,6 +1138,9 @@ OL.handleTaskCompletionCascade = function(client, task, previousStatus) {
     // asked whether to complete it too (see ERROR → TASK in features/business/error-log.js).
     if (task.errorId && typeof OL.onErrorTaskClosed === 'function') OL.onErrorTaskClosed(client.id, task);
 
+    // Maintenance clients: if that finished a request's steps, ask whether it needs a test (features/testing.js).
+    if (typeof OL.onImplementationTaskClosed === 'function') OL.onImplementationTaskClosed(client.id, task);
+
     const tasks = client.projectData?.clientTasks || [];
     tasks.forEach(other => {
         if (other.dueRelativeTo?.taskId === task.id) {

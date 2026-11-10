@@ -25,6 +25,8 @@
 
 import { getCurrentRound } from './requests.js';
 import { requestResourceIds } from './request-pricing.js';
+import { isMaintenanceClient } from './maintenance.js';
+import { taskAppliesToRequest } from './task-links.js';
 import { deriveWorkStatus, isTaskClosed, tasksForItem } from './work-status.js';
 
 export const TEST_RESULTS = { PASS: 'pass', FAIL: 'fail', SKIP: 'skip' };
@@ -172,6 +174,28 @@ export function markReadyForTesting(client, itemId, now) {
     return null;
 }
 
+// Maintenance clients: after an implementation task closes, which requests it belongs to are now ready for testing and have not
+// been asked about yet. Only Sphynx's own build steps count: not testing, fix or client/third-party ask tasks. Returns
+// [{ sheetId, item }].
+export function requestsAwaitingTestAnswer(client, task, closedNames) {
+    const pd = client?.projectData;
+    if (!pd || !task || !isMaintenanceClient(client)) return [];
+    if (task.testRunId || task.fixForTestRunId || task.isClientTask || task.askKind) return [];
+    const tasks = pd.clientTasks || [];
+    const runs = pd.testRuns || [];
+    const out = [];
+    (pd.scopingSheets || []).forEach((sheet) => (sheet?.lineItems || []).forEach((item) => {
+        if (!item || typeof item !== 'object' || isBlank(item.id)) return;
+        if (String(item.status || '') !== 'Do Now' || !TESTABLE_TYPES.includes(isBlank(item.requestType) ? 'build' : String(item.requestType))) return;
+        if (item.testAsked || item.testNeeded === true || item.testNeeded === false) return;
+        if (!taskAppliesToRequest(task, item.id)) return;
+        if (runs.some((r) => r.itemId === String(item.id) && r.sheetId === String(sheet.id ?? ''))) return;
+        if (!isReadyForTesting(item, tasks, closedNames)) return;
+        out.push({ sheetId: sheet.id, item });
+    }));
+    return out;
+}
+
 // ---- the main pass, run before each save ----
 // ctx: { templates, roles, closedNames, resourceFor(item) -> resource|null, uid, now }
 // Returns what it did, so the caller can tell the person.
@@ -189,15 +213,17 @@ export function updateTestRuns(client, ctx) {
     const builderFor = (item) => assigneeForRequestRole(client, ctx.roles, /implement/i, item);
     const itemById = (id) => (pd.scopingSheets || []).flatMap((sh) => sh?.lineItems || []).find((i) => i && String(i.id) === String(id)) || null;
 
-    // 1. a request whose steps are done gets its own checklist and a Testing task
+    // 1. a request whose steps are done gets its own checklist and a Testing task.
+    //    Maintenance clients (ongoing and ad hoc) are asked first: when the steps of a request are done the app asks whether it
+    //    needs a test (features/testing.js, onImplementationTaskClosed), and only a "yes" (item.testNeeded) makes a checklist
+    //    and Testing task. Requests where the answer was no, or that were never asked, get none.
+    const askFirst = isMaintenanceClient(client);
     (pd.scopingSheets || []).forEach((sheet) => {
         if (!sheet) return;
-        // Client requests (maintenance) are plain: no testing checklist and no round review — unless the project
-        // opts in (projectData.reviewSettings.testClientRequests, a checkbox on Maintenance & Hours). Then each
-        // request gets its own internal checklist and Testing task when its steps are done; there are still no
-        // rounds, so nothing is sent to the client and no review period starts (core/conclusion.js skips them).
+        // Client requests (maintenance) are plain: no round review, and nothing is sent to the client. They only get a testing
+        // checklist when someone says so (see above); there are still no rounds, so no review period starts (core/conclusion.js skips them).
         const isMaintSheet = sheet.kind === 'maintenance' || sheet.id === 'maintenance';
-        if (isMaintSheet && !pd.reviewSettings?.testClientRequests) return;
+        if (isMaintSheet && !askFirst) return;
         const real = (sheet.lineItems || []).filter((item) => item && typeof item === 'object' && !isBlank(item.id) && titleOf(item, ctx.resourceFor(item)));
         // Carries roundApprovals/status through for per-round approval
         // gating (core/requests.js isRoundApproved) — see that file for why.
@@ -206,6 +232,7 @@ export function updateTestRuns(client, ctx) {
 
         real.forEach((item) => {
             if (String(item.status || '') !== 'Do Now') return;
+            if (askFirst && item.testNeeded !== true) return;
             const r = parseInt(item.round, 10);
             const round = Number.isFinite(r) && r >= 1 ? r : 1;
             if (round !== current) return;
@@ -225,15 +252,19 @@ export function updateTestRuns(client, ctx) {
                 ? resIds.map((id) => ({ id, res: ctx.resourceForId ? ctx.resourceForId(id) : null }))
                 : [{ id: null, res: ctx.resourceFor(item) }];
 
-            targets.forEach(({ id, res }) => {
+            targets.forEach(({ id, res }, n) => {
                 if (pd.testRuns.some((run) => run.itemId === String(item.id) && run.sheetId === String(sheet.id ?? '') && (run.resourceId || null) === (id ? String(id) : null))) return;
 
                 const run = buildRun({ item, sheetId: sheet.id, round, title, resourceId: id, resourceName: res?.name || '', requestType,
                                        templates, resourceType: res?.type || '', uid: ctx.uid, now });
                 if (!run) return;
 
+                // Always name the resource, so two Test tasks for one request never look like duplicates; if the resource's
+                // name can't be found, number them instead.
+                const suffix = id ? ` — ${res?.name || `Resource ${n + 1} of ${targets.length}`}` : '';
+                const taskTitle = `Test: ${title}${suffix}`;
                 const task = {
-                    id: ctx.uid(), title: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`, name: `Test: ${title}${res?.name ? ' — ' + res.name : ''}`,
+                    id: ctx.uid(), title: taskTitle, name: taskTitle,
                     description: 'This request is ready. Open the checklist and mark each step Pass, Fail or Skipped. A failed step creates a fix task.',
                     status: 'Pending Sphynx Action', assignee: testerFor(item), dueDate: '', isClientTask: false, loggedHours: 0,
                     parentTaskId: null, createdBy: 'testing', createdAt: now, testRunId: run.id, testForItemId: String(item.id),

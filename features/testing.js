@@ -9,7 +9,7 @@
 
 import { state, esc, uid, getActiveClient, updateAndSync, persist, loadFullClient } from '../core/data.js';
 import {
-    updateTestRuns, recordResult, markReadyForTesting, runsForItem, testRunById, runProgress,
+    updateTestRuns, recordResult, markReadyForTesting, runsForItem, requestsAwaitingTestAnswer, testRunById, runProgress,
     DEFAULT_TEST_TEMPLATES, TEST_RESULTS, TESTABLE_TYPES,
 } from '../core/testing.js';
 import { reviewDefaults } from '../core/conclusion.js';
@@ -37,6 +37,73 @@ function contextFor(client) {
 // Called by the app just before a project is saved, so new checklists and fix tasks are saved with it.
 export function updateTestRunsFor(client) {
     return updateTestRuns(client, contextFor(client));
+}
+
+// ---------------- "does this need a test?" (maintenance clients) ----------------
+// Maintenance requests are only tested when someone says so. When an implementation task closes and that leaves a request
+// with all its steps done, this asks once per request. Yes marks it (testNeeded) and the checklist and Testing task are
+// made on the save; No records the answer so it isn't asked again; Not now leaves it to be asked when the next task closes.
+let testAskQueue = [];
+let testAskOpen = false;
+let testAskCurrent = null;
+
+export function onImplementationTaskClosed(clientId, task) {
+    const client = state.clients?.[clientId];
+    if (!client || !task) return;
+    requestsAwaitingTestAnswer(client, task, closedNames()).forEach(({ sheetId, item }) => {
+        if (!testAskQueue.some((q) => q.clientId === clientId && q.itemId === String(item.id))) {
+            testAskQueue.push({ clientId, sheetId: String(sheetId ?? ''), itemId: String(item.id), title: String(item.name || '').trim() || 'this request' });
+        }
+    });
+    setTimeout(drainTestAsks, 200);   // let the status change finish saving and redrawing first
+}
+
+function drainTestAsks() {
+    if (testAskOpen) return;
+    testAskCurrent = testAskQueue.shift() || null;
+    if (!testAskCurrent) return;
+    testAskOpen = true;
+    document.getElementById('test-needed-prompt')?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'test-needed-prompt';
+    wrap.style.cssText = 'position:fixed; inset:0; z-index:20000; display:flex; align-items:center; justify-content:center; background:rgba(2,6,23,0.6);';
+    wrap.onclick = () => OL.answerTestNeeded('later');
+    wrap.innerHTML = `
+        <div class="card" style="max-width:460px; width:90vw; padding:20px; cursor:default;" onclick="event.stopPropagation();">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:bold;">
+                <i data-lucide="flask-conical" style="width:16px;height:16px;color:var(--accent);"></i> Does this need a test?
+            </div>
+            <div class="tiny muted" style="margin-bottom:14px;">All the steps for <strong>${esc(testAskCurrent.title)}</strong> are done. Yes creates a testing checklist and a Testing task. Nothing is sent to the client.</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                <button class="btn soft" onclick="OL.answerTestNeeded('later')">Not now</button>
+                <button class="btn soft" onclick="OL.answerTestNeeded('no')">No test needed</button>
+                <button class="btn primary" onclick="OL.answerTestNeeded('yes')">Create test task</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export async function answerTestNeeded(answer) {
+    const q = testAskCurrent;
+    document.getElementById('test-needed-prompt')?.remove();
+    testAskCurrent = null;
+    testAskOpen = false;
+    if (q && (answer === 'yes' || answer === 'no')) {
+        await updateAndSync(() => {
+            const client = state.clients?.[q.clientId];
+            const sheet = (client?.projectData?.scopingSheets || []).find((sh) => String(sh?.id ?? '') === q.sheetId);
+            const item = (sheet?.lineItems || []).find((i) => i && String(i.id) === q.itemId);
+            if (!item) return;
+            item.testAsked = true;
+            item.testNeeded = answer === 'yes';
+            if (answer === 'yes') markReadyForTesting(client, item.id);
+            updateTestRunsFor(client);
+        }, q.clientId);
+        refreshScopingIfOpen();
+        if (typeof OL.refreshTaskView === 'function') OL.refreshTaskView();
+    }
+    setTimeout(drainTestAsks, 150);
 }
 
 const currentUser = () => (typeof OL.getCurrentUserName === 'function' ? OL.getCurrentUserName() : '') || 'Someone';
@@ -291,6 +358,6 @@ export function saveTestTemplates() {
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    updateTestRunsFor, openTestRun, setTestResult, setTestNote, markReadyForTesting: markReady, testBadgeHtml,
+    updateTestRunsFor, onImplementationTaskClosed, answerTestNeeded, openTestRun, setTestResult, setTestNote, markReadyForTesting: markReady, testBadgeHtml,
     openTestTemplates, addTestTemplate, removeTestTemplate, resetTestTemplates, saveTestTemplates,
 });

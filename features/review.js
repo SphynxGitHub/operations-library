@@ -419,15 +419,6 @@ export async function saveReviewSettings() {
     refreshScopingIfOpen();
 }
 
-// Maintenance clients: create an internal testing checklist (and Testing task) for each client request.
-export async function setTestClientRequests(clientId, on) {
-    const client = state.clients?.[clientId]; if (!client) return;
-    await updateAndSync(() => {
-        if (!client.projectData.reviewSettings) client.projectData.reviewSettings = {};
-        client.projectData.reviewSettings.testClientRequests = !!on;
-    }, clientId);
-}
-
 // ---------------- the client's answers ----------------
 // The client marks each step Pass or Fail on their private page. Every few minutes (and when the app opens) this
 // reads the answers for reviews in progress, opens a task on the original request for each new Fail, and marks
@@ -472,7 +463,7 @@ export async function pullClientReviewFeedback() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { editReviewDatesFor, saveReviewDates, openReviewSettings, saveReviewSettings, setTestClientRequests, rvModeChanged, extendReviewFor, pullClientReviewFeedback, updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
+Object.assign(window.OL, { editReviewDatesFor, saveReviewDates, openReviewSettings, saveReviewSettings, rvModeChanged, extendReviewFor, pullClientReviewFeedback, updateRoundStatesFor, roundStatusHtml, openReviewNotification, rvRecalc, rvRefreshMessage, sendReviewNotification, closeReviewFor });
 
 // First check shortly after the app loads, then every few minutes while it is open.
 if (typeof window !== 'undefined' && typeof setTimeout === 'function' && !window.__OL_NO_TIMERS__) {
