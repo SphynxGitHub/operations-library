@@ -253,7 +253,7 @@ function paintDialog() {
         <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:14px;">
             <div>
                 <div class="modal-section-label" style="margin-bottom:8px;">${global ? 'USED IN' : 'WILL CHANGE'} <span class="pill tiny soft">${uses.length}</span></div>
-                <div style="max-height:46vh;overflow:auto;">${rows || '<div class="tiny muted" style="padding:6px 0;">No places found.</div>'}${uses.length > 60 ? `<div class="tiny muted" style="padding:6px 0;">and ${uses.length - 60} more</div>` : ''}</div>
+                <div style="max-height:46vh;overflow:auto;">${rows || `<div class="tiny muted" style="padding:6px 0;">${global ? 'Not used as collateral anywhere. Merging still moves its steps, flow-map connections and linked items.' : 'No places found.'}</div>`}${uses.length > 60 ? `<div class="tiny muted" style="padding:6px 0;">and ${uses.length - 60} more</div>` : ''}</div>
             </div>
             <div>
                 <div class="modal-section-label" style="margin-bottom:8px;">REPLACE WITH</div>
@@ -270,7 +270,7 @@ function paintDialog() {
         </label>` : ''}
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
             <button class="btn soft" onclick="OL.rmFinish(true)">Cancel</button>
-            <button class="btn primary" ${target && uses.length ? '' : 'disabled'} onclick="OL.rmApply()">${target ? `${global ? 'Merge' : 'Replace'} with ${esc(target.name || 'Untitled')}` : (global ? 'Merge' : 'Replace')}</button>
+            <button class="btn primary" ${target && (global || uses.length) ? '' : 'disabled'} onclick="OL.rmApply()">${target ? `${global ? 'Merge' : 'Replace'} with ${esc(target.name || 'Untitled')}` : (global ? 'Merge' : 'Replace')}</button>
         </div>`;
     }
 
