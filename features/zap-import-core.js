@@ -257,6 +257,9 @@ export function zapToResource(zap, opts = {}) {
     appName: s.appName || cleanAppName(s.app),
     assignees: s.role === 'trigger' ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] : [{ id: 'zap-auto', name: 'Zapier', type: 'app' }],
     logic: { in: [], out: flow.get(String(s.stepId)) || [] },
+    // The end of a path (or of the Zap) has nothing after it. Without this mark the flow map "helps" by drawing a next-step line
+    // from it to whichever step happens to follow in the list, which is the first step of some other path.
+    ...((flow.get(String(s.stepId)) || []).length ? {} : { noAutoNext: true }),
     links: [],
     datapoints: [],
     zap: {
@@ -314,8 +317,15 @@ export function mergeIntoExisting(oldRes, newRes) {
     if (!os) return seen && seen.has(String(ns.zap.stepId)) ? null : { ...ns, _importName: ns.name };
     const keepName = os._importName !== undefined ? os.name !== os._importName : os.name !== ns.name;
     newIdFor.set(ns.id, os.id);
-    const hand = (os.logic && os.logic.out ? os.logic.out : []).filter((l) => l.targetId && !l._auto);
+    // Lines the flow map added itself to a path's end (a plain "next" to the step after it in the list, on a step nobody edited by
+    // hand) were saved like hand-drawn ones. They are not hand-drawn: drop them, the path really ends there.
+    const oldList = oldRes.steps || [];
+    const oldNext = oldList[oldList.indexOf(os) + 1];
+    const addedByMap = (l) => !os.noAutoNext && ns.logic.out.length === 0 && oldNext && String(l.targetId) === `${oldRes.id}-${oldNext.id}`
+      && (l.types || [l.type]).join() === 'next' && !String(l.rule || '').trim();
+    const hand = (os.logic && os.logic.out ? os.logic.out : []).filter((l) => l.targetId && !l._auto && !addedByMap(l));
     return {
+      ...os,                                               // everything a person set on the step that the import does not own: its combined-card group, position, change stamps...
       ...ns,
       name: keepName ? os.name : ns.name, _importName: ns.name,
       id: os.id,                                           // the old id keeps links from other cards working
