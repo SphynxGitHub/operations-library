@@ -2696,6 +2696,9 @@ export function _fvRenderSteps(resources) {
       const resGap = new Map();
       const gapFor = (res, layout) => {
         let need = COL_GAP;
+        // An imported Zap's lines run across the rows and down the gutters, and their tags sit anywhere along them clear of the cards, so its
+        // columns need only room for the lines, not for a tag beside each other column. Without this the columns were a tag and a half apart.
+        if (isLaneLayout(layout)) return COL_GAP + 12;
         (res.steps || []).forEach((st) => _fvGetEffectiveOut(st, res).forEach((l) => {
           if (!l.targetId || l._implicit) return;
           const rule = String(l.rule || '').trim();
