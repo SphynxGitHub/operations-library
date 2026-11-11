@@ -142,7 +142,39 @@ export function layoutLanes(res, opts = {}) {
     chainMemo.set(head, out);
     return out;
   };
-  heads.forEach((h) => chainOf(String(h)));                              // claim in file order
+  const claimAll = () => { chainMemo.clear(); claimed.clear(); heads.forEach((h) => chainOf(String(h))); };   // claim in file order
+  claimAll();
+
+  // Follow the flow, not the file order. A step that the flow reaches from some other step, but that is not on the main line nor in
+  // a lane yet (for instance "Launch Opportunities", which both Track 2 and Track 3 lead into), becomes a lane beside the first step
+  // that leads to it. Left alone it was listed in the main column with the steps of no path at all, far from every line into it.
+  const sourcesOf = new Map();
+  steps.forEach((s) => (s.logic && s.logic.out ? s.logic.out : []).forEach((l) => {
+    if (!l || !l.targetId) return;
+    const tid = stepIdOf(res, l.targetId);
+    if (tid === null || !byId.has(tid) || tid === String(s.id)) return;
+    const list = sourcesOf.get(tid) || [];
+    if (!list.includes(String(s.id))) list.push(String(s.id));
+    sourcesOf.set(tid, list);
+  }));
+  const mainLine = new Set();
+  for (let cur = steps.length ? String(steps[0].id) : null; cur && !mainLine.has(cur) && !heads.has(cur); cur = nextOf.get(cur)) mainLine.add(cur);
+  for (let guard = 0; guard <= steps.length; guard++) {
+    const placed = new Set(mainLine);
+    heads.forEach((h) => chainOf(String(h)).forEach((m) => placed.add(m)));
+    let attached = false;
+    for (const st of steps) {
+      const id = String(st.id);
+      if (placed.has(id)) continue;
+      const src = (sourcesOf.get(id) || []).find((x) => placed.has(x));
+      if (src === undefined) continue;
+      const list = branchesOf.get(src) || [];
+      list.push(id); branchesOf.set(src, list); heads.add(id);
+      attached = true; break;
+    }
+    if (!attached) break;
+    claimAll();
+  }
 
   // steps that sit in a lane (a head, or reached from a head by following "next")
   const inLane = new Set();
