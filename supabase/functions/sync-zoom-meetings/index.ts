@@ -403,17 +403,21 @@ serve(async (req) => {
         { id: generateCommentId(), author: "Zoom", text: `Meeting summary:\n\n${summaryText}`, mentions: [], date: new Date().toISOString() }
       ];
 
-      const { error: updateErr } = await supabase
-        .from("calendar_events")
-        .update({
-          zoom_summary: summaryText,
-          zoom_meeting_id: zoomMeetingId,
-          zoom_meeting_uuid: meetingUuid,
-          zoom_action_items: actionItems,
-          comments: updatedComments,
-          zoom_summary_processed: true
-        })
-        .eq("id", evt.id);
+      // Who hosted it, so the follow-up task can go to them. Zoom puts the host on the summary; the column comes from
+      // 2026_11h_zoom_host_email.sql, and until that has run the update is made without it.
+      const hostEmail = String(summaryPayload?.meeting_host_email || summaryPayload?.host_email || "").trim().toLowerCase();
+      const patch: Record<string, unknown> = {
+        zoom_summary: summaryText,
+        zoom_meeting_id: zoomMeetingId,
+        zoom_meeting_uuid: meetingUuid,
+        zoom_action_items: actionItems,
+        comments: updatedComments,
+        zoom_summary_processed: true
+      };
+      let { error: updateErr } = await supabase.from("calendar_events").update(hostEmail ? { ...patch, zoom_host_email: hostEmail } : patch).eq("id", evt.id);
+      if (updateErr && hostEmail && /zoom_host_email/.test(updateErr.message || "")) {
+        ({ error: updateErr } = await supabase.from("calendar_events").update(patch).eq("id", evt.id));
+      }
       if (updateErr) { console.error(`Failed to update calendar event ${evt.id}:`, updateErr.message); continue; }
       summariesPostedCount++;
       if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(meetingUuid, accessToken, summaryPayload))) elapsedSaved++;

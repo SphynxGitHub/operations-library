@@ -39,9 +39,19 @@ function meetingAttendees(evt) {
     return [...new Set(names)].filter(n => roster.includes(n));
 }
 
-// The summary goes to the project's Communication person only when they were on the meeting. Otherwise it goes to someone who
-// was (the first team member on the event); with nobody on the event, the generic Sphynx task.
+// The summary goes to whoever hosted the Zoom meeting (the host's email from Zoom, matched to the team roster). When the host is not
+// known, or not on the team, it goes to the project's Communication person if they were on the meeting, else to someone who was (the
+// first team member on the event); with nobody on the event, the generic Sphynx task.
+function zoomHostName(evt) {
+    const email = String(evt?.zoom_host_email || '').trim().toLowerCase();
+    if (!email) return '';
+    const m = (state.master?.sphynxTeam || []).find(x => String(x?.email || '').trim().toLowerCase() === email);
+    return (m && m.name) || '';
+}
+
 function summaryAssignee(client, evt) {
+    const host = zoomHostName(evt);
+    if (host) return host;
     const attendees = meetingAttendees(evt);
     const comm = communicationAssignee(client);
     if (attendees.includes(comm)) return comm;
@@ -237,15 +247,17 @@ OL.checkMeetingSummaries = async function() {
         if (!(state.adminMode === true || state.teamMemberMode === true)) return 0;
 
         const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        const { data: events, error } = await db
+        const load = (cols) => db
             .from('calendar_events')
-            .select('id, title, start, linked_client_id, summary_sent_at, assignee, assignees')
+            .select(cols)
             .not('zoom_summary', 'is', null)
             .neq('zoom_summary', '')
             .not('linked_client_id', 'is', null)
             .is('summary_sent_at', null)
             .gte('start', since)
             .limit(200);
+        let { data: events, error } = await load('id, title, start, linked_client_id, summary_sent_at, assignee, assignees, zoom_host_email');
+        if (error && /zoom_host_email/.test(error.message || '')) ({ data: events, error } = await load('id, title, start, linked_client_id, summary_sent_at, assignee, assignees'));   // before 2026_11h_zoom_host_email.sql has run
         if (error) throw error;
 
         const byClient = {};
