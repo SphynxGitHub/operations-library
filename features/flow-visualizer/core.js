@@ -3401,6 +3401,31 @@ export function _fvDrawStepConnections(resources) {
     const _myKey = fvDomKey(sourceRes);
     const _myCopies = copiesOf.get(String(sourceRes.id)) || [sourceRes];
     (sourceRes.steps || []).forEach((sourceStep, sourceIdx) => {
+      // Lines that leave a card for steps below and off to one side run down, across at a height of their own and down again, so
+      // the lines of one card never lie on top of each other or on each other's tags. The one that goes furthest runs highest,
+      // so none of them has to cross another.
+      const _busRank = new Map();
+      {
+        const fe0 = elById.get(`fv-step-${_myKey}-${sourceStep.id}`);
+        const fe = (fe0 && fe0.dataset.consolCardId && elById.get(fe0.dataset.consolCardId)) || fe0;
+        if (fe) {
+          const fr = rectOf(fe); const fxc = fr.left + fr.width / 2; const list = [];
+          OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach((o) => {
+            if (!o.targetId || o._implicit) return;
+            const k = OL._refSplitIdx(String(o.targetId)); if (k === -1) return;
+            if (String(o.targetId.substring(0, k)) !== String(sourceRes.id)) return;
+            const tid = o.targetId.substring(k + 1);
+            if (String(tid) === String(sourceStep.id)) return;
+            const te = elById.get(`fv-step-${_myKey}-${tid}`); if (!te) return;
+            const tr = rectOf(te);
+            if (tr.top < fr.bottom - 2) return;
+            const dx0 = tr.left + tr.width / 2 - fxc;
+            if (Math.abs(dx0) < 40) return;
+            list.push({ tid: String(tid), dx: dx0 });
+          });
+          [1, -1].forEach((sg) => list.filter((x) => Math.sign(x.dx) === sg).sort((a, b) => Math.abs(b.dx) - Math.abs(a.dx)).forEach((x, i) => _busRank.set(x.tid, i)));
+        }
+      }
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
 
@@ -3518,6 +3543,19 @@ export function _fvDrawStepConnections(resources) {
           }
         } catch (err) { draftRoute = null; console.warn('Draft line routing skipped:', err); }
 
+        // the run-across line (see _busRank above)
+        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && _busRank.has(String(tStepId)) && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+          const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
+          const by = Math.min(sy + 16 + _busRank.get(String(tStepId)) * 13, ey - 14);
+          if (by > sy + 6 && Math.abs(tx - fx) >= 24) {
+            const pts = [[fx, sy], [fx, by], [tx, by], [tx, ey]];
+            draftRoute = { points: pts, kind: 'bus' };
+            const R = 10; const sgx = Math.sign(tx - fx);
+            const r1 = Math.min(R, Math.abs(tx - fx) / 2, (by - sy) / 2), r2 = Math.min(R, Math.abs(tx - fx) / 2, (ey - by) / 2);
+            d = `M ${fx} ${sy} L ${fx} ${by - r1} Q ${fx} ${by} ${fx + sgx * r1} ${by} L ${tx - sgx * r2} ${by} Q ${tx} ${by} ${tx} ${by + r2} L ${tx} ${ey}`;
+          }
+        }
+
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
         const isBackLoop = !!(draftRoute && draftRoute.kind === 'loop-back');   // a link back up to an earlier step: amber and dashed
         const isLoop     = outRule.type === 'loop' || isBackLoop;
@@ -3609,7 +3647,7 @@ export function _fvDrawStepConnections(resources) {
                     u * u * u * fy + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * ty];
           };
           let bx = null, by = null;
-          const ts = vertLeft ? [] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
+          const ts = vertLeft ? [] : (draftRoute && draftRoute.kind === 'bus') ? [0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
           search:
           for (const t of ts) {
             const [px, py] = pointAt(t);

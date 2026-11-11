@@ -200,13 +200,14 @@ export function layoutLanes(res, opts = {}) {
 
   const layout = {};
   // Places one lane and everything that branches off it. Returns { bottom: last row used, ids: every step placed }.
-  const placeLane = (head, col, row, parentId, after) => {
+  const placeLane = (head, col, row, parentId, after, pgap) => {
     const members = chainOf(head);
     if (layout[head]) return { bottom: row - 1, ids: [] };
     const ids = [];
     members.forEach((m, i) => {
       layout[m] = { colOffset: col, row: row + i, parentId: i === 0 ? parentId : null, laneMode: true };
       if (i === 0 && after && after.length) layout[m].after = after.slice();
+      if (i === 0 && pgap) layout[m].parentGap = pgap;               // room for the lines of several paths to run across under their step
       ids.push(m);
     });
     let bottom = row + members.length - 1;
@@ -260,7 +261,7 @@ export function layoutLanes(res, opts = {}) {
           if (!busy) { c = cc; break; }
         }
       }
-      const got = placeLane(k, c, bandRow, m, after);
+      const got = placeLane(k, c, bandRow, m, after, Math.max(0, kids.length - 1) * 13);
       got.ids.forEach((x) => placedIds.push(x));
       bandBottom = Math.max(bandBottom, got.bottom); bottom = Math.max(bottom, got.bottom);
       c = nextC;
