@@ -147,8 +147,17 @@ export function layoutLanes(res, opts = {}) {
         // Into the emptiest stretch of columns (the one whose lanes end highest), not under everything in the first
         // column. A new band below the whole row put the lane at the far end of a long line that ran down through the
         // cards of the first lane, while columns further along stood empty.
-        let bestC = c0; let bestBottom = Infinity;
-        for (let cc = c0; cc + w <= maxCols; cc++) {
+        let bestC = c0; let bestBottom = Infinity; let early = false;
+        // First choice: the nearest column to the parent that is free for this lane's whole height, right beside the parent.
+        // Only for a plain lane (one column, nothing branching off it), so nothing of its own needs room further down.
+        const mem = chainOf(k);
+        if (w === 1 && mem.every((x) => !(branchesOf.get(x) || []).length)) {
+          for (let cc = c0; cc < maxCols && !early; cc++) {
+            const busy = Object.values(layout).some((li) => li.colOffset === cc && li.row >= startRow && li.row < startRow + mem.length);
+            if (!busy) { bestC = cc; bestBottom = startRow - 1; early = true; }
+          }
+        }
+        for (let cc = c0; !early && cc + w <= maxCols; cc++) {
           let b = startRow - 1;
           Object.values(layout).forEach((li) => { if (li.colOffset >= cc && li.colOffset < cc + w && li.row > b) b = li.row; });
           if (b < bestBottom) { bestBottom = b; bestC = cc; }
@@ -156,10 +165,21 @@ export function layoutLanes(res, opts = {}) {
         c = bestC; bandRow = Math.max(startRow, bestBottom + 1); bandBottom = bandRow - 1;
         after = baseAfter.slice();
       }
+      // A plain lane (one column, nothing branching off it) takes the nearest column to its step that is free for its whole
+      // height, rather than waiting until the columns of the lanes before it are used up: it can sit right beside its step
+      // instead of far off at the end of the row.
+      const nextC = c + w;                                               // the next lane still starts after this lane's own place in the row
+      const kmem = chainOf(k);
+      if (w === 1 && kmem.every((x) => !(branchesOf.get(x) || []).length)) {
+        for (let cc = c0; cc < c; cc++) {
+          const busy = Object.values(layout).some((li) => li.colOffset === cc && li.row >= bandRow && li.row < bandRow + kmem.length);
+          if (!busy) { c = cc; break; }
+        }
+      }
       const got = placeLane(k, c, bandRow, m, after);
       got.ids.forEach((x) => placedIds.push(x));
       bandBottom = Math.max(bandBottom, got.bottom); bottom = Math.max(bottom, got.bottom);
-      c += w;
+      c = nextC;
     });
     return { bottom, ids: placedIds };
   };
@@ -191,7 +211,10 @@ export function stackColumns(cards, layout, startY, gap, hOf, minYOf) {
   const placed = new Map();
   const tops = new Map();
   let bottom = startY;
-  cards.forEach(({ step, el }) => {
+  // by grid row (file order within a row): a lane placed up beside its parent is stacked before the lanes further down its
+  // column, not after them
+  const order = cards.map((c, i) => ({ c, i, row: ((layout[String(c.step.id)] || {}).row) || 0 })).sort((a, b) => a.row - b.row || a.i - b.i).map((x) => x.c);
+  order.forEach(({ step, el }) => {
     const li = layout[String(step.id)] || { colOffset: 0, parentId: null };
     let top = colY.has(li.colOffset) ? colY.get(li.colOffset) : startY;
     if (li.parentId && placed.has(String(li.parentId))) top = Math.max(top, placed.get(String(li.parentId)).bottom + gap + (li.parentGap || 0));
