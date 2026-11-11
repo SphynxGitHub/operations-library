@@ -30,6 +30,42 @@ const stepIdOf = (res, targetId) => {
 export const isLaneResource = (res) => !!(res && (res.zapMeta || res.originalZapId));
 export const isLaneLayout = (layout) => { const first = layout && Object.values(layout)[0]; return !!(first && first.laneMode); };
 
+// A copy of the card in which every group named in `names` is one step (the group's first member), with the links of all its members:
+// links into any member now point at that step, and the links out of the members are gathered on it. Returns { virtual, anchorOf }
+// (anchorOf: member id -> the id of the step standing for its group).
+export function collapseGroups(res, names) {
+  const steps = res.steps || [];
+  const byGroup = new Map();
+  steps.forEach((s) => { const g = s.stepGroup; if (g && names.has(g)) { if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(String(s.id)); } });
+  const anchorOf = new Map();
+  byGroup.forEach((ids) => { if (ids.length > 1) ids.forEach((id) => anchorOf.set(id, ids[0])); });
+  const remap = (l) => {
+    const tid = stepIdOf(res, l.targetId);
+    if (tid === null || !anchorOf.has(tid)) return l;
+    return { ...l, targetId: `${res.id}-${anchorOf.get(tid)}` };
+  };
+  const outsOf = new Map();   // anchor id -> links gathered from every member
+  steps.forEach((s) => {
+    const id = String(s.id); const a = anchorOf.get(id) || id;
+    const list = outsOf.get(a) || [];
+    ((s.logic && s.logic.out) || []).forEach((l) => {
+      if (!l || !l.targetId) return;
+      const r = remap(l);
+      if (stepIdOf(res, r.targetId) === a) return;                       // a link between two members of one card is no link at all
+      const k = `${r.targetId}|${(r.types || [r.type || 'next']).join(',')}`;
+      if (!list.some((x) => `${x.targetId}|${(x.types || [x.type || 'next']).join(',')}` === k)) list.push(r);
+    });
+    outsOf.set(a, list);
+  });
+  const out = [];
+  steps.forEach((s) => {
+    const id = String(s.id);
+    if (anchorOf.has(id) && anchorOf.get(id) !== id) return;            // another member: stands in the first one
+    out.push({ id, logic: { out: outsOf.get(id) || [] } });
+  });
+  return { virtual: { id: res.id, zapMeta: res.zapMeta, originalZapId: res.originalZapId, steps: out }, anchorOf };
+}
+
 // Returns { [stepId]: { colOffset, row, parentId, laneMode: true, after? } }.
 //   colOffset  which column (0 = the main column, 1 = the next one to the right ...)
 //   row        a grid row (steps in one lane are on consecutive rows; sibling lanes start on the SAME row)
@@ -38,6 +74,15 @@ export const isLaneLayout = (layout) => { const first = layout && Object.values(
 // opts.maxCols  the most columns that fit the window (default: no limit). Lanes that would not fit wrap onto a new band
 //               below instead of running off the side, so a narrow window gives a taller, narrower diagram.
 export function layoutLanes(res, opts = {}) {
+  // Steps that share a group name are drawn as ONE combined card (the Steps view). The lanes are laid out as if each group were a
+  // single step, standing where its first member stands, so the lanes keep their own columns side by side instead of being
+  // pulled apart and stacked one after another around the cards. A member's position is its card's position.
+  if (opts.collapse && opts.collapse.size) {
+    const { virtual, anchorOf } = collapseGroups(res, opts.collapse);
+    const lay = layoutLanes(virtual, { ...opts, collapse: null });
+    anchorOf.forEach((a, m) => { if (m !== a && lay[a]) lay[m] = { ...lay[a], parentId: null }; });
+    return lay;
+  }
   const maxCols = Math.max(1, Math.floor(opts.maxCols || Infinity) || Infinity);
   const steps = res.steps || [];
   const byId = new Map(steps.map((s) => [String(s.id), s]));
@@ -81,16 +126,23 @@ export function layoutLanes(res, opts = {}) {
     });
   });
 
+  // The steps of a lane, from its first step down. A step that several lanes lead into (a combined card that two paths share) belongs
+  // to the first lane that reaches it; the other lanes stop short of it and just point at it.
+  const chainMemo = new Map(); const claimed = new Set();
   const chainOf = (head) => {
+    if (chainMemo.has(head)) return chainMemo.get(head);
     const out = [head]; const seen = new Set(out);
     let cur = head;
     while (nextOf.has(cur)) {
       const n = nextOf.get(cur);
-      if (seen.has(n) || heads.has(n)) break;
+      if (seen.has(n) || heads.has(n) || claimed.has(n)) break;
       out.push(n); seen.add(n); cur = n;
     }
+    out.forEach((x) => claimed.add(x));
+    chainMemo.set(head, out);
     return out;
   };
+  heads.forEach((h) => chainOf(String(h)));                              // claim in file order
 
   // steps that sit in a lane (a head, or reached from a head by following "next")
   const inLane = new Set();

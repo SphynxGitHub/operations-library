@@ -588,9 +588,9 @@ function fvOrderColumns(wfRes) {
 // Computes per-step layout info for a single resource.
 // Main-path steps (not branch targets): colOffset=0, sequential rows.
 // Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
-export function _fvLayoutResource(res) {
+export function _fvLayoutResource(res, opts) {
     // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
-    if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols });
+    if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols, collapse: opts && opts.collapse });
     // Processes made in Frame-out: the Yes and No paths run down their own columns beside the main line
     if (isDraftLayoutResource(res)) return layoutDraft(res.steps, { maxCols: OL._fv._laneCols });
     const steps = res.steps || [];
@@ -2486,6 +2486,22 @@ export function _fvRenderSteps(resources) {
     Object.entries(groupMap).forEach(([g, members]) => {
       if (members.length > 1) consolidatedGroups[g] = members;
     });
+    // A group whose steps all belong to ONE imported Zap is a combined card inside that Zap's lanes: it takes a place in the lane
+    // grid like any step (see layoutLanes' `collapse`), instead of being a card in the stack of the workflow, which pulled the
+    // lanes apart and left a card between every stretch of steps.
+    const laneGroupSet = new Map();   // resource -> the names of its combined groups
+    const laneItems = [];
+    const laneSkip = new Set();       // "resId-stepId" of the steps that are drawn inside those cards
+    Object.entries(consolidatedGroups).forEach(([g, members]) => {
+      const r0 = members[0].res;
+      if (!isLaneResource(r0) || !members.every(m => m.res === r0)) return;
+      if (!laneGroupSet.has(r0)) laneGroupSet.set(r0, new Set());
+      laneGroupSet.get(r0).add(g);
+      laneItems.push({ type: 'consolidated', lane: true, laneRes: r0, groupName: g, members, continuing: [] });
+      members.forEach(m => laneSkip.add(`${m.res.id}-${m.step.id}`));
+      delete consolidatedGroups[g];
+    });
+    const isSkipped = (res, st) => laneSkip.has(`${res.id}-${st.id}`);
     const consolidatedIds = new Set(
       Object.values(consolidatedGroups).flat().map(m => String(m.step.id))
     );
@@ -2493,8 +2509,8 @@ export function _fvRenderSteps(resources) {
     if (Object.keys(consolidatedGroups).length === 0) {
       // No consolidation — single columns section
       return {
-        consolidatedGroups,
-        sequence: [{ type: 'columns', sections: wfRes.map(res => ({ res, steps: res.steps || [] })) }]
+        consolidatedGroups, laneGroupSet,
+        sequence: [...laneItems, { type: 'columns', sections: wfRes.map(res => ({ res, steps: (res.steps || []).filter(st => !isSkipped(res, st)) })) }]
       };
     }
 
@@ -2508,7 +2524,7 @@ export function _fvRenderSteps(resources) {
             ms.some(m => String(m.step.id) === String(step.id))
           )?.[0];
           if (g && !seenGroups.has(g)) { seenGroups.add(g); flow.push({ type: 'consolidated', group: g }); }
-        } else {
+        } else if (!isSkipped(res, step)) {
           flow.push({ type: 'step', step });
         }
       });
@@ -2621,7 +2637,7 @@ export function _fvRenderSteps(resources) {
     });
     if (trailing.some(s => s.steps.length > 0)) sequence.push({ type: 'columns', sections: trailing });
 
-    return { consolidatedGroups, sequence };
+    return { consolidatedGroups, laneGroupSet, sequence: [...laneItems, ...sequence] };
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2670,7 +2686,7 @@ export function _fvRenderSteps(resources) {
     const wfMetaList = [];
 
     wfGroups.forEach(({ workflow, resources: wfRes }) => {
-      const { sequence } = buildMergedFlow(wfRes);
+      const { sequence, laneGroupSet } = buildMergedFlow(wfRes);
 
       // Compute x positions for each resource
       const resLayouts = new Map();
@@ -2699,7 +2715,7 @@ export function _fvRenderSteps(resources) {
       const sideOfRes = (res) => ((res.steps || []).some((st) => typeof OL.fvJumpCardsOf === 'function' && OL.fvJumpCardsOf(st, res).length) ? SIDE_W + SIDE_GAP : 0);
       let cumX = PAD_X;
       wfRes.forEach(r => {
-        const rLayout = OL._fvLayoutResource(r);
+        const rLayout = OL._fvLayoutResource(r, { collapse: laneGroupSet.get(r) });
         resLayouts.set(r, rLayout);
         resBaseX.set(r, cumX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
@@ -2875,8 +2891,13 @@ export function _fvRenderSteps(resources) {
           const spanRight = memberXs.length ? Math.max(...memberXs) + CARD_W : PAD_X + wfWidth;
           const consolCenterX = (spanLeft + spanRight) / 2;
           const cardW   = CARD_W;
-          const cardX   = Math.round(consolCenterX - cardW / 2);
+          let cardX   = Math.round(consolCenterX - cardW / 2);
           const cardY   = estY;
+          if (item.lane) {   // inside an imported Zap: the card stands in the grid cell of the group's first member
+            const lr = item.laneRes; const li = (resLayouts.get(lr) || {})[String(members[0].step.id)] || { colOffset: 0 };
+            cardX = Math.round(resBaseX.get(lr) + li.colOffset * (CARD_W + (resGap.get(lr) || COL_GAP)));
+            item.laneX = cardX;
+          }
 
           // Use first member's type color and step name — all members share the same step
           // the step marked as the group's title (button on each step when the card is open) names the card; otherwise the first
@@ -2946,8 +2967,10 @@ export function _fvRenderSteps(resources) {
           });
 
           members.forEach(m => { m.step.coords = { x: cardX, y: cardY }; });
-          seqMeta.push({ type: 'consolidated', el: consolEl, members, cardX, cardW, consolCenterX, estH: CONSOL_H, anchors: consolAnchors });
-          estY += CONSOL_H + STEP_GAP;
+          const _cx = item.lane ? cardX + cardW / 2 : consolCenterX;
+          if (item.lane) consolAnchors.forEach(a => { a.style.left = Math.round(_cx - 1) + 'px'; });
+          seqMeta.push({ type: 'consolidated', lane: !!item.lane, laneRes: item.laneRes, el: consolEl, members, cardX, cardW, consolCenterX: _cx, estH: CONSOL_H, anchors: consolAnchors });
+          if (!item.lane) estY += CONSOL_H + STEP_GAP;
         }
       });
 
@@ -3083,6 +3106,10 @@ export function _fvRenderSteps(resources) {
               cardByKey.set(`${sc.res.id}-${sc.step.id}`, sc);
             });
 
+            // The combined cards of an imported Zap are stacked with that Zap's own steps (they have a cell in its lane grid)
+            const laneCons = seqMeta.filter(it => it.type === 'consolidated' && it.lane);
+            laneCons.forEach(it => { if (byRes.has(it.laneRes)) byRes.get(it.laneRes).push({ res: it.laneRes, step: it.members[0].step, el: it.el, idx: 0, laneItem: it }); });
+
             // Pass 1: compute natural (independent) Y for each card via simple stacking
             const naturalTopY = new Map(); // el → top Y from simple stacking
             byRes.forEach((cards, res) => {
@@ -3118,9 +3145,10 @@ export function _fvRenderSteps(resources) {
                  if (isLaneLayout(lay)) {   // imported Zap: paths sit side by side, each lane stacks down from its path step
                      const _ex2 = laneExtraOf(res, cards, lay, gapFor(res));
                      const out = stackColumns(cards, lay, y, gapFor(res), (el) => hOf(el) + (_ex2.get(el) || 0), (el) => minY.get(el));
-                     cards.forEach(({ step, el }) => {
+                     cards.forEach(({ step, el, laneItem }) => {
                          const top = out.tops.get(el);
                           { el.style.top = top + 'px'; step.coords.y = top; }   // pins are ignored here: the layout always decides
+                          if (laneItem) { laneItem.anchors.forEach(a => { a.style.top = top + 'px'; }); laneItem.members.forEach(m => { m.step.coords.y = top; }); }
                     });
                 maxBottom = Math.max(maxBottom, out.bottom);
                 return;
@@ -3192,6 +3220,8 @@ export function _fvRenderSteps(resources) {
             y = maxBottom + STEP_GAP;
             wfBottom = Math.max(wfBottom, maxBottom);
 
+          } else if (item.type === 'consolidated' && item.lane) {
+            // placed with its Zap's lanes (above)
           } else if (item.type === 'consolidated') {
             item.el.style.top = y + 'px';
             // Keep anchor divs aligned to top-center of card for arrow targeting
