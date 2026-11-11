@@ -181,6 +181,10 @@ export function layoutLanes(res, opts = {}) {
   heads.forEach((h) => chainOf(String(h)).forEach((m) => inLane.add(m)));
   const main = steps.map((s) => String(s.id)).filter((id) => !inLane.has(id));
 
+  // A step carries on in its own lane when the step after it is in that lane. One whose next line goes to a step of another lane
+  // (two paths that join the same steps) does not: what branches off it goes straight below it, not in a column of its own.
+  const carriesOn = (head, m) => nextOf.has(m) && chainOf(head).includes(nextOf.get(m));
+
   // how many columns a lane needs (its own, plus those of any lanes that branch off it), never more than fit
   const widthMemo = new Map();
   const width = (head) => {
@@ -191,7 +195,7 @@ export function layoutLanes(res, opts = {}) {
       const kids = branchesOf.get(m) || [];
       if (!kids.length) continue;
       const sum = kids.reduce((a, k) => a + width(k), 0);
-      w = Math.max(w, nextOf.has(m) ? 1 + sum : Math.max(1, sum));
+      w = Math.max(w, carriesOn(head, m) ? 1 + sum : Math.max(1, sum));
     }
     w = Math.min(w, maxCols);
     widthMemo.set(head, w);
@@ -212,7 +216,7 @@ export function layoutLanes(res, opts = {}) {
     });
     let bottom = row + members.length - 1;
     members.forEach((m, i) => {
-      let c0 = col + (nextOf.has(m) ? 1 : 0);                            // a step that carries on leaves its own column to the main flow
+      let c0 = col + (carriesOn(head, m) ? 1 : 0);                       // a step that carries on leaves its own column to the main flow
       let r0 = row + i + 1; let hold = [];
       if (c0 >= maxCols) { c0 = col; r0 = row + members.length; hold = members.slice(); }   // no room to the right: go below this lane
       const got = placeBranches(m, c0, r0, hold);
@@ -253,12 +257,12 @@ export function layoutLanes(res, opts = {}) {
       // A plain lane (one column, nothing branching off it) takes the nearest column to its step that is free for its whole
       // height, rather than waiting until the columns of the lanes before it are used up: it can sit right beside its step
       // instead of far off at the end of the row.
-      const nextC = c + w;                                               // the next lane still starts after this lane's own place in the row
+      let nextC = c + w;                                                 // the next lane starts after this lane's own place in the row
       const kmem = chainOf(k);
       if (w === 1 && kmem.every((x) => !(branchesOf.get(x) || []).length)) {
         for (let cc = c0; cc < c; cc++) {
           const busy = Object.values(layout).some((li) => li.colOffset === cc && li.row >= bandRow && li.row < bandRow + kmem.length);
-          if (!busy) { c = cc; break; }
+          if (!busy) { nextC = c; c = cc; break; }                       // tucked into a column already passed: it uses no new column
         }
       }
       const got = placeLane(k, c, bandRow, m, after, Math.max(0, kids.length - 1) * 13);
