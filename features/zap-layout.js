@@ -179,7 +179,10 @@ export function layoutLanes(res, opts = {}) {
   // steps that sit in a lane (a head, or reached from a head by following "next")
   const inLane = new Set();
   heads.forEach((h) => chainOf(String(h)).forEach((m) => inLane.add(m)));
-  const main = steps.map((s) => String(s.id)).filter((id) => !inLane.has(id));
+  // The main column is the line from the first step. A step nothing leads to (and that leads nowhere the flow reaches) is not part of
+  // it: left in the main column it made the steps above it "carry on" and moved every path a column to the right. They are set
+  // apart, in columns of their own after everything else, below.
+  const main = steps.map((s) => String(s.id)).filter((id) => !inLane.has(id) && mainLine.has(id));
 
   // A step carries on in its own lane when the step after it is in that lane. One whose next line goes to a step of another lane
   // (two paths that join the same steps) does not: what branches off it goes straight below it, not in a column of its own.
@@ -320,6 +323,20 @@ export function layoutLanes(res, opts = {}) {
     if (c0 >= maxCols) { c0 = 0; r0 = main.length; hold = main.slice(); }   // narrow window: below the whole main flow
     placeBranches(m, c0, r0, hold);
   });
+
+  // the steps nothing leads to: each loose run of them in a column of its own, to the right of everything
+  {
+    let oc = Math.max(-1, ...Object.values(layout).map((l) => l.colOffset)) + 1;
+    const seenO = new Set();
+    steps.forEach((st) => {
+      const id = String(st.id);
+      if (layout[id] || seenO.has(id)) return;
+      const chain = []; let cur = id;
+      while (cur && !layout[cur] && !seenO.has(cur)) { chain.push(cur); seenO.add(cur); cur = nextOf.get(cur); }
+      chain.forEach((x, i) => { layout[x] = { colOffset: oc, row: i, parentId: null, laneMode: true }; });
+      oc++;
+    });
+  }
 
   // anything left (for example a lane whose parent is missing) goes at the bottom of the main column
   let extra = Math.max(-1, ...Object.values(layout).map((l) => l.row)) + 1;
