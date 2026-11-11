@@ -3416,8 +3416,8 @@ export function _fvDrawStepConnections(resources) {
             if (String(o.targetId.substring(0, k)) !== String(sourceRes.id)) return;
             const tid = o.targetId.substring(k + 1);
             if (String(tid) === String(sourceStep.id)) return;
-            const te = elById.get(`fv-step-${_myKey}-${tid}`); if (!te) return;
-            const tr = rectOf(te);
+            const te0 = elById.get(`fv-step-${_myKey}-${tid}`); if (!te0) return;
+            const tr = rectOf((te0.dataset.consolCardId && elById.get(te0.dataset.consolCardId)) || te0);
             if (tr.top < fr.bottom - 2) return;
             const dx0 = tr.left + tr.width / 2 - fxc;
             if (Math.abs(dx0) < 40) return;
@@ -3453,7 +3453,9 @@ export function _fvDrawStepConnections(resources) {
         if (!fromEl || !toEl) return;
 
         const fRect = rectOf(fromEl);
-        const tRect = rectOf(toEl);
+        // a step that is part of a combined card is reached at the real card (its stand-in is a dot at the card's top centre, which
+        // made a line from the side end at the top)
+        const tRect = rectOf((toEl.dataset.consolCardId && elById.get(toEl.dataset.consolCardId)) || toEl);
 
         // Determine best anchor based on relative positions
         const fx_center = fRect.left - cRect.left + fRect.width / 2;
