@@ -3695,7 +3695,12 @@ export function _fvDrawStepConnections(resources) {
           search:
           for (const t of ts) {
             const [px, py] = pointAt(t);
-            for (const x of [px - labelW / 2, px + 8, px - 8 - labelW]) {
+            // A line that runs down a gutter to a step beside it keeps its label on the side of the step it comes from (under that
+            // step), not on the line itself where it sits out in the gap.
+            const towardSrc = draftRoute && draftRoute.kind === 'side' && draftRoute.points.length > 2
+              ? (draftRoute.points[0][0] > draftRoute.points[1][0] ? [px + 8, px - labelW / 2, px - 8 - labelW] : [px - 8 - labelW, px - labelW / 2, px + 8])
+              : [px - labelW / 2, px + 8, px - 8 - labelW];
+            for (const x of towardSrc) {
               if (!hitsCard(x, py - labelH / 2, labelW, labelH)) { bx = x; by = py - labelH / 2; break search; }
             }
           }
