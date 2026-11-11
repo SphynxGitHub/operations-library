@@ -3461,8 +3461,10 @@ export function _fvDrawStepConnections(resources) {
           fx = fRect.right - cRect.left; fy = fRect.top - cRect.top + fRect.height * 0.35;
           tx = fx;                       ty = fRect.top - cRect.top + fRect.height * 0.65;
           isVert = false;
-        } else if (Math.abs(dy) >= Math.abs(dx)) {
-          // Same resource, primarily vertical
+        } else if (Math.abs(dy) >= Math.abs(dx) || tRect.top >= fRect.bottom - 2) {
+          // Same resource, primarily vertical, or a target that starts below this card: the line leaves the card's bottom and
+          // arrives at the target's top, however far across it is. Only a target beside the card (level with it, or above it
+          // and further across than up) is reached from the side.
           if (dy > 0) {
             fx = fx_center; fy = fRect.bottom - cRect.top;
             tx = tx_center; ty = tRect.top    - cRect.top;
