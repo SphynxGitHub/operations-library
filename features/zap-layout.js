@@ -344,6 +344,22 @@ export function layoutLanes(res, opts = {}) {
     const id = String(s.id);
     if (!layout[id]) { layout[id] = { colOffset: 0, row: extra, parentId: null, laneMode: true }; extra++; }
   });
+  // Everything that hangs off the given steps: the lanes branching from them, those lanes' own branches, and the plain steps that follow
+  // each of them down its column.
+  const hangingOff = (roots) => {
+    const fam = new Set();
+    for (let grew = true; grew;) {
+      grew = false;
+      Object.entries(layout).forEach(([oid, o]) => {
+        if (fam.has(oid) || roots.includes(oid)) return;
+        const viaParent = o.parentId && (roots.includes(o.parentId) || fam.has(o.parentId));
+        const viaChain = !o.parentId && Object.entries(layout).some(([qid, q]) => (fam.has(qid)) && nextOf.get(qid) === oid && q.colOffset === o.colOffset && q.row + 1 === o.row);
+        if (viaParent || viaChain) { fam.add(oid); grew = true; }
+      });
+    }
+    return [...fam];
+  };
+
   // A stack that two or more lanes lead into (the combined steps that paths share, which Zapier cannot merge back into one) sits
   // halfway between those lanes, not under the first of them where it reads as that lane's own. Halfway can be half a column when
   // nothing else is in the way; if cards of another lane are, the stack gets a column of its own and the columns from there on move one
@@ -368,6 +384,7 @@ export function layoutLanes(res, opts = {}) {
       const rows = stack.map((m) => layout[m].row); const r0 = Math.min(...rows), r1 = Math.max(...rows);
       const ideal = (lo + hi) / 2;
       const free = !Object.entries(layout).some(([id, l]) => !stack.includes(id) && l.row >= r0 && l.row <= r1 && Math.abs(l.colOffset - ideal) < 1);
+      const hanging = hangingOff(stack);
       let at = ideal;
       if (!free) {
         if (colsAfter() + 1 > maxCols) return;
@@ -375,6 +392,19 @@ export function layoutLanes(res, opts = {}) {
         Object.values(layout).forEach((l) => { if (l.colOffset >= at) l.colOffset += 1; });
       }
       stack.forEach((m) => { layout[m].colOffset = at; });
+      // The lanes branching off the stack go to the first column to the right of it with room for them, so they stay beside the stack
+      // and are not left behind in the column it came from.
+      if (hanging.length) {
+        const top = Math.min(...hanging.map((m) => layout[m].row)); const bot = Math.max(...hanging.map((m) => layout[m].row));
+        const head = hanging.filter((m) => !layout[m].parentId || stack.includes(layout[m].parentId)).sort((a, b) => layout[a].colOffset - layout[b].colOffset)[0];
+        const from = layout[head].colOffset;
+        for (let cc = Math.ceil(at + 0.0001); cc <= colsAfter() + 1; cc++) {
+          const d = cc - from;
+          const fits = hanging.every((m) => !Object.entries(layout).some(([oid, o]) => oid !== m && !hanging.includes(oid) && !stack.includes(oid) && o.row === layout[m].row && Math.abs(o.colOffset - (layout[m].colOffset + d)) < 1))
+            && !Object.entries(layout).some(([oid, o]) => !hanging.includes(oid) && !stack.includes(oid) && o.row >= top && o.row <= bot && o.colOffset >= cc && o.colOffset < cc + 1 && false);
+          if (fits) { hanging.forEach((m) => { layout[m].colOffset += d; }); break; }
+        }
+      }
       const low = srcs.slice().sort((a, b) => layout[a].row - layout[b].row).pop();
       X.parentId = low; X.parentGap = 26; X.after = srcs.slice(); delete X.beside;
     });
