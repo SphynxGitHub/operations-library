@@ -344,6 +344,35 @@ export function layoutLanes(res, opts = {}) {
     const id = String(s.id);
     if (!layout[id]) { layout[id] = { colOffset: 0, row: extra, parentId: null, laneMode: true }; extra++; }
   });
+  // A stack that two or more lanes lead into (the combined steps that paths share, which Zapier cannot merge back into one) sits in a
+  // column of its own halfway between those lanes, not under the first of them where it reads as that lane's own. The columns from there
+  // on move one to the right to make room.
+  {
+    const colsAfter = () => Math.max(...Object.values(layout).map((l) => l.colOffset)) + 1;
+    const joins = steps.map((s) => String(s.id)).filter((id) => layout[id] && (sourcesOf.get(id) || []).length > 1);
+    joins.forEach((x) => {
+      const X = layout[x]; if (!X) return;
+      const srcs = (sourcesOf.get(x) || []).filter((y) => layout[y]);
+      const cols = srcs.map((y) => layout[y].colOffset);
+      const lo = Math.min(...cols), hi = Math.max(...cols);
+      if (lo === hi || (X.colOffset > lo && X.colOffset < hi)) return;
+      if (srcs.some((y) => layout[y].row >= X.row)) return;                // a line back up, not a lane joining
+      const p = Math.floor((lo + hi) / 2) + 1;
+      if (colsAfter() + 1 > maxCols) return;
+      // the stack: this step and the ones that follow it down the same column
+      const stack = [x]; let cur = x;
+      while (nextOf.has(cur)) {
+        const n = nextOf.get(cur); const N = layout[n];
+        if (!N || N.colOffset !== X.colOffset || N.row !== layout[cur].row + 1 || (N.parentId && !stack.includes(N.parentId)) || stack.includes(n)) break;
+        stack.push(n); cur = n;
+      }
+      Object.values(layout).forEach((l) => { if (l.colOffset >= p) l.colOffset += 1; });
+      stack.forEach((m) => { layout[m].colOffset = p; });
+      const low = srcs.slice().sort((a, b) => layout[a].row - layout[b].row).pop();
+      X.parentId = low; X.parentGap = 26; delete X.beside;
+    });
+  }
+
   // A lane put beside its step must have nothing between them on that row. Lanes placed after it can end up there (the lane of another
   // step, say), so check once everything is placed, and lay the card out again without "beside" for any lane that has a card in the way.
   const bad = [];
