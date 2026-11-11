@@ -751,6 +751,9 @@ const HUB_GROUPS = [
         { key: 'mailchimp', name: 'Mailchimp', desc: 'Classic automations', icon: 'mail-open', creds: 'mailchimp' },
         { key: 'keap', name: 'Keap', desc: 'Campaigns and sequences', icon: 'megaphone', creds: 'keap' },
     ] },
+    { title: 'Automation platforms', items: [
+        { key: 'zapier-file', name: 'Zapier', desc: 'Import Zaps from the export file', icon: 'zap', csv: true, action: 'OL.openZapImport()', statusText: 'Upload the Zapier export file' },
+    ] },
     { title: 'Checklists and tasks', items: [
         { key: 'processstreet', name: 'Process Street', desc: 'Checklists', icon: 'list-checks', creds: 'processstreet' },
         { key: 'clickup', name: 'ClickUp', desc: 'Task import (CSV)', icon: 'square-check-big', csv: true },
@@ -906,13 +909,13 @@ export function openImportHub() {
         const last = synced[it.key];
         const busy = st.busy === it.key || st.busy === 'all';
         const status = busy ? 'Syncing...'
-            : it.csv ? 'Upload a ClickUp export'
+            : it.csv ? (it.statusText || 'Upload a ClickUp export')
             : !connected ? 'Add the API key in Credentials'
             : last && last.error && (!last.at || Date.parse(last.errorAt || 0) > Date.parse(last.at)) ? `Last attempt failed ${timeAgo(last.errorAt)}: ${last.error}`
             : last && last.at ? `Last synced ${timeAgo(last.at)}${Number.isFinite(last.count) ? ` · ${last.count} items` : ''}${last.missing ? ` · ${last.missing} removed upstream` : ''}`
             : hasPulledBefore(client, it.key) ? 'Pulled before · will refresh automatically'
             : 'Connected · not synced yet';
-        const action = it.csv ? "OL.openClickUpImportModal()" : `OL.syncExternalIntegrations('${it.key}')`;
+        const action = it.csv ? (it.action || "OL.openClickUpImportModal()") : `OL.syncExternalIntegrations('${it.key}')`;
         return `
             <button type="button" class="ih-tile${connected ? '' : ' is-off'}${busy ? ' is-busy' : ''}" ${st.busy ? 'disabled' : ''} onclick="${action}">
                 <span class="ih-icon"><i data-lucide="${it.icon}"></i></span>
