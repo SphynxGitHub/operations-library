@@ -265,7 +265,16 @@ export function layoutLanes(res, opts = {}) {
           if (!busy) { nextC = c; c = cc; break; }                       // tucked into a column already passed: it uses no new column
         }
       }
-      const got = placeLane(k, c, bandRow, m, after, Math.max(0, kids.length - 1) * 13);
+      // A lane that has had to go two or more columns away from its step, with that stretch of the step's own row empty, starts
+      // level with the step (beside it, a short line straight across) rather than a row lower, so it sits high instead of low.
+      let rowK = bandRow; let pg = Math.max(0, kids.length - 1) * 13; let beside = false;
+      const pc = layout[m] ? layout[m].colOffset : c0;
+      if (!baseAfter.length && bandRow === startRow && startRow >= 1 && c - pc >= 2 && !(opts.noBeside && opts.noBeside.has(k)) && layout[m] && layout[m].row === startRow - 1) {
+        const clear = Object.values(layout).every((li) => !(li.row === startRow - 1 && li.colOffset > pc && li.colOffset < c + w));
+        if (clear) { rowK = startRow - 1; pg = 0; beside = true; }
+      }
+      const got = placeLane(k, c, rowK, m, after, pg);
+      if (beside && layout[k]) layout[k].beside = true;
       got.ids.forEach((x) => placedIds.push(x));
       bandBottom = Math.max(bandBottom, got.bottom); bottom = Math.max(bottom, got.bottom);
       c = nextC;
@@ -287,6 +296,15 @@ export function layoutLanes(res, opts = {}) {
     const id = String(s.id);
     if (!layout[id]) { layout[id] = { colOffset: 0, row: extra, parentId: null, laneMode: true }; extra++; }
   });
+  // A lane put beside its step must have nothing between them on that row. Lanes placed after it can end up there (the lane of another
+  // step, say), so check once everything is placed, and lay the card out again without "beside" for any lane that has a card in the way.
+  const bad = [];
+  Object.entries(layout).forEach(([id, li]) => {
+    if (!li.beside) return;
+    const par = layout[li.parentId]; if (!par) return;
+    if (Object.entries(layout).some(([oid, o]) => oid !== id && o.row === li.row && o.colOffset > par.colOffset && o.colOffset < li.colOffset)) bad.push(id);
+  });
+  if (bad.length) return layoutLanes(res, { ...opts, noBeside: new Set([...(opts.noBeside || []), ...bad]) });
   return layout;
 }
 
@@ -306,7 +324,10 @@ export function stackColumns(cards, layout, startY, gap, hOf, minYOf) {
   order.forEach(({ step, el }) => {
     const li = layout[String(step.id)] || { colOffset: 0, parentId: null };
     let top = colY.has(li.colOffset) ? colY.get(li.colOffset) : startY;
-    if (li.parentId && placed.has(String(li.parentId))) top = Math.max(top, placed.get(String(li.parentId)).bottom + gap + (li.parentGap || 0));
+    if (li.parentId && placed.has(String(li.parentId))) {
+      const pp = placed.get(String(li.parentId));
+      top = li.beside ? Math.max(top, pp.top) : Math.max(top, pp.bottom + gap + (li.parentGap || 0));   // beside: level with its step
+    }
     (li.after || []).forEach((id) => { if (placed.has(String(id))) top = Math.max(top, placed.get(String(id)).bottom + gap + (li.extraGap || 0)); });   // extraGap: room for a line to run across
     const floor = minYOf ? minYOf(el) : undefined;
     if (floor !== undefined && floor > top) top = floor;
