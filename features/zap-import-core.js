@@ -225,6 +225,38 @@ export function buildFlow(zap, resId, byId) {
   return out;
 }
 
+// A filter ("Only continue if ...") and the step that splits a Zap into paths are not steps of the work: they are conditions on the way
+// from one step to the next. They get no card. The step before them leads straight to what comes after, and the condition rides on
+// that line (a path's own condition rides on the line to the path's first card).
+export const isBuiltInStep = (s) => !!s && (s.role === 'filter' || s.role === 'paths');
+
+export function withoutBuiltInSteps(zap, flow, resId) {
+  const skipped = new Set((zap.steps || []).filter(isBuiltInStep).map((s) => String(s.stepId)));
+  if (!skipped.size) return flow;
+  const pre = `${resId}-z`;
+  const idOf = (l) => String(l.targetId).startsWith(pre) ? String(l.targetId).slice(pre.length) : null;
+  const joinRule = (a, b) => [a, b].map((x) => String(x || '').trim()).filter(Boolean).join(' AND ');
+  const resolve = (link, depth) => {
+    const tid = idOf(link);
+    if (tid === null || !skipped.has(tid) || depth > 25) return [link];
+    return (flow.get(tid) || []).flatMap((o) => resolve(o, depth + 1)).map((e) => {
+      const t = (link.type === 'condition' || e.type === 'condition') ? 'condition' : 'next';
+      return { ...e, type: t, types: [t], rule: joinRule(link.rule, e.rule) };
+    });
+  };
+  const out = new Map();
+  flow.forEach((links, id) => {
+    if (skipped.has(id)) return;
+    const seen = new Set(); const list = [];
+    links.flatMap((l) => resolve(l, 0)).forEach((l) => {
+      const k = `${l.targetId}|${l.type}|${l.rule}`;
+      if (!seen.has(k)) { seen.add(k); list.push(l); }
+    });
+    out.set(id, list);
+  });
+  return out;
+}
+
 // ---------- building an OL card ----------------------------------------------------------------
 
 export function zapEditorUrl(zapId) { return `https://zapier.com/editor/${zapId}`; }
@@ -249,9 +281,9 @@ export function zapFolderOf(zap) {
 export function zapToResource(zap, opts = {}) {
   const resId = opts.resourceId || `zap-${zap.zapId}`;
   const byId = new Map((zap.steps || []).map((s) => [String(s.stepId), s]));
-  const flow = buildFlow(zap, resId, byId);
+  const flow = withoutBuiltInSteps(zap, buildFlow(zap, resId, byId), resId);
 
-  const steps = (zap.steps || []).map((s) => ({
+  const steps = (zap.steps || []).filter((s) => !isBuiltInStep(s)).map((s) => ({
     id: `z${s.stepId}`,
     name: s.title || s.actionLabel || s.action || 'Untitled Step',
     appName: s.appName || cleanAppName(s.app),
@@ -349,6 +381,9 @@ export function mergeIntoExisting(oldRes, newRes) {
   // an automatic link to a step that was deleted by hand has nothing to point at
   const have = new Set(merged.steps.map((st) => `${prefix}${st.id}`));
   merged.steps.forEach((st) => { st.logic.out = st.logic.out.filter((l) => !l._auto || !l.targetId || have.has(String(l.targetId)) || !String(l.targetId).startsWith(prefix)); });
+  // ...and so has a line drawn by hand to a step the import no longer makes (a filter or a paths step, now built into the lines)
+  const gone = new Set((oldRes.steps || []).filter((os) => os.zap && os.zap.stepId && !newRes.steps.some((ns) => String(ns.zap.stepId) === String(os.zap.stepId))).map((os) => `${oldRes.id}-${os.id}`));
+  if (gone.size) merged.steps.forEach((st) => { st.logic.out = st.logic.out.filter((l) => !gone.has(String(l.targetId))); });
   return merged;
 }
 
