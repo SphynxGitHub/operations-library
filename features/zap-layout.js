@@ -265,16 +265,47 @@ export function layoutLanes(res, opts = {}) {
           if (!busy) { nextC = c; c = cc; break; }                       // tucked into a column already passed: it uses no new column
         }
       }
-      // A lane that has had to go two or more columns away from its step, with that stretch of the step's own row empty, starts
-      // level with the step (beside it, a short line straight across) rather than a row lower, so it sits high instead of low.
-      let rowK = bandRow; let pg = Math.max(0, kids.length - 1) * 13; let beside = false;
-      const pc = layout[m] ? layout[m].colOffset : c0;
-      if (!baseAfter.length && bandRow === startRow && startRow >= 1 && c - pc >= 2 && !(opts.noBeside && opts.noBeside.has(k)) && layout[m] && layout[m].row === startRow - 1) {
-        const clear = Object.values(layout).every((li) => !(li.row === startRow - 1 && li.colOffset > pc && li.colOffset < c + w));
-        if (clear) { rowK = startRow - 1; pg = 0; beside = true; }
+      // A lane takes the leftmost column (nearest its step) where it fits: its cards on cells nobody else uses, and none of them on the
+      // lines that run from a step across to the first step of its other paths.
+      const busCount = () => {
+        const ents = Object.entries(layout); let n = 0;
+        ents.forEach(([id, X]) => {
+          const P = X.parentId ? layout[X.parentId] : null;
+          if (!P || P.colOffset === X.colOffset || X.beside) return;
+          const lo = Math.min(P.colOffset, X.colOffset), hi = Math.max(P.colOffset, X.colOffset);
+          ents.forEach(([oid, o]) => { if (oid !== id && o.colOffset > lo && o.colOffset < hi && o.row > P.row && o.row < X.row) n++; });
+        });
+        return n;
+      };
+      const attempt = (cc) => {
+        // A lane that has gone two or more columns away from its step, with that stretch of the step's own row empty, starts level
+        // with the step (beside it, a short line straight across) rather than a row lower, so it sits high instead of low.
+        let rowK = bandRow; let pg = Math.max(0, kids.length - 1) * 13; let beside = false;
+        const pc = layout[m] ? layout[m].colOffset : c0;
+        if (!baseAfter.length && bandRow === startRow && startRow >= 1 && cc - pc >= 2 && !(opts.noBeside && opts.noBeside.has(k)) && layout[m] && layout[m].row === startRow - 1) {
+          const clear = Object.values(layout).every((li) => !(li.row === startRow - 1 && li.colOffset > pc && li.colOffset < cc + w));
+          if (clear) { rowK = startRow - 1; pg = 0; beside = true; }
+        }
+        const got = placeLane(k, cc, rowK, m, after, pg);
+        if (beside && layout[k]) layout[k].beside = true;
+        return got;
+      };
+      const cands = [];
+      if (!baseAfter.length && bandRow === startRow) for (let cc = c0; cc < c; cc++) if (cc + w <= maxCols) cands.push(cc);
+      cands.push(c);
+      let got = null; let at = c;
+      for (let n = 0; n < cands.length && !got; n++) {
+        const cc = cands[n]; const last = n === cands.length - 1;
+        const before = new Set(Object.keys(layout)); const bc0 = last ? 0 : busCount();
+        const g = attempt(cc);
+        if (!last) {
+          const seen = new Set(); let clash = false;
+          Object.values(layout).forEach((li) => { const key = `${li.colOffset},${li.row}`; if (seen.has(key)) clash = true; seen.add(key); });
+          if (clash || busCount() > bc0) { Object.keys(layout).forEach((id) => { if (!before.has(id)) delete layout[id]; }); continue; }
+        }
+        got = g; at = cc;
       }
-      const got = placeLane(k, c, rowK, m, after, pg);
-      if (beside && layout[k]) layout[k].beside = true;
+      if (at < c) nextC = Math.max(c, at + w);                           // tucked into columns already passed: no new column unless it is wider
       got.ids.forEach((x) => placedIds.push(x));
       bandBottom = Math.max(bandBottom, got.bottom); bottom = Math.max(bottom, got.bottom);
       c = nextC;
