@@ -3683,7 +3683,15 @@ export function _fvDrawStepConnections(resources) {
                     u * u * u * fy + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * ty];
           };
           let bx = null, by = null;
-          const ts = vertLeft ? [] : (draftRoute && (draftRoute.kind === 'bus' || draftRoute.kind === 'side')) ? [0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
+          // A long line across to a step far off carries its label near the step it reaches, not in the middle of the stretch.
+          const nearEnd = [];
+          if (!vertLeft && draftRoute && draftRoute.kind === 'bus' && draftRoute.points.length > 3) {
+            const P = draftRoute.points; let tot = 0; P.forEach((q, i) => { if (i) tot += Math.hypot(q[0] - P[i - 1][0], q[1] - P[i - 1][1]); });
+            const last = Math.hypot(P[P.length - 1][0] - P[P.length - 2][0], P[P.length - 1][1] - P[P.length - 2][1]);
+            const run = Math.hypot(P[P.length - 2][0] - P[P.length - 3][0], P[P.length - 2][1] - P[P.length - 3][1]);
+            for (let d = labelW / 2 + 40; d < run * 0.8 && nearEnd.length < 6; d += 70) nearEnd.push((tot - last - d) / tot);
+          }
+          const ts = vertLeft ? [] : nearEnd.length ? nearEnd.concat([0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3]) : (draftRoute && (draftRoute.kind === 'bus' || draftRoute.kind === 'side')) ? [0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
           search:
           for (const t of ts) {
             const [px, py] = pointAt(t);
