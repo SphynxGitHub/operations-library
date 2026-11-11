@@ -3545,6 +3545,23 @@ export function _fvDrawStepConnections(resources) {
           }
         } catch (err) { draftRoute = null; console.warn('Draft line routing skipped:', err); }
 
+        // A step beside-and-below (the next path across): out of the card's right edge, down the gap beside the target, and into the
+        // target's left side, when nothing is in the way. Otherwise the run-across line below.
+        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+          const sx = fRect.right - cRect.left, ex = tRect.left - cRect.left;
+          if (ex - sx >= 60) {
+            const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
+            const gx = ex - 28;
+            const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 2);
+            if (tmid - fmid > 24 && !hit(sx + 4, fmid, gx, fmid) && !hit(gx, fmid, gx, tmid) && !hit(gx, tmid, ex - 4, tmid)) {
+              const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
+              draftRoute = { points: pts, kind: 'side' };
+              const R = Math.min(10, (gx - sx) / 2, (tmid - fmid) / 2, (ex - gx) / 2);
+              d = `M ${sx} ${fmid} L ${gx - R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx + R} ${tmid} L ${ex} ${tmid}`;
+            }
+          }
+        }
+
         // the run-across line (see _busRank above)
         if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && _busRank.has(String(tStepId)) && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
           const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
@@ -3649,7 +3666,7 @@ export function _fvDrawStepConnections(resources) {
                     u * u * u * fy + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * ty];
           };
           let bx = null, by = null;
-          const ts = vertLeft ? [] : (draftRoute && draftRoute.kind === 'bus') ? [0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
+          const ts = vertLeft ? [] : (draftRoute && (draftRoute.kind === 'bus' || draftRoute.kind === 'side')) ? [0.62, 0.7, 0.54, 0.78, 0.46, 0.38, 0.86, 0.3] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88];
           search:
           for (const t of ts) {
             const [px, py] = pointAt(t);
