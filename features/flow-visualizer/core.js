@@ -3562,6 +3562,23 @@ export function _fvDrawStepConnections(resources) {
           }
         }
 
+        // The same for a step beside-and-below on the left: out of the card's left edge, down the gap beside the target, into the
+        // target's right side. (Two paths that join the same steps then each arrive at a side of their own, not on one line.)
+        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+          const sx = fRect.left - cRect.left, ex = tRect.right - cRect.left;
+          if (sx - ex >= 60) {
+            const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
+            const gx = ex + 28;
+            const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 2);
+            if (tmid - fmid > 24 && !hit(gx, fmid, sx - 4, fmid) && !hit(gx, fmid, gx, tmid) && !hit(ex + 4, tmid, gx, tmid)) {
+              const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
+              draftRoute = { points: pts, kind: 'side' };
+              const R = Math.min(10, (sx - gx) / 2, (tmid - fmid) / 2, (gx - ex) / 2);
+              d = `M ${sx} ${fmid} L ${gx + R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx - R} ${tmid} L ${ex} ${tmid}`;
+            }
+          }
+        }
+
         // the run-across line (see _busRank above)
         if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && _busRank.has(String(tStepId)) && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
           const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
