@@ -535,7 +535,7 @@ function fvOrderColumns(wfRes) {
   const n = wfRes.length;
   if (n < 2 || n > 12) return wfRes;
   const layouts = wfRes.map(r => { try { return OL._fvLayoutResource(r) || {}; } catch (e) { return {}; } });
-  const width = layouts.map(l => 1 + Math.max(0, ...Object.values(l).map(v => v.colOffset || 0)));
+  const width = layouts.map(l => 1 + Math.ceil(Math.max(0, ...Object.values(l).map(v => v.colOffset || 0))));
   // which step is in which column, and the groups that span several columns
   const where = new Map();                       // "resId-stepId" -> { ri, off }
   const groups = {};                             // group name -> Set of column indexes
@@ -2446,7 +2446,7 @@ export function _fvRenderSteps(resources) {
           const rows = []; let cur = []; let used = 0;
           g.resources.forEach(r => {
             const lay = OL._fvLayoutResource(r);
-            const w = 1 + Math.max(0, ...Object.values(lay).map(l => l.colOffset));
+            const w = 1 + Math.ceil(Math.max(0, ...Object.values(lay).map(l => l.colOffset)));
             if (cur.length && used + w > maxCols) { rows.push(cur); cur = []; used = 0; }
             cur.push(r); used += w;
           });

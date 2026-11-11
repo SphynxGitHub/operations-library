@@ -344,12 +344,13 @@ export function layoutLanes(res, opts = {}) {
     const id = String(s.id);
     if (!layout[id]) { layout[id] = { colOffset: 0, row: extra, parentId: null, laneMode: true }; extra++; }
   });
-  // A stack that two or more lanes lead into (the combined steps that paths share, which Zapier cannot merge back into one) sits in a
-  // column of its own halfway between those lanes, not under the first of them where it reads as that lane's own. The columns from there
-  // on move one to the right to make room.
+  // A stack that two or more lanes lead into (the combined steps that paths share, which Zapier cannot merge back into one) sits
+  // halfway between those lanes, not under the first of them where it reads as that lane's own. Halfway can be half a column when
+  // nothing else is in the way; if cards of another lane are, the stack gets a column of its own and the columns from there on move one
+  // to the right. The right-hand stacks go first, so the ones to their left can still find room.
   {
     const colsAfter = () => Math.max(...Object.values(layout).map((l) => l.colOffset)) + 1;
-    const joins = steps.map((s) => String(s.id)).filter((id) => layout[id] && (sourcesOf.get(id) || []).length > 1);
+    const joins = steps.map((s) => String(s.id)).filter((id) => layout[id] && (sourcesOf.get(id) || []).length > 1).reverse();
     joins.forEach((x) => {
       const X = layout[x]; if (!X) return;
       const srcs = (sourcesOf.get(x) || []).filter((y) => layout[y]);
@@ -357,8 +358,6 @@ export function layoutLanes(res, opts = {}) {
       const lo = Math.min(...cols), hi = Math.max(...cols);
       if (lo === hi || (X.colOffset > lo && X.colOffset < hi)) return;
       if (srcs.some((y) => layout[y].row >= X.row)) return;                // a line back up, not a lane joining
-      const p = Math.floor((lo + hi) / 2) + 1;
-      if (colsAfter() + 1 > maxCols) return;
       // the stack: this step and the ones that follow it down the same column
       const stack = [x]; let cur = x;
       while (nextOf.has(cur)) {
@@ -366,12 +365,50 @@ export function layoutLanes(res, opts = {}) {
         if (!N || N.colOffset !== X.colOffset || N.row !== layout[cur].row + 1 || (N.parentId && !stack.includes(N.parentId)) || stack.includes(n)) break;
         stack.push(n); cur = n;
       }
-      Object.values(layout).forEach((l) => { if (l.colOffset >= p) l.colOffset += 1; });
-      stack.forEach((m) => { layout[m].colOffset = p; });
+      const rows = stack.map((m) => layout[m].row); const r0 = Math.min(...rows), r1 = Math.max(...rows);
+      const ideal = (lo + hi) / 2;
+      const free = !Object.entries(layout).some(([id, l]) => !stack.includes(id) && l.row >= r0 && l.row <= r1 && Math.abs(l.colOffset - ideal) < 1);
+      let at = ideal;
+      if (!free) {
+        if (colsAfter() + 1 > maxCols) return;
+        at = Math.floor(ideal) + 1;
+        Object.values(layout).forEach((l) => { if (l.colOffset >= at) l.colOffset += 1; });
+      }
+      stack.forEach((m) => { layout[m].colOffset = at; });
       const low = srcs.slice().sort((a, b) => layout[a].row - layout[b].row).pop();
-      X.parentId = low; X.parentGap = 26; delete X.beside;
+      X.parentId = low; X.parentGap = 26; X.after = srcs.slice(); delete X.beside;
     });
   }
+
+  // A lane beside its step (a short line straight across) comes as far back toward the step as its cards, and those of the lanes
+  // branching off it, fit: the stacks moved above can leave room nearer than where it was first put.
+  Object.keys(layout).forEach((id) => {
+    const L = layout[id]; if (!L || !L.beside || !L.parentId || !layout[L.parentId]) return;
+    const pc = layout[L.parentId].colOffset;
+    const family = new Set([id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      Object.entries(layout).forEach(([oid, o]) => {
+        if (family.has(oid)) return;
+        if ((o.parentId && family.has(o.parentId)) || (!o.parentId && o.colOffset === L.colOffset && o.row > L.row && nextOf.has([...family].pop()) && false)) { family.add(oid); grew = true; }
+      });
+      // the plain steps that follow in the same column belong to the lane
+      Object.entries(layout).forEach(([oid, o]) => {
+        if (family.has(oid) || o.parentId) return;
+        const prev = Object.entries(layout).find(([qid, q]) => family.has(qid) && nextOf.get(qid) === oid && q.colOffset === o.colOffset && q.row + 1 === o.row);
+        if (prev) { family.add(oid); grew = true; }
+      });
+    }
+    const fam = [...family];
+    for (let cc = pc + 1; cc < L.colOffset; cc++) {
+      const d = L.colOffset - cc;
+      const ok = fam.every((m) => {
+        const nc = layout[m].colOffset - d;
+        return !Object.entries(layout).some(([oid, o]) => !family.has(oid) && o.row === layout[m].row && Math.abs(o.colOffset - nc) < 1);
+      }) && !Object.entries(layout).some(([oid, o]) => !family.has(oid) && o.row === L.row && o.colOffset > pc && o.colOffset < cc);
+      if (ok) { fam.forEach((m) => { layout[m].colOffset -= d; }); break; }
+    }
+  });
 
   // A lane put beside its step must have nothing between them on that row. Lanes placed after it can end up there (the lane of another
   // step, say), so check once everything is placed, and lay the card out again without "beside" for any lane that has a card in the way.
