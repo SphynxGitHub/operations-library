@@ -284,8 +284,11 @@ serve(async (req) => {
     const { data: unmatched } = await unmatchedQuery;
     const needDiscovery = (unmatched || []).filter((e: any) => !e.zoom_meeting_id && !extractZoomMeetingId(e.location) && !extractZoomMeetingId(e.description));
 
-    let discoveredCount = 0;
-    if (needDiscovery.length) {
+    // Zoom's own lists of recent meetings, loaded once and only when needed, used to match a calendar event to its Zoom
+    // meeting by start time (within 20 minutes), preferring a similar title.
+    let zoomListCache: { id: string; uuid: string; topic: string; start: string; source: string }[] | null = null;
+    const getZoomList = async () => {
+      if (zoomListCache) return zoomListCache;
       const zoomList: { id: string; uuid: string; topic: string; start: string; source: string }[] = [];
       const pull = async (url: string, pick: (d: any) => any[], source: string) => {
         const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -300,27 +303,35 @@ serve(async (req) => {
         (d) => (d.summaries || []).map((m: any) => ({ id: String(m.meeting_id), uuid: m.meeting_uuid, topic: m.meeting_topic || "", start: m.meeting_start_time })), "summaries");
       await pull(`https://api.zoom.us/v2/users/me/meetings?type=previous_meetings&page_size=300`,
         (d) => (d.meetings || []).map((m: any) => ({ id: String(m.id), uuid: m.uuid, topic: m.topic || "", start: m.start_time })), "past meetings");
+      zoomListCache = zoomList;
+      return zoomList;
+    };
+    const words = (t: string) => new Set(String(t || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2));
+    const matchByTime = async (evt: any) => {
+      const zoomList = await getZoomList();
+      const t0 = new Date(evt.start).getTime();
+      const ew = words(evt.title);
+      let best: any = null, bestScore = -Infinity;
+      for (const z of zoomList) {
+        if (!z.start || !z.uuid) continue;
+        const diffMin = Math.abs(new Date(z.start).getTime() - t0) / 60000;
+        if (diffMin > 20) continue;
+        const overlap = [...words(z.topic)].filter((w) => ew.has(w)).length;
+        const score = overlap * 10 - diffMin;
+        if (score > bestScore) { bestScore = score; best = z; }
+      }
+      return { best, listed: zoomList.length };
+    };
 
-      const words = (t: string) => new Set(String(t || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2));
-      for (const evt of needDiscovery) {
-        const t0 = new Date(evt.start).getTime();
-        const ew = words(evt.title);
-        let best: any = null, bestScore = -Infinity;
-        for (const z of zoomList) {
-          if (!z.start || !z.uuid) continue;
-          const diffMin = Math.abs(new Date(z.start).getTime() - t0) / 60000;
-          if (diffMin > 20) continue;
-          const overlap = [...words(z.topic)].filter((w) => ew.has(w)).length;
-          const score = overlap * 10 - diffMin;
-          if (score > bestScore) { bestScore = score; best = z; }
-        }
-        if (best) {
-          await supabase.from("calendar_events").update({ zoom_meeting_id: best.id, zoom_meeting_uuid: best.uuid }).eq("id", evt.id);
-          discoveredCount++;
-          if (report) { report.meetingId = best.id; report.matchedBy = `start time via Zoom ${best.source}${best.topic ? `: "${best.topic}"` : ''}`; }
-        } else if (report) {
-          report.notes.push(`Zoom lists ${zoomList.length} meeting(s) in the last ${LOOKBACK_DAYS} days, none starting within 20 minutes of this event. If someone else hosted it, their Zoom account holds the summary and recording.`);
-        }
+    let discoveredCount = 0;
+    for (const evt of needDiscovery) {
+      const { best, listed } = await matchByTime(evt);
+      if (best) {
+        await supabase.from("calendar_events").update({ zoom_meeting_id: best.id, zoom_meeting_uuid: best.uuid }).eq("id", evt.id);
+        discoveredCount++;
+        if (report) { report.meetingId = best.id; report.matchedBy = `start time via Zoom ${best.source}${best.topic ? `: "${best.topic}"` : ''}`; }
+      } else if (report) {
+        report.notes.push(`Zoom lists ${listed} meeting(s) in the last ${LOOKBACK_DAYS} days, none starting within 20 minutes of this event. If someone else hosted it, their Zoom account holds the summary and recording.`);
       }
     }
 
@@ -362,9 +373,20 @@ serve(async (req) => {
     let firstOtherError: any = null;
 
     for (const evt of zoomEvents) {
-      const zoomMeetingId = evt.resolvedMeetingId as string;
-      if (report && !report.meetingId) { report.meetingId = zoomMeetingId; report.matchedBy = "link on the invite"; }
-      const savedOrResolvedUuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
+      if (report && !report.meetingId) { report.meetingId = evt.resolvedMeetingId as string; report.matchedBy = "link on the invite"; }
+      let zoomMeetingId = evt.resolvedMeetingId as string;
+      let savedOrResolvedUuid: string | null = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
+      // The ID on the event may be for a meeting Zoom never ran (the event was rescheduled and got a new Zoom meeting).
+      // Look for the real meeting by start time and switch to it.
+      let reMatched = false;
+      if (!savedOrResolvedUuid) {
+        const { best } = await matchByTime(evt);
+        if (best && best.id !== zoomMeetingId) {
+          zoomMeetingId = best.id; savedOrResolvedUuid = best.uuid; reMatched = true;
+          await supabase.from("calendar_events").update({ zoom_meeting_id: best.id, zoom_meeting_uuid: best.uuid }).eq("id", evt.id);
+          if (report) { report.meetingId = best.id; report.matchedBy = `start time via Zoom ${best.source} (the ID on the invite had no past meeting)`; }
+        }
+      }
       if (!savedOrResolvedUuid) {
         noSummaryYetCount++;
         if (report) report.summary = "Zoom has no record of this meeting having happened (no past instance) — it may have been held on another host's account";
@@ -383,6 +405,17 @@ serve(async (req) => {
           meetingUuid = fresh;
           await supabase.from("calendar_events").update({ zoom_meeting_id: zoomMeetingId, zoom_meeting_uuid: fresh }).eq("id", evt.id);
           summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(fresh)}/meeting_summary`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+        }
+      }
+      if (summaryRes.status === 404 && !reMatched) {
+        const { best } = await matchByTime(evt);
+        if (best && best.uuid !== meetingUuid) {
+          zoomMeetingId = best.id; meetingUuid = best.uuid;
+          await supabase.from("calendar_events").update({ zoom_meeting_id: best.id, zoom_meeting_uuid: best.uuid }).eq("id", evt.id);
+          if (report) { report.meetingId = best.id; report.matchedBy = `start time via Zoom ${best.source} (the saved meeting had no record)`; }
+          summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/meeting_summary`, {
             headers: { Authorization: `Bearer ${accessToken}` }
           });
         }
