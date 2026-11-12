@@ -138,6 +138,8 @@ async function actualMeetingTimes(meetingUuid: string, accessToken: string, summ
       const t = (await res.text().catch(() => "")).slice(0, 200);
       lastTimeLookupProblem = res.status === 400 || res.status === 401 || res.status === 403
         ? `Zoom refused the past-meeting lookup (HTTP ${res.status}: ${t}). The Zoom app likely needs the "meeting:read:past_meeting" permission; add it, then reconnect Zoom.`
+        : res.status === 404
+        ? `Zoom's past-meeting lookup answered HTTP 404 for this meeting's saved ID (${t}). Zoom doesn't recognise it for the connected account: the saved instance may be wrong, or the meeting was started under a different Zoom account/meeting ID than the one on the invite.`
         : `Zoom's past-meeting lookup answered HTTP ${res.status}: ${t}`;
       return null;
     }
@@ -362,16 +364,29 @@ serve(async (req) => {
     for (const evt of zoomEvents) {
       const zoomMeetingId = evt.resolvedMeetingId as string;
       if (report && !report.meetingId) { report.meetingId = zoomMeetingId; report.matchedBy = "link on the invite"; }
-      const meetingUuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
-      if (!meetingUuid) {
+      const savedOrResolvedUuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
+      if (!savedOrResolvedUuid) {
         noSummaryYetCount++;
         if (report) report.summary = "Zoom has no record of this meeting having happened (no past instance) — it may have been held on another host's account";
         continue;
       }
 
-      const summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/meeting_summary`, {
+      let meetingUuid = savedOrResolvedUuid;
+      let summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(meetingUuid)}/meeting_summary`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
+      // A UUID saved on the event earlier can be stale or from the wrong instance (recurring meetings, personal room
+      // links), and it is reused forever. On a 404, ask Zoom for the meeting's real instances and retry once.
+      if (summaryRes.status === 404 && evt.zoom_meeting_uuid) {
+        const fresh = await resolvePastMeetingUuid(zoomMeetingId, accessToken, evt.start);
+        if (fresh && fresh !== meetingUuid) {
+          meetingUuid = fresh;
+          await supabase.from("calendar_events").update({ zoom_meeting_id: zoomMeetingId, zoom_meeting_uuid: fresh }).eq("id", evt.id);
+          summaryRes = await fetch(`https://api.zoom.us/v2/meetings/${encodeZoomUuid(fresh)}/meeting_summary`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+        }
+      }
       if (summaryRes.status === 401) throw new ZoomAuthError("Zoom rejected the token while fetching a meeting summary.");
       if (summaryRes.status === 404) {
         // No summary (yet) — but remember the meeting so the recording
@@ -569,7 +584,15 @@ serve(async (req) => {
           const uuid = evt.zoom_meeting_uuid || await resolvePastMeetingUuid(mid, accessToken, evt.start);
           if (!uuid) { if (report) report.notes.push("Zoom has no past instance of this meeting yet, so no actual end time."); continue; }
           if (!evt.zoom_meeting_uuid) await supabase.from("calendar_events").update({ zoom_meeting_id: mid, zoom_meeting_uuid: uuid }).eq("id", evt.id);
-          if (await saveActualMeetingTime(supabase, evt, await actualMeetingTimes(uuid, accessToken))) elapsedSaved++;
+          let times = await actualMeetingTimes(uuid, accessToken);
+          if (!times && evt.zoom_meeting_uuid && lastTimeLookupProblem.includes("HTTP 404")) {
+            const fresh = await resolvePastMeetingUuid(mid, accessToken, evt.start);
+            if (fresh && fresh !== uuid) {
+              await supabase.from("calendar_events").update({ zoom_meeting_id: mid, zoom_meeting_uuid: fresh }).eq("id", evt.id);
+              times = await actualMeetingTimes(fresh, accessToken);
+            }
+          }
+          if (await saveActualMeetingTime(supabase, evt, times)) elapsedSaved++;
           else if (report) report.notes.push(lastTimeLookupProblem || "Zoom returned an end time that doesn't fit this meeting (before its start or over 12 hours), so the scheduled length stays.");
         }
       } else console.error("Elapsed-time pass skipped:", elapsedErr.message);
