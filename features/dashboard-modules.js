@@ -9,14 +9,16 @@
 import { state, esc, db, getCurrentUserName } from '../core/data.js';
 import { roundStatusOf } from '../core/requests.js';
 import { isClientWaitingStatus } from '../core/work-status.js';
+import { isOngoing } from '../core/maintenance.js';
 import { memberDayHours, dailyLoadHours, workdayGoneHours } from '../core/scheduling.js';
 import {
     MODULES, DEFAULT_ON, TEAM_PRESET, easternDay, rollingDays, monthWeeks, availabilityGrid, pendingReviewRollup, readyNotSent, leadsWaiting,
-    followUpsDue, waitingByAge, hoursBlocksNearing, reviewsEnding,
+    followUpsDue, waitingByAge, hoursBlocksNearing, reviewsEnding, plansExpiring,
 } from '../core/dashboard-modules.js';
 
 const view = { mode: 'week', offset: 0 };          // the Availability module: 'today', 'week' (a rolling 5 working days from today) or 'month'
 const MAX_WEEK_OFFSET = 8, MAX_MONTH_OFFSET = 1;   // the dashboard's calendar events only reach about 60 days ahead
+let planPeriods = null;                             // { rows, at }: every maintenance_plan_period row, once loaded
 let reviewData = null;                              // { reviews, itemsByReview, reviewedTaskIds, at } once loaded
 
 const todayStr = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -132,6 +134,12 @@ function bodyFor(key) {
         const list = reviewsEnding(base);
         return { count: list.length, extra: '', body: list.map((r) => row(r.client, r.clientId, `Round ${r.round} · ends ${r.ends}`, chip(r.daysLeft < 0 ? 'Ended' : `${r.daysLeft}d left`, r.daysLeft <= 2 ? '#f87171' : '#f5b942'))).join('') || empty('No review period ends in the next 7 days.') };
     }
+    if (key === 'plans_expiring') {
+        if (!planPeriods) return { count: '', body: empty('Loading...'), extra: '' };
+        const list = plansExpiring({ clients, periods: planPeriods.rows, today, isOngoing });
+        return { count: list.length, extra: '', body: list.map((p) => row(p.client, p.clientId, `${p.tier ? `${p.tier} · ` : ''}ends ${p.ends}`,
+            `${chip(p.renewing ? 'Renewing' : 'Not renewing', p.renewing ? '#2dd4bf' : '#f5b942')} ${chip(p.daysLeft === 0 ? 'Today' : `${p.daysLeft}d left`, p.daysLeft <= 14 ? '#f87171' : '#f5b942')}`)).join('') || empty('No Ongoing Maintenance plan ends in the next 60 days.') };
+    }
     return { count: '', body: '', extra: '' };
 }
 
@@ -191,6 +199,7 @@ function paint() {
 // Loads the sent reviews (and which tasks are in any review) for every project, then repaints the modules.
 export async function loadDashboardModules() {
     paint();
+    loadPlanPeriods();
     if (!enabled().includes('pending_review') || (reviewData && Date.now() - reviewData.at < 60000)) return;
     try {
         const r = await db.from('reviews').select('id, client_id, status, sent_at, sent_by, follow_up_owner').order('created_at', { ascending: false }).limit(500);
@@ -209,6 +218,20 @@ export async function loadDashboardModules() {
     } catch (e) {
         console.warn('Review data for the dashboard is unavailable (run the Step 1 migration?):', e?.message || e);
         reviewData = { reviews: [], itemsByReview: {}, reviewedTaskIds: new Set(), at: Date.now() };
+    }
+    paint();
+}
+
+// The plan periods for every project, for the "Maintenance plans expiring" card. Read once a minute at most, and only when the card is on.
+async function loadPlanPeriods() {
+    if (!enabled().includes('plans_expiring') || (planPeriods && Date.now() - planPeriods.at < 60000)) return;
+    try {
+        const r = await db.from('maintenance_plan_period').select('*').eq('status', 'active');
+        if (r.error) throw r.error;
+        planPeriods = { rows: r.data || [], at: Date.now() };
+    } catch (e) {
+        console.warn('Plan periods for the dashboard are unavailable:', e?.message || e);
+        planPeriods = { rows: [], at: Date.now() };
     }
     paint();
 }

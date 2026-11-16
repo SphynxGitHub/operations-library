@@ -634,7 +634,7 @@ export function planPeriodReminders(client, periods, ctx) {
     const created = [];
     (periods || []).filter((p) => p && p.status === 'active' && p.due_date).forEach((p) => {
         const due = day(p.due_date);
-        [[60, 'Plan period ends in 2 months'], [14, 'Plan period ends in 2 weeks']].forEach(([lead, label]) => {
+        [[60, 'Plan period ends in 2 months'], [30, 'Plan period ends in 1 month'], [14, 'Plan period ends in 2 weeks']].forEach(([lead, label]) => {
             const key = `${p.id}:${lead}`;
             if (setup.reminders[key]) return;
             const when = addDays(due, -lead);

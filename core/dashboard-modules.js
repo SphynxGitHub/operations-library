@@ -3,7 +3,7 @@
 // can be checked on its own. A client that is only partly loaded (no projectData) is skipped.
 //
 // Modules: availability (today or the week), pending review, leads waiting on scoping, client follow-ups due,
-// waiting on client by age, hours blocks nearing their limits, reviews ending soon.
+// waiting on client by age, hours blocks nearing their limits, reviews ending soon, maintenance plans expiring.
 
 import { isTaskClosed } from './work-status.js';
 
@@ -15,6 +15,7 @@ export const MODULES = [
     { key: 'waiting_age',    label: 'Waiting on client by age', icon: 'hourglass',     team: true  },
     { key: 'hours_blocks',   label: 'Hours blocks nearing limits', icon: 'timer',      team: false },
     { key: 'reviews_ending', label: 'Reviews ending soon',      icon: 'calendar-clock', team: true },
+    { key: 'plans_expiring', label: 'Maintenance plans expiring', icon: 'calendar-x',   team: false },
 ];
 export const DEFAULT_ON = ['availability', 'pending_review', 'leads'];
 export const TEAM_PRESET = MODULES.filter((m) => m.team).map((m) => m.key);
@@ -180,4 +181,25 @@ export function reviewsEnding({ clients, today, withinDays = 7 }) {
         });
     });
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+// ---- maintenance plans expiring ----------------------------------------------------------------------------------
+// Ongoing Maintenance clients whose active plan period ends within the next `withinDays` days (today counts). periods are the
+// rows of maintenance_plan_period (they live in the database, not the project JSON). A client whose next period has already
+// been started (a period beginning after this one ends) is left out, since it has been renewed. Soonest first.
+export function plansExpiring({ clients, periods, today, withinDays = 60, isOngoing }) {
+    const byClient = new Map();
+    (periods || []).forEach((p) => { if (p && p.client_id && p.due_date) (byClient.get(String(p.client_id)) || byClient.set(String(p.client_id), []).get(String(p.client_id))).push(p); });
+    const out = [];
+    (clients || []).filter((c) => c && !c._metaOnly && isOngoing(c)).forEach((c) => {
+        const mine = byClient.get(String(c.id)) || [];
+        mine.filter((p) => p.status === 'active').forEach((p) => {
+            const ends = dayOf(p.due_date);
+            const left = daysBetween(today, ends);
+            if (left < 0 || left > withinDays) return;
+            if (mine.some((q) => q !== p && dayOf(q.start_date) > ends)) return;     // already renewed into a later period
+            out.push({ clientId: c.id, client: nameOf(c), ends, daysLeft: left, renewing: !!p.renewing, tier: p.tier || '' });
+        });
+    });
+    return out.sort((a, b) => a.daysLeft - b.daysLeft || a.client.localeCompare(b.client));
 }
