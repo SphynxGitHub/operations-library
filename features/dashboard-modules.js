@@ -137,8 +137,11 @@ function bodyFor(key) {
     if (key === 'plans_expiring') {
         if (!planPeriods) return { count: '', body: empty('Loading...'), extra: '' };
         const list = plansExpiring({ clients, periods: planPeriods.rows, today, isOngoing });
-        return { count: list.length, extra: '', body: list.map((p) => row(p.client, p.clientId, `${p.tier ? `${p.tier} · ` : ''}ends ${p.ends}`,
-            `${chip(p.renewing ? 'Renewing' : 'Not renewing', p.renewing ? '#2dd4bf' : '#f5b942')} ${chip(p.daysLeft === 0 ? 'Today' : `${p.daysLeft}d left`, p.daysLeft <= 14 ? '#f87171' : '#f5b942')}`)).join('') || empty('No Ongoing Maintenance plan ends in the next 60 days.') };
+        return { count: list.length, extra: '', body: list.map((p) => row(p.client, p.clientId,
+            p.overdue ? `${p.tier ? `${p.tier} · ` : ''}ended ${p.ends} · marked Renewing, no new plan added` : `${p.tier ? `${p.tier} · ` : ''}ends ${p.ends}`,
+            p.overdue ? chip(`Overdue ${p.overdueDays}d`, '#f87171')
+                : `${chip(p.renewing ? 'Renewing' : 'Not renewing', p.renewing ? '#2dd4bf' : '#f5b942')} ${chip(p.daysLeft === 0 ? 'Today' : `${p.daysLeft}d left`, p.daysLeft <= 14 ? '#f87171' : '#f5b942')}`)).join('')
+            || empty('No plan ends in the next 60 days and no renewal is overdue.') };
     }
     return { count: '', body: '', extra: '' };
 }
@@ -222,11 +225,11 @@ export async function loadDashboardModules() {
     paint();
 }
 
-// The plan periods for every project, for the "Maintenance plans expiring" card. Read once a minute at most, and only when the card is on.
+// The plan periods for every project (needed in full to tell renewed from overdue), for the "Maintenance plans expiring" card. Read once a minute at most, and only when the card is on.
 async function loadPlanPeriods() {
     if (!enabled().includes('plans_expiring') || (planPeriods && Date.now() - planPeriods.at < 60000)) return;
     try {
-        const r = await db.from('maintenance_plan_period').select('*').eq('status', 'active');
+        const r = await db.from('maintenance_plan_period').select('*');      // every period: an overdue renewal is a closed or ended one with nothing after it
         if (r.error) throw r.error;
         planPeriods = { rows: r.data || [], at: Date.now() };
     } catch (e) {

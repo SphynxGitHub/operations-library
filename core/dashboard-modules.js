@@ -184,22 +184,26 @@ export function reviewsEnding({ clients, today, withinDays = 7 }) {
 }
 
 // ---- maintenance plans expiring ----------------------------------------------------------------------------------
-// Ongoing Maintenance clients whose active plan period ends within the next `withinDays` days (today counts). periods are the
-// rows of maintenance_plan_period (they live in the database, not the project JSON). A client whose next period has already
-// been started (a period beginning after this one ends) is left out, since it has been renewed. Soonest first.
+// Ongoing Maintenance clients whose active plan period ends within the next `withinDays` days (today counts), plus OVERDUE
+// renewals: the client's latest period has already ended, is marked Renewing, and no later period has been added. periods are
+// the rows of maintenance_plan_period (they live in the database, not the project JSON). A client whose next period has
+// already been started (one beginning after this one ends) is left out, since it has been renewed. Overdue first (longest
+// overdue at the top), then soonest to end.
 export function plansExpiring({ clients, periods, today, withinDays = 60, isOngoing }) {
     const byClient = new Map();
     (periods || []).forEach((p) => { if (p && p.client_id && p.due_date) (byClient.get(String(p.client_id)) || byClient.set(String(p.client_id), []).get(String(p.client_id))).push(p); });
     const out = [];
     (clients || []).filter((c) => c && !c._metaOnly && isOngoing(c)).forEach((c) => {
         const mine = byClient.get(String(c.id)) || [];
+        const renewed = (p) => mine.some((q) => q !== p && dayOf(q.start_date) > dayOf(p.due_date));
+        const row = (p, left) => ({ clientId: c.id, client: nameOf(c), ends: dayOf(p.due_date), daysLeft: left, overdueDays: left < 0 ? -left : 0, overdue: left < 0, renewing: !!p.renewing, tier: p.tier || '' });
         mine.filter((p) => p.status === 'active').forEach((p) => {
-            const ends = dayOf(p.due_date);
-            const left = daysBetween(today, ends);
-            if (left < 0 || left > withinDays) return;
-            if (mine.some((q) => q !== p && dayOf(q.start_date) > ends)) return;     // already renewed into a later period
-            out.push({ clientId: c.id, client: nameOf(c), ends, daysLeft: left, renewing: !!p.renewing, tier: p.tier || '' });
+            const left = daysBetween(today, dayOf(p.due_date));
+            if (left >= 0 && left <= withinDays && !renewed(p)) out.push(row(p, left));
         });
+        // Overdue renewal: only the latest period counts, whatever its status (a closed one with nothing after it still counts).
+        const latest = [...mine].sort((a, b) => dayOf(b.start_date).localeCompare(dayOf(a.start_date)))[0];
+        if (latest && latest.renewing && dayOf(latest.due_date) < today && !renewed(latest)) out.push(row(latest, daysBetween(today, dayOf(latest.due_date))));
     });
-    return out.sort((a, b) => a.daysLeft - b.daysLeft || a.client.localeCompare(b.client));
+    return out.sort((a, b) => (a.overdue === b.overdue ? 0 : a.overdue ? -1 : 1) || a.daysLeft - b.daysLeft || a.client.localeCompare(b.client));
 }
