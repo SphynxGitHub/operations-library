@@ -188,6 +188,7 @@ export function dashboardModulesHtml() {
         <b style="font-size:14px;">Modules</b><span class="tiny muted">Shown for you. Click a square to open it.</span>
         <span style="margin-left:auto;display:flex;gap:8px;">
             <button class="btn tiny soft" onclick="OL.dashModulesPreset()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="users" style="width:12px;height:12px;"></i>Team meeting preset</button>
+            <button class="btn tiny soft" onclick="OL.dashOnlyMePreset()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="user" style="width:12px;height:12px;"></i>Only Me</button>
             <button class="btn tiny soft" onclick="OL.dashModulesOpen()" style="display:inline-flex;gap:5px;align-items:center;"><i data-lucide="layout-grid" style="width:12px;height:12px;"></i>Customize</button></span></div>
     ${list.length || stats.length ? `${availHtml}${tiles}${opened}` : '<div class="tiny muted" style="margin-bottom:25px;">No modules are switched on.</div>'}`;
 }
@@ -245,6 +246,13 @@ export function dashModulesPreset() {
     loadDashboardModules();
     if (typeof OL.applyTeamMeetingTaskFilters === 'function') OL.applyTeamMeetingTaskFilters();   // also sets the task list: next 2 weeks, everyone, grouped by client
 }
+// Back to a personal view: the default modules and the task list for just the signed-in person (next 2 weeks + no due date, by due date).
+export function dashOnlyMePreset() {
+    if (typeof OL.applyOnlyMeTaskFilters !== 'function') throw new Error('Only Me preset: OL.applyOnlyMeTaskFilters is not loaded.');
+    setEnabled(DEFAULT_ON.slice());
+    OL.applyOnlyMeTaskFilters();      // throws if there is no signed-in user, before anything repaints
+    loadDashboardModules();
+}
 export function dashModuleToggle(key) {
     const on = enabled();
     setEnabled(on.includes(key) ? on.filter((k) => k !== key) : [...on, key]);
@@ -263,6 +271,7 @@ export function dashModulesOpen() {
     <div class="modal-body" style="width:100%;box-sizing:border-box;">${rows}
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
             <button class="btn soft" onclick="OL.dashModulesPreset(); OL.dashModulesOpen();">Team meeting preset</button>
+            <button class="btn soft" onclick="OL.dashOnlyMePreset(); OL.dashModulesOpen();">Only Me</button>
             <button class="btn primary" onclick="OL.closeModal()">Done</button></div></div>`;
     if (document.querySelector('.modal-box.modal-wide')) document.querySelector('.modal-box.modal-wide').innerHTML = html;
     else OL.showOverlayModal(html, { wide: true });
@@ -270,4 +279,4 @@ export function dashModulesOpen() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashModuleToggle, dashModulesOpen });
+Object.assign(window.OL, { dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashOnlyMePreset, dashModuleToggle, dashModulesOpen });

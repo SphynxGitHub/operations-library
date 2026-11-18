@@ -457,6 +457,17 @@ OL.applyTeamMeetingTaskFilters = function() {
     OL.renderDailyDashboard();
 };
 
+// The Only Me preset's task-list settings: just the signed-in person, everything due in the next 2 weeks plus anything with no
+// due date, grouped by due date.
+OL.applyOnlyMeTaskFilters = function() {
+    const myName = state.currentUser?.name;
+    if (!myName) throw new Error('Only Me preset: no signed-in user name is available.');
+    Object.assign(OL.dashboardTaskState, { assignees: [myName], dueRange: 'next2weeks', undatedWithRange: true, showNoDueDate: true, groupBy: 'date', subGroupBy: 'none' });
+    OL._dashboardAssigneeDefaulted = true;
+    OL._saveDashboardTaskState();
+    OL.renderDailyDashboard();
+};
+
 OL.setDashboardTaskFilter = function(key, value) {
     OL.dashboardTaskState[key] = value;
     if (key === 'dueRange') OL.dashboardTaskState.undatedWithRange = false;   // picking a range by hand goes back to the normal behaviour
@@ -474,7 +485,12 @@ OL.setDashboardTaskFilter = function(key, value) {
 OL.openDashboardAssigneePopover = function(event) {
     const popover = OL.createPopoverContainer(event);
     const selected = OL.dashboardTaskState.assignees;
-    const options = OL._dashboardAssigneeOptions || [];
+    const baseOptions = OL._dashboardAssigneeOptions || [];
+    // Every selected name gets a checkbox, even someone with no open items right now (the Team meeting preset selects the whole
+    // team). Otherwise the "N selected" count includes people who cannot be seen or unticked here.
+    const hiddenSelected = selected.filter(n => n !== '__unassigned__' && !baseOptions.includes(n));
+    const options = [...baseOptions, ...hiddenSelected];
+    const showUnassignedBox = OL._dashboardHasUnassigned || selected.includes('__unassigned__');
 
     popover.innerHTML = `
         <div class="tiny bold uppercase muted" style="margin-bottom:6px; padding:2px 4px;">Filter by Assignee</div>
@@ -486,7 +502,7 @@ OL.openDashboardAssigneePopover = function(event) {
                 <input type="checkbox" ${selected.length === 0 ? 'checked' : ''} onclick="OL.clearDashboardAssignees(event)">
                 <span class="tiny bold">All</span>
             </label>
-            ${OL._dashboardHasUnassigned ? `
+            ${showUnassignedBox ? `
                 <label style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
                     <input type="checkbox" ${selected.includes('__unassigned__') ? 'checked' : ''} onclick="OL.toggleDashboardAssignee(event, '__unassigned__')">
                     <span class="tiny">Unassigned</span>
@@ -495,7 +511,7 @@ OL.openDashboardAssigneePopover = function(event) {
             ${options.map(a => `
                 <label data-assignee-name="${esc(a.toLowerCase())}" style="display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer;" onclick="event.stopPropagation();">
                     <input type="checkbox" ${selected.includes(a) ? 'checked' : ''} onclick="OL.toggleDashboardAssignee(event, '${esc(a)}')">
-                    <span class="tiny">${esc(a)}${a === state.currentUser?.name ? ' (you)' : ''}</span>
+                    <span class="tiny">${esc(a)}${a === state.currentUser?.name ? ' (you)' : ''}${hiddenSelected.includes(a) ? ' <span class="muted">(no open items)</span>' : ''}</span>
                 </label>
             `).join('')}
         </div>

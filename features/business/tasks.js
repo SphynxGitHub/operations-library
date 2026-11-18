@@ -99,8 +99,10 @@ OL.taskGroupTotalHtml = function(items, opts = {}) {
         if (people.length) {
             const events = OL._dashboardEventsCache || [];
             const allTasks = Object.values(state.clients || {}).filter(c => c && c.projectData && !c._metaOnly).flatMap(c => c.projectData.clientTasks || []);
-            const free = people.reduce((sum, n) => sum + Math.max(0, memberDayHours(n, day) - workdayGoneHours(events, n, day) - dailyLoadHours(events, allTasks, n, day)), 0);
-            openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'} for ${esc(people.join(', '))}, after meetings and tasks. Same number as the Availability table.">Free ${scope} <strong style="font-size:12px; color:${(() => { const h = Math.round(free * 10) / 10; return h <= 0 ? '#f87171' : h <= 2 ? '#f5b942' : '#2dd4bf'; })()};">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
+            const perPerson = people.map(n => ({ n, h: Math.max(0, memberDayHours(n, day) - workdayGoneHours(events, n, day) - dailyLoadHours(events, allTasks, n, day)) }));
+            const free = perPerson.reduce((sum, p) => sum + p.h, 0);
+            const breakdown = perPerson.map(p => `${p.n}: ${(Math.round(p.h * 10) / 10).toFixed(1)}h`).join(', ');
+            openCell = `<span class="muted" title="Hours still free ${day === todayKey ? 'today' : 'that day'}, after meetings and tasks, added up for ${people.length} ${people.length === 1 ? 'person' : 'people'} (${esc(breakdown)}). Same number as the Availability table.">Free ${scope}${people.length > 1 ? ` (${people.length} people)` : ''} <strong style="font-size:12px; color:${(() => { const h = Math.round(free * 10) / 10; return h <= 0 ? '#f87171' : h <= 2 ? '#f5b942' : '#2dd4bf'; })()};">${(Math.round(free * 10) / 10).toFixed(1)}h</strong></span>`;
         }
     }
     const cell = (label, value, color) => `<span class="muted">${label} ${scope} <strong style="font-size:12px; color:${color};">${value.toFixed(2)}h</strong></span>`;
