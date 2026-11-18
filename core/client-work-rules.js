@@ -624,6 +624,9 @@ export function reconcileMaintenance(client, ctx) {
     return out;
 }
 
+// Each plan-ending reminder (2 months, 1 month, 2 weeks) is a quick nudge, so it starts out at 0.15 hours (9 minutes) and unbilled.
+export const PERIOD_REMINDER_HOURS = 0.15;
+
 // Reminders as a plan period nears its end. periods come from the database (maintenance_plan_period), not the
 // project JSON, so the caller passes them in. One reminder per period per date.
 export function planPeriodReminders(client, periods, ctx) {
@@ -643,6 +646,7 @@ export function planPeriodReminders(client, periods, ctx) {
                 id: ctx.uid(), title: `${label}: ${client.meta?.name || 'client'}`, name: `${label}: ${client.meta?.name || 'client'}`,
                 description: `The current plan period ends ${due}. Talk to the client about renewing, and decide whether to give any unused hours as a courtesy carryover.`,
                 status: OPEN_STATUS, assignee: communicationAssignee(client, ctx), dueDate: when < ctx.today ? ctx.today : when,
+                estimatedHours: PERIOD_REMINDER_HOURS, billable: false,   // a quick nudge: unbilled, even though Ongoing Maintenance tasks are billable by default
                 isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now,
             };
             pd.clientTasks.unshift(t); setup.reminders[key] = t.id; created.push(t.id);

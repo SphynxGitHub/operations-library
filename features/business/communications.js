@@ -3,6 +3,8 @@ import { esc, decodeEntities, uid, state, db, updateAndSync, getBusinessScopedCl
 import { getRequestTypes, nextOpenRound } from '../../core/requests.js';
 import { isMaintenanceClient, ensureMaintenanceSheet, buildMaintenanceRequest } from '../../core/maintenance.js';
 import { getOlSettings } from '../../core/ol-settings.js';
+import { findFirstAvailableDate } from '../../core/scheduling.js';
+import { loadWorkload } from '../../core/workload.js';
 import { linksForTask, requestIdsForTask } from '../../core/task-links.js';
 import { removePieceLink } from '../../core/roll-down.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -1892,6 +1894,22 @@ OL.__excerptRemoveIdx = function(index) {
 };
 
 // ---- "not finding it? create a new task instead" — same picker, no separate flow ----
+// A due date for a task made from an email: the first day the person making it has room (their working hours, meetings and
+// every project's tasks already booked, the project's allowed busy level), the same search the activation plan uses.
+// Throws if the workload cannot be loaded, so a task is never created with a made-up date. Returns { dueDate, reason }:
+// dueDate is '' (and reason says why) when nothing fits inside the look-ahead window, so a person sets it by hand.
+OL.suggestEmailTaskDueDate = async function(clientId) {
+    const who = state.currentUser?.name;
+    if (!who) throw new Error('Cannot suggest a due date: no signed-in user name is available.');
+    const cfg = getOlSettings().scheduling;
+    const lookAheadDays = Math.ceil(((Number(cfg.windowDays) || 14) + 1) * 7 / 5) + 2;
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    const to = new Date(from); to.setDate(to.getDate() + lookAheadDays);
+    const { events, tasks } = await loadWorkload(from, to);
+    const slot = findFirstAvailableDate({ calendarEvents: events, tasks, assignee: who, clientStatus: state.clients?.[clientId]?.meta?.status, config: cfg });
+    return slot.date ? { dueDate: slot.date, reason: '' } : { dueDate: '', reason: slot.reason || 'no_capacity_in_window' };
+};
+
 OL.startExcerptCreateTask = function() {
     const st = OL._excerptLinkState;
     if (!st) return;
@@ -1912,6 +1930,7 @@ OL.confirmExcerptCreateTask = async function() {
     const title = (st.newTaskTitle || '').trim();
     if (!title || !clientId) return;
 
+    const suggested = await OL.suggestEmailTaskDueDate(clientId);   // the first day with room; edit it in the task settings that open next
     let newTaskId;
     await updateAndSync(() => {
         const client = state.clients[clientId];
@@ -1922,6 +1941,7 @@ OL.confirmExcerptCreateTask = async function() {
         client.projectData.clientTasks.unshift({
             id: newTaskId, title, name: title,
             description: st.excerptText || '', assignee: 'Sphynx Task', loggedHours: 0,
+            dueDate: suggested.dueDate, ...(suggested.reason ? { dueDateReason: suggested.reason } : {}),
             createdAt: new Date().toISOString(),
         });
     }, clientId);
@@ -3936,6 +3956,7 @@ OL.createAndLinkGmailTask = async function() {
     const title = (st.newTaskTitle || '').trim();
     if (!title || !st.clientId) return;
 
+    const suggested = await OL.suggestEmailTaskDueDate(st.clientId);   // the first day with room, same as a task made from an excerpt
     let newTaskId;
     await updateAndSync(() => {
         const client = state.clients[st.clientId];
@@ -3949,6 +3970,7 @@ OL.createAndLinkGmailTask = async function() {
             description: st.emailBody || '',
             assignee: 'Sphynx Task',
             loggedHours: 0,
+            dueDate: suggested.dueDate, ...(suggested.reason ? { dueDateReason: suggested.reason } : {}),
             createdAt: new Date().toISOString()
         });
     }, st.clientId);
