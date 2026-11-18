@@ -17,6 +17,53 @@ function driveFetch(url: string, init?: RequestInit) {
   return fetch(u.toString(), init);
 }
 
+// Finds (or creates) the client's Drive folder and the named subfolder inside it, and returns the subfolder's id.
+// Throws if Google refuses any step, so an upload never goes to the wrong place or reports success without one.
+async function resolveClientUploadFolder(supabase: any, accessToken: string, p: { clientId: string; clientName?: string; subfolderName?: string }) {
+  const { data: client } = await supabase
+    .from("workspace_clients")
+    .select("google_drive_folder_id")
+    .eq("id", p.clientId)
+    .maybeSingle();
+
+  let targetFolderId = client?.google_drive_folder_id;
+  if (!targetFolderId) {
+    const rootName = (p.clientName || "Unnamed Client").trim();
+    const createRes = await driveFetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: rootName, mimeType: "application/vnd.google-apps.folder" })
+    });
+    const createData = await createRes.json();
+    if (!createRes.ok || !createData.id) throw new Error(`Could not create the client's Drive folder: ${createData?.error?.message || createRes.status}`);
+    targetFolderId = createData.id;
+    if (p.clientId) {
+      const { error } = await supabase.from("workspace_clients").update({ google_drive_folder_id: targetFolderId }).eq("id", p.clientId);
+      if (error) throw new Error(`Could not save the client's Drive folder: ${error.message}`);
+    }
+  }
+
+  const targetSubfolder = p.subfolderName || "Task Attachments";
+  const subQ = `mimeType='application/vnd.google-apps.folder' and name='${targetSubfolder.replace(/'/g, "\\'")}' and '${targetFolderId}' in parents and trashed=false`;
+  const subSearch = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQ)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const subData = await subSearch.json();
+  if (!subSearch.ok) throw new Error(`Could not look up the "${targetSubfolder}" folder: ${subData?.error?.message || subSearch.status}`);
+  let parentFolderId = subData.files?.[0]?.id;
+  if (!parentFolderId) {
+    const subCreate = await driveFetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: targetSubfolder, mimeType: "application/vnd.google-apps.folder", parents: [targetFolderId] })
+    });
+    const subCreateData = await subCreate.json();
+    if (!subCreate.ok || !subCreateData.id) throw new Error(`Could not create the "${targetSubfolder}" folder: ${subCreateData?.error?.message || subCreate.status}`);
+    parentFolderId = subCreateData.id;
+  }
+  return parentFolderId as string;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -267,54 +314,35 @@ serve(async (req) => {
     // ACTION 2B: SYNC UPLOADS
 
     // Inside google-drive-sync index.ts serve handler...
+    // Large files (a 20+ MB video) must not pass through this function: base64 in the request plus several in-memory copies
+    // runs the worker out of memory (status 546). So the browser asks for a Drive resumable-upload link here (a tiny request)
+    // and sends the file straight to Google.
+    if (action === "start_client_file_upload") {
+      const { clientId, clientName, fileName, fileType, fileSize, subfolderName } = body;
+      if (!clientId || !fileName) throw new Error("start_client_file_upload needs clientId and fileName.");
+      const parentFolderId = await resolveClientUploadFolder(supabase, accessToken, { clientId, clientName, subfolderName });
+      const origin = req.headers.get("origin");
+      const initRes = await driveFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": fileType || "application/octet-stream",
+          ...(fileSize ? { "X-Upload-Content-Length": String(fileSize) } : {}),
+          // Google only allows the browser to send to the upload link from the page that asked for it when it is told that page's origin.
+          ...(origin ? { Origin: origin } : {}),
+        },
+        body: JSON.stringify({ name: fileName, parents: [parentFolderId] }),
+      });
+      if (!initRes.ok) throw new Error(`Google refused to start the upload (${initRes.status}): ${(await initRes.text()).slice(0, 300)}`);
+      const uploadUrl = initRes.headers.get("location");
+      if (!uploadUrl) throw new Error("Google did not return an upload link.");
+      return new Response(JSON.stringify({ success: true, uploadUrl }), { status: 200, headers: corsHeaders });
+    }
+
     if (action === "upload_client_file") {
       const { clientId, clientName, fileName, fileData, fileType, subfolderName } = body;
-
-      // 1. Resolve client Drive folder ID from database
-      const { data: client } = await supabase
-        .from("workspace_clients")
-        .select("google_drive_folder_id")
-        .eq("id", clientId)
-        .maybeSingle();
-
-      let targetFolderId = client?.google_drive_folder_id;
-
-      // Create root folder if missing
-      if (!targetFolderId) {
-        const rootName = (clientName || "Unnamed Client").trim();
-        const createRes = await driveFetch("https://www.googleapis.com/drive/v3/files", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ name: rootName, mimeType: "application/vnd.google-apps.folder" })
-        });
-        const createData = await createRes.json();
-        targetFolderId = createData.id;
-
-        if (clientId && targetFolderId) {
-          await supabase.from("workspace_clients").update({ google_drive_folder_id: targetFolderId }).eq("id", clientId);
-        }
-      }
-
-      
-
-      // 2. Resolve target subfolder (e.g., "App Snapshots" or "Task Attachments")
-      const targetSubfolder = subfolderName || "Task Attachments";
-      const subQ = `mimeType='application/vnd.google-apps.folder' and name='${targetSubfolder}' and '${targetFolderId}' in parents and trashed=false`;
-      const subSearch = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQ)}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      const subData = await subSearch.json();
-      let parentFolderId = subData.files?.[0]?.id;
-
-      if (!parentFolderId) {
-        const subCreate = await driveFetch("https://www.googleapis.com/drive/v3/files", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ name: targetSubfolder, mimeType: "application/vnd.google-apps.folder", parents: [targetFolderId] })
-        });
-        const subCreateData = await subCreate.json();
-        parentFolderId = subCreateData.id;
-      }
+      const parentFolderId = await resolveClientUploadFolder(supabase, accessToken, { clientId, clientName, subfolderName });
 
       // 3. Convert base64 data back to Blob
       const base64Data = fileData.split(",")[1] || fileData;
@@ -334,6 +362,7 @@ serve(async (req) => {
       });
 
       const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.id) throw new Error(`Drive rejected the upload (${uploadRes.status}): ${uploadData?.error?.message || "no file id returned"}`);
       return new Response(JSON.stringify({ 
         success: true, 
         fileId: uploadData.id, 

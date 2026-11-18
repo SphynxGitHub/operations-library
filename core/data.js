@@ -1837,42 +1837,43 @@ OL.uploadFileToDrive = async function(clientId, file, subfolderName = "Task Atta
     return null;
   }
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-
-    reader.onload = async () => {
-      try {
-        console.log(`📤 Uploading ${file.name} to ${subfolderName}...`);
-        
-        const { data, error } = await db.functions.invoke("google-drive-sync", {
-          body: {
-            action: "upload_client_file",
-            clientId: clientId,
-            clientName: client.meta?.name || "Client Workspace",
-            fileName: file.name,
-            fileType: file.type,
-            fileData: reader.result,
-            subfolderName: subfolderName // "App Snapshots" or "Task Attachments"
-          }
-        });
-
-        if (error || !data?.success) {
-          throw new Error(error?.message || "Drive upload failed");
-        }
-
-        if (typeof OL.showToast === "function") {
-          OL.showToast(`Uploaded ${file.name} to ${subfolderName}`);
-        }
-
-        resolve(data); // Returns { fileId, webViewLink }
-      } catch (err) {
-        console.error("Drive upload error:", err);
-        alert(`Failed to upload file to Drive: ${err.message}`);
-        reject(err);
+  // The file goes straight from the browser to Google Drive. Sending it through the edge function (base64 inside the request)
+  // ran the function out of memory on large files (a 21.9 MB video came back as status 546). The function only starts the
+  // upload and hands back a one-time upload link.
+  try {
+    console.log(`Uploading ${file.name} to ${subfolderName}...`);
+    const { data: start, error: startError } = await db.functions.invoke("google-drive-sync", {
+      body: {
+        action: "start_client_file_upload",
+        clientId: clientId,
+        clientName: client.meta?.name || "Client Workspace",
+        fileName: file.name,
+        fileType: file.type || "application/octet-stream",
+        fileSize: file.size,
+        subfolderName: subfolderName // "App Snapshots" or "Task Attachments"
       }
-    };
-  });
+    });
+    if (startError || !start?.success || !start.uploadUrl) {
+      let detail = startError?.message || "Drive did not start the upload";
+      try { const b = await startError?.context?.json(); detail = b?.error || b?.message || detail; } catch (_e) { /* keep the generic message */ }
+      throw new Error(detail);
+    }
+
+    const putRes = await fetch(start.uploadUrl, { method: "PUT", body: file });
+    if (!putRes.ok) throw new Error(`Google Drive rejected the file (status ${putRes.status}).`);
+    const uploaded = await putRes.json();
+    if (!uploaded?.id) throw new Error("Google Drive did not return the uploaded file's id.");
+
+    const data = { success: true, fileId: uploaded.id, webViewLink: uploaded.webViewLink };
+    if (typeof OL.showToast === "function") {
+      OL.showToast(`Uploaded ${file.name} to ${subfolderName}`);
+    }
+    return data; // { success, fileId, webViewLink }
+  } catch (err) {
+    console.error("Drive upload error:", err);
+    alert(`Failed to upload file to Drive: ${err.message}`);
+    throw err;
+  }
 };
 
 OL.uploadGlobalSnapshotToDrive = async function(file) {
