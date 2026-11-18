@@ -83,7 +83,7 @@ function checklistSectionHtml(key, items, checked, clientName) {
         <div style="margin-bottom:14px;">
             <div class="tiny bold uppercase muted" style="margin-bottom:4px;">${esc(SECTION_LABELS[key](clientName))} (${items.length})</div>
             <div style="display:grid; gap:3px;">
-                ${items.map((it) => `
+                ${items.map((it, i) => `
                     <label style="display:flex !important; align-items:flex-start; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; font-size:12px; margin:0 !important;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='none'">
                         <input type="checkbox" style="margin-top:2px; width:auto !important; display:inline-block !important;" ${checked[key]?.has(it.id) ? 'checked' : ''} onchange="OL.cfToggle('${key}', '${esc(String(it.id))}', this.checked)">
                         <span style="flex:1; min-width:0;">
@@ -93,6 +93,7 @@ function checklistSectionHtml(key, items, checked, clientName) {
                             ${it.noNote ? '<span style="color:#f59e0b;"> — no progress update yet</span>' : ''}
                             ${(it.waitNotes || []).map((n) => `<div class="tiny" style="margin-top:3px; padding-left:8px; border-left:2px solid var(--line); color:var(--muted); white-space:pre-wrap;">${n.label ? `<strong>${esc(n.label)}:</strong> ` : '<strong>Note:</strong> '}${esc(n.text)}</div>`).join('')}
                         </span>
+                        ${items.length > 1 ? `<span style="display:inline-flex; gap:2px; flex:none;">${['up', 'down'].map((d, n) => { const off = (n === 0 && i === 0) || (n === 1 && i === items.length - 1); return `<button type="button" class="btn tiny soft" style="padding:1px 5px; ${off ? 'opacity:.3; pointer-events:none;' : ''}" title="Move ${d}" onclick="event.preventDefault(); event.stopPropagation(); OL.cfMove('${key}', '${esc(String(it.id))}', ${n === 0 ? -1 : 1})"><i data-lucide="arrow-${d}" style="width:12px;height:12px;"></i></button>`; }).join('')}</span>` : ''}
                     </label>
                 `).join('')}
             </div>
@@ -230,6 +231,19 @@ OL.cfSaveNextDate = async function() {
     if (typeof OL.refreshTaskView === 'function') OL.refreshTaskView();
 };
 
+// Moves an item up or down within its section; the email lists each section in this order.
+OL.cfMove = function(key, id, dir) {
+    const st = OL._cfState;
+    if (!st) throw new Error('Cannot reorder: the follow-up email window is no longer open.');
+    const list = st.data[key];
+    const i = Array.isArray(list) ? list.findIndex((it) => String(it.id) === String(id)) : -1;
+    if (i < 0) throw new Error(`Cannot reorder: item ${id} is not in the ${key} section.`);
+    const j = i + (dir < 0 ? -1 : 1);
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    renderSidebar();
+};
+
 OL.cfToggle = function(key, id, checked) {
     const st = OL._cfState;
     if (!st) return;
@@ -324,4 +338,4 @@ OL.cfMarkFollowedUp = function() {
     OL._cfCloseFollowUp(st.clientId, st.taskId, nextDue);
 };
 
-Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend, cfMarkFollowedUp: OL.cfMarkFollowedUp, cfNextFromDays: OL.cfNextFromDays, cfNextFromDate: OL.cfNextFromDate, cfSaveNextDate: OL.cfSaveNextDate });
+Object.assign(window.OL, { openClientFollowUpEmail: OL.openClientFollowUpEmail, cfToggle: OL.cfToggle, cfMove: OL.cfMove, cfAddClientAsk: OL.cfAddClientAsk, cfSend: OL.cfSend, cfMarkFollowedUp: OL.cfMarkFollowedUp, cfNextFromDays: OL.cfNextFromDays, cfNextFromDate: OL.cfNextFromDate, cfSaveNextDate: OL.cfSaveNextDate });

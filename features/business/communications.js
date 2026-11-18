@@ -2851,8 +2851,34 @@ OL.renderComposeTaskPicker = function() {
                     </label>`;
                 }).join('') || '<span class="tiny muted">No matches.</span>'}
             </div>
+            <div id="compose-task-reorder"></div>
         </details>` : '';
     OL._composeTaskClientId = clientId;
+    OL.renderComposeReorder();
+};
+
+// The "Reorder next steps" list for the ticked tasks. The email lists them in this order (the Sphynx and client groups each keep it).
+OL.renderComposeReorder = function() {
+    const el = document.getElementById('compose-task-reorder');
+    const st = OL._composeState;
+    if (!el || !st) return;
+    const client = state.clients?.[OL._composeTaskClientId || OL._composeProjectId()];
+    const tasks = (st.includedTaskIds || []).map(id => (client?.projectData?.clientTasks || []).find(t => String(t.id) === String(id))).filter(Boolean);
+    const wasOpen = !!el.querySelector('details')?.open;
+    el.innerHTML = OL.reorderListHtml(tasks.map(t => ({ id: t.id, label: t.title || t.name || '' })), 'OL.moveComposeTask', wasOpen);
+    if (window.lucide) lucide.createIcons();
+};
+
+OL.moveComposeTask = function(taskId, dir) {
+    const st = OL._composeState;
+    if (!st) throw new Error('Cannot reorder next steps: the email window is no longer open.');
+    const ids = st.includedTaskIds;
+    const i = ids.findIndex(id => String(id) === String(taskId));
+    if (i < 0) throw new Error(`Cannot reorder next steps: task ${taskId} is not included in this email.`);
+    const j = i + (dir < 0 ? -1 : 1);
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    OL.renderComposeReorder();
 };
 
 OL.toggleComposeTask = function(taskId, on) {
@@ -2862,6 +2888,7 @@ OL.toggleComposeTask = function(taskId, on) {
     if (on) st.includedTaskIds.push(taskId);
     const sum = document.querySelector('#compose-task-picker summary');
     if (sum) sum.innerHTML = sum.innerHTML.replace(/ · \d+ included$/, '') + (st.includedTaskIds.length ? ` · ${st.includedTaskIds.length} included` : '');
+    OL.renderComposeReorder();
 };
 
 OL._composeTaskListHtml = function() {

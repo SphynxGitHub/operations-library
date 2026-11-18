@@ -566,8 +566,19 @@ function closeFullPage() {
     }
 }
 
+// A "Reorder next steps" list with up/down arrows, the same one the meeting summary email uses. items = [{ id, label }];
+// moveFn = the name of a global function called as moveFn(id, -1 | 1). Pass open = true to keep it expanded across repaints.
+export function reorderListHtml(items, moveFn, open = false) {
+    if (!Array.isArray(items) || items.length < 2) return '';
+    const arrow = (id, dir, icon, off) => `<button type="button" class="btn tiny soft" style="padding:1px 5px; ${off ? 'opacity:.3; pointer-events:none;' : ''}" title="Move ${dir < 0 ? 'up' : 'down'}" onclick="event.preventDefault(); event.stopPropagation(); ${moveFn}('${esc(String(id))}', ${dir})"><i data-lucide="${icon}" style="width:12px;height:12px;"></i></button>`;
+    return `<details ${open ? 'open' : ''} style="margin-top:8px;"><summary class="tiny muted" style="cursor:pointer;">Reorder next steps</summary>
+        <div style="margin-top:6px;">${items.map((t, i) => `<div style="display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid var(--line);">
+            <div style="flex:1; min-width:0; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(t.label || '')}">${esc(t.label || '')}</div>
+            ${arrow(t.id, -1, 'arrow-up', i === 0)}${arrow(t.id, 1, 'arrow-down', i === items.length - 1)}</div>`).join('')}</div></details>`;
+}
+
 Object.assign(window.OL, {
-    openFullPage, closeFullPage,
+    openFullPage, closeFullPage, reorderListHtml,
     myTeamCard, signatureHtmlFor, getMySignatureHtml, signatureParts, fillClosing, saveSignatureFor, signatureIncluded, signaturePanelHtml,
     senderEmails, personDirectory, greetingContact, initRecipients, recipientBoxHtml, renderRecipients, renderAllRecipients,
     addRecipient, getRecipients, commitRecipients, composeStyles, composeShellHtml, assembleEmail, collectCompose, sendCompose,
