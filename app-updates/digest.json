@@ -1,4 +1,37 @@
 {
-  "updatedAt": null,
-  "items": []
+  "updatedAt": "2026-11-19T17:47:35Z",
+  "items": [
+    {
+      "app": "Schwab",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Schwab Advisor Services' digital onboarding now lets firms add PDF forms to digital envelopes and countersign their own documents.",
+      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Schwab",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Syntax Direct personalized indexing is now available through iRebal without changing existing workflows.",
+      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Schwab",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Clients can eAuthorize wires and checks submitted via Import Transactions, with up to 2,000 transactions per upload.",
+      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Jotform",
+      "kind": "pricing",
+      "date": "2026-11-19",
+      "summary": "Jotform's pricing page advertises a limited-time Black Friday discount on annual plans (not Enterprise); no dates or amounts are shown publicly. Listed prices are unchanged: Bronze $39, Silver $49, Gold $129 monthly.",
+      "sourceUrl": "https://www.jotform.com/pricing/",
+      "checkedAt": "2026-11-19"
+    }
+  ]
 }
