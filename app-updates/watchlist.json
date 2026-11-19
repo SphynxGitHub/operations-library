@@ -1,0 +1,8 @@
+{
+  "apps": [
+    { "name": "Jotform", "pricingUrl": "https://www.jotform.com/pricing/", "releaseNotesUrl": "" },
+    { "name": "Wealthbox", "pricingUrl": "https://www.wealthbox.com/pricing/", "releaseNotesUrl": "" },
+    { "name": "Slant", "pricingUrl": "", "releaseNotesUrl": "" },
+    { "name": "Schwab", "pricingUrl": "", "releaseNotesUrl": "" }
+  ]
+}

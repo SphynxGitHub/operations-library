@@ -16,6 +16,7 @@ export const MODULES = [
     { key: 'hours_blocks',   label: 'Hours blocks nearing limits', icon: 'timer',      team: false },
     { key: 'reviews_ending', label: 'Reviews ending soon',      icon: 'calendar-clock', team: true },
     { key: 'plans_expiring', label: 'Maintenance plans expiring', icon: 'calendar-x',   team: false },
+    { key: 'app_updates',    label: 'App updates',              icon: 'radar',         team: false },
 ];
 export const DEFAULT_ON = ['availability', 'pending_review', 'leads'];
 export const TEAM_PRESET = MODULES.filter((m) => m.team).map((m) => m.key);

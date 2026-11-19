@@ -19,6 +19,7 @@ import {
 const view = { mode: 'week', offset: 0 };          // the Availability module: 'today', 'week' (a rolling 5 working days from today) or 'month'
 const MAX_WEEK_OFFSET = 8, MAX_MONTH_OFFSET = 1;   // the dashboard's calendar events only reach about 60 days ahead
 let planPeriods = null;                             // { rows, at }: every maintenance_plan_period row, once loaded
+let appUpdates = null;                              // { items, updatedAt } from app-updates/digest.json, or { error }
 let reviewData = null;                              // { reviews, itemsByReview, reviewedTaskIds, at } once loaded
 
 const todayStr = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -143,6 +144,18 @@ function bodyFor(key) {
                 : `${chip(p.renewing ? 'Renewing' : 'Not renewing', p.renewing ? '#2dd4bf' : '#f5b942')} ${chip(p.daysLeft === 0 ? 'Today' : `${p.daysLeft}d left`, p.daysLeft <= 14 ? '#f87171' : '#f5b942')}`)).join('')
             || empty('No plan ends in the next 60 days and no renewal is overdue.') };
     }
+    if (key === 'app_updates') {
+        if (!appUpdates) return { count: '', body: empty('Loading...'), extra: '' };
+        if (appUpdates.error) return { count: '', body: `<div class="tiny" style="color:#ef4444;padding:6px 0;">${esc(appUpdates.error)}</div>`, extra: '' };
+        const items = appUpdates.items;
+        const stamp = appUpdates.updatedAt ? `<span class="tiny muted" style="margin-left:auto;">Last scan ${esc(String(appUpdates.updatedAt).slice(0, 10))}</span>` : '';
+        const kindColor = { pricing: '#f5b942', feature: '#2dd4bf', release: '#60a5fa', other: '#94a3b8' };
+        const body = items.map((i) => `<div style="padding:7px 0;border-bottom:1px solid var(--line);">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span></div>
+            <div style="font-size:13px;overflow-wrap:anywhere;">${esc(i.summary || '')}</div>
+            ${i.sourceUrl ? `<a class="tiny" href="${esc(i.sourceUrl)}" target="_blank" rel="noopener">Source</a><span class="tiny muted"> · checked ${esc(i.checkedAt || '')}</span>` : ''}</div>`).join('');
+        return { count: items.length, extra: stamp, body: body || empty(appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.') };
+    }
     return { count: '', body: '', extra: '' };
 }
 
@@ -201,9 +214,23 @@ function paint() {
 }
 
 // Loads the sent reviews (and which tasks are in any review) for every project, then repaints the modules.
+async function loadAppUpdates() {
+    if (!enabled().includes('app_updates') || (appUpdates && !appUpdates.error && Date.now() - appUpdates.at < 300000)) return;
+    try {
+        const r = await fetch(`app-updates/digest.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`App updates digest could not be loaded (${r.status}).`);
+        const d = await r.json();
+        if (!d || !Array.isArray(d.items)) throw new Error('App updates digest is not in the expected format.');
+        const items = d.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 40);
+        appUpdates = { items, updatedAt: d.updatedAt || null, at: Date.now() };
+    } catch (e) { appUpdates = { error: e.message, at: Date.now() }; }
+    paint();
+}
+
 export async function loadDashboardModules() {
     paint();
     loadPlanPeriods();
+    loadAppUpdates();
     if (!enabled().includes('pending_review') || (reviewData && Date.now() - reviewData.at < 60000)) return;
     try {
         const r = await db.from('reviews').select('id, client_id, status, sent_at, sent_by, follow_up_owner').order('created_at', { ascending: false }).limit(500);
