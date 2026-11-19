@@ -39,6 +39,11 @@
       "name": "eMoney",
       "pricingUrl": "",
       "releaseNotesUrl": ""
+    },
+    {
+      "name": "Zapier",
+      "pricingUrl": "https://zapier.com/pricing",
+      "releaseNotesUrl": ""
     }
   ]
 }
