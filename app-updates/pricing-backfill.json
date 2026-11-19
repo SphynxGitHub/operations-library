@@ -1,4 +1,138 @@
 {
- "generatedAt": null,
- "apps": []
+ "generatedAt": "2026-11-19T17:51:10Z",
+ "apps": [
+  {
+   "id": "master-app-1767936076742",
+   "name": "AdvicePay",
+   "status": "found",
+   "sourceUrl": "https://www.advicepay.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Essential (flat)",
+     "price": 10,
+     "notes": "1 advisor, up to 10 active clients; plus transaction fees"
+    },
+    {
+     "name": "Professional (per user)",
+     "price": 50,
+     "notes": "Unlimited clients; plus transaction fees (card 3.5%+$0.30, ACH 1.5%)"
+    }
+   ],
+   "note": "Enterprise is custom quote"
+  },
+  {
+   "id": "master-app-1767934864582",
+   "name": "Axos",
+   "status": "not_found",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bank; pricing page not researched/verified this run"
+  },
+  {
+   "id": "master-app-1767934560279",
+   "name": "Calendly",
+   "status": "not_found",
+   "sourceUrl": "https://calendly.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Page shows Standard $10 / Teams $16 per seat but could not confirm monthly vs annual billing rate"
+  },
+  {
+   "id": "master-app-1767977879193",
+   "name": "Constant Contact",
+   "status": "not_found",
+   "sourceUrl": "https://www.constantcontact.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Opened pricing page; fetched content showed no dollar prices"
+  },
+  {
+   "id": "master-app-1767977861608",
+   "name": "DocuSign",
+   "status": "found",
+   "sourceUrl": "https://ecom.docusign.com/plans-and-pricing/esignature",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Personal",
+     "price": 11,
+     "notes": "Annual commitment, billed monthly"
+    },
+    {
+     "name": "Standard (per user)",
+     "price": 30,
+     "notes": "Annual commitment, billed monthly"
+    },
+    {
+     "name": "Business Pro (per user)",
+     "price": 45,
+     "notes": "Annual commitment, billed monthly"
+    }
+   ],
+   "note": "Enhanced plans contact sales"
+  },
+  {
+   "id": "master-app-1767934677414",
+   "name": "Gmail",
+   "status": "found",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Business Starter (per user)",
+     "price": 7,
+     "notes": "Standard list price from Feb 10 2027; intro promo $3.50 until then; flexible/monthly billing; excl. tax"
+    },
+    {
+     "name": "Business Standard (per user)",
+     "price": 14,
+     "notes": "Standard list price; promo $7"
+    },
+    {
+     "name": "Business Plus (per user)",
+     "price": 22,
+     "notes": "Standard list price; promo $11"
+    }
+   ],
+   "note": "Google Workspace plan prices recorded once here for the Workspace apps"
+  },
+  {
+   "id": "master-app-1767977778824",
+   "name": "Google Calendar",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934766237",
+   "name": "Google Docs",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934694566",
+   "name": "Google Drive",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1774749468859",
+   "name": "Google Forms",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  }
+ ]
 }
