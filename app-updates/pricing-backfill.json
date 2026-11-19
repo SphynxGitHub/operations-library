@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T18:49:13Z",
+  "generatedAt": "2026-11-19T19:53:31Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -325,6 +325,102 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301343132",
+      "name": "Zapier Code",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301351883",
+      "name": "Zapier Tables",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301364619",
+      "name": "Zapier Formatter",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301372340",
+      "name": "Zapier Delay",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301378780",
+      "name": "Zapier Filter",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301387571",
+      "name": "Zapier Storage",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+    },
+    {
+      "id": "master-app-1788301412365",
+      "name": "PreciseFP",
+      "status": "found",
+      "sourceUrl": "https://precisefp.com/pricing/",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Standard (includes 1 user)",
+          "price": 89,
+          "notes": "100 account profiles, 1 team; add-ons: extra user +$49/mo, extra team +$25/mo, +100 profiles +$15/mo"
+        }
+      ],
+      "note": "Enterprise tier is custom-quoted (10+ employees)"
+    },
+    {
+      "id": "master-app-1788301433749",
+      "name": "Mailchimp",
+      "status": "not_found",
+      "sourceUrl": "https://mailchimp.com/pricing/",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page showed promo prices for 12 months; could not verify standard monthly price per contact tier"
+    },
+    {
+      "id": "master-app-1788301472847",
+      "name": "AdobeSign",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official adobe.com pricing page could not be fetched this run"
+    },
+    {
+      "id": "master-app-1788301490005",
+      "name": "SEI",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Custodian/asset-management platform; fees are asset-based, not software subscription pricing"
     }
   ]
 }
