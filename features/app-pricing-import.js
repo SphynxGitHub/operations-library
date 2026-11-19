@@ -87,6 +87,7 @@ OL.openAppPricingImport = function () {
                     <textarea id="pricing-import-text" class="modal-textarea" rows="8" style="width:100%;" placeholder='{"apps":[{"name":"Jotform","sourceUrl":"https://...","checkedAt":"2026-11-19","tiers":[{"name":"Bronze","price":39}]}]}'></textarea>
                     <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
                         <input type="file" id="pricing-import-file" accept=".json,application/json" onchange="OL.pricingImportFile(this)">
+                        <button class="btn small soft" onclick="OL.pricingImportLoadRepo()">Load latest researched pricing</button>
                         <button class="btn small soft" style="margin-left:auto;" onclick="OL.pricingImportPreview()">Review changes</button>
                     </div>
                     <div id="pricing-import-error" class="tiny" style="color:#ef4444; margin-top:6px;"></div>
@@ -103,6 +104,20 @@ OL.pricingImportFile = function (input) {
     r.onerror = () => { document.getElementById('pricing-import-error').textContent = 'The file could not be read.'; };
     r.onload = () => { document.getElementById('pricing-import-text').value = String(r.result || ''); OL.pricingImportPreview(); };
     r.readAsText(f);
+};
+
+OL.pricingImportLoadRepo = async function () {
+    const err = document.getElementById('pricing-import-error');
+    err.textContent = '';
+    try {
+        const r = await fetch(`app-updates/pricing-backfill.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`The researched pricing file could not be loaded (${r.status}).`);
+        const d = await r.json();
+        const apps = (d.apps || []).filter((a) => Array.isArray(a.tiers) && a.tiers.length);
+        if (!apps.length) throw new Error('The researched pricing file has no apps with tiers yet.');
+        document.getElementById('pricing-import-text').value = JSON.stringify({ apps }, null, 2);
+        OL.pricingImportPreview();
+    } catch (e) { err.textContent = e.message; throw e; }
 };
 
 OL.pricingImportPreview = function () {
