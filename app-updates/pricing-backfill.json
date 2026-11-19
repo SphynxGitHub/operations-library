@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-19T17:51:10Z",
+ "generatedAt": "2026-11-19T17:56:20Z",
  "apps": [
   {
    "id": "master-app-1767936076742",
@@ -33,11 +33,27 @@
   {
    "id": "master-app-1767934560279",
    "name": "Calendly",
-   "status": "not_found",
+   "status": "found",
    "sourceUrl": "https://calendly.com/pricing",
    "checkedAt": "2026-11-19",
-   "tiers": [],
-   "note": "Page shows Standard $10 / Teams $16 per seat but could not confirm monthly vs annual billing rate"
+   "tiers": [
+    {
+     "name": "Free",
+     "price": 0,
+     "notes": ""
+    },
+    {
+     "name": "Standard (per seat)",
+     "price": 10,
+     "notes": "Monthly-billing rate confirmed by account owner; page lists notetaker/Callie as add-ons"
+    },
+    {
+     "name": "Teams (per seat)",
+     "price": 16,
+     "notes": "Monthly-billing rate confirmed by account owner; page's own help article shows $16 for annual billing, so verify"
+    }
+   ],
+   "note": "Prices read from official pricing page; page did not label monthly vs annual, monthly basis confirmed by user. Enterprise from $15k/yr, min 50 seats (quote)"
   },
   {
    "id": "master-app-1767977879193",
