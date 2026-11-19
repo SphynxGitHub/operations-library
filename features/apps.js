@@ -48,6 +48,8 @@ export function renderAppsGrid() {
           </div>
           <div class="header-actions">
               ${isVaultMode ? `
+                  <button class="btn small soft" onclick="OL.exportAppPricingList()" title="Download every master app and its current tiers">Export app list</button>
+                  <button class="btn small soft" onclick="OL.openAppPricingImport()" title="Review and import researched pricing tiers">Import pricing</button>
                   <button class="btn primary" onclick="OL.createMasterAppFromGrid()">
                     <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> Create Master App
                   </button>

@@ -50,6 +50,7 @@ import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
 import './features/intel.js';
+import './features/app-pricing-import.js';
 import './features/resource-merge.js';
 import './core/billable.js';
 import './core/recurrence.js';
