@@ -169,6 +169,11 @@
       "name": "WealthTender",
       "pricingUrl": "",
       "releaseNotesUrl": ""
+    },
+    {
+      "name": "Altruist",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
     }
   ]
 }
