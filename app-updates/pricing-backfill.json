@@ -1,426 +1,426 @@
 {
-  "generatedAt": "2026-11-19T19:53:31Z",
-  "apps": [
+ "generatedAt": "2026-11-19T20:31:17Z",
+ "apps": [
+  {
+   "id": "master-app-1767936076742",
+   "name": "AdvicePay",
+   "status": "found",
+   "sourceUrl": "https://www.advicepay.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
     {
-      "id": "master-app-1767936076742",
-      "name": "AdvicePay",
-      "status": "found",
-      "sourceUrl": "https://www.advicepay.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Essential (flat)",
-          "price": 10,
-          "notes": "1 advisor, up to 10 active clients; plus transaction fees"
-        },
-        {
-          "name": "Professional (per user)",
-          "price": 50,
-          "notes": "Unlimited clients; plus transaction fees (card 3.5%+$0.30, ACH 1.5%)"
-        }
-      ],
-      "note": "Enterprise is custom quote"
+     "name": "Essential (flat)",
+     "price": 10,
+     "notes": "1 advisor, up to 10 active clients; plus transaction fees"
     },
     {
-      "id": "master-app-1767934864582",
-      "name": "Axos",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bank; pricing page not researched/verified this run"
-    },
-    {
-      "id": "master-app-1767934560279",
-      "name": "Calendly",
-      "status": "found",
-      "sourceUrl": "https://calendly.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Free",
-          "price": 0,
-          "notes": ""
-        },
-        {
-          "name": "Standard (per seat)",
-          "price": 10,
-          "notes": "Monthly-billing rate confirmed by account owner; page lists notetaker/Callie as add-ons"
-        },
-        {
-          "name": "Teams (per seat)",
-          "price": 16,
-          "notes": "Monthly-billing rate confirmed by account owner; page's own help article shows $16 for annual billing, so verify"
-        }
-      ],
-      "note": "Prices read from official pricing page; page did not label monthly vs annual, monthly basis confirmed by user. Enterprise from $15k/yr, min 50 seats (quote)"
-    },
-    {
-      "id": "master-app-1767977879193",
-      "name": "Constant Contact",
-      "status": "not_found",
-      "sourceUrl": "https://www.constantcontact.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Opened pricing page; fetched content showed no dollar prices"
-    },
-    {
-      "id": "master-app-1767977861608",
-      "name": "DocuSign",
-      "status": "found",
-      "sourceUrl": "https://ecom.docusign.com/plans-and-pricing/esignature",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Personal",
-          "price": 11,
-          "notes": "Annual commitment, billed monthly"
-        },
-        {
-          "name": "Standard (per user)",
-          "price": 30,
-          "notes": "Annual commitment, billed monthly"
-        },
-        {
-          "name": "Business Pro (per user)",
-          "price": 45,
-          "notes": "Annual commitment, billed monthly"
-        }
-      ],
-      "note": "Enhanced plans contact sales"
-    },
-    {
-      "id": "master-app-1767934677414",
-      "name": "Gmail",
-      "status": "found",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Business Starter (per user)",
-          "price": 7,
-          "notes": "Standard list price from Feb 10 2027; intro promo $3.50 until then; flexible/monthly billing; excl. tax"
-        },
-        {
-          "name": "Business Standard (per user)",
-          "price": 14,
-          "notes": "Standard list price; promo $7"
-        },
-        {
-          "name": "Business Plus (per user)",
-          "price": 22,
-          "notes": "Standard list price; promo $11"
-        }
-      ],
-      "note": "Google Workspace plan prices recorded once here for the Workspace apps"
-    },
-    {
-      "id": "master-app-1767977778824",
-      "name": "Google Calendar",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
-    },
-    {
-      "id": "master-app-1767934766237",
-      "name": "Google Docs",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
-    },
-    {
-      "id": "master-app-1767934694566",
-      "name": "Google Drive",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
-    },
-    {
-      "id": "master-app-1774749468859",
-      "name": "Google Forms",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
-    },
-    {
-      "id": "master-app-1767934715678",
-      "name": "Google Sheets",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://workspace.google.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Bundled in Google Workspace plans; see Gmail entry for plan prices"
-    },
-    {
-      "id": "master-app-1767934799829",
-      "name": "Hazel",
-      "status": "not_found",
-      "sourceUrl": "https://store.noodlesoft.com/store",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official store lists one-time licenses only (Hazel 6 $42, Family Pack $65, Upgrade $20), no monthly price; store page footer may be dated"
-    },
-    {
-      "id": "master-app-1767977842769",
-      "name": "Jotform",
-      "status": "found",
-      "sourceUrl": "https://www.jotform.com/sr/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Starter",
-          "price": 0,
-          "notes": "1 user; 5 forms, 100 submissions/mo"
-        },
-        {
-          "name": "Bronze",
-          "price": 39,
-          "notes": "1 user"
-        },
-        {
-          "name": "Silver",
-          "price": 49,
-          "notes": "1 user"
-        },
-        {
-          "name": "Gold",
-          "price": 129,
-          "notes": "1 user"
-        }
-      ],
-      "note": "Enterprise is custom quote. Page read in Serbian; larger figure per plan taken as monthly-billing price (annual rates lower)"
-    },
-    {
-      "id": "master-app-1767934596064",
-      "name": "Wealthbox",
-      "status": "found",
-      "sourceUrl": "https://wealthbox.com/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Basic (per user)",
-          "price": 65,
-          "notes": "Page does not state billing period; signup links are yearly"
-        },
-        {
-          "name": "Pro (per user)",
-          "price": 85,
-          "notes": "Same caveat"
-        },
-        {
-          "name": "Premier (per user)",
-          "price": 119,
-          "notes": "Same caveat"
-        }
-      ],
-      "note": "Enterprise is custom/contact us; add-ons AI Notetaker $49 and Vault $29 per user/mo"
-    },
-    {
-      "id": "master-app-1767934530303",
-      "name": "Zapier",
-      "status": "found",
-      "sourceUrl": "https://zapier.com/pricing.md",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Free",
-          "price": 0,
-          "notes": "100 tasks/mo, 1 seat"
-        },
-        {
-          "name": "Professional (entry tier, 750 tasks/mo)",
-          "price": 29.99,
-          "notes": "1 seat; higher task tiers cost more, e.g. 2,000 tasks $73.50"
-        },
-        {
-          "name": "Team (entry tier, 2,000 tasks/mo)",
-          "price": 103.5,
-          "notes": "25 seats; higher task tiers cost more"
-        }
-      ],
-      "note": "Enterprise is custom; prices are monthly billing"
-    },
-    {
-      "id": "master-app-1767934812047",
-      "name": "Zoom",
-      "status": "found",
-      "sourceUrl": "https://zoom.us/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Workplace Pro (per user)",
-          "price": 16.99,
-          "notes": "Billed monthly"
-        },
-        {
-          "name": "Workplace Business (per user)",
-          "price": 21.99,
-          "notes": "Billed monthly"
-        }
-      ],
-      "note": "Basic card shows no price on page; Enterprise has no published price"
-    },
-    {
-      "id": "master-app-1767990053242",
-      "name": "1Password",
-      "status": "found",
-      "sourceUrl": "https://1password.com/business-pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Business (per user)",
-          "price": 8.99,
-          "notes": "Page shows annual billing only"
-        },
-        {
-          "name": "Teams Starter Pack",
-          "price": 24.95,
-          "notes": "Flat for up to 10 members, billed annually; extra seats $4.99/seat"
-        }
-      ],
-      "note": "Page shows no monthly-billing prices; figures are annual-billing"
-    },
-    {
-      "id": "master-app-1788300902447",
-      "name": "Redtail",
-      "status": "found",
-      "sourceUrl": "https://redtailtechnology.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Launch (per user)",
-          "price": 45,
-          "notes": "Max 5 users"
-        },
-        {
-          "name": "Growth (per user)",
-          "price": 65,
-          "notes": "Unlimited users"
-        }
-      ],
-      "note": "Enterprise is custom with minimum commitment"
-    },
-    {
-      "id": "master-app-1788301270078",
-      "name": "Contact Management",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Generic feature/category, not a vendor product with its own pricing"
-    },
-    {
-      "id": "master-app-1788301331366",
-      "name": "Zapier Email",
-      "status": "no_software_pricing",
-      "sourceUrl": "https://zapier.com/pricing.md",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301343132",
-      "name": "Zapier Code",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301351883",
-      "name": "Zapier Tables",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301364619",
-      "name": "Zapier Formatter",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301372340",
-      "name": "Zapier Delay",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301378780",
-      "name": "Zapier Filter",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301387571",
-      "name": "Zapier Storage",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
-    },
-    {
-      "id": "master-app-1788301412365",
-      "name": "PreciseFP",
-      "status": "found",
-      "sourceUrl": "https://precisefp.com/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [
-        {
-          "name": "Standard (includes 1 user)",
-          "price": 89,
-          "notes": "100 account profiles, 1 team; add-ons: extra user +$49/mo, extra team +$25/mo, +100 profiles +$15/mo"
-        }
-      ],
-      "note": "Enterprise tier is custom-quoted (10+ employees)"
-    },
-    {
-      "id": "master-app-1788301433749",
-      "name": "Mailchimp",
-      "status": "not_found",
-      "sourceUrl": "https://mailchimp.com/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page showed promo prices for 12 months; could not verify standard monthly price per contact tier"
-    },
-    {
-      "id": "master-app-1788301472847",
-      "name": "AdobeSign",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official adobe.com pricing page could not be fetched this run"
-    },
-    {
-      "id": "master-app-1788301490005",
-      "name": "SEI",
-      "status": "no_software_pricing",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Custodian/asset-management platform; fees are asset-based, not software subscription pricing"
+     "name": "Professional (per user)",
+     "price": 50,
+     "notes": "Unlimited clients; plus transaction fees (card 3.5%+$0.30, ACH 1.5%)"
     }
-  ]
+   ],
+   "note": "Enterprise is custom quote"
+  },
+  {
+   "id": "master-app-1767934864582",
+   "name": "Axos",
+   "status": "not_found",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bank; pricing page not researched/verified this run"
+  },
+  {
+   "id": "master-app-1767934560279",
+   "name": "Calendly",
+   "status": "found",
+   "sourceUrl": "https://calendly.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Free",
+     "price": 0,
+     "notes": ""
+    },
+    {
+     "name": "Standard (per seat)",
+     "price": 10,
+     "notes": "Annual agreement, paid monthly (per account owner); page lists notetaker/Callie as add-ons"
+    },
+    {
+     "name": "Teams (per seat)",
+     "price": 16,
+     "notes": "Annual agreement, paid monthly (per account owner); page lists notetaker/Callie as add-ons"
+    }
+   ],
+   "note": "Prices from official pricing page; page does not label billing basis. Per account owner these are annual-agreement, paid-monthly rates. Enterprise from $15k/yr, min 50 seats (quote)"
+  },
+  {
+   "id": "master-app-1767977879193",
+   "name": "Constant Contact",
+   "status": "not_found",
+   "sourceUrl": "https://www.constantcontact.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Opened pricing page; fetched content showed no dollar prices"
+  },
+  {
+   "id": "master-app-1767977861608",
+   "name": "DocuSign",
+   "status": "found",
+   "sourceUrl": "https://ecom.docusign.com/plans-and-pricing/esignature",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Personal",
+     "price": 11,
+     "notes": "Annual commitment, billed monthly"
+    },
+    {
+     "name": "Standard (per user)",
+     "price": 30,
+     "notes": "Annual commitment, billed monthly"
+    },
+    {
+     "name": "Business Pro (per user)",
+     "price": 45,
+     "notes": "Annual commitment, billed monthly"
+    }
+   ],
+   "note": "Enhanced plans contact sales"
+  },
+  {
+   "id": "master-app-1767934677414",
+   "name": "Gmail",
+   "status": "found",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Business Starter (per user)",
+     "price": 7,
+     "notes": "Standard list price from Feb 10 2027; intro promo $3.50 until then; flexible/monthly billing; excl. tax"
+    },
+    {
+     "name": "Business Standard (per user)",
+     "price": 14,
+     "notes": "Standard list price; promo $7"
+    },
+    {
+     "name": "Business Plus (per user)",
+     "price": 22,
+     "notes": "Standard list price; promo $11"
+    }
+   ],
+   "note": "Google Workspace plan prices recorded once here for the Workspace apps"
+  },
+  {
+   "id": "master-app-1767977778824",
+   "name": "Google Calendar",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934766237",
+   "name": "Google Docs",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934694566",
+   "name": "Google Drive",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1774749468859",
+   "name": "Google Forms",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934715678",
+   "name": "Google Sheets",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://workspace.google.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Bundled in Google Workspace plans; see Gmail entry for plan prices"
+  },
+  {
+   "id": "master-app-1767934799829",
+   "name": "Hazel",
+   "status": "not_found",
+   "sourceUrl": "https://store.noodlesoft.com/store",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Official store lists one-time licenses only (Hazel 6 $42, Family Pack $65, Upgrade $20), no monthly price; store page footer may be dated"
+  },
+  {
+   "id": "master-app-1767977842769",
+   "name": "Jotform",
+   "status": "found",
+   "sourceUrl": "https://www.jotform.com/sr/pricing/",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Starter",
+     "price": 0,
+     "notes": "1 user; 5 forms, 100 submissions/mo"
+    },
+    {
+     "name": "Bronze",
+     "price": 39,
+     "notes": "1 user"
+    },
+    {
+     "name": "Silver",
+     "price": 49,
+     "notes": "1 user"
+    },
+    {
+     "name": "Gold",
+     "price": 129,
+     "notes": "1 user"
+    }
+   ],
+   "note": "Enterprise is custom quote. Page read in Serbian; larger figure per plan taken as monthly-billing price (annual rates lower)"
+  },
+  {
+   "id": "master-app-1767934596064",
+   "name": "Wealthbox",
+   "status": "found",
+   "sourceUrl": "https://wealthbox.com/pricing/",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Basic (per user)",
+     "price": 65,
+     "notes": "Page does not state billing period; signup links are yearly"
+    },
+    {
+     "name": "Pro (per user)",
+     "price": 85,
+     "notes": "Same caveat"
+    },
+    {
+     "name": "Premier (per user)",
+     "price": 119,
+     "notes": "Same caveat"
+    }
+   ],
+   "note": "Enterprise is custom/contact us; add-ons AI Notetaker $49 and Vault $29 per user/mo"
+  },
+  {
+   "id": "master-app-1767934530303",
+   "name": "Zapier",
+   "status": "found",
+   "sourceUrl": "https://zapier.com/pricing.md",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Free",
+     "price": 0,
+     "notes": "100 tasks/mo, 1 seat"
+    },
+    {
+     "name": "Professional (entry tier, 750 tasks/mo)",
+     "price": 29.99,
+     "notes": "1 seat; higher task tiers cost more, e.g. 2,000 tasks $73.50"
+    },
+    {
+     "name": "Team (entry tier, 2,000 tasks/mo)",
+     "price": 103.5,
+     "notes": "25 seats; higher task tiers cost more"
+    }
+   ],
+   "note": "Enterprise is custom; prices are monthly billing"
+  },
+  {
+   "id": "master-app-1767934812047",
+   "name": "Zoom",
+   "status": "found",
+   "sourceUrl": "https://zoom.us/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Workplace Pro (per user)",
+     "price": 16.99,
+     "notes": "Billed monthly"
+    },
+    {
+     "name": "Workplace Business (per user)",
+     "price": 21.99,
+     "notes": "Billed monthly"
+    }
+   ],
+   "note": "Basic card shows no price on page; Enterprise has no published price"
+  },
+  {
+   "id": "master-app-1767990053242",
+   "name": "1Password",
+   "status": "found",
+   "sourceUrl": "https://1password.com/business-pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Business (per user)",
+     "price": 8.99,
+     "notes": "Page shows annual billing only"
+    },
+    {
+     "name": "Teams Starter Pack",
+     "price": 24.95,
+     "notes": "Flat for up to 10 members, billed annually; extra seats $4.99/seat"
+    }
+   ],
+   "note": "Page shows no monthly-billing prices; figures are annual-billing"
+  },
+  {
+   "id": "master-app-1788300902447",
+   "name": "Redtail",
+   "status": "found",
+   "sourceUrl": "https://redtailtechnology.com/pricing",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Launch (per user)",
+     "price": 45,
+     "notes": "Max 5 users"
+    },
+    {
+     "name": "Growth (per user)",
+     "price": 65,
+     "notes": "Unlimited users"
+    }
+   ],
+   "note": "Enterprise is custom with minimum commitment"
+  },
+  {
+   "id": "master-app-1788301270078",
+   "name": "Contact Management",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Generic feature/category, not a vendor product with its own pricing"
+  },
+  {
+   "id": "master-app-1788301331366",
+   "name": "Zapier Email",
+   "status": "no_software_pricing",
+   "sourceUrl": "https://zapier.com/pricing.md",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301343132",
+   "name": "Zapier Code",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301351883",
+   "name": "Zapier Tables",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301364619",
+   "name": "Zapier Formatter",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301372340",
+   "name": "Zapier Delay",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301378780",
+   "name": "Zapier Filter",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301387571",
+   "name": "Zapier Storage",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Zapier sub-app; priced via Zapier plans (see Zapier entry)"
+  },
+  {
+   "id": "master-app-1788301412365",
+   "name": "PreciseFP",
+   "status": "found",
+   "sourceUrl": "https://precisefp.com/pricing/",
+   "checkedAt": "2026-11-19",
+   "tiers": [
+    {
+     "name": "Standard (includes 1 user)",
+     "price": 89,
+     "notes": "100 account profiles, 1 team; add-ons: extra user +$49/mo, extra team +$25/mo, +100 profiles +$15/mo"
+    }
+   ],
+   "note": "Enterprise tier is custom-quoted (10+ employees)"
+  },
+  {
+   "id": "master-app-1788301433749",
+   "name": "Mailchimp",
+   "status": "not_found",
+   "sourceUrl": "https://mailchimp.com/pricing/",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Page showed promo prices for 12 months; could not verify standard monthly price per contact tier"
+  },
+  {
+   "id": "master-app-1788301472847",
+   "name": "AdobeSign",
+   "status": "not_found",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Official adobe.com pricing page could not be fetched this run"
+  },
+  {
+   "id": "master-app-1788301490005",
+   "name": "SEI",
+   "status": "no_software_pricing",
+   "sourceUrl": "",
+   "checkedAt": "2026-11-19",
+   "tiers": [],
+   "note": "Custodian/asset-management platform; fees are asset-based, not software subscription pricing"
+  }
+ ]
 }
