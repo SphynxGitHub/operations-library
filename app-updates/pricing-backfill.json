@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:30:31Z",
+  "generatedAt": "2026-11-19T23:54:29Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1095,6 +1095,133 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Fetched page rendered $0 placeholders for paid plans; real prices not readable."
+    },
+    {
+      "id": "master-app-1788305193002",
+      "name": "G Reminders",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Feature bundled inside Google apps (Google Tasks/Assistant/Calendar); no standalone pricing"
+    },
+    {
+      "id": "master-app-1788305207360",
+      "name": "ActiveCampaign",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page fetch refused (permission not granted); price not verified"
+    },
+    {
+      "id": "master-app-1788305222824",
+      "name": "MailerLite",
+      "status": "not_found",
+      "sourceUrl": "https://www.mailerlite.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page opened but Comfort/Power price figures were blank in fetched text (FAQ only says \"starting $12\" and \"$25\" without subscriber tier); Free plan is 0 up to 250 subscribers; not verified"
+    },
+    {
+      "id": "master-app-1788305228624",
+      "name": "Kit",
+      "status": "found",
+      "sourceUrl": "https://kit.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "Up to 10,000 subscribers"
+        },
+        {
+          "name": "Creator",
+          "price": 39,
+          "notes": "Priced for 1,000 subscribers, monthly billing; promo $20/mo for first 3 months ends Dec 1"
+        },
+        {
+          "name": "Pro",
+          "price": 79,
+          "notes": "Priced for 1,000 subscribers, billed monthly; annual saves 17%"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "master-app-1788305233860",
+      "name": "Keap",
+      "status": "not_found",
+      "sourceUrl": "https://keap.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows \"Starting at $320/mo\" with \"Billed at $3,195/year\" but does not label which is monthly vs annual; contact/user selectors not readable; implementation package required"
+    },
+    {
+      "id": "master-app-1788305243385",
+      "name": "Box",
+      "status": "not_found",
+      "sourceUrl": "https://www.box.com/en-au/pricing/platform",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Only en-au page opened and currency of \"$\" prices not stated as USD; en-us pricing fetch refused"
+    },
+    {
+      "id": "master-app-1788305249515",
+      "name": "Dropbox",
+      "status": "not_found",
+      "sourceUrl": "https://dropbox.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page opened (Plus $9.99, Standard $15/user, Advanced $24/user, Basic free) but page text did not say whether figures are monthly or annual billing; not recorded"
+    },
+    {
+      "id": "master-app-1788305254068",
+      "name": "Egnyte",
+      "status": "found",
+      "sourceUrl": "https://www.egnyte.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Business (per user, annual billing)",
+          "price": 22,
+          "notes": "Monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Enterprise Lite (per user, annual billing)",
+          "price": 39,
+          "notes": "Monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Elite (per user, annual billing)",
+          "price": 48,
+          "notes": "Monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Ultimate",
+          "price": 0,
+          "notes": "Custom quote only; price 0 is placeholder, not free"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "master-app-1788305271985",
+      "name": "OneDrive",
+      "status": "not_found",
+      "sourceUrl": "https://www.microsoft.com/en-ie/microsoft-365/onedrive/compare-onedrive-plans-b",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Only en-ie page opened (EUR prices); en-us page fetch refused; USD not verified"
+    },
+    {
+      "id": "master-app-1788305277536",
+      "name": "Sharepoint",
+      "status": "not_found",
+      "sourceUrl": "https://www.microsoft.com/en-au/microsoft-365/sharepoint/sharepoint-business-plans-and-pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Only en-au page opened (AUD prices); en-us page fetch refused; USD not verified"
     }
   ]
 }
