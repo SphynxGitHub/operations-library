@@ -134,7 +134,7 @@ function startRealtime() {
         const ch = db.channel('ol-live');
         const applyClientRow = (row) => {
             const merged = mergeClientRow(row);
-            if (row?.id && !hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at);   // so the background check does not fetch it again
+            if (row?.id && !hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at, row);   // so the background check does not fetch it again
             if (merged) scheduleViewRefresh(600);
         };
         // Big projects can exceed Realtime's message size, in which case the change arrives without its data and the project has to be
@@ -216,7 +216,7 @@ async function poll(fromFocus = false) {
             const { data } = await db.from('workspace_clients').select('id, meta, project_data, updated_at').in('id', toFetch.slice(i, i + 25));
             (data || []).forEach(row => {
                 if (mergeClientRow(row)) changed = true;
-                if (!hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at);
+                if (!hasLocalUnsaved(row.id)) noteRowVersion(row.id, row.updated_at, row);
             });
         }
         const { data: m } = await db.from('workspace_masters').select('sphynx_team').eq('id', 'main_state').maybeSingle();

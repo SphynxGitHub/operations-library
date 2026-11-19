@@ -6,6 +6,7 @@ import { isMaintenanceSheet } from './maintenance.js';
 import { realFetch, previewFetchGuard, isPreviewActive, notifyPreviewBlocked } from './preview.js';
 import { stampChangedResources } from './change-stamps.js';
 import { BLOB_FIELDS, splitBlobs } from './resource-blobs.js';
+import { merge3 } from './merge3.js';
 
 // ---- small value helpers used throughout the data layer ----
 export const val = (v) => (v === undefined || v === null) ? "" : v;
@@ -439,12 +440,28 @@ function persistNow() {
 
                 // Ask for just the new updated_at back (a few bytes). It is recorded below so this tab can tell that the live-update
                 // message about this save is its own, and does not download the whole project again to "catch up" with itself.
-                const { data: savedStamp, error: clientErr } = await db
-                    .from('workspace_clients')
-                    .upsert(clientPayload, { onConflict: 'id' })
-                    .select('updated_at');
+                const { error: clientErr, merged: mergedRow } = await saveClientRowSafely(activeId, clientPayload);
 
-                if (!clientErr) noteRowVersion(activeId, savedStamp?.[0]?.updated_at);
+                if (!clientErr && mergedRow) {
+                    // Someone else saved this project since this tab read it, and their changes were merged in. Bring this tab up to date
+                    // too: the merge is applied on top of any edits made while the save ran, so nothing typed in the meantime is lost.
+                    try {
+                        const live = state.clients[activeId];
+                        if (live) {
+                            live.projectData = ensureProjectLists(merge3(clientPayload.project_data, live.projectData, mergedRow.project_data));
+                            live.meta = merge3(clientPayload.meta, live.meta, mergedRow.meta) || live.meta;
+                            live.modules = merge3(clientPayload.modules, live.modules, mergedRow.modules) || live.modules;
+                            live.permissions = merge3(clientPayload.permissions, live.permissions, mergedRow.permissions) || live.permissions;
+                            live.sharedMasterIds = merge3(clientPayload.shared_master_ids, live.sharedMasterIds, mergedRow.shared_master_ids) || live.sharedMasterIds;
+                        }
+                        rememberSavedProject(activeId, mergedRow.project_data || {});
+                        if (typeof window.OL?.showToast === 'function') window.OL.showToast("Saved, and merged in changes someone else made to this project while you were working.");
+                        window.OL?.scheduleViewRefresh?.(300);
+                    } catch (mergeApplyErr) {
+                        console.error(`Merged ${activeId} saved, but this tab could not be updated with it:`, mergeApplyErr);
+                        showSyncErrorToast(`Your changes were saved and merged with someone else's, but this page could not refresh itself. Reload to see the latest.`);
+                    }
+                }
 
                 if (clientErr) {
                     console.error(`❌ Client Persist Error [${activeId}]:`, clientErr.message);
@@ -724,7 +741,7 @@ export async function sync() {
                     businessModules: c.business_modules || {},
                     authUserId: c.auth_user_id || null
                 };
-                noteRowVersion(clientId, c.updated_at);
+                noteRowVersion(clientId, c.updated_at, c);
             });
             console.log(`📋 Successfully Loaded ${clientsData.length} clients from Supabase.`);
         }
@@ -797,12 +814,77 @@ export async function sync() {
 // ---- loadFullClient: lazy-load one client's full project data ----
 // The last-changed time each project had when this tab last read it (workspace_clients.updated_at, from the 2026_11e migration).
 // The background check compares against it so it only downloads projects that changed. Empty until the column exists.
-export function noteRowVersion(id, updatedAt) {
+// Also remembers the copy of the project that went with that version (the "base"): when a save finds that someone else saved the
+// project since, the base is what lets the two copies be merged instead of one overwriting the other (core/merge3.js).
+// Only ever moves forward, so a late echo of an old save cannot send the version (and base) back in time.
+const rowBases = new Map();
+const BASE_FIELDS = ['project_data', 'meta', 'modules', 'permissions', 'shared_master_ids'];
+export function getRowBase(id) { return rowBases.get(id) || null; }
+function versionIsNewer(next, prev) {
+    if (!prev) return true;
+    if (next === prev) return false;
+    if (next.length === prev.length) return next > prev;
+    return Date.parse(next) > Date.parse(prev);
+}
+export function noteRowVersion(id, updatedAt, row) {
     if (!id || !updatedAt) return;
     const g = (typeof window !== 'undefined' ? window : globalThis);
     g.OL = g.OL || {};
     g.OL._rowVersions = g.OL._rowVersions || {};
+    if (!versionIsNewer(updatedAt, g.OL._rowVersions[id])) return;
     g.OL._rowVersions[id] = updatedAt;
+    if (row && row.project_data) {
+        const snap = {};
+        BASE_FIELDS.forEach((f) => { snap[f] = row[f] === undefined ? null : row[f]; });
+        rowBases.set(id, JSON.stringify(snap));
+    } else {
+        rowBases.delete(id);   // a version without its data: a save then falls back to the old whole-row write rather than merging against a wrong base
+    }
+}
+
+// Writes a project row without overwriting someone else's save. If the row is still at the version this tab last read, the write goes
+// through. If someone else saved since, their copy is fetched, merged with this one using the base, and the write is retried against
+// the new version (up to 3 times). Returns { error, merged }: merged is the combined row when a merge was needed, else null.
+async function saveClientRowSafely(id, payload) {
+    const known = (typeof window !== 'undefined' && window.OL?._rowVersions?.[id]) || null;
+    const baseJson = getRowBase(id);
+    if (!known || !baseJson) {
+        // No version or base to compare against (the updated_at migration is missing, or this is a new project): the old whole-row write.
+        const { data, error } = await db.from('workspace_clients').upsert(payload, { onConflict: 'id' }).select('updated_at');
+        if (!error) noteRowVersion(id, data?.[0]?.updated_at, payload);
+        return { error, merged: null };
+    }
+    let base = JSON.parse(baseJson);
+    let current = payload;
+    let knownNow = known;
+    let mergedAny = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        const { data, error } = await db.from('workspace_clients').update(current).eq('id', id).eq('updated_at', knownNow).select('updated_at');
+        if (error) return { error, merged: null };
+        if (data && data.length) {
+            noteRowVersion(id, data[0].updated_at, current);
+            return { error: null, merged: mergedAny ? current : null };
+        }
+        // Nothing matched: the row changed since this tab read it (or was removed). Get the current copy and merge.
+        const { data: theirs, error: fetchErr } = await db.from('workspace_clients')
+            .select('updated_at, meta, modules, permissions, project_data, shared_master_ids').eq('id', id).maybeSingle();
+        if (fetchErr) return { error: fetchErr, merged: null };
+        if (!theirs) {
+            const { data: ins, error: insErr } = await db.from('workspace_clients').upsert(current, { onConflict: 'id' }).select('updated_at');
+            if (!insErr) noteRowVersion(id, ins?.[0]?.updated_at, current);
+            return { error: insErr, merged: null };
+        }
+        let unmergeable = false;
+        const onUnmergeable = () => { unmergeable = true; };
+        const next = { ...current };
+        BASE_FIELDS.forEach((f) => { next[f] = merge3(base[f] ?? undefined, current[f], theirs[f] ?? undefined, onUnmergeable); });
+        if (unmergeable) console.warn(`Merging ${id}: a list without item ids could not be combined; this tab's copy of it was kept.`);
+        current = next;
+        base = {}; BASE_FIELDS.forEach((f) => { base[f] = theirs[f] === undefined ? null : theirs[f]; });
+        knownNow = theirs.updated_at;
+        mergedAny = true;
+    }
+    return { error: new Error('Someone else kept saving this project while this save was being merged. It will retry.'), merged: null };
 }
 
 // ---- heavy resource fields (resource_blobs) ----
@@ -875,7 +957,7 @@ export async function loadFullClient(clientId) {
             businessModules: data.business_modules || state.clients[clientId]?.businessModules || {}
         };
         delete state.clients[clientId]._metaOnly;
-        noteRowVersion(clientId, data.updated_at);
+        noteRowVersion(clientId, data.updated_at, data);
 
         // Cards saved before the emoji clean-up carry names like "Cal: Intro Call"; strip them in memory (saved with the next write).
         try { if (typeof window !== 'undefined' && typeof window.OL?.cleanLegacyResourceNames === 'function') window.OL.cleanLegacyResourceNames(state.clients[clientId]); } catch (e) { console.warn('Name clean-up skipped:', e); }
