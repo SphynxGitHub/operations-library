@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:18:06Z",
+  "generatedAt": "2026-11-19T23:18:13Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -690,25 +690,25 @@
         {
           "name": "Basic",
           "price": 25,
-          "notes": "Monthly billing; annual billing is $19/mo"
+          "notes": "Monthly billing; annual billing is $19/mo; 30% off badge shown for annual"
         },
         {
           "name": "Core",
           "price": 39,
-          "notes": "Monthly billing; annual billing is $29/mo"
+          "notes": "Monthly billing; annual billing is $29/mo; 30% off badge shown for annual"
         },
         {
           "name": "Plus",
           "price": 65,
-          "notes": "Monthly billing; annual billing is $49/mo"
+          "notes": "Monthly billing; annual billing is $49/mo; 30% off badge shown for annual"
         },
         {
           "name": "Advanced",
           "price": 139,
-          "notes": "Monthly billing; annual billing is $99/mo"
+          "notes": "Monthly billing; annual billing is $99/mo; 30% off badge shown for annual"
         }
       ],
-      "note": "Page lists two prices per plan; the annual-toggle figures ($19/$29/$49/$99) were confirmed by a user screenshot, so the higher figures are the monthly-toggle prices (inferred, page does not label them)."
+      "note": "Monthly prices confirmed via user screenshot of the official page with 'Pay monthly' selected; annual-toggle prices are $19/$29/$49/$99. Free custom domain applies to annual plans only."
     },
     {
       "id": "master-app-1788304946273",
