@@ -29,10 +29,10 @@ const text = (id, v) => `<input id="${id}" type="text" class="modal-input" value
 const area = (id, v, rows = 3) => `<textarea id="${id}" class="modal-input" rows="${rows}" style="font-family:inherit;">${esc(v ?? '')}</textarea>`;
 const numIn = (id, v, w = 90) => `<input id="${id}" type="number" min="0" step="0.5" class="modal-input" style="width:${w}px;" value="${esc(v ?? '')}">`;
 const check = (id, on, label) => `<label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input id="${id}" type="checkbox" ${on ? 'checked' : ''}> ${label}</label>`;
-const personSelect = (id, current, blankLabel) => {
+const personSelect = (id, current, blankLabel, extraOptions = []) => {
     const names = teamNames();
-    const all = current && !names.includes(current) ? [...names, current] : names;
-    return `<select id="${id}" class="modal-input os-select"><option value="">${blankLabel}</option>${all.map((n) => `<option value="${esc(n)}" ${n === current ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+    const all = current && !names.includes(current) && !extraOptions.some(([v]) => v === current) ? [...names, current] : names;
+    return `<select id="${id}" class="modal-input os-select"><option value="">${blankLabel}</option>${extraOptions.map(([v, l]) => `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(l)}</option>`).join('')}${all.map((n) => `<option value="${esc(n)}" ${n === current ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
 };
 const tierSelect = (id, current) => `<select id="${id}" class="modal-input" style="width:120px;">${TIER_OPTIONS.map(([k, l]) => `<option value="${k}" ${k === current ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
 const section = (title, sub, body) => `<div class="card" style="padding:16px 18px; margin-bottom:14px;"><div style="font-weight:700; font-size:14px;">${title}</div><div class="tiny muted" style="margin:2px 0 12px;">${sub}</div>${body}</div>`;
@@ -74,7 +74,7 @@ OL.renderOlSettingsPanel = function() {
             `<div class="os-row">${field('After (days in Drafting)', numIn('os-df-after', d.afterDays))}${field('Then again every (days)', numIn('os-df-repeat', d.repeatEveryDays), 'Only once the previous task is closed.')}</div>` +
             field('Task title', text('os-df-title', d.taskTitle), 'Fills in: {round} {client} {days}') +
             field('Task description', area('os-df-desc', d.taskDescription), 'Fills in: {round} {client} {days}') +
-            field('Assigned to', personSelect('os-df-assignee', d.assignee, 'The project\'s Communications person'))) }
+            field('Assigned to', personSelect('os-df-assignee', d.assignee, 'The project\'s Communications person', [['@scoping', 'The project\'s Scoping person']]), 'The Scoping person is whoever is set for that role on the project (Role Defaults); if none is set, the Communications person gets it.')) }
 
         ${section('Zap export re-pull (Ongoing Maintenance)', 'Keeps each Ongoing Maintenance client\'s flow map current. A task to pull a fresh Zap JSON export is created once for each client already on the plan, once when a client is onboarded, and each time a new plan period starts.',
             `<div style="margin-bottom:10px;">${check('os-zr-enabled', zr.enabled !== false, 'Create these re-pull tasks')}</div>` +

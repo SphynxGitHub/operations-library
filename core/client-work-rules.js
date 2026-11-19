@@ -70,6 +70,15 @@ function communicationAssignee(client, ctx) {
     return (a && a.memberName) || 'Sphynx Task';
 }
 
+// The project's Scoping person (project > Role Defaults), for settings that hand a task to "the project's Scoping person".
+// Falls back to the Communications person when the project has no Scoping person set.
+export const SCOPING_ASSIGNEE = '@scoping';
+function scopingAssignee(client, ctx) {
+    const role = (ctx.roles || []).find((r) => /scop/i.test(String(r?.name || '')));
+    const a = role ? (client?.projectData?.roleAssignments || []).find((x) => x.roleId === role.id) : null;
+    return (a && a.memberName) || communicationAssignee(client, ctx);
+}
+
 const requestsOf = (client) => (client?.projectData?.scopingSheets || []).flatMap((s) => (s?.lineItems || []));
 const requestById = (client, id) => requestsOf(client).find((i) => i && String(i.id) === String(id)) || null;
 
@@ -858,7 +867,7 @@ function reconcileDraftingRounds(client, ctx) {
     const title = fillTemplate(cfg.taskTitle, vars()) || `Follow up on ${vars().round}`;
     const t = {
         id: ctx.uid(), title, name: title, description: describe(),
-        status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: ctx.today,
+        status: OPEN_STATUS, assignee: ((cfg.assignee || '').trim() === SCOPING_ASSIGNEE ? scopingAssignee(client, ctx) : (cfg.assignee || '').trim()) || communicationAssignee(client, ctx), dueDate: ctx.today,
         isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'drafting-followup', createdAt: ctx.now,
         draftingFollowUpKey: DRAFTING_TASK_KEY, draftingRoundKeys: keysNow,
     };

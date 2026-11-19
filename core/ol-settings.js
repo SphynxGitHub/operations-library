@@ -34,7 +34,7 @@ export const DEFAULT_OL_SETTINGS = {
         repeatEveryDays: 7,
         taskTitle: 'Follow up on {round}: {client}',
         taskDescription: '{round} has been in Drafting for {days} days. Follow up with the client, or change the round\'s status to Approved, Declined or On Hold to record the outcome.',
-        assignee: '',   // blank = the project's Communications person, else the general Sphynx task pool
+        assignee: '',   // blank = the project's Communications person, else the general Sphynx task pool; '@scoping' = the project's Scoping person (falls back to Communications)
     },
     // Ongoing Maintenance clients get a task to re-pull the Zap JSON export: once for each client already on the plan, once
     // when a client is onboarded, and each time a new plan period starts. {client} = the project name, {reason} = why now.
