@@ -1,8 +1,44 @@
 {
   "apps": [
-    { "name": "Jotform", "pricingUrl": "https://www.jotform.com/pricing/", "releaseNotesUrl": "" },
-    { "name": "Wealthbox", "pricingUrl": "https://www.wealthbox.com/pricing/", "releaseNotesUrl": "" },
-    { "name": "Slant", "pricingUrl": "", "releaseNotesUrl": "" },
-    { "name": "Schwab", "pricingUrl": "", "releaseNotesUrl": "" }
+    {
+      "name": "Jotform",
+      "pricingUrl": "https://www.jotform.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Wealthbox",
+      "pricingUrl": "https://www.wealthbox.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Slant",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Schwab",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Redtail",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "RightCapital",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Claude",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "eMoney",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    }
   ]
 }
