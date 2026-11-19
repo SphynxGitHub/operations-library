@@ -253,7 +253,7 @@ OL.saveIntel = async function() {
     if (i >= 0) rows[i] = row2; else rows.unshift(row2);
     if (typeof OL.showToast === 'function') OL.showToast(OL._intelEditId ? 'Intel updated' : 'Intel added');
     OL.closeIntelModal();
-    if (location.hash.startsWith('#/vault/intel')) OL._paintIntelLibrary();
+    if (location.hash.startsWith('#/business/intel')) OL._paintIntelLibrary();
 };
 
 OL.deleteIntel = async function(id) {
@@ -262,7 +262,7 @@ OL.deleteIntel = async function(id) {
     const { data, error } = await db.from('intel_entries').delete().eq('id', id).select('id');
     if (error || !data || !data.length) { alert(`Could not delete the intel${error ? `: ${error.message}` : ' (you may not have permission).'}`); return; }
     OL.intelState.rows = OL.intelState.rows.filter((x) => String(x.id) !== String(id));
-    if (location.hash.startsWith('#/vault/intel')) OL._paintIntelLibrary();
+    if (location.hash.startsWith('#/business/intel')) OL._paintIntelLibrary();
 };
 
 // ---------- an app's page ----------

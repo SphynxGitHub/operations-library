@@ -326,6 +326,7 @@ export const TEAM_PERMISSION_TABS = [
     { key: 'communications', label: 'Communications' },
     { key: 'calendar', label: 'Calendar' },
     { key: 'errors', label: 'Error Tracking' },
+    { key: 'intel', label: 'Intel Library' },
     { key: 'tasks', label: 'Task Manager' },
     { key: 'time-reports', label: 'Time Reports' },
     { key: 'financials', label: 'Financials' },
@@ -343,7 +344,6 @@ export const TEAM_PERMISSION_TABS = [
     { key: 'vault-rates', label: 'Vault: Scoping Rates' },
     { key: 'vault-data', label: 'Vault: Master Data Tags' },
     { key: 'vault-automations', label: 'Vault: Automation Rules' },
-    { key: 'vault-intel', label: 'Vault: Intel Library' },
     { key: 'vault-client-access', label: 'Vault: Client Logins' }
 ];
 

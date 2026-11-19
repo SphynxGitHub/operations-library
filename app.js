@@ -597,7 +597,6 @@ window.buildLayout = function () {
         { key: "vault-rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
         { key: "vault-data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
         { key: "vault-automations", label: "Automation Rules", icon: "zap", href: "#/vault/automations" },
-        { key: "vault-intel", label: "Intel Library", icon: "lightbulb", href: "#/vault/intel" },
         { key: "vault-client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" }
     ];
 
@@ -605,6 +604,7 @@ window.buildLayout = function () {
         { key: "communications", label: "Communications", icon: "mail", href: "#/business/communications" },
         { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
         { key: "errors", label: "Error Tracking", icon: "alert-triangle", href: "#/business/errors" },
+        { key: "intel", label: "Intel Library", icon: "lightbulb", href: "#/business/intel" },
         { key: "to-file", label: "To File", icon: "folder-input", href: "#/business/to-file" },
         { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
         { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
@@ -1001,6 +1001,7 @@ window.handleRoute = function () {
         if (hash.includes('/communications') && typeof OL.renderBusinessCommunications === 'function') OL.renderBusinessCommunications();
         else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
         else if (hash.includes('/to-file') && typeof OL.renderToFileQueue === 'function') { OL.toFileState.rendered = false; OL.renderToFileQueue(); }
+        else if (hash.includes('/intel') && typeof OL.renderIntelLibrary === 'function') OL.renderIntelLibrary();
         else if (hash.includes('/errors') && typeof OL.renderBusinessErrorLog === 'function') OL.renderBusinessErrorLog();
         else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
         else if (hash.includes('/time-reports') && typeof OL.renderBusinessTimeReports === 'function') OL.renderBusinessTimeReports();
@@ -1041,7 +1042,6 @@ window.handleRoute = function () {
 
         // Render Permitted Route
         if (hash.includes("/apps")) renderAppsGrid();
-        else if (hash.includes("/intel")) OL.renderIntelLibrary();
         else if (hash.includes("/functions")) renderFunctionsGrid();
         else if (hash.includes("/resources")) renderResourceManager();
         else if (hash.includes("/visualizer")) {
