@@ -44,6 +44,131 @@
       "name": "Zapier",
       "pricingUrl": "https://zapier.com/pricing",
       "releaseNotesUrl": ""
+    },
+    {
+      "name": "ChatGPT",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Copilot",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Gemini",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Calendly",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "ScheduleOnce",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "AdvicePay",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "QuickBooks",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Circle Black",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Black Diamond",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Advyzon",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "AssetMark",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "DocuSign",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Dropbox",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Datapoints",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Riskalyze",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "fpPathfinder",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "PreciseFp",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Hazel",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Hubly",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Mailchimp",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "SEI",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "SharePoint",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Tamarac",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "SSG",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "WealthTender",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
     }
   ]
 }
