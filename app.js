@@ -49,6 +49,7 @@ import * as OLResourceKey from './features/resource-key.js';
 import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
+import './features/intel.js';
 import './features/resource-merge.js';
 import './core/billable.js';
 import './core/recurrence.js';
@@ -596,6 +597,7 @@ window.buildLayout = function () {
         { key: "vault-rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
         { key: "vault-data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
         { key: "vault-automations", label: "Automation Rules", icon: "zap", href: "#/vault/automations" },
+        { key: "vault-intel", label: "Intel Library", icon: "lightbulb", href: "#/vault/intel" },
         { key: "vault-client-access", label: "Client Logins", icon: "key-round", href: "#/vault/client-access" }
     ];
 
@@ -1039,6 +1041,7 @@ window.handleRoute = function () {
 
         // Render Permitted Route
         if (hash.includes("/apps")) renderAppsGrid();
+        else if (hash.includes("/intel")) OL.renderIntelLibrary();
         else if (hash.includes("/functions")) renderFunctionsGrid();
         else if (hash.includes("/resources")) renderResourceManager();
         else if (hash.includes("/visualizer")) {

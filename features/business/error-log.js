@@ -590,6 +590,7 @@ OL.openErrorDetailModal = async function(id) {
             <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:10px;">
                 ${OL.renderErrorTaskButton(r)}
                 <button type="button" class="btn tiny soft" onclick="OL.emailErrorInContext('${r.id}')" title="Open an email draft with this error's details inside it">${ic('mail')}Send email</button>
+                ${!window.IS_GUEST && (state.adminMode === true || state.teamMemberMode === true) ? `<button type="button" class="btn tiny soft" onclick="OL.saveErrorAsIntel('${r.id}')" title="Add this to the Intel Library, prefilled from the error">${ic('lightbulb')}Save as intel</button>` : ''}
                 <select class="tiny" style="border:none; border-radius:14px; padding:4px 10px; cursor:pointer; background:${statusBg}; color:${statusColor}; font-weight:bold;" onchange="OL.onErrorStatusSelect(this, '${r.id}', true)">
                     <option value="open" ${!isResolved ? 'selected' : ''}>Open</option>
                     <option value="resolved" ${isResolved ? 'selected' : ''}>Complete</option>

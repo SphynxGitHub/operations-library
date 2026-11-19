@@ -623,9 +623,11 @@ export function openAppModal(appId, draftObj = null) {
         modalBody.innerHTML = `
             ${renderAppModalInnerContent(app, client)}
             ${OL.renderAccessSection(appId, 'app')} 
+            <div id="app-intel-section"></div>
         `;
         // Trigger repaint for dynamic content
         if (window.lucide) window.lucide.createIcons();
+        if (typeof OL.fillAppIntelSection === 'function') OL.fillAppIntelSection(app);
         return;
     }
 
@@ -657,6 +659,7 @@ export function openAppModal(appId, draftObj = null) {
         <div class="modal-body">
             ${renderAppModalInnerContent(app, client)}
             ${OL.renderAccessSection(appId, 'app')}
+            <div id="app-intel-section"></div>
         </div>
     `;
     
@@ -666,6 +669,7 @@ export function openAppModal(appId, draftObj = null) {
     if (window.lucide) {
         window.lucide.createIcons();
     }
+    if (typeof OL.fillAppIntelSection === 'function') OL.fillAppIntelSection(app);
 
     // Auto-focus the name field
     setTimeout(() => {
