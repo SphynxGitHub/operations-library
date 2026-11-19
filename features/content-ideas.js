@@ -30,9 +30,10 @@ OL.starButton = function (item) {
     if (!canUse()) return '';
     const on = OL.contentIdeaIsStarred(item.type, item.key);
     OL._starItems = OL._starItems || {};
-    const id = `${item.type}:${item.key}`;
+    OL._starSeq = (OL._starSeq || 0) + 1;
+    const id = `star${OL._starSeq}`;             // plain id: the item's text can hold quotes that would break the onclick
     OL._starItems[id] = item;
-    return `<button type="button" class="btn tiny soft" title="${on ? 'Remove from content ideas' : 'Save as a content idea'}" onclick="event.stopPropagation(); OL.toggleContentIdea('${esc(id).replace(/'/g, '&#39;')}')" style="padding:2px 6px;">
+    return `<button type="button" class="btn tiny soft" title="${on ? 'Remove from content ideas' : 'Save as a content idea'}" onclick="event.stopPropagation(); OL.toggleContentIdea('${id}')" style="padding:2px 6px;">
         <i data-lucide="star" style="width:13px;height:13px;vertical-align:-2px;${on ? 'fill:#f5b942;color:#f5b942;' : ''}"></i></button>`;
 };
 
