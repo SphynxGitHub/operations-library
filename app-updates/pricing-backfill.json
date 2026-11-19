@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-19T20:31:17Z",
+ "generatedAt": "2026-11-19T20:32:19Z",
  "apps": [
   {
    "id": "master-app-1767936076742",
@@ -58,11 +58,27 @@
   {
    "id": "master-app-1767977879193",
    "name": "Constant Contact",
-   "status": "not_found",
+   "status": "found",
    "sourceUrl": "https://www.constantcontact.com/pricing",
    "checkedAt": "2026-11-19",
-   "tiers": [],
-   "note": "Opened pricing page; fetched content showed no dollar prices"
+   "tiers": [
+    {
+     "name": "Lite",
+     "price": 12,
+     "notes": "Starting at (entry contact tier); month-to-month list price. Annual-billing price $10.20/mo"
+    },
+    {
+     "name": "Standard",
+     "price": 35,
+     "notes": "Starting at; month-to-month list price. Annual-billing price $29.75/mo"
+    },
+    {
+     "name": "Premium",
+     "price": 80,
+     "notes": "Starting at; month-to-month list price. Annual-billing price $68/mo"
+    }
+   ],
+   "note": "Prices taken from a screenshot of the official pricing page supplied by account owner (annual toggle shown; struck-through list prices used as monthly, consistent with 15% annual discount). Price scales with contact count. Multi-Account (5+ accounts) is contact-sales."
   },
   {
    "id": "master-app-1767977861608",
