@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:18:13Z",
+  "generatedAt": "2026-11-19T23:19:56Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -713,11 +713,32 @@
     {
       "id": "master-app-1788304946273",
       "name": "Wordpress",
-      "status": "not_found",
-      "sourceUrl": "",
+      "status": "found",
+      "sourceUrl": "https://wordpress.com/pricing/",
       "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "tiers": [
+        {
+          "name": "Personal",
+          "price": 9,
+          "notes": "Billed monthly, excl. taxes; yearly billing is $4/mo"
+        },
+        {
+          "name": "Premium",
+          "price": 18,
+          "notes": "Billed monthly, excl. taxes; yearly billing is $8/mo"
+        },
+        {
+          "name": "Business",
+          "price": 40,
+          "notes": "Billed monthly, excl. taxes; yearly billing is $25/mo"
+        },
+        {
+          "name": "Commerce",
+          "price": 70,
+          "notes": "Billed monthly, excl. taxes; yearly billing is $45/mo"
+        }
+      ],
+      "note": "WordPress.com plans, from user screenshot of the official page with 'Pay monthly' selected. Enterprise (WordPress VIP) is contact-for-quote and not listed; free plan not shown in screenshot."
     },
     {
       "id": "master-app-1788304956954",
