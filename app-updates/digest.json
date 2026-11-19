@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-19T17:48:00Z",
+  "updatedAt": "2026-11-19T23:26:56Z",
   "items": [
     {
       "app": "Schwab",
@@ -39,6 +39,22 @@
       "date": "2026-11-19",
       "summary": "Ester tax and estate planning is now available to all advisors in Schwab Advisor Center at no additional fee.",
       "sourceUrl": "https://advisorservices.schwab.com/whats-new",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Claude",
+      "kind": "release",
+      "date": "2026-11-17",
+      "summary": "Claude Desktop now lets users choose a release channel: Stable (default, fewer updates) or Latest (a new version roughly daily).",
+      "sourceUrl": "https://support.claude.com/en/articles/12138966-release-notes",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Claude",
+      "kind": "feature",
+      "date": "2026-11-12",
+      "summary": "Claude Meetings is rolling out in beta on Team and Enterprise plans; Claude joins Google Meet calls as a visible participant to take notes, answer questions and build artifacts.",
+      "sourceUrl": "https://support.claude.com/en/articles/12138966-release-notes",
       "checkedAt": "2026-11-19"
     }
   ]
