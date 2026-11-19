@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T21:53:46Z",
+  "generatedAt": "2026-11-19T22:52:54Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -655,6 +655,102 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Lead-generation/referral program, not software pricing"
+    },
+    {
+      "id": "master-app-1788304914972",
+      "name": "Garret Planning Network",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304927155",
+      "name": "XY Planning Network",
+      "status": "found",
+      "sourceUrl": "https://xyplanningnetwork.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Emerald (per advisor)",
+          "price": 544,
+          "notes": "Page shows $544/mo; billing cadence not stated. Sapphire (monthly fee plus revenue percentage) has no price on this page; add-on pricing not shown"
+        }
+      ],
+      "note": "Sapphire and add-on pricing not verified"
+    },
+    {
+      "id": "master-app-1788304939714",
+      "name": "Squarespace",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304946273",
+      "name": "Wordpress",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304956954",
+      "name": "TwentyOverTen",
+      "status": "not_found",
+      "sourceUrl": "https://twentyoverten.com/pricing/enhanced",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Opened page shows only that Twenty Over Ten was acquired by FMG (Nov 2020); no pricing published there."
+    },
+    {
+      "id": "master-app-1788304962643",
+      "name": "Wix",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304971641",
+      "name": "Google Contacts",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Feature bundled inside Google Workspace/free Google accounts; no separate price."
+    },
+    {
+      "id": "master-app-1788304982284",
+      "name": "Pulse360",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304990819",
+      "name": "Notion",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788304998785",
+      "name": "OneNote",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
     }
   ]
 }
