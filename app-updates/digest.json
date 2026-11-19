@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-19T17:47:35Z",
+  "updatedAt": "2026-11-19T17:48:00Z",
   "items": [
     {
       "app": "Schwab",
@@ -31,6 +31,14 @@
       "date": "2026-11-19",
       "summary": "Jotform's pricing page advertises a limited-time Black Friday discount on annual plans (not Enterprise); no dates or amounts are shown publicly. Listed prices are unchanged: Bronze $39, Silver $49, Gold $129 monthly.",
       "sourceUrl": "https://www.jotform.com/pricing/",
+      "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Schwab",
+      "kind": "pricing",
+      "date": "2026-11-19",
+      "summary": "Ester tax and estate planning is now available to all advisors in Schwab Advisor Center at no additional fee.",
+      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
       "checkedAt": "2026-11-19"
     }
   ]
