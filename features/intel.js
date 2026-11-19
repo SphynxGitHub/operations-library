@@ -53,6 +53,7 @@ OL.renderIntelLibrary = async function() {
         main.innerHTML = `<div class="section-header"><h2 style="margin:0;">Intel Library</h2></div><div class="muted" style="padding:20px;">Loading...</div>`;
         try { await OL.loadIntel(); } catch (e) { console.error(e); }
     }
+    try { if (OL.loadContentIdeas && !OL.contentState.loaded) await OL.loadContentIdeas(); } catch (e) { console.error(e); }
     OL._paintIntelLibrary();
 };
 
@@ -136,6 +137,7 @@ OL.renderIntelCard = function(r, opts = {}) {
                     </div>
                 </div>
                 ${opts.readOnly ? '' : `<div style="display:flex; gap:6px;">
+                    ${typeof OL.starButton === 'function' ? OL.starButton({ type: 'intel', key: String(r.id), title: r.title, details: [r.details, r.how_to_avoid ? `How to avoid or fix: ${r.how_to_avoid}` : ''].filter(Boolean).join('\n\n'), apps: entryApps(r).map((a) => a.name) }) : ''}
                     <button class="btn tiny soft" onclick="OL.openIntelModal('${esc(r.id)}')">Edit</button>
                     <button class="btn tiny soft" onclick="OL.deleteIntel('${esc(r.id)}')">Delete</button>
                 </div>`}

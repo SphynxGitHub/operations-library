@@ -327,6 +327,7 @@ export const TEAM_PERMISSION_TABS = [
     { key: 'calendar', label: 'Calendar' },
     { key: 'errors', label: 'Error Tracking' },
     { key: 'intel', label: 'Intel Library' },
+    { key: 'content-ideas', label: 'Content Ideas' },
     { key: 'tasks', label: 'Task Manager' },
     { key: 'time-reports', label: 'Time Reports' },
     { key: 'financials', label: 'Financials' },

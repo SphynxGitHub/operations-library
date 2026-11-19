@@ -151,7 +151,7 @@ function bodyFor(key) {
         const stamp = appUpdates.updatedAt ? `<span class="tiny muted" style="margin-left:auto;">Last scan ${esc(String(appUpdates.updatedAt).slice(0, 10))}</span>` : '';
         const kindColor = { pricing: '#f5b942', feature: '#2dd4bf', release: '#60a5fa', other: '#94a3b8' };
         const body = items.map((i) => `<div style="padding:7px 0;border-bottom:1px solid var(--line);">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span><span style="margin-left:auto;">${OL.starButton ? OL.starButton({ type: 'app_update', key: `${i.app}|${i.date}|${String(i.summary || '').slice(0, 80)}`, title: `${i.app}: ${i.summary}`, details: i.summary, sourceUrl: i.sourceUrl, apps: [i.app] }) : ''}</span></div>
             <div style="font-size:13px;overflow-wrap:anywhere;">${esc(i.summary || '')}</div>
             ${i.sourceUrl ? `<a class="tiny" href="${esc(i.sourceUrl)}" target="_blank" rel="noopener">Source</a><span class="tiny muted"> · checked ${esc(i.checkedAt || '')}</span>` : ''}</div>`).join('');
         return { count: items.length, extra: stamp, body: body || empty(appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.') };
@@ -223,6 +223,7 @@ async function loadAppUpdates() {
         if (!d || !Array.isArray(d.items)) throw new Error('App updates digest is not in the expected format.');
         const items = d.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 40);
         appUpdates = { items, updatedAt: d.updatedAt || null, at: Date.now() };
+        try { if (OL.loadContentIdeas && !OL.contentState.loaded) await OL.loadContentIdeas(); } catch (e) { console.error(e); }
     } catch (e) { appUpdates = { error: e.message, at: Date.now() }; }
     paint();
 }
@@ -306,4 +307,4 @@ export function dashModulesOpen() {
 }
 
 window.OL = window.OL || {};
-Object.assign(window.OL, { dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashOnlyMePreset, dashModuleToggle, dashModulesOpen });
+Object.assign(window.OL, { dashRepaintModules: () => paint(), dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashOnlyMePreset, dashModuleToggle, dashModulesOpen });

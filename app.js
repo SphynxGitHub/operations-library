@@ -50,6 +50,7 @@ import * as OLRequestTasks from './features/request-tasks.js';
 import * as OLRequestResources from './features/request-resources.js';
 import * as OLMaintenance from './features/maintenance.js';
 import './features/intel.js';
+import './features/content-ideas.js';
 import './features/app-pricing-import.js';
 import './features/resource-merge.js';
 import './core/billable.js';
@@ -606,6 +607,7 @@ window.buildLayout = function () {
         { key: "calendar", label: "Calendar", icon: "calendar", href: "#/business/calendar" },
         { key: "errors", label: "Error Tracking", icon: "alert-triangle", href: "#/business/errors" },
         { key: "intel", label: "Intel Library", icon: "lightbulb", href: "#/business/intel" },
+        { key: "content-ideas", label: "Content Ideas", icon: "star", href: "#/business/content-ideas" },
         { key: "to-file", label: "To File", icon: "folder-input", href: "#/business/to-file" },
         { key: "tasks", label: "Task Manager", icon: "check-square", href: "#/business/tasks" },
         { key: "time-reports", label: "Time Reports", icon: "bar-chart-2", href: "#/business/time-reports" },
@@ -1002,6 +1004,7 @@ window.handleRoute = function () {
         if (hash.includes('/communications') && typeof OL.renderBusinessCommunications === 'function') OL.renderBusinessCommunications();
         else if (hash.includes('/calendar') && typeof OL.renderBusinessCalendar === 'function') OL.renderBusinessCalendar();
         else if (hash.includes('/to-file') && typeof OL.renderToFileQueue === 'function') { OL.toFileState.rendered = false; OL.renderToFileQueue(); }
+        else if (hash.includes('/content-ideas') && typeof OL.renderContentIdeas === 'function') OL.renderContentIdeas();
         else if (hash.includes('/intel') && typeof OL.renderIntelLibrary === 'function') OL.renderIntelLibrary();
         else if (hash.includes('/errors') && typeof OL.renderBusinessErrorLog === 'function') OL.renderBusinessErrorLog();
         else if (hash.includes('/tasks') && typeof OL.renderBusinessTaskManager === 'function') OL.renderBusinessTaskManager();
