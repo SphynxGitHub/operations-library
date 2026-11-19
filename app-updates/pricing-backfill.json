@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:54:29Z",
+  "generatedAt": "2026-11-19T23:59:47Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1222,6 +1222,180 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Only en-au page opened (AUD prices); en-us page fetch refused; USD not verified"
+    },
+    {
+      "id": "master-app-1788305283435",
+      "name": "ShareFile",
+      "status": "not_found",
+      "sourceUrl": "https://www.sharefile.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows two figures per plan without clear labeling of monthly vs annual; cannot verify monthly price."
+    },
+    {
+      "id": "master-app-1788305293993",
+      "name": "FGM Suite",
+      "status": "found",
+      "sourceUrl": "https://fmgsuite.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Essential",
+          "price": 178,
+          "notes": "monthly; $994 setup fee; 'starting at'"
+        },
+        {
+          "name": "Premium",
+          "price": 418,
+          "notes": "monthly; $3,194 setup fee; 'starting at'"
+        },
+        {
+          "name": "Do It For Me + Premium Website",
+          "price": 1044,
+          "notes": "monthly; $3,494 setup fee; 'starting at'"
+        }
+      ],
+      "note": "Lower part of page showed different unverified figures; top pricing section recorded."
+    },
+    {
+      "id": "master-app-1788305306064",
+      "name": "Airtable",
+      "status": "found",
+      "sourceUrl": "https://airtable.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Team (per user) (annual billing)",
+          "price": 20,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 45,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Enterprise Scale is custom pricing."
+    },
+    {
+      "id": "master-app-1788305320521",
+      "name": "Monday",
+      "status": "found",
+      "sourceUrl": "https://monday.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "up to 2 seats"
+        },
+        {
+          "name": "Basic (per seat) (annual billing)",
+          "price": 9,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Standard (per seat) (annual billing)",
+          "price": 12,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Pro (per seat) (annual billing)",
+          "price": 19,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Work management plans; Enterprise is quote-only."
+    },
+    {
+      "id": "master-app-1788305338832",
+      "name": "Hubly",
+      "status": "not_found",
+      "sourceUrl": "https://hubly.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305355665",
+      "name": "Process Street",
+      "status": "quote_only",
+      "sourceUrl": "https://www.process.st/pricing/",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Pricing page lists Startup, Pro, Enterprise with contact-sales CTAs and no prices."
+    },
+    {
+      "id": "master-app-1788305382167",
+      "name": "Quickbooks",
+      "status": "not_found",
+      "sourceUrl": "https://quickbooks.intuit.com/pricing/",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows struck-through regular prices and 70%-off promo prices without labeling regular price as monthly vs annual; cannot verify."
+    },
+    {
+      "id": "master-app-1788305387920",
+      "name": "Pinterest",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788305392135",
+      "name": "Canva",
+      "status": "not_found",
+      "sourceUrl": "https://www.canva.com/pricing/",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305400513",
+      "name": "Riskalyze",
+      "status": "found",
+      "sourceUrl": "https://nitrogenwealth.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Risk Center (annual billing)",
+          "price": 199,
+          "notes": "monthly price not shown; annual-term rate"
+        },
+        {
+          "name": "Research Center (annual billing)",
+          "price": 149,
+          "notes": "monthly price not shown; annual-term rate"
+        },
+        {
+          "name": "Income Center (annual billing)",
+          "price": 99,
+          "notes": "monthly price not shown; annual-term rate"
+        },
+        {
+          "name": "Tax Center (annual billing)",
+          "price": 99,
+          "notes": "monthly price not shown; annual-term rate"
+        },
+        {
+          "name": "Legacy Center (annual billing)",
+          "price": 99,
+          "notes": "monthly price not shown; annual-term rate"
+        },
+        {
+          "name": "Insurance Center (annual billing)",
+          "price": 99,
+          "notes": "monthly price not shown; annual-term rate"
+        }
+      ],
+      "note": "Riskalyze is now Nitrogen. Enterprise/broker-dealer quote-only."
     }
   ]
 }
