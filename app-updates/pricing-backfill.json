@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T20:53:57Z",
+  "generatedAt": "2026-11-19T21:53:46Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -559,6 +559,102 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Official pricing page could not be opened in this run (fetch permission failure)"
+    },
+    {
+      "id": "master-app-1788301678916",
+      "name": "Zoom Phone",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+    },
+    {
+      "id": "master-app-1788301684499",
+      "name": "RingCentral",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+    },
+    {
+      "id": "master-app-1788301691261",
+      "name": "Quo",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+    },
+    {
+      "id": "master-app-1788301697524",
+      "name": "CurrentClient",
+      "status": "found",
+      "sourceUrl": "https://currentclient.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Text (per user)",
+          "price": 27,
+          "notes": "Monthly billing per vendor FAQ; $24/user/mo if billed annually"
+        }
+      ],
+      "note": "Text + Forwarding ($34) and Text + Phone ($44) shown only at annual billing; monthly price not verified so omitted. Add-ons exist; $50 one-time A2P 10DLC fee"
+    },
+    {
+      "id": "master-app-1788301705949",
+      "name": "Intulse",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+    },
+    {
+      "id": "master-app-1788304821577",
+      "name": "AssetMark",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Asset manager/custodial platform; fees are asset-based, not software subscription"
+    },
+    {
+      "id": "master-app-1788304836330",
+      "name": "MyRepChat",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+    },
+    {
+      "id": "master-app-1788304884426",
+      "name": "WealthTender",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Advisor-matching/lead-generation marketplace, not software pricing"
+    },
+    {
+      "id": "master-app-1788304894294",
+      "name": "SmartAsset",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Lead-generation program for advisors (SmartAdvisor Match), not software pricing"
+    },
+    {
+      "id": "master-app-1788304903098",
+      "name": "Ramsey SmartVestor",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Lead-generation/referral program, not software pricing"
     }
   ]
 }
