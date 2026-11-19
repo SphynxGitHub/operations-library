@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:27:58Z",
+  "generatedAt": "2026-11-19T23:30:31Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -923,6 +923,178 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Fetch of fireflies.ai/pricing refused (permission/provenance error)."
+    },
+    {
+      "id": "master-app-1788305081307",
+      "name": "MobileAssistant",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "No official pricing page found in search results."
+    },
+    {
+      "id": "master-app-1788305100729",
+      "name": "Typeform",
+      "status": "found",
+      "sourceUrl": "https://www.typeform.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 39,
+          "notes": "monthly billing; 100 responses/mo, 1 user"
+        },
+        {
+          "name": "Plus",
+          "price": 79,
+          "notes": "monthly billing; 1,000 responses/mo, 3 users"
+        },
+        {
+          "name": "Business",
+          "price": 129,
+          "notes": "monthly billing; 10,000 responses/mo, 5 users"
+        },
+        {
+          "name": "Talent (HR)",
+          "price": 169,
+          "notes": "monthly billing; 3,000 responses/mo, 3 users"
+        }
+      ],
+      "note": "Enterprise and Research Flow are contact-sales; Growth Flow cycle labeling unclear so omitted."
+    },
+    {
+      "id": "master-app-1788305111585",
+      "name": "Cognito Form",
+      "status": "not_found",
+      "sourceUrl": "https://cognitoforms.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows conflicting overlapping price blocks without labeling monthly vs annual; cannot verify."
+    },
+    {
+      "id": "master-app-1788305129772",
+      "name": "Google Voice",
+      "status": "found",
+      "sourceUrl": "https://workspace.google.com/products/voice/",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Starter (per user)",
+          "price": 10,
+          "notes": "billing cycle not stated on page"
+        },
+        {
+          "name": "Standard (per user)",
+          "price": 20,
+          "notes": "billing cycle not stated on page"
+        },
+        {
+          "name": "Premier (per user)",
+          "price": 30,
+          "notes": "billing cycle not stated on page"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305138842",
+      "name": "GoTo Meeting",
+      "status": "not_found",
+      "sourceUrl": "https://www.goto.com/meeting/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetch of official pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305150874",
+      "name": "Microsoft Teams",
+      "status": "found",
+      "sourceUrl": "https://www.microsoft.com/en-us/microsoft-teams/compare-microsoft-teams-options",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Teams Essentials (per user) (annual billing)",
+          "price": 4,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Microsoft 365 Business Basic (per user) (annual billing)",
+          "price": 7,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Microsoft 365 Business Standard with Copilot (per user) (annual billing)",
+          "price": 23.5,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305160226",
+      "name": "RingCentral Meeting",
+      "status": "found",
+      "sourceUrl": "https://ringcentral.com/online-meetings/plansandpricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free (per user)",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Essentials (per user)",
+          "price": 14.99,
+          "notes": "billing cycle not stated on page"
+        },
+        {
+          "name": "Advanced (per user)",
+          "price": 19.99,
+          "notes": "billing cycle not stated on page"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305167077",
+      "name": "Google Meet",
+      "status": "found",
+      "sourceUrl": "https://workspace.google.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Business Starter (per user)",
+          "price": 7,
+          "notes": "Meet bundled in Workspace; list price, page says all plans billed monthly; intro promo $3.50 for first 12 months/20 users"
+        },
+        {
+          "name": "Business Standard (per user)",
+          "price": 14,
+          "notes": "list price; promo $7 intro"
+        },
+        {
+          "name": "Business Plus (per user)",
+          "price": 22,
+          "notes": "list price; promo $11 intro"
+        }
+      ],
+      "note": "Google Meet is a feature of Google Workspace; prices are parent Workspace plans. Enterprise is contact sales."
+    },
+    {
+      "id": "master-app-1788305178354",
+      "name": "OnceHub",
+      "status": "not_found",
+      "sourceUrl": "https://www.oncehub.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows two figures per plan (e.g. $12 $10/seat/month) without clear labeling of which is monthly vs discounted."
+    },
+    {
+      "id": "master-app-1788305186754",
+      "name": "YouCanBookMe",
+      "status": "not_found",
+      "sourceUrl": "https://youcanbook.me/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetched page rendered $0 placeholders for paid plans; real prices not readable."
     }
   ]
 }
