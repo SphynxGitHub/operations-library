@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T22:52:54Z",
+  "generatedAt": "2026-11-19T23:18:06Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -683,11 +683,32 @@
     {
       "id": "master-app-1788304939714",
       "name": "Squarespace",
-      "status": "not_found",
-      "sourceUrl": "",
+      "status": "found",
+      "sourceUrl": "https://www.squarespace.com/pricing",
       "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 25,
+          "notes": "Monthly billing; annual billing is $19/mo"
+        },
+        {
+          "name": "Core",
+          "price": 39,
+          "notes": "Monthly billing; annual billing is $29/mo"
+        },
+        {
+          "name": "Plus",
+          "price": 65,
+          "notes": "Monthly billing; annual billing is $49/mo"
+        },
+        {
+          "name": "Advanced",
+          "price": 139,
+          "notes": "Monthly billing; annual billing is $99/mo"
+        }
+      ],
+      "note": "Page lists two prices per plan; the annual-toggle figures ($19/$29/$49/$99) were confirmed by a user screenshot, so the higher figures are the monthly-toggle prices (inferred, page does not label them)."
     },
     {
       "id": "master-app-1788304946273",
