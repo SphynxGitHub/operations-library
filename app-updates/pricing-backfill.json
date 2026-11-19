@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:19:56Z",
+  "generatedAt": "2026-11-19T23:27:58Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -793,6 +793,136 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+    },
+    {
+      "id": "master-app-1788305004213",
+      "name": "Todoist",
+      "status": "found",
+      "sourceUrl": "https://www.todoist.com/help/articles/todoist-plans-pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Beginner",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Pro",
+          "price": 7,
+          "notes": "monthly billing; $60/year if billed yearly"
+        },
+        {
+          "name": "Business (per user)",
+          "price": 10,
+          "notes": "monthly billing; $8/user/month billed yearly"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305017035",
+      "name": "Microsoft To Do",
+      "status": "found",
+      "sourceUrl": "https://www.microsoft.com/en-us/microsoft-365/microsoft-to-do-list-app",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "Page states To Do is free to use; Microsoft 365 plan prices not shown on page"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305021746",
+      "name": "Trello",
+      "status": "found",
+      "sourceUrl": "https://trello.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "up to 10 collaborators per Workspace"
+        },
+        {
+          "name": "Standard (per user)",
+          "price": 6,
+          "notes": "$5 if billed annually"
+        },
+        {
+          "name": "Premium (per user)",
+          "price": 12.5,
+          "notes": "$10 if billed annually"
+        },
+        {
+          "name": "Enterprise (per user) (annual billing)",
+          "price": 17.5,
+          "notes": "monthly price not shown; annual-billing rate ($210/user/year)"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305030625",
+      "name": "Asana",
+      "status": "not_found",
+      "sourceUrl": "https://asana.com/pricing.md",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetched pricing page showed no per-seat USD prices (only AI request prices); seat prices likely rendered dynamically."
+    },
+    {
+      "id": "master-app-1788305036740",
+      "name": "LastPass",
+      "status": "not_found",
+      "sourceUrl": "https://lastpass.com/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Pricing page rendered only unfilled template placeholders; no USD amounts readable."
+    },
+    {
+      "id": "master-app-1788305042794",
+      "name": "Dashlane",
+      "status": "not_found",
+      "sourceUrl": "https://dashlane.com/plans",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Pricing page showed '--' placeholders (annual billing only); no USD amounts readable."
+    },
+    {
+      "id": "master-app-1788305047770",
+      "name": "Keeper",
+      "status": "not_found",
+      "sourceUrl": "https://keepersecurity.com/es_ES/pricing.html",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetched page showed no readable amounts or currency (billed annually); English page not fetched."
+    },
+    {
+      "id": "master-app-1788305055593",
+      "name": "Vega Minds",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "No official pricing page found in search results."
+    },
+    {
+      "id": "master-app-1788305061630",
+      "name": "Fathom",
+      "status": "not_found",
+      "sourceUrl": "https://fathom.ai/pricing",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Page shows several figures per paid plan (e.g. Premium $20/$16) without labeling which is monthly vs annual; cannot verify monthly price."
+    },
+    {
+      "id": "master-app-1788305071985",
+      "name": "Fireflies.ai",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-19",
+      "tiers": [],
+      "note": "Fetch of fireflies.ai/pricing refused (permission/provenance error)."
     }
   ]
 }
