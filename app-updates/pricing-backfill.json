@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:19:24Z",
+  "generatedAt": "2026-11-20T01:20:31Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1389,11 +1389,11 @@
     {
       "id": "master-app-1788305271985",
       "name": "OneDrive",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "https://www.microsoft.com/en-ie/microsoft-365/onedrive/compare-onedrive-plans-b",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Only en-ie page opened (EUR prices); en-us page fetch refused; USD not verified"
+      "note": "Included in Microsoft 365 (per user); see Office 365 entry for plan prices."
     },
     {
       "id": "master-app-1788305277536",
