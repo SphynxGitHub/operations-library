@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:34:49Z",
+  "generatedAt": "2026-11-20T01:35:41Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1084,11 +1084,27 @@
     {
       "id": "master-app-1788305042794",
       "name": "Dashlane",
-      "status": "not_found",
-      "sourceUrl": "https://dashlane.com/plans",
+      "status": "found",
+      "sourceUrl": "https://www.dashlane.com/lp/enterprise-password-manager",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "tiers": [
+        {
+          "name": "Password Management (per user) (annual billing)",
+          "price": 8,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Credential Protection (per user) (annual billing)",
+          "price": 4,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Enterprise",
+          "price": null,
+          "notes": "Custom, volume-optimized pricing; contact sales"
+        }
+      ],
+      "note": "Business plans from user-supplied screenshot (page itself shows placeholders when fetched). Personal plans not recorded."
     },
     {
       "id": "master-app-1788305047770",
