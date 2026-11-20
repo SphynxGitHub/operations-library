@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:13:50Z",
+  "generatedAt": "2026-11-20T01:14:27Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1501,11 +1501,22 @@
     {
       "id": "master-app-1788305338832",
       "name": "Hubly",
-      "status": "not_found",
-      "sourceUrl": "https://hubly.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "status": "found",
+      "sourceUrl": "https://www.myhubly.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 89,
+          "notes": "'starting at'; annual rate inferred from yearly toggle; $110 is the other figure shown (likely monthly billing)"
+        },
+        {
+          "name": "Scale (per user) (annual billing)",
+          "price": 119,
+          "notes": "'starting at'; annual rate inferred from yearly toggle; $150 is the other figure shown (likely monthly billing)"
+        }
+      ],
+      "note": "Enterprise is call-for-quote. Onboarding fees: Community (teams of 4 or fewer) from $500/firm; Full Service (5+) from $3,000/firm. Page meta says from $59/user/month but that figure is not in the page body."
     },
     {
       "id": "master-app-1788305355665",
