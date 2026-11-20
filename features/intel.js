@@ -254,6 +254,7 @@ OL.saveIntel = async function() {
     const i = rows.findIndex((r) => String(r.id) === String(row2.id));
     if (i >= 0) rows[i] = row2; else rows.unshift(row2);
     if (typeof OL.showToast === 'function') OL.showToast(OL._intelEditId ? 'Intel updated' : 'Intel added');
+    if (!OL._intelEditId && typeof OL.onIntelSaved === 'function') { try { await OL.onIntelSaved(row2, OL._intelSource); } catch (e) { console.error(e); } }
     OL.closeIntelModal();
     if (location.hash.startsWith('#/business/intel')) OL._paintIntelLibrary();
 };

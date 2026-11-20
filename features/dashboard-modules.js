@@ -19,7 +19,8 @@ import {
 const view = { mode: 'week', offset: 0 };          // the Availability module: 'today', 'week' (a rolling 5 working days from today) or 'month'
 const MAX_WEEK_OFFSET = 8, MAX_MONTH_OFFSET = 1;   // the dashboard's calendar events only reach about 60 days ahead
 let planPeriods = null;                             // { rows, at }: every maintenance_plan_period row, once loaded
-let appUpdates = null;                              // { items, updatedAt } from app-updates/digest.json, or { error }
+let appUpdates = null;                              // { items, updatedAt, actions, actionsError, showHandled } from app-updates/digest.json, or { error }
+const updKey = (i) => `${i.app}|${i.date}|${String(i.summary || '').slice(0, 80)}`;   // same key the star button uses
 let reviewData = null;                              // { reviews, itemsByReview, reviewedTaskIds, at } once loaded
 
 const todayStr = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -147,14 +148,27 @@ function bodyFor(key) {
     if (key === 'app_updates') {
         if (!appUpdates) return { count: '', body: empty('Loading...'), extra: '' };
         if (appUpdates.error) return { count: '', body: `<div class="tiny" style="color:#ef4444;padding:6px 0;">${esc(appUpdates.error)}</div>`, extra: '' };
-        const items = appUpdates.items;
+        const staff = !window.IS_GUEST && (state.adminMode === true || state.teamMemberMode === true);
+        const acts = appUpdates.actions || {};
+        const all = appUpdates.items;
+        const handled = all.filter((i) => acts[updKey(i)]);
+        const items = appUpdates.showHandled ? all : all.filter((i) => !acts[updKey(i)]);
         const stamp = appUpdates.updatedAt ? `<span class="tiny muted" style="margin-left:auto;">Last scan ${esc(String(appUpdates.updatedAt).slice(0, 10))}</span>` : '';
         const kindColor = { pricing: '#f5b942', feature: '#2dd4bf', release: '#60a5fa', other: '#94a3b8' };
-        const body = items.map((i) => `<div style="padding:7px 0;border-bottom:1px solid var(--line);">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span><span style="margin-left:auto;">${OL.starButton ? OL.starButton({ type: 'app_update', key: `${i.app}|${i.date}|${String(i.summary || '').slice(0, 80)}`, title: `${i.app}: ${i.summary}`, details: i.summary, sourceUrl: i.sourceUrl, apps: [i.app] }) : ''}</span></div>
+        const btn = (label, icon, fn, idx, title) => `<button type="button" class="btn tiny soft" title="${esc(title)}" onclick="event.stopPropagation();OL.${fn}(${idx})" style="display:inline-flex;gap:4px;align-items:center;"><i data-lucide="${icon}" style="width:11px;height:11px;"></i>${label}</button>`;
+        const body = items.map((i) => {
+            const idx = all.indexOf(i), a = acts[updKey(i)];
+            const actions = !staff ? '' : a
+                ? `<span class="tiny muted">${a.action === 'intel' ? 'In Intel Library' : 'Dismissed'}${a.acted_by ? ` by ${esc(a.acted_by)}` : ''}</span> ${btn('Restore', 'rotate-ccw', 'dashUpdateRestore', idx, 'Put this back in the feed')}`
+                : `${btn('Add to intel', 'lightbulb', 'dashUpdateToIntel', idx, 'Save this to the Intel Library')} ${btn('Dismiss', 'x', 'dashUpdateDismiss', idx, 'Hide this update')}`;
+            return `<div style="padding:7px 0;border-bottom:1px solid var(--line);${a ? 'opacity:.6;' : ''}">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span><span style="margin-left:auto;">${OL.starButton ? OL.starButton({ type: 'app_update', key: updKey(i), title: `${i.app}: ${i.summary}`, details: i.summary, sourceUrl: i.sourceUrl, apps: [i.app] }) : ''}</span></div>
             <div style="font-size:13px;overflow-wrap:anywhere;">${esc(i.summary || '')}</div>
-            ${i.sourceUrl ? `<a class="tiny" href="${esc(i.sourceUrl)}" target="_blank" rel="noopener">Source</a><span class="tiny muted"> · checked ${esc(i.checkedAt || '')}</span>` : ''}</div>`).join('');
-        return { count: items.length, extra: stamp, body: body || empty(appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.') };
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">${i.sourceUrl ? `<a class="tiny" href="${esc(i.sourceUrl)}" target="_blank" rel="noopener">Source</a><span class="tiny muted"> · checked ${esc(i.checkedAt || '')}</span>` : ''}<span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center;">${actions}</span></div></div>`;
+        }).join('');
+        const note = appUpdates.actionsError ? `<div class="tiny" style="color:#f59e0b;padding:4px 0;">Dismiss and Add to intel are not saving yet: ${esc(appUpdates.actionsError)} (run migration 2026_11k_app_update_actions.sql in Supabase).</div>` : '';
+        const toggle = handled.length ? `<div style="padding:6px 0;"><a class="tiny" href="#" onclick="event.preventDefault();OL.dashUpdateToggleHandled()">${appUpdates.showHandled ? 'Hide' : 'Show'} ${handled.length} handled</a></div>` : '';
+        return { count: all.length - handled.length, extra: stamp, body: note + (body || empty(all.length && !items.length ? 'Everything has been dismissed or added to intel.' : appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.')) + toggle };
     }
     return { count: '', body: '', extra: '' };
 }
@@ -221,8 +235,14 @@ async function loadAppUpdates() {
         if (!r.ok) throw new Error(`App updates digest could not be loaded (${r.status}).`);
         const d = await r.json();
         if (!d || !Array.isArray(d.items)) throw new Error('App updates digest is not in the expected format.');
-        const items = d.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 40);
-        appUpdates = { items, updatedAt: d.updatedAt || null, at: Date.now() };
+        const items = d.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 80);
+        const prev = appUpdates && !appUpdates.error ? appUpdates : {};
+        appUpdates = { items, updatedAt: d.updatedAt || null, at: Date.now(), actions: prev.actions || {}, actionsError: '', showHandled: !!prev.showHandled };
+        try {
+            const a = await db.from('app_update_actions').select('*').limit(5000);
+            if (a.error) throw a.error;
+            appUpdates.actions = Object.fromEntries((a.data || []).map((x) => [x.key, x]));
+        } catch (e) { appUpdates.actionsError = e?.message || String(e); }
         try { if (OL.loadContentIdeas && !OL.contentState.loaded) await OL.loadContentIdeas(); } catch (e) { console.error(e); }
     } catch (e) { appUpdates = { error: e.message, at: Date.now() }; }
     paint();
@@ -305,6 +325,45 @@ export function dashModulesOpen() {
     else OL.showOverlayModal(html, { wide: true });
     if (window.lucide) window.lucide.createIcons();
 }
+
+// ---- app updates: dismiss / add to the Intel Library ------------------------------------------------------------
+async function saveUpdateAction(i, action, intelId) {
+    const row = { key: updKey(i), action, intel_id: intelId || null, acted_by: getCurrentUserName() || null, acted_at: new Date().toISOString() };
+    const r = await db.from('app_update_actions').upsert(row).select('*');
+    if (r.error || !r.data || !r.data.length) { alert(`Could not save that: ${r.error ? r.error.message : 'nothing was saved (you may not have permission)'}`); return false; }
+    appUpdates.actions[row.key] = r.data[0];
+    paint();
+    return true;
+}
+OL.dashUpdateDismiss = async (idx) => { const i = appUpdates?.items?.[idx]; if (i) await saveUpdateAction(i, 'dismissed'); };
+OL.dashUpdateRestore = async (idx) => {
+    const i = appUpdates?.items?.[idx]; if (!i) return;
+    const r = await db.from('app_update_actions').delete().eq('key', updKey(i));
+    if (r.error) { alert(`Could not restore that: ${r.error.message}`); return; }
+    delete appUpdates.actions[updKey(i)];
+    paint();
+};
+OL.dashUpdateToggleHandled = () => { if (appUpdates) { appUpdates.showHandled = !appUpdates.showHandled; paint(); } };
+OL.dashUpdateToIntel = (idx) => {
+    const i = appUpdates?.items?.[idx];
+    if (!i) return;
+    if (typeof OL.openIntelModal !== 'function') { alert('The Intel Library is not loaded. Reload the page and try again.'); return; }
+    const name = String(i.app || '').trim();
+    const match = (state.master?.apps || []).find((a) => a && String(a.name || '').trim().toLowerCase() === name.toLowerCase());
+    OL.openIntelModal(null, {
+        kind: 'note', title: `${name}: ${String(i.summary || '').split(/(?<=[.!?])\s/)[0].slice(0, 110)}`,
+        details: [i.summary, i.sourceUrl ? `Source: ${i.sourceUrl}` : '', i.date ? `Date: ${i.date}` : ''].filter(Boolean).join('\n\n'),
+        apps: name ? [{ id: match ? match.id : null, name: match ? match.name : name }] : [],
+        source_type: 'manual', source_id: `appupdate:${updKey(i)}`,
+    });
+};
+// Called by the Intel Library after a new entry is saved: if it came from an app update, mark that update as added.
+OL.onIntelSaved = async (entry, source) => {
+    const sid = source?.source_id || '';
+    if (!sid.startsWith('appupdate:') || !appUpdates || appUpdates.error) return;
+    const i = appUpdates.items.find((x) => updKey(x) === sid.slice('appupdate:'.length));
+    if (i) await saveUpdateAction(i, 'intel', entry.id);
+};
 
 window.OL = window.OL || {};
 Object.assign(window.OL, { dashRepaintModules: () => paint(), dashSetStats, dashTile, dashboardModulesHtml, loadDashboardModules, dashAvail, dashModulesPreset, dashOnlyMePreset, dashModuleToggle, dashModulesOpen });
