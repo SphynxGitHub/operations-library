@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:51:45Z",
+  "generatedAt": "2026-11-20T01:52:12Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2830,6 +2830,15 @@
         }
       ],
       "note": "Business & Enterprise tab from user-supplied screenshot. Individual plans (Go, Plus, Pro) not recorded: amounts did not render when fetched."
+    },
+    {
+      "id": "master-app-1795130769864",
+      "name": "Copilot",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user: Copilot is included in Microsoft; no separate software pricing."
     }
   ]
 }
