@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:14:27Z",
+  "generatedAt": "2026-11-20T01:15:08Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1548,11 +1548,27 @@
     {
       "id": "master-app-1788305392135",
       "name": "Canva",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://www.canva.com/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "one person"
+        },
+        {
+          "name": "Pro",
+          "price": 18,
+          "notes": "monthly billing, one person; promo 50% off first 3 months ($9)"
+        },
+        {
+          "name": "Business (per person)",
+          "price": 25,
+          "notes": "monthly billing; promo 50% off first 3 months ($12.50)"
+        }
+      ],
+      "note": "Prices from user-supplied screenshot of the Monthly view (official page fetch failed). Enterprise is contact sales."
     },
     {
       "id": "master-app-1788305400513",
