@@ -1378,7 +1378,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
 
     const html = `
     <div class="task-row-card" 
-         style="display:flex; flex-direction:column; gap:6px; padding:10px 14px; margin-left:${t.parentTaskId ? '28px' : '0'}; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; ${t.parentTaskId ? 'border-left:2px solid var(--accent);' : ''}"
+         style="min-width:0; max-width:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; padding:10px 14px; margin-left:${t.parentTaskId ? '28px' : '0'}; background:${isTimerRunning ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.01)'}; border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer; ${t.parentTaskId ? 'border-left:2px solid var(--accent);' : ''}"
          onclick="OL.handleTaskRowClick(event, '${t.clientId}', '${t.id}')">
         ${t.parentTaskId ? `<div class="tiny muted" style="display:flex; align-items:center; gap:4px;"><i data-lucide="corner-down-right" style="width:11px;height:11px;"></i> Sub-task${t.automationRuleId ? ' · auto-created' : ''}</div>` : ''}
         <!-- LINE 1: Status Dot + Expanded Task Title + Workspace Badge -->
@@ -1430,9 +1430,9 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
         </div>
 
         <!-- LINE 2: Linked Resource | Due Date | Time Logging | Assignee Badge -->
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:4px; border-top:1px dashed rgba(255,255,255,0.04);">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 10px; padding-top:4px; border-top:1px dashed rgba(255,255,255,0.04); min-width:0;">
             
-            <div style="display:flex; align-items:center; gap:12px;">
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; min-width:0;">
                 <!-- Linked Resource -->
                 <span class="pill tiny soft" style="font-size:10px; color:var(--accent); background:rgba(var(--accent-rgb), 0.06); border:1px solid rgba(var(--accent-rgb), 0.15); display:inline-flex; align-items:center; gap:4px;">
                     <i data-lucide="database" style="width:11px;height:11px; pointer-events:none;"></i>
