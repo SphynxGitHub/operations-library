@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:20:51Z",
+  "generatedAt": "2026-11-20T01:21:28Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2081,11 +2081,22 @@
     {
       "id": "master-app-1789090841592",
       "name": "Levitate",
-      "status": "not_found",
-      "sourceUrl": "https://www.levitate.ai/pricing",
+      "status": "found",
+      "sourceUrl": "",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "All-inclusive plan (low end)",
+          "price": 349,
+          "notes": "per month, as stated by user; exact price by quote"
+        },
+        {
+          "name": "All-inclusive plan (high end)",
+          "price": 449,
+          "notes": "per month, as stated by user; exact price by quote"
+        }
+      ],
+      "note": "Price range supplied by user ($349-$449/month, all-inclusive plans); exact pricing is quote-only. Official page could not be fetched."
     },
     {
       "id": "master-app-1789527521775",
