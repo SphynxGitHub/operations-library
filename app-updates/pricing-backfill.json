@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:34:27Z",
+  "generatedAt": "2026-11-20T01:34:49Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -766,16 +766,26 @@
       "id": "master-app-1788304914972",
       "name": "Garret Planning Network",
       "status": "found",
-      "sourceUrl": "",
+      "sourceUrl": "https://garrettplanningnetwork.com/for-advisors/",
       "checkedAt": "2026-11-20",
       "tiers": [
         {
-          "name": "Network membership fee",
+          "name": "Pathway Membership",
           "price": 210,
-          "notes": "Per month; billing cycle not stated"
+          "notes": "Monthly payment; 5% discount if paid as annual lump sum"
+        },
+        {
+          "name": "Full Membership",
+          "price": 210,
+          "notes": "Monthly payment; 5% discount if paid as annual lump sum"
+        },
+        {
+          "name": "Associate Membership",
+          "price": 50,
+          "notes": "Monthly payment; 5% discount if paid as annual lump sum"
         }
       ],
-      "note": "Per user: $210/month fee. Garrett Planning Network is a membership network, not a software platform."
+      "note": "Garrett Planning Network is a membership network, not a software platform. No one-time fees listed."
     },
     {
       "id": "master-app-1788304927155",
