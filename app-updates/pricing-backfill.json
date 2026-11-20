@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:31:52Z",
+  "generatedAt": "2026-11-20T01:33:06Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -512,11 +512,11 @@
     {
       "id": "master-app-1788301583084",
       "name": "Allbridge",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified. Official site not identified."
+      "note": "Per user: Allbridge is provided through BNY Pershing; no standalone software pricing found."
     },
     {
       "id": "master-app-1788301597628",
