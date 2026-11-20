@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:00:49Z",
+  "generatedAt": "2026-11-20T00:01:53Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1513,6 +1513,265 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "First Ascent is now GeoWealth (TAMP); pricing by request only."
+    },
+    {
+      "id": "master-app-1788305487936",
+      "name": "TIAA",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Custodian/financial services provider; no software pricing."
+    },
+    {
+      "id": "master-app-1788305493575",
+      "name": "Fidelity",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Custodian/brokerage; no software pricing."
+    },
+    {
+      "id": "master-app-1788305505855",
+      "name": "SSG",
+      "status": "not_found",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Vendor unclear from the name; no official pricing page identified."
+    },
+    {
+      "id": "master-app-1788305514743",
+      "name": "Betterment",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Robo-advisor/custodian; no software pricing."
+    },
+    {
+      "id": "master-app-1788305522863",
+      "name": "Roboforms",
+      "status": "not_found",
+      "sourceUrl": "https://www.roboform.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305564335",
+      "name": "Slant",
+      "status": "not_found",
+      "sourceUrl": "https://slantfinancial.com/",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "No pricing page found; site is contact-form only and vendor identity unconfirmed."
+    },
+    {
+      "id": "master-app-1788305610207",
+      "name": "Advyzon",
+      "status": "not_found",
+      "sourceUrl": "https://www.advyzon.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305637335",
+      "name": "Snappy Kraken",
+      "status": "found",
+      "sourceUrl": "https://snappykraken.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Marketing Automation Foundations (annual billing)",
+          "price": 199,
+          "notes": "monthly price not shown; annual-term rate; $199 setup"
+        },
+        {
+          "name": "Marketing Automation Grow (annual billing)",
+          "price": 299,
+          "notes": "monthly price not shown; annual-term rate; $499 setup"
+        },
+        {
+          "name": "Marketing Automation Freedom360 (annual billing)",
+          "price": 899,
+          "notes": "monthly price not shown; annual-term rate; $499 setup"
+        },
+        {
+          "name": "Websites Foundations (annual billing)",
+          "price": 99,
+          "notes": "monthly price not shown; annual-term rate; $499 setup"
+        },
+        {
+          "name": "Websites Grow (annual billing)",
+          "price": 199,
+          "notes": "monthly price not shown; annual-term rate; $2,499 setup"
+        }
+      ],
+      "note": "Bundles and a la carte options also listed; multi-advisor is quote-only."
+    },
+    {
+      "id": "master-app-1788305673974",
+      "name": "Koyfin",
+      "status": "not_found",
+      "sourceUrl": "https://www.koyfin.com/pricing/",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Page shows /month prices ($39/$79/$209/$299) but does not clarify whether monthly or annual billing is displayed."
+    },
+    {
+      "id": "master-app-1788305686024",
+      "name": "Allo",
+      "status": "found",
+      "sourceUrl": "https://www.withallo.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Business (per seat)",
+          "price": 45,
+          "notes": "monthly billing; $32/seat/mo billed yearly"
+        },
+        {
+          "name": "Ultra (per seat)",
+          "price": 120,
+          "notes": "monthly billing; $100/seat/mo billed yearly"
+        }
+      ],
+      "note": "Prices taken from page FAQ; headline price text was garbled. Pricing marked early/changeable."
+    },
+    {
+      "id": "master-app-1788305760267",
+      "name": "Wave",
+      "status": "found",
+      "sourceUrl": "https://www.waveapps.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starter",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Pro",
+          "price": 19,
+          "notes": "billed monthly; per business; $190/year billed annually"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305809839",
+      "name": "LinkedIn",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788305814576",
+      "name": "Facebook",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788305819615",
+      "name": "YouTube",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788305824119",
+      "name": "TikTok",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788305831359",
+      "name": "Instagram",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Social platform; no software subscription pricing."
+    },
+    {
+      "id": "master-app-1788306029782",
+      "name": "Acuity",
+      "status": "not_found",
+      "sourceUrl": "https://acuityscheduling.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Page shows two prices per plan without explicit labels for which is monthly vs annual."
+    },
+    {
+      "id": "master-app-1788306079198",
+      "name": "NAPFA",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Professional membership network; no software pricing."
+    },
+    {
+      "id": "master-app-1788306173326",
+      "name": "Slack",
+      "status": "found",
+      "sourceUrl": "https://slack.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Pro (per user)",
+          "price": 8.75,
+          "notes": "monthly billing; promo 50% off first 3 months; $7.25 paying annually"
+        },
+        {
+          "name": "Business+ (per user)",
+          "price": 18,
+          "notes": "monthly billing; promo 50% off first 3 months; $15 paying annually"
+        }
+      ],
+      "note": "Enterprise+ is contact-sales."
+    },
+    {
+      "id": "master-app-1788306210142",
+      "name": "Loom",
+      "status": "found",
+      "sourceUrl": "https://www.loom.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starter",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Business (per user)",
+          "price": 18,
+          "notes": "billing cycle not stated; annual saves up to 17%"
+        },
+        {
+          "name": "Business + AI (per user)",
+          "price": 24,
+          "notes": "billing cycle not stated; annual saves up to 17%"
+        }
+      ],
+      "note": "Enterprise is contact-sales."
     }
   ]
 }
