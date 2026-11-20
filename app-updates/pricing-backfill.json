@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:05:52Z",
+  "generatedAt": "2026-11-20T00:06:15Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -441,11 +441,11 @@
     {
       "id": "master-app-1788301526061",
       "name": "eMoney",
-      "status": "not_found",
+      "status": "quote_only",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Official pricing page could not be opened in this run (fetch permission failure)"
+      "note": "Custom quote only (confirmed by user); no published pricing."
     },
     {
       "id": "master-app-1788301548532",
@@ -484,11 +484,11 @@
     {
       "id": "master-app-1788301597628",
       "name": "Black Diamond",
-      "status": "not_found",
+      "status": "quote_only",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Official site could not be opened in this run (fetch permission failure)"
+      "note": "Custom quote only (confirmed by user); no published pricing."
     },
     {
       "id": "master-app-1788301612652",
