@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:13:23Z",
+  "generatedAt": "2026-11-20T00:14:17Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1271,11 +1271,47 @@
     {
       "id": "master-app-1788305243385",
       "name": "Box",
-      "status": "not_found",
-      "sourceUrl": "https://www.box.com/en-au/pricing/platform",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Only en-au page opened and currency of \"$\" prices not stated as USD; en-us pricing fetch refused"
+      "status": "found",
+      "sourceUrl": "https://www.box.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Personal Pro (annual billing)",
+          "price": 10,
+          "notes": "single user; monthly price not shown; lower of two figures shown ($14 other), annual rate inferred"
+        },
+        {
+          "name": "Business Starter (per user) (annual billing)",
+          "price": 5,
+          "notes": "monthly price not shown; lower of two figures ($7 other), annual rate inferred; 3 user min"
+        },
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 15,
+          "notes": "monthly price not shown; lower of two figures ($20 other), annual rate inferred; 3 user min"
+        },
+        {
+          "name": "Business Plus (per user) (annual billing)",
+          "price": 25,
+          "notes": "monthly price not shown; lower of two figures ($33 other), annual rate inferred; 3 user min"
+        },
+        {
+          "name": "Enterprise (per user) (annual billing)",
+          "price": 35,
+          "notes": "monthly price not shown; lower of two figures ($47 other), annual rate inferred; 3 user min"
+        },
+        {
+          "name": "Enterprise Plus (per user) (annual billing)",
+          "price": 50,
+          "notes": "page states price shown under annual billing; 3 user min"
+        },
+        {
+          "name": "Enterprise Advanced (per user) (annual billing)",
+          "price": 70,
+          "notes": "annual billing only; 3 user min"
+        }
+      ],
+      "note": "Page shows two figures per plan without clear monthly/annual labels; recorded the lower figure as the annual rate. Individual and Free Developer plans are free."
     },
     {
       "id": "master-app-1788305254068",
