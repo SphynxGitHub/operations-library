@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:56:50Z",
+  "generatedAt": "2026-11-20T01:57:41Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2865,7 +2865,7 @@
       "sourceUrl": "https://www.comply.com/products/comply-ria",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Per user: RIA in a Box is now COMPLY. Product page lists no prices; only demo booking is offered, so pricing appears to be by quote."
+      "note": "Per user: RIA in a Box is now COMPLY. Quote-only (product page lists no prices, demo booking only). Estimated $3,000/yr for basic up to $40,000/yr (user estimate, not from an official page)."
     }
   ]
 }
