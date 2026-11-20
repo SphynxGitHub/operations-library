@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-19T23:29:20Z",
+  "updatedAt": "2026-11-20T02:34:35Z",
   "items": [
     {
       "app": "Schwab",
@@ -56,6 +56,54 @@
       "summary": "Claude Meetings is rolling out in beta on Team and Enterprise plans; Claude joins Google Meet calls as a visible participant to take notes, answer questions and build artifacts.",
       "sourceUrl": "https://support.claude.com/en/articles/12138966-release-notes",
       "checkedAt": "2026-11-19"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "feature",
+      "date": "2026-11-16",
+      "summary": "Wealthbox now integrates with Osaic's eQuipt platform. Osaic-affiliated advisors can push or pull a client profile on demand, with a side-by-side view to choose which fields update.",
+      "sourceUrl": "https://www.wealthbox.com/osaic-integrates-with-wealthbox-to-simplify-client-account-management/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Claude",
+      "kind": "feature",
+      "date": "2026-11-16",
+      "summary": "The unified Chat and Cowork experience turns on by default for Enterprise organizations whose admins hadn't set it; it needs Chat and code execution enabled and excludes zero-data-retention, HIPAA-ready and customer-managed-key orgs.",
+      "sourceUrl": "https://support.claude.com/en/articles/17444462-set-up-and-manage-the-new-unified-claude-experience-for-your-enterprise-organization",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Morningstar",
+      "kind": "release",
+      "date": "2026-11-12",
+      "summary": "Morningstar's 11-12-26 update fixes ETF and closed-end fund 3-year standard deviation showing an outdated month, removed watchlist items reappearing, and embedded video sizing.",
+      "sourceUrl": "https://www.morningstar.com/whats-new/11-12-26-product-enhancement-bug-fixes",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Google Calendar now syncs guest additions with third-party calendars such as Outlook: the organizer is notified when a guest adds guests, and the event updates when such a notice arrives.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/improved-syncing-of-guest-additions-across-calendar-services.html",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-18",
+      "summary": "Gemini Notebook can now build a site from a chat prompt, opening it in a new tab; rollout started November 16 on web for users 18 and older.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/transform-your-notes-and-research-into-dynamic-tools-with-Gemini-Notebook.html",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Google Meet",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Google Meet adds an optional setting that shows participants a clickable link to the presented Docs, Sheets or Slides file; it is off by default.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/seamlessly-share-presented-file-links-with-viewers-in-Google-Meet.html",
+      "checkedAt": "2026-11-20"
     }
   ]
 }
