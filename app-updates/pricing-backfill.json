@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:59:18Z",
+  "generatedAt": "2026-11-20T01:59:51Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2884,6 +2884,15 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: quote-based only; no pricing published."
+    },
+    {
+      "id": "master-app-1795139074306",
+      "name": "Morningstar Office",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user: Morningstar Office is retired; no current pricing."
     }
   ]
 }
