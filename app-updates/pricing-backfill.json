@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T02:01:42Z",
+  "generatedAt": "2026-11-20T02:02:16Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2756,11 +2756,11 @@
     {
       "id": "master-app-1795139017664",
       "name": "Holistiplan",
-      "status": "not_found",
+      "status": "quote_only",
       "sourceUrl": "https://help.holistiplan.com/new-pricing-structure-coming-in-2025",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Priced per household (not per user); no dollar amounts found on the official help article."
+      "note": "Priced per household (not per user); tiers depend on number of households. No dollar amounts published in the sources checked."
     },
     {
       "id": "master-app-1795139000587",
