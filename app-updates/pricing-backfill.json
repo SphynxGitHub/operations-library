@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:33:06Z",
+  "generatedAt": "2026-11-20T01:34:27Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -765,11 +765,17 @@
     {
       "id": "master-app-1788304914972",
       "name": "Garret Planning Network",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "tiers": [
+        {
+          "name": "Network membership fee",
+          "price": 210,
+          "notes": "Per month; billing cycle not stated"
+        }
+      ],
+      "note": "Per user: $210/month fee. Garrett Planning Network is a membership network, not a software platform."
     },
     {
       "id": "master-app-1788304927155",
