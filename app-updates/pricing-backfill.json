@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T23:59:47Z",
+  "generatedAt": "2026-11-20T00:00:49Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1396,6 +1396,123 @@
         }
       ],
       "note": "Riskalyze is now Nitrogen. Enterprise/broker-dealer quote-only."
+    },
+    {
+      "id": "master-app-1788305406615",
+      "name": "FP Pathfinder",
+      "status": "not_found",
+      "sourceUrl": "https://www.fppathfinder.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305411512",
+      "name": "Datapoints",
+      "status": "found",
+      "sourceUrl": "https://www.datapoints.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Coaching (per advisor)",
+          "price": 70,
+          "notes": "monthly; additional users $70/mo"
+        },
+        {
+          "name": "Investor (per advisor)",
+          "price": 85,
+          "notes": "monthly; additional users $85/mo"
+        },
+        {
+          "name": "Journey (per advisor)",
+          "price": 95,
+          "notes": "monthly; additional users $95/mo"
+        },
+        {
+          "name": "Complete (up to 3 advisors)",
+          "price": 180,
+          "notes": "monthly; additional users $60/mo"
+        }
+      ],
+      "note": "No annual contract required."
+    },
+    {
+      "id": "master-app-1788305420959",
+      "name": "Morningstar",
+      "status": "not_found",
+      "sourceUrl": "https://www.morningstar.com/products/morningstar-office",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetched page returned no readable content; second URL failed."
+    },
+    {
+      "id": "master-app-1788305433304",
+      "name": "Circle Black",
+      "status": "found",
+      "sourceUrl": "https://www.circleblack.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Platform base (up to 100 accounts, 1 CRM user)",
+          "price": 550,
+          "notes": "monthly billing; page headline says starting at $600/mo; extra CRM user $30/mo"
+        }
+      ],
+      "note": "Annual rate $6,600/yr; accounts beyond 100 priced per account; trading & rebalancing priced in bps of AUM."
+    },
+    {
+      "id": "master-app-1788305439455",
+      "name": "Orion",
+      "status": "not_found",
+      "sourceUrl": "https://orion.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305446623",
+      "name": "Tamarac",
+      "status": "not_found",
+      "sourceUrl": "https://www.envestnet.com/financial-intelligence/tamarac",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch failed (client error); no pricing read."
+    },
+    {
+      "id": "master-app-1788305453759",
+      "name": "Capitect",
+      "status": "not_found",
+      "sourceUrl": "https://www.capitect.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1788305463343",
+      "name": "LPL Financial",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Broker-dealer/custodian; no software pricing."
+    },
+    {
+      "id": "master-app-1788305471295",
+      "name": "Altruist",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Custodian/brokerage platform; not priced as standalone software here."
+    },
+    {
+      "id": "master-app-1788305482680",
+      "name": "First Ascent",
+      "status": "quote_only",
+      "sourceUrl": "https://geowealth.com/first-ascent-homepage/",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "First Ascent is now GeoWealth (TAMP); pricing by request only."
     }
   ]
 }
