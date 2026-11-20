@@ -1,560 +1,628 @@
 {
- "apps": [
-  {
-   "id": "master-app-1767936076742",
-   "name": "AdvicePay"
-  },
-  {
-   "id": "master-app-1767934864582",
-   "name": "Axos"
-  },
-  {
-   "id": "master-app-1767934560279",
-   "name": "Calendly"
-  },
-  {
-   "id": "master-app-1767977879193",
-   "name": "Constant Contact"
-  },
-  {
-   "id": "master-app-1767977861608",
-   "name": "DocuSign"
-  },
-  {
-   "id": "master-app-1767934677414",
-   "name": "Gmail"
-  },
-  {
-   "id": "master-app-1767977778824",
-   "name": "Google Calendar"
-  },
-  {
-   "id": "master-app-1767934766237",
-   "name": "Google Docs"
-  },
-  {
-   "id": "master-app-1767934694566",
-   "name": "Google Drive"
-  },
-  {
-   "id": "master-app-1774749468859",
-   "name": "Google Forms"
-  },
-  {
-   "id": "master-app-1767934715678",
-   "name": "Google Sheets"
-  },
-  {
-   "id": "master-app-1767934799829",
-   "name": "Hazel"
-  },
-  {
-   "id": "master-app-1767977842769",
-   "name": "Jotform"
-  },
-  {
-   "id": "master-app-1767934596064",
-   "name": "Wealthbox"
-  },
-  {
-   "id": "master-app-1767934530303",
-   "name": "Zapier"
-  },
-  {
-   "id": "master-app-1767934812047",
-   "name": "Zoom"
-  },
-  {
-   "id": "master-app-1767990053242",
-   "name": "1Password"
-  },
-  {
-   "id": "master-app-1788300902447",
-   "name": "Redtail"
-  },
-  {
-   "id": "master-app-1788301270078",
-   "name": "Contact Management"
-  },
-  {
-   "id": "master-app-1788301331366",
-   "name": "Zapier Email"
-  },
-  {
-   "id": "master-app-1788301343132",
-   "name": "Zapier Code"
-  },
-  {
-   "id": "master-app-1788301351883",
-   "name": "Zapier Tables"
-  },
-  {
-   "id": "master-app-1788301364619",
-   "name": "Zapier Formatter"
-  },
-  {
-   "id": "master-app-1788301372340",
-   "name": "Zapier Delay"
-  },
-  {
-   "id": "master-app-1788301378780",
-   "name": "Zapier Filter"
-  },
-  {
-   "id": "master-app-1788301387571",
-   "name": "Zapier Storage"
-  },
-  {
-   "id": "master-app-1788301412365",
-   "name": "PreciseFP"
-  },
-  {
-   "id": "master-app-1788301433749",
-   "name": "Mailchimp"
-  },
-  {
-   "id": "master-app-1788301472847",
-   "name": "AdobeSign"
-  },
-  {
-   "id": "master-app-1788301490005",
-   "name": "SEI"
-  },
-  {
-   "id": "master-app-1788301501733",
-   "name": "Schwab"
-  },
-  {
-   "id": "master-app-1788301526061",
-   "name": "eMoney"
-  },
-  {
-   "id": "master-app-1788301548532",
-   "name": "RightCapital"
-  },
-  {
-   "id": "master-app-1788301583084",
-   "name": "Allbridge"
-  },
-  {
-   "id": "master-app-1788301597628",
-   "name": "Black Diamond"
-  },
-  {
-   "id": "master-app-1788301612652",
-   "name": "Blueleaf"
-  },
-  {
-   "id": "master-app-1788301624437",
-   "name": "Kwanti"
-  },
-  {
-   "id": "master-app-1788301644397",
-   "name": "Jump.ai"
-  },
-  {
-   "id": "master-app-1788301651757",
-   "name": "Zocks"
-  },
-  {
-   "id": "master-app-1788301658996",
-   "name": "Otter.ai"
-  },
-  {
-   "id": "master-app-1788301678916",
-   "name": "Zoom Phone"
-  },
-  {
-   "id": "master-app-1788301684499",
-   "name": "RingCentral"
-  },
-  {
-   "id": "master-app-1788301691261",
-   "name": "Quo"
-  },
-  {
-   "id": "master-app-1788301697524",
-   "name": "CurrentClient"
-  },
-  {
-   "id": "master-app-1788301705949",
-   "name": "Intulse"
-  },
-  {
-   "id": "master-app-1788304821577",
-   "name": "AssetMark"
-  },
-  {
-   "id": "master-app-1788304836330",
-   "name": "MyRepChat"
-  },
-  {
-   "id": "master-app-1788304884426",
-   "name": "WealthTender"
-  },
-  {
-   "id": "master-app-1788304894294",
-   "name": "SmartAsset"
-  },
-  {
-   "id": "master-app-1788304903098",
-   "name": "Ramsey SmartVestor"
-  },
-  {
-   "id": "master-app-1788304914972",
-   "name": "Garret Planning Network"
-  },
-  {
-   "id": "master-app-1788304927155",
-   "name": "XY Planning Network"
-  },
-  {
-   "id": "master-app-1788304939714",
-   "name": "Squarespace"
-  },
-  {
-   "id": "master-app-1788304946273",
-   "name": "Wordpress"
-  },
-  {
-   "id": "master-app-1788304956954",
-   "name": "TwentyOverTen"
-  },
-  {
-   "id": "master-app-1788304962643",
-   "name": "Wix"
-  },
-  {
-   "id": "master-app-1788304971641",
-   "name": "Google Contacts"
-  },
-  {
-   "id": "master-app-1788304982284",
-   "name": "Pulse360"
-  },
-  {
-   "id": "master-app-1788304990819",
-   "name": "Notion"
-  },
-  {
-   "id": "master-app-1788304998785",
-   "name": "OneNote"
-  },
-  {
-   "id": "master-app-1788305004213",
-   "name": "Todoist"
-  },
-  {
-   "id": "master-app-1788305017035",
-   "name": "Microsoft To Do"
-  },
-  {
-   "id": "master-app-1788305021746",
-   "name": "Trello"
-  },
-  {
-   "id": "master-app-1788305030625",
-   "name": "Asana"
-  },
-  {
-   "id": "master-app-1788305036740",
-   "name": "LastPass"
-  },
-  {
-   "id": "master-app-1788305042794",
-   "name": "Dashlane"
-  },
-  {
-   "id": "master-app-1788305047770",
-   "name": "Keeper"
-  },
-  {
-   "id": "master-app-1788305055593",
-   "name": "Vega Minds"
-  },
-  {
-   "id": "master-app-1788305061630",
-   "name": "Fathom"
-  },
-  {
-   "id": "master-app-1788305071985",
-   "name": "Fireflies.ai"
-  },
-  {
-   "id": "master-app-1788305081307",
-   "name": "MobileAssistant"
-  },
-  {
-   "id": "master-app-1788305100729",
-   "name": "Typeform"
-  },
-  {
-   "id": "master-app-1788305111585",
-   "name": "Cognito Form"
-  },
-  {
-   "id": "master-app-1788305129772",
-   "name": "Google Voice"
-  },
-  {
-   "id": "master-app-1788305138842",
-   "name": "GoTo Meeting"
-  },
-  {
-   "id": "master-app-1788305150874",
-   "name": "Microsoft Teams"
-  },
-  {
-   "id": "master-app-1788305160226",
-   "name": "RingCentral Meeting"
-  },
-  {
-   "id": "master-app-1788305167077",
-   "name": "Google Meet"
-  },
-  {
-   "id": "master-app-1788305178354",
-   "name": "OnceHub"
-  },
-  {
-   "id": "master-app-1788305186754",
-   "name": "YouCanBookMe"
-  },
-  {
-   "id": "master-app-1788305193002",
-   "name": "G Reminders"
-  },
-  {
-   "id": "master-app-1788305207360",
-   "name": "ActiveCampaign"
-  },
-  {
-   "id": "master-app-1788305222824",
-   "name": "MailerLite"
-  },
-  {
-   "id": "master-app-1788305228624",
-   "name": "Kit"
-  },
-  {
-   "id": "master-app-1788305233860",
-   "name": "Keap"
-  },
-  {
-   "id": "master-app-1788305243385",
-   "name": "Box"
-  },
-  {
-   "id": "master-app-1788305249515",
-   "name": "Dropbox"
-  },
-  {
-   "id": "master-app-1788305254068",
-   "name": "Egnyte"
-  },
-  {
-   "id": "master-app-1788305271985",
-   "name": "OneDrive"
-  },
-  {
-   "id": "master-app-1788305277536",
-   "name": "Sharepoint"
-  },
-  {
-   "id": "master-app-1788305283435",
-   "name": "ShareFile"
-  },
-  {
-   "id": "master-app-1788305293993",
-   "name": "FGM Suite"
-  },
-  {
-   "id": "master-app-1788305306064",
-   "name": "Airtable"
-  },
-  {
-   "id": "master-app-1788305320521",
-   "name": "Monday"
-  },
-  {
-   "id": "master-app-1788305338832",
-   "name": "Hubly"
-  },
-  {
-   "id": "master-app-1788305355665",
-   "name": "Process Street"
-  },
-  {
-   "id": "master-app-1788305382167",
-   "name": "Quickbooks"
-  },
-  {
-   "id": "master-app-1788305387920",
-   "name": "Pinterest"
-  },
-  {
-   "id": "master-app-1788305392135",
-   "name": "Canva"
-  },
-  {
-   "id": "master-app-1788305400513",
-   "name": "Riskalyze"
-  },
-  {
-   "id": "master-app-1788305406615",
-   "name": "FP Pathfinder"
-  },
-  {
-   "id": "master-app-1788305411512",
-   "name": "Datapoints"
-  },
-  {
-   "id": "master-app-1788305420959",
-   "name": "Morningstar"
-  },
-  {
-   "id": "master-app-1788305433304",
-   "name": "Circle Black"
-  },
-  {
-   "id": "master-app-1788305439455",
-   "name": "Orion"
-  },
-  {
-   "id": "master-app-1788305446623",
-   "name": "Tamarac"
-  },
-  {
-   "id": "master-app-1788305453759",
-   "name": "Capitect"
-  },
-  {
-   "id": "master-app-1788305463343",
-   "name": "LPL Financial"
-  },
-  {
-   "id": "master-app-1788305471295",
-   "name": "Altruist"
-  },
-  {
-   "id": "master-app-1788305482680",
-   "name": "First Ascent"
-  },
-  {
-   "id": "master-app-1788305487936",
-   "name": "TIAA"
-  },
-  {
-   "id": "master-app-1788305493575",
-   "name": "Fidelity"
-  },
-  {
-   "id": "master-app-1788305505855",
-   "name": "SSG"
-  },
-  {
-   "id": "master-app-1788305514743",
-   "name": "Betterment"
-  },
-  {
-   "id": "master-app-1788305522863",
-   "name": "Roboforms"
-  },
-  {
-   "id": "master-app-1788305564335",
-   "name": "Slant"
-  },
-  {
-   "id": "master-app-1788305610207",
-   "name": "Advyzon"
-  },
-  {
-   "id": "master-app-1788305637335",
-   "name": "Snappy Kraken"
-  },
-  {
-   "id": "master-app-1788305673974",
-   "name": "Koyfin"
-  },
-  {
-   "id": "master-app-1788305686024",
-   "name": "Allo"
-  },
-  {
-   "id": "master-app-1788305760267",
-   "name": "Wave"
-  },
-  {
-   "id": "master-app-1788305809839",
-   "name": "LinkedIn"
-  },
-  {
-   "id": "master-app-1788305814576",
-   "name": "Facebook"
-  },
-  {
-   "id": "master-app-1788305819615",
-   "name": "YouTube"
-  },
-  {
-   "id": "master-app-1788305824119",
-   "name": "TikTok"
-  },
-  {
-   "id": "master-app-1788305831359",
-   "name": "Instagram"
-  },
-  {
-   "id": "master-app-1788305893879",
-   "name": "Outlook Contacts"
-  },
-  {
-   "id": "master-app-1788305932895",
-   "name": "Excel"
-  },
-  {
-   "id": "master-app-1788305978082",
-   "name": "Office 365"
-  },
-  {
-   "id": "master-app-1788306029782",
-   "name": "Acuity"
-  },
-  {
-   "id": "master-app-1788306079198",
-   "name": "NAPFA"
-  },
-  {
-   "id": "master-app-1788306173326",
-   "name": "Slack"
-  },
-  {
-   "id": "master-app-1788306210142",
-   "name": "Loom"
-  },
-  {
-   "id": "master-app-1788306215583",
-   "name": "BombBomb"
-  },
-  {
-   "id": "master-app-1788382119983",
-   "name": "CLIC"
-  },
-  {
-   "id": "master-app-1789090841592",
-   "name": "Levitate"
-  },
-  {
-   "id": "master-app-1789527521775",
-   "name": "17 Hats"
-  },
-  {
-   "id": "master-app-1790729073629",
-   "name": "Wealth.com"
-  },
-  {
-   "id": "master-app-1795110162585",
-   "name": "Addepar"
-  }
- ]
+  "apps": [
+    {
+      "id": "master-app-1767936076742",
+      "name": "AdvicePay"
+    },
+    {
+      "id": "master-app-1767934864582",
+      "name": "Axos"
+    },
+    {
+      "id": "master-app-1767934560279",
+      "name": "Calendly"
+    },
+    {
+      "id": "master-app-1767977879193",
+      "name": "Constant Contact"
+    },
+    {
+      "id": "master-app-1767977861608",
+      "name": "DocuSign"
+    },
+    {
+      "id": "master-app-1767934677414",
+      "name": "Gmail"
+    },
+    {
+      "id": "master-app-1767977778824",
+      "name": "Google Calendar"
+    },
+    {
+      "id": "master-app-1767934766237",
+      "name": "Google Docs"
+    },
+    {
+      "id": "master-app-1767934694566",
+      "name": "Google Drive"
+    },
+    {
+      "id": "master-app-1774749468859",
+      "name": "Google Forms"
+    },
+    {
+      "id": "master-app-1767934715678",
+      "name": "Google Sheets"
+    },
+    {
+      "id": "master-app-1767934799829",
+      "name": "Hazel"
+    },
+    {
+      "id": "master-app-1767977842769",
+      "name": "Jotform"
+    },
+    {
+      "id": "master-app-1767934596064",
+      "name": "Wealthbox"
+    },
+    {
+      "id": "master-app-1767934530303",
+      "name": "Zapier"
+    },
+    {
+      "id": "master-app-1767934812047",
+      "name": "Zoom"
+    },
+    {
+      "id": "master-app-1767990053242",
+      "name": "1Password"
+    },
+    {
+      "id": "master-app-1788300902447",
+      "name": "Redtail"
+    },
+    {
+      "id": "master-app-1788301270078",
+      "name": "Contact Management"
+    },
+    {
+      "id": "master-app-1788301331366",
+      "name": "Zapier Email"
+    },
+    {
+      "id": "master-app-1788301343132",
+      "name": "Zapier Code"
+    },
+    {
+      "id": "master-app-1788301351883",
+      "name": "Zapier Tables"
+    },
+    {
+      "id": "master-app-1788301364619",
+      "name": "Zapier Formatter"
+    },
+    {
+      "id": "master-app-1788301372340",
+      "name": "Zapier Delay"
+    },
+    {
+      "id": "master-app-1788301378780",
+      "name": "Zapier Filter"
+    },
+    {
+      "id": "master-app-1788301387571",
+      "name": "Zapier Storage"
+    },
+    {
+      "id": "master-app-1788301412365",
+      "name": "PreciseFP"
+    },
+    {
+      "id": "master-app-1788301433749",
+      "name": "Mailchimp"
+    },
+    {
+      "id": "master-app-1788301472847",
+      "name": "AdobeSign"
+    },
+    {
+      "id": "master-app-1788301490005",
+      "name": "SEI"
+    },
+    {
+      "id": "master-app-1788301501733",
+      "name": "Schwab"
+    },
+    {
+      "id": "master-app-1788301526061",
+      "name": "eMoney"
+    },
+    {
+      "id": "master-app-1788301548532",
+      "name": "RightCapital"
+    },
+    {
+      "id": "master-app-1788301583084",
+      "name": "Allbridge"
+    },
+    {
+      "id": "master-app-1788301597628",
+      "name": "Black Diamond"
+    },
+    {
+      "id": "master-app-1788301612652",
+      "name": "Blueleaf"
+    },
+    {
+      "id": "master-app-1788301624437",
+      "name": "Kwanti"
+    },
+    {
+      "id": "master-app-1788301644397",
+      "name": "Jump.ai"
+    },
+    {
+      "id": "master-app-1788301651757",
+      "name": "Zocks"
+    },
+    {
+      "id": "master-app-1788301658996",
+      "name": "Otter.ai"
+    },
+    {
+      "id": "master-app-1788301678916",
+      "name": "Zoom Phone"
+    },
+    {
+      "id": "master-app-1788301684499",
+      "name": "RingCentral"
+    },
+    {
+      "id": "master-app-1788301691261",
+      "name": "Quo"
+    },
+    {
+      "id": "master-app-1788301697524",
+      "name": "CurrentClient"
+    },
+    {
+      "id": "master-app-1788301705949",
+      "name": "Intulse"
+    },
+    {
+      "id": "master-app-1788304821577",
+      "name": "AssetMark"
+    },
+    {
+      "id": "master-app-1788304836330",
+      "name": "MyRepChat"
+    },
+    {
+      "id": "master-app-1788304884426",
+      "name": "WealthTender"
+    },
+    {
+      "id": "master-app-1788304894294",
+      "name": "SmartAsset"
+    },
+    {
+      "id": "master-app-1788304903098",
+      "name": "Ramsey SmartVestor"
+    },
+    {
+      "id": "master-app-1788304914972",
+      "name": "Garret Planning Network"
+    },
+    {
+      "id": "master-app-1788304927155",
+      "name": "XY Planning Network"
+    },
+    {
+      "id": "master-app-1788304939714",
+      "name": "Squarespace"
+    },
+    {
+      "id": "master-app-1788304946273",
+      "name": "Wordpress"
+    },
+    {
+      "id": "master-app-1788304956954",
+      "name": "TwentyOverTen"
+    },
+    {
+      "id": "master-app-1788304962643",
+      "name": "Wix"
+    },
+    {
+      "id": "master-app-1788304971641",
+      "name": "Google Contacts"
+    },
+    {
+      "id": "master-app-1788304982284",
+      "name": "Pulse360"
+    },
+    {
+      "id": "master-app-1788304990819",
+      "name": "Notion"
+    },
+    {
+      "id": "master-app-1788304998785",
+      "name": "OneNote"
+    },
+    {
+      "id": "master-app-1788305004213",
+      "name": "Todoist"
+    },
+    {
+      "id": "master-app-1788305017035",
+      "name": "Microsoft To Do"
+    },
+    {
+      "id": "master-app-1788305021746",
+      "name": "Trello"
+    },
+    {
+      "id": "master-app-1788305030625",
+      "name": "Asana"
+    },
+    {
+      "id": "master-app-1788305036740",
+      "name": "LastPass"
+    },
+    {
+      "id": "master-app-1788305042794",
+      "name": "Dashlane"
+    },
+    {
+      "id": "master-app-1788305047770",
+      "name": "Keeper"
+    },
+    {
+      "id": "master-app-1788305055593",
+      "name": "Vega Minds"
+    },
+    {
+      "id": "master-app-1788305061630",
+      "name": "Fathom"
+    },
+    {
+      "id": "master-app-1788305071985",
+      "name": "Fireflies.ai"
+    },
+    {
+      "id": "master-app-1788305081307",
+      "name": "MobileAssistant"
+    },
+    {
+      "id": "master-app-1788305100729",
+      "name": "Typeform"
+    },
+    {
+      "id": "master-app-1788305111585",
+      "name": "Cognito Form"
+    },
+    {
+      "id": "master-app-1788305129772",
+      "name": "Google Voice"
+    },
+    {
+      "id": "master-app-1788305138842",
+      "name": "GoTo Meeting"
+    },
+    {
+      "id": "master-app-1788305150874",
+      "name": "Microsoft Teams"
+    },
+    {
+      "id": "master-app-1788305160226",
+      "name": "RingCentral Meeting"
+    },
+    {
+      "id": "master-app-1788305167077",
+      "name": "Google Meet"
+    },
+    {
+      "id": "master-app-1788305178354",
+      "name": "OnceHub"
+    },
+    {
+      "id": "master-app-1788305186754",
+      "name": "YouCanBookMe"
+    },
+    {
+      "id": "master-app-1788305193002",
+      "name": "G Reminders"
+    },
+    {
+      "id": "master-app-1788305207360",
+      "name": "ActiveCampaign"
+    },
+    {
+      "id": "master-app-1788305222824",
+      "name": "MailerLite"
+    },
+    {
+      "id": "master-app-1788305228624",
+      "name": "Kit"
+    },
+    {
+      "id": "master-app-1788305233860",
+      "name": "Keap"
+    },
+    {
+      "id": "master-app-1788305243385",
+      "name": "Box"
+    },
+    {
+      "id": "master-app-1788305249515",
+      "name": "Dropbox"
+    },
+    {
+      "id": "master-app-1788305254068",
+      "name": "Egnyte"
+    },
+    {
+      "id": "master-app-1788305271985",
+      "name": "OneDrive"
+    },
+    {
+      "id": "master-app-1788305277536",
+      "name": "Sharepoint"
+    },
+    {
+      "id": "master-app-1788305283435",
+      "name": "ShareFile"
+    },
+    {
+      "id": "master-app-1788305293993",
+      "name": "FGM Suite"
+    },
+    {
+      "id": "master-app-1788305306064",
+      "name": "Airtable"
+    },
+    {
+      "id": "master-app-1788305320521",
+      "name": "Monday"
+    },
+    {
+      "id": "master-app-1788305338832",
+      "name": "Hubly"
+    },
+    {
+      "id": "master-app-1788305355665",
+      "name": "Process Street"
+    },
+    {
+      "id": "master-app-1788305382167",
+      "name": "Quickbooks"
+    },
+    {
+      "id": "master-app-1788305387920",
+      "name": "Pinterest"
+    },
+    {
+      "id": "master-app-1788305392135",
+      "name": "Canva"
+    },
+    {
+      "id": "master-app-1788305400513",
+      "name": "Riskalyze"
+    },
+    {
+      "id": "master-app-1788305406615",
+      "name": "FP Pathfinder"
+    },
+    {
+      "id": "master-app-1788305411512",
+      "name": "Datapoints"
+    },
+    {
+      "id": "master-app-1788305420959",
+      "name": "Morningstar"
+    },
+    {
+      "id": "master-app-1788305433304",
+      "name": "Circle Black"
+    },
+    {
+      "id": "master-app-1788305439455",
+      "name": "Orion"
+    },
+    {
+      "id": "master-app-1788305446623",
+      "name": "Tamarac"
+    },
+    {
+      "id": "master-app-1788305453759",
+      "name": "Capitect"
+    },
+    {
+      "id": "master-app-1788305463343",
+      "name": "LPL Financial"
+    },
+    {
+      "id": "master-app-1788305471295",
+      "name": "Altruist"
+    },
+    {
+      "id": "master-app-1788305482680",
+      "name": "First Ascent"
+    },
+    {
+      "id": "master-app-1788305487936",
+      "name": "TIAA"
+    },
+    {
+      "id": "master-app-1788305493575",
+      "name": "Fidelity"
+    },
+    {
+      "id": "master-app-1788305505855",
+      "name": "SSG"
+    },
+    {
+      "id": "master-app-1788305514743",
+      "name": "Betterment"
+    },
+    {
+      "id": "master-app-1788305522863",
+      "name": "Roboforms"
+    },
+    {
+      "id": "master-app-1788305564335",
+      "name": "Slant"
+    },
+    {
+      "id": "master-app-1788305610207",
+      "name": "Advyzon"
+    },
+    {
+      "id": "master-app-1788305637335",
+      "name": "Snappy Kraken"
+    },
+    {
+      "id": "master-app-1788305673974",
+      "name": "Koyfin"
+    },
+    {
+      "id": "master-app-1788305686024",
+      "name": "Allo"
+    },
+    {
+      "id": "master-app-1788305760267",
+      "name": "Wave"
+    },
+    {
+      "id": "master-app-1788305809839",
+      "name": "LinkedIn"
+    },
+    {
+      "id": "master-app-1788305814576",
+      "name": "Facebook"
+    },
+    {
+      "id": "master-app-1788305819615",
+      "name": "YouTube"
+    },
+    {
+      "id": "master-app-1788305824119",
+      "name": "TikTok"
+    },
+    {
+      "id": "master-app-1788305831359",
+      "name": "Instagram"
+    },
+    {
+      "id": "master-app-1788305893879",
+      "name": "Outlook Contacts"
+    },
+    {
+      "id": "master-app-1788305932895",
+      "name": "Excel"
+    },
+    {
+      "id": "master-app-1788305978082",
+      "name": "Office 365"
+    },
+    {
+      "id": "master-app-1788306029782",
+      "name": "Acuity"
+    },
+    {
+      "id": "master-app-1788306079198",
+      "name": "NAPFA"
+    },
+    {
+      "id": "master-app-1788306173326",
+      "name": "Slack"
+    },
+    {
+      "id": "master-app-1788306210142",
+      "name": "Loom"
+    },
+    {
+      "id": "master-app-1788306215583",
+      "name": "BombBomb"
+    },
+    {
+      "id": "master-app-1788382119983",
+      "name": "CLIC"
+    },
+    {
+      "id": "master-app-1789090841592",
+      "name": "Levitate"
+    },
+    {
+      "id": "master-app-1789527521775",
+      "name": "17 Hats"
+    },
+    {
+      "id": "master-app-1790729073629",
+      "name": "Wealth.com"
+    },
+    {
+      "id": "master-app-1795110162585",
+      "name": "Addepar"
+    },
+    {
+      "id": "master-app-1795130744168",
+      "name": "Claude"
+    },
+    {
+      "id": "master-app-1795130769864",
+      "name": "Copilot"
+    },
+    {
+      "id": "master-app-1795130795921",
+      "name": "ChatGPT"
+    },
+    {
+      "id": "master-app-1795130812313",
+      "name": "Gemini"
+    },
+    {
+      "id": "master-app-1795130873112",
+      "name": "Granola"
+    },
+    {
+      "id": "master-app-1795138988965",
+      "name": "MoneyGuidePro"
+    },
+    {
+      "id": "master-app-1795139000587",
+      "name": "Voyant"
+    },
+    {
+      "id": "master-app-1795139017664",
+      "name": "Holistiplan"
+    },
+    {
+      "id": "master-app-1795139035123",
+      "name": "NaviPlan"
+    },
+    {
+      "id": "master-app-1795139057915",
+      "name": "Income Lab"
+    },
+    {
+      "id": "master-app-1795139074306",
+      "name": "Morningstar Office"
+    },
+    {
+      "id": "master-app-1795139110010",
+      "name": "Orion Eclipse"
+    },
+    {
+      "id": "master-app-1795139129385",
+      "name": "BNY Pershing"
+    },
+    {
+      "id": "master-app-1795139145960",
+      "name": "Smarsh"
+    },
+    {
+      "id": "master-app-1795139155698",
+      "name": "Global Relay"
+    },
+    {
+      "id": "master-app-1795139166138",
+      "name": "RIA in a Box"
+    },
+    {
+      "id": "master-app-1795139182980",
+      "name": "Docupace"
+    }
+  ]
 }
