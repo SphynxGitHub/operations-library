@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:31:11Z",
+  "generatedAt": "2026-11-20T01:31:17Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1022,11 +1022,27 @@
     {
       "id": "master-app-1788305036740",
       "name": "LastPass",
-      "status": "not_found",
-      "sourceUrl": "https://www.lastpass.com/pricing",
+      "status": "found",
+      "sourceUrl": "https://www.lastpass.com/pricing?business",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Pricing page (rechecked) still shows only unrendered template placeholders ({LPTeams} etc.), billed annually; no USD amounts readable."
+      "tiers": [
+        {
+          "name": "Teams (per user) (annual billing)",
+          "price": 4.25,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 7.0,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Business Max (per user) (annual billing)",
+          "price": 11.0,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Business plans from user-supplied screenshot of the pricing page; Personal plans not recorded."
     },
     {
       "id": "master-app-1788305042794",
