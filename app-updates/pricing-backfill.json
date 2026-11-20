@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:14:17Z",
+  "generatedAt": "2026-11-20T00:15:04Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1017,11 +1017,27 @@
     {
       "id": "master-app-1788305055593",
       "name": "Vega Minds",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "No official pricing page found in search results."
+      "status": "found",
+      "sourceUrl": "https://vegaminds.com/pricing/",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Core",
+          "price": 50,
+          "notes": "monthly billing; $500/year billed annually; per-user basis not stated; 14-day trial"
+        },
+        {
+          "name": "Pro",
+          "price": 100,
+          "notes": "monthly billing; $1,000/year billed annually; per-user basis not stated; 14-day trial"
+        },
+        {
+          "name": "Premium Vega Partnership (custom)",
+          "price": 4000,
+          "notes": "engagements start at $4,000/month; quote-based"
+        }
+      ],
+      "note": "Premium Vega Partnership scales with firm size; contact sales."
     },
     {
       "id": "master-app-1788305071985",
