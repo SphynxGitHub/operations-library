@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:15:53Z",
+  "generatedAt": "2026-11-20T01:17:20Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1806,11 +1806,17 @@
     {
       "id": "master-app-1788305610207",
       "name": "Advyzon",
-      "status": "not_found",
-      "sourceUrl": "https://www.advyzon.com/pricing",
+      "status": "found",
+      "sourceUrl": "",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "Starting price",
+          "price": 6500,
+          "notes": "'starts at' per month, as stated by user; billing basis not stated"
+        }
+      ],
+      "note": "Price supplied by user; official page could not be fetched."
     },
     {
       "id": "master-app-1788305637335",
