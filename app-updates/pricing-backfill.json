@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:20:31Z",
+  "generatedAt": "2026-11-20T01:20:51Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1398,11 +1398,11 @@
     {
       "id": "master-app-1788305277536",
       "name": "Sharepoint",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "https://www.microsoft.com/en-au/microsoft-365/sharepoint/sharepoint-business-plans-and-pricing",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Only en-au page opened (AUD prices); en-us page fetch refused; USD not verified"
+      "note": "Included in Microsoft 365 (per user); see Office 365 entry for plan prices."
     },
     {
       "id": "master-app-1788305293993",
