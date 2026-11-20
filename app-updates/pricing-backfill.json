@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:58:42Z",
+  "generatedAt": "2026-11-20T01:59:18Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2875,6 +2875,15 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: quote-only; estimated $3-$197 per month per user (user estimate, not from an official page)."
+    },
+    {
+      "id": "master-app-1795139182980",
+      "name": "Docupace",
+      "status": "quote_only",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user: quote-based only; no pricing published."
     }
   ]
 }
