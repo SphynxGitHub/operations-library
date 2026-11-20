@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:01:53Z",
+  "generatedAt": "2026-11-20T00:02:46Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1772,6 +1772,113 @@
         }
       ],
       "note": "Enterprise is contact-sales."
+    },
+    {
+      "id": "master-app-1788305893879",
+      "name": "Outlook Contacts",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Feature bundled in Microsoft 365/Outlook; see Office 365 for plan prices."
+    },
+    {
+      "id": "master-app-1788305932895",
+      "name": "Excel",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Feature bundled in Microsoft 365; see Office 365 for plan prices."
+    },
+    {
+      "id": "master-app-1788305978082",
+      "name": "Office 365",
+      "status": "found",
+      "sourceUrl": "https://www.microsoft.com/en-us/microsoft-teams/compare-microsoft-teams-options",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Microsoft 365 Business Basic (per user) (annual billing)",
+          "price": 7,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Microsoft 365 Business Standard with Copilot (per user) (annual billing)",
+          "price": 23.5,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788306215583",
+      "name": "BombBomb",
+      "status": "found",
+      "sourceUrl": "https://bombbomb.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Core (per user)",
+          "price": 42,
+          "notes": "monthly billing (per page FAQ); $36 billed annually"
+        },
+        {
+          "name": "Pro (per user)",
+          "price": 70,
+          "notes": "monthly billing (per page FAQ); $56 billed annually"
+        }
+      ],
+      "note": "Enterprise is custom pricing."
+    },
+    {
+      "id": "master-app-1788382119983",
+      "name": "CLIC",
+      "status": "not_found",
+      "sourceUrl": "https://www.clic.net",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Vendor unclear; the clic.net site is an unrelated Canadian web host with CAD prices."
+    },
+    {
+      "id": "master-app-1789090841592",
+      "name": "Levitate",
+      "status": "not_found",
+      "sourceUrl": "https://www.levitate.ai/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Fetch of pricing page failed (client error)."
+    },
+    {
+      "id": "master-app-1789527521775",
+      "name": "17 Hats",
+      "status": "found",
+      "sourceUrl": "https://www.17hats.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "All-inclusive plan",
+          "price": 60,
+          "notes": "monthly billing; $600/year billed annually; Free CRM plan also offered"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1790729073629",
+      "name": "Wealth.com",
+      "status": "quote_only",
+      "sourceUrl": "https://wealth.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Pricing page shows Get Pricing / contact buttons only; no prices."
+    },
+    {
+      "id": "master-app-1795110162585",
+      "name": "Addepar",
+      "status": "quote_only",
+      "sourceUrl": "https://addepar.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "No published pricing; page is a contact/demo page."
     }
   ]
 }
