@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:55:35Z",
+  "generatedAt": "2026-11-20T01:56:10Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2853,10 +2853,10 @@
       "id": "master-app-1795139145960",
       "name": "Smarsh",
       "status": "quote_only",
-      "sourceUrl": "",
+      "sourceUrl": "https://www.smarsh.com/media/2021-06-Pro-Archive-FeatureMatrix-Business.pdf",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Per user: quote-only; average roughly $12-$25 per user per month. Not from an official vendor page."
+      "note": "Per user: quote-only; average roughly $12-$25 per user per month (not from an official page). Source is a June 2021 Professional Archive feature matrix that lists only add-on fees (e.g. Personal Access $5/user/month); package prices (Silver/Gold/Platinum) are by quote and the figures may be outdated."
     }
   ]
 }
