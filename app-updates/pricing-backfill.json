@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:52:12Z",
+  "generatedAt": "2026-11-20T01:52:43Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2839,6 +2839,15 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: Copilot is included in Microsoft; no separate software pricing."
+    },
+    {
+      "id": "master-app-1795139035123",
+      "name": "NaviPlan",
+      "status": "quote_only",
+      "sourceUrl": "",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user: quote-only; average roughly $175-$275 per user per month. Not from an official vendor page."
     }
   ]
 }
