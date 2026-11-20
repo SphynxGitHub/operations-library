@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:59:51Z",
+  "generatedAt": "2026-11-20T02:01:02Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2893,6 +2893,15 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: Morningstar Office is retired; no current pricing."
+    },
+    {
+      "id": "master-app-1795139110010",
+      "name": "Orion Eclipse",
+      "status": "quote_only",
+      "sourceUrl": "https://orionadvisorservices.my.site.com/OrionSupportApp/s/article/Communities-FAQ",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user-supplied text from Orion's Communities FAQ: Eclipse (includes Orion Investment Portal) is priced at 15% of your annual Orion contract, with a minimum of $6,000 per year. Strategist-only use of Investment Portal has a separate tiered fee. Depends on your Orion contract, so not a standalone monthly price."
     }
   ]
 }
