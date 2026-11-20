@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:15:08Z",
+  "generatedAt": "2026-11-20T01:15:53Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1613,11 +1613,27 @@
     {
       "id": "master-app-1788305406615",
       "name": "FP Pathfinder",
-      "status": "not_found",
-      "sourceUrl": "https://www.fppathfinder.com/pricing",
+      "status": "found",
+      "sourceUrl": "https://www.fppathfinder.com/become-a-member/",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "Essentials (per user) (annual billing)",
+          "price": 16.58,
+          "notes": "page shows $199/year billed annually only; per-month figure is $199 divided by 12; monthly price not shown"
+        },
+        {
+          "name": "Deluxe (per user) (annual billing)",
+          "price": 33.25,
+          "notes": "page shows $399/year billed annually only; per-month figure is $399 divided by 12; monthly price not shown"
+        },
+        {
+          "name": "Premier (per user) (annual billing)",
+          "price": 49.92,
+          "notes": "page shows $599/year billed annually only; per-month figure is $599 divided by 12; monthly price not shown"
+        }
+      ],
+      "note": "Prices are yearly memberships ($199, $399, $599 per user per year); no monthly option shown. Advisor Teams group pricing is by quote."
     },
     {
       "id": "master-app-1788305411512",
