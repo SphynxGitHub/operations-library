@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:15:04Z",
+  "generatedAt": "2026-11-20T00:15:59Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1072,11 +1072,11 @@
     {
       "id": "master-app-1788305081307",
       "name": "MobileAssistant",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "No official pricing page found in search results."
+      "note": "Acquired by Jump (per user); no separate pricing. See Jump.ai entry."
     },
     {
       "id": "master-app-1788305100729",
