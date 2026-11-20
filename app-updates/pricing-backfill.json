@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:37:53Z",
+  "generatedAt": "2026-11-20T01:39:44Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2004,11 +2004,11 @@
     {
       "id": "master-app-1788305505855",
       "name": "SSG",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Vendor unclear from the name; no official pricing page identified."
+      "note": "Per user: SSG is a custodian, not a tech platform, and was acquired by Altruist; no software pricing."
     },
     {
       "id": "master-app-1788305514743",
