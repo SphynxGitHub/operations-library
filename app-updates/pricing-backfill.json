@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:17:20Z",
+  "generatedAt": "2026-11-20T01:17:41Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1811,12 +1811,12 @@
       "checkedAt": "2026-11-20",
       "tiers": [
         {
-          "name": "Starting price",
-          "price": 6500,
-          "notes": "'starts at' per month, as stated by user; billing basis not stated"
+          "name": "Starting price (annual billing)",
+          "price": 541.67,
+          "notes": "starts at $6,500 per year, as stated by user; per-month figure is $6,500 divided by 12; monthly price not shown"
         }
       ],
-      "note": "Price supplied by user; official page could not be fetched."
+      "note": "Price supplied by user ($6,500 per year); official page could not be fetched."
     },
     {
       "id": "master-app-1788305637335",
