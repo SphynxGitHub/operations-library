@@ -584,6 +584,16 @@
       "name": "BNY Pershing",
       "pricingUrl": "https://www.bny.com/corporate/global/en/about-us/newsroom/press-release/bny-mellon-s-pershing-unveils-subscription-pricing-for-ria-custod-brings-more-choice-to-advisors-130101.html",
       "releaseNotesUrl": ""
+    },
+    {
+      "name": "Google Meet",
+      "pricingUrl": "https://workspace.google.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Google Voice",
+      "pricingUrl": "https://workspace.google.com/products/voice/",
+      "releaseNotesUrl": ""
     }
   ]
 }
