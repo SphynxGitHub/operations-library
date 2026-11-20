@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:21:48Z",
+  "generatedAt": "2026-11-20T01:22:30Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1726,11 +1726,27 @@
     {
       "id": "master-app-1788305453759",
       "name": "Capitect",
-      "status": "not_found",
-      "sourceUrl": "https://www.capitect.com/pricing",
+      "status": "found",
+      "sourceUrl": "https://www.capitect.com/#pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "Discover Starter",
+          "price": 215,
+          "notes": "per plan, up to 10 client households; shown as /month, toggle state not confirmed; one-year commitment"
+        },
+        {
+          "name": "Discover Standard",
+          "price": 385,
+          "notes": "per plan, up to 50 client households; shown as /month, toggle state not confirmed; one-year commitment"
+        },
+        {
+          "name": "Discover Professional",
+          "price": 500,
+          "notes": "per plan, first 100 households, then +$100/month per additional 50; over 300 households contact us; one-year commitment"
+        }
+      ],
+      "note": "Pricing is per plan tiered by client households, not per user. Page has Pay monthly / Pay annually (1 month free) toggle; annual figures not shown. Account Aggregation add-on from $65/month."
     },
     {
       "id": "master-app-1788305463343",
