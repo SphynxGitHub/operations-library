@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:56:10Z",
+  "generatedAt": "2026-11-20T01:56:50Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2857,6 +2857,15 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: quote-only; average roughly $12-$25 per user per month (not from an official page). Source is a June 2021 Professional Archive feature matrix that lists only add-on fees (e.g. Personal Access $5/user/month); package prices (Silver/Gold/Platinum) are by quote and the figures may be outdated."
+    },
+    {
+      "id": "master-app-1795139166138",
+      "name": "RIA in a Box",
+      "status": "quote_only",
+      "sourceUrl": "https://www.comply.com/products/comply-ria",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Per user: RIA in a Box is now COMPLY. Product page lists no prices; only demo booking is offered, so pricing appears to be by quote."
     }
   ]
 }
