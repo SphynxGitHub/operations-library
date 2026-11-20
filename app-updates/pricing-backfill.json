@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:39:44Z",
+  "generatedAt": "2026-11-20T01:39:59Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2005,7 +2005,7 @@
       "id": "master-app-1788305505855",
       "name": "SSG",
       "status": "no_software_pricing",
-      "sourceUrl": "",
+      "sourceUrl": "https://ssginstitutional.com/",
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: SSG is a custodian, not a tech platform, and was acquired by Altruist; no software pricing."
