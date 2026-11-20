@@ -156,6 +156,7 @@ export async function savePeriodUpgrade(period, grants, opts) {
     const n = await db.from('maintenance_plan_period').insert(plan.next.period).select('id').single();
     if (n.error) return { error: friendly(n.error) };
     if (plan.next.grant) { const g = await db.from('hours_grant').insert({ ...plan.next.grant, period_id: n.data.id }); if (g.error) return { error: friendly(g.error) }; }
+    if (plan.carryover) { const c = await db.from('hours_grant').insert(plan.carryover); if (c.error) return { error: friendly(c.error) }; }
     return { ok: true };
 }
 
@@ -444,7 +445,7 @@ function periodCardHtml(client, slot, ledger) {
                         <input type="checkbox" ${active.renewing ? 'checked' : ''} onchange="OL.setPeriodRenewing('${esc(active.id)}', this.checked)"> Renewing
                     </label>
                     <button class="btn tiny soft" onclick="OL.openEditPeriodModal('${esc(active.id)}')">Edit</button>
-                    <button class="btn tiny soft" onclick="OL.openUpgradeTierModal('${esc(active.id)}')"><i data-lucide="trending-up" style="width:12px;height:12px;"></i> Upgrade tier</button>
+                    <button class="btn tiny soft" onclick="OL.openUpgradeTierModal('${esc(active.id)}')"><i data-lucide="trending-up" style="width:12px;height:12px;"></i> Change tier</button>
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
@@ -783,21 +784,38 @@ export async function submitClosePeriod(periodId) {
 export function openUpgradeTierModal(periodId) {
     const { period } = findPeriod(periodId); if (!period) return;
     const opts = MAINTENANCE_TIERS.map((t) => `<option value="${esc(t.title)}">${esc(t.title)} · ${esc(hoursText(t.hours))}</option>`).join('');
-    openModal(`${modalHead('Upgrade tier')}<div class="modal-body" style="padding-top:14px;">
-        <p class="tiny muted" style="margin-bottom:14px;">The current tier is prorated for the months it ran and ends the day before the upgrade. Hours the old tier went over are covered by the new tier's hours.</p>
-        ${field('Upgrade to', `<select id="ut-tier" class="modal-input" onchange="OL.utRecalc('${esc(periodId)}')">${opts}</select>`)}
-        ${field('Upgrade date', `<input id="ut-date" type="date" class="modal-input" value="${todayIso()}" oninput="OL.utRecalc('${esc(periodId)}')">`)}
+    openModal(`${modalHead('Change tier')}<div class="modal-body" style="padding-top:14px;">
+        <p class="tiny muted" style="margin-bottom:14px;">The current tier is prorated for the months it ran and ends the day before the change. Hours the old tier went over are covered by the new tier's hours. This works for a downgrade as well as an upgrade.</p>
+        ${field('Change to', `<select id="ut-tier" class="modal-input" onchange="OL.utRecalc('${esc(periodId)}')">${opts}</select>`)}
+        ${field('Change date', `<input id="ut-date" type="date" class="modal-input" value="${todayIso()}" oninput="OL.utRecalc('${esc(periodId)}')">`)}
         <label class="tiny" style="display:flex; gap:8px; align-items:flex-start; margin-bottom:8px; cursor:pointer;"><input type="radio" name="ut-mode" value="finish" checked style="width:auto !important; margin-top:2px;" onchange="OL.utRecalc('${esc(periodId)}')"><span><strong>Finish current period</strong><br><span class="muted">The new tier runs to ${esc(niceDate(period.due_date))}, with its hours prorated for the time left.</span></span></label>
         <label class="tiny" style="display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; cursor:pointer;"><input type="radio" name="ut-mode" value="extend" style="width:auto !important; margin-top:2px;" onchange="OL.utRecalc('${esc(periodId)}')"><span><strong>Extend period</strong><br><span class="muted">The new tier starts on the upgrade date for a full year, with all of its hours.</span></span></label>
         <div id="ut-preview" class="card tiny" style="padding:12px; margin-bottom:12px;"></div>
-        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitUpgradeTier('${esc(periodId)}')">Upgrade tier</button></div>`);
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${field('Carry unused hours forward (h)', `<input id="ut-carry" type="number" min="0" step="0.25" class="modal-input" oninput="this.dataset.touched='1'; OL.utRecalc('${esc(periodId)}')">`)}
+            ${field('Carryover expires', `<input id="ut-carry-exp" type="date" class="modal-input" oninput="this.dataset.touched='1'">`)}
+        </div>
+        <div id="ut-carry-note" class="tiny muted" style="margin:-6px 0 12px;"></div>
+        <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitUpgradeTier('${esc(periodId)}')">Change tier</button></div>`);
     utRecalc(periodId);
 }
-const utOpts = () => ({ newTier: val('ut-tier'), effective: val('ut-date'), mode: document.querySelector('input[name="ut-mode"]:checked')?.value || 'finish' });
+const utOpts = () => ({ newTier: val('ut-tier'), effective: val('ut-date'), mode: document.querySelector('input[name="ut-mode"]:checked')?.value || 'finish', carryHours: val('ut-carry'), carryExpires: val('ut-carry-exp') });
 export function utRecalc(periodId) {
     const { period, grants } = findPeriod(periodId); const box = document.getElementById('ut-preview'); if (!period || !box) return;
     const plan = planUpgradeTier({ period, grants, ...utOpts() });
     if (plan.error) { box.innerHTML = `<span class="muted">${esc(plan.error)}</span>`; return; }
+    // Suggest carrying forward what is left of the old tier's prorated hours (until the person types their own figure).
+    const carryEl = document.getElementById('ut-carry'), expEl = document.getElementById('ut-carry-exp'), noteEl = document.getElementById('ut-carry-note');
+    if (carryEl && expEl) {
+        const client = getActiveClient(), slot = slotFor(client?.id);
+        const old = (grants || []).find((g) => g.period_id === period.id && g.source === 'plan_allotment' && g.status === 'active') || (grants || []).find((g) => g.period_id === period.id && g.source === 'plan_allotment');
+        let used = 0;
+        try { used = old ? usedHoursOf(ledgerFor(client, slot), old) : 0; } catch (e) { console.error(e); }
+        const unused = Math.max(0, Math.round((plan.oldProrated - used) * 100) / 100);
+        if (!carryEl.dataset.touched) carryEl.value = unused > 0 ? String(unused) : '';
+        if (!expEl.dataset.touched) expEl.value = carryoverExpiry(plan.dayBefore, !!period.renewing);
+        if (noteEl) noteEl.textContent = `The old tier's prorated hours are ${hoursText(plan.oldProrated)} and ${hoursText(Math.round(used * 100) / 100)} have been used so far. Whatever you enter here stays available as a courtesy carryover; clear it (or enter 0) to let the unused hours end with the old tier.`;
+    }
     const mo = (n) => `${Math.round(n * 100) / 100} month${Math.round(n * 100) / 100 === 1 ? '' : 's'}`;
     box.innerHTML = `<div><strong>${esc(periodTierTitle(period, plan.oldHours) || 'Current tier')}</strong>: ${esc(niceDate(period.start_date))} to ${esc(niceDate(plan.dayBefore))}, ${esc(mo(plan.elapsedMonths))}, <strong>${esc(hoursText(plan.oldProrated))}</strong> of ${esc(hoursText(plan.oldHours))}</div>
         <div style="margin-top:4px;"><strong>${esc(val('ut-tier'))}</strong>: ${esc(niceDate(plan.newStart))} to ${esc(niceDate(plan.newDue))}${plan.remainingMonths != null ? `, ${esc(mo(plan.remainingMonths))}` : ', full year'}, <strong>${esc(hoursText(plan.newHours))}</strong></div>`;

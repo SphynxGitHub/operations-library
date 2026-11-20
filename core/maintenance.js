@@ -320,7 +320,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 // "extend": the new tier starts on the upgrade date for a full year. Either way the old tier is prorated for the
 // months it ran and ends the day before. Unused old-tier hours end with it; overage the old tier ran up is covered
 // by the new hours (covers_from), so it is not charged twice.
-export function planUpgradeTier({ period, grants = [], newTier, mode, effective }) {
+export function planUpgradeTier({ period, grants = [], newTier, mode, effective, carryHours = 0, carryExpires = '' }) {
     const t = tierByTitle(newTier);
     if (!t) return { error: 'Pick the tier to upgrade to.' };
     if (mode !== 'finish' && mode !== 'extend') return { error: 'Choose finish current period or extend period.' };
@@ -342,7 +342,19 @@ export function planUpgradeTier({ period, grants = [], newTier, mode, effective 
         newDue = periodDue(effective);
         newHours = t.hours;
     }
+    // Optional: hours left on the old tier carried forward as a courtesy carryover (the usual 3 months, or 6 if renewing, after the old tier ends)
+    // instead of ending with it. The expiry can be typed in.
+    const carry = cleanHours(carryHours);
+    let carryover = null;
+    if (carry > 0) {
+        const custom = String(carryExpires || '').trim();
+        if (custom && (!validDate(custom) || custom <= dayBefore)) return { error: 'The carryover expiry must be after the old tier ends.' };
+        carryover = { client_id: period.client_id, period_id: period.id, source: 'courtesy_carryover', hours_granted: carry, granted_on: effective,
+                      expires_on: custom || carryoverExpiry(dayBefore, !!period.renewing), status: 'active',
+                      note: `Carried forward from the ${period.tier || 'previous'} tier, which ended ${dayBefore}` };
+    }
     return {
+        carryover,
         oldProrated, oldHours, elapsedMonths: elapsed, remainingMonths: remaining, newHours, newStart, newDue, dayBefore,
         periodUpdate: { due_date: dayBefore, status: 'closed' },
         grantUpdate: allot ? { id: allot.id, patch: { hours_granted: oldProrated, expires_on: dayBefore } } : null,
