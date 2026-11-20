@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:20:51Z",
+  "generatedAt": "2026-11-20T00:23:00Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1996,11 +1996,11 @@
     {
       "id": "master-app-1788382119983",
       "name": "CLIC",
-      "status": "not_found",
-      "sourceUrl": "https://www.clic.net",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Vendor unclear; the clic.net site is an unrelated Canadian web host with CAD prices."
+      "note": "Bundled into Cambridge fees (per user); no separate software pricing."
     },
     {
       "id": "master-app-1789090841592",
