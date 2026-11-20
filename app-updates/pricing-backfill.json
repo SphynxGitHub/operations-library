@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T02:01:02Z",
+  "generatedAt": "2026-11-20T02:01:42Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2902,6 +2902,21 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user-supplied text from Orion's Communities FAQ: Eclipse (includes Orion Investment Portal) is priced at 15% of your annual Orion contract, with a minimum of $6,000 per year. Strategist-only use of Investment Portal has a separate tiered fee. Depends on your Orion contract, so not a standalone monthly price."
+    },
+    {
+      "id": "master-app-1795139129385",
+      "name": "BNY Pershing",
+      "status": "found",
+      "sourceUrl": "https://www.bny.com/corporate/global/en/about-us/newsroom/press-release/bny-mellon-s-pershing-unveils-subscription-pricing-for-ria-custod-brings-more-choice-to-advisors-130101.html",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Subscription pricing (starting at)",
+          "price": 25,
+          "notes": "Per month, tiered by assets under custody; no transaction fees on ETFs, equities, fixed income, mutual funds; excludes alternatives, foreign trading/FX, lending, paper confirmations and misc. cash management fees"
+        }
+      ],
+      "note": "Custodian, not a software platform. Figure is from a March 5, 2020 BNY Mellon press release and may be outdated. Zero-transaction-fee and variable (customized asset/transaction-based) pricing also offered, with no amounts published."
     }
   ]
 }
