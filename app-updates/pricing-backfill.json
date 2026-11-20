@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:48:22Z",
+  "generatedAt": "2026-11-20T01:48:48Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2745,6 +2745,50 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Pricing is per household; help article gives no dollar amounts."
+    },
+    {
+      "id": "master-app-1795139000587",
+      "name": "Voyant",
+      "status": "found",
+      "sourceUrl": "https://planwithvoyant.com/us/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "AdviserGo (adviser)",
+          "price": 150,
+          "notes": "Per month"
+        },
+        {
+          "name": "AdviserGo (auxiliary user)",
+          "price": 50,
+          "notes": "Per month; assistants/paraplanners only"
+        },
+        {
+          "name": "White Labeling service charge",
+          "price": 60,
+          "notes": "Per month plus $750 one-time set-up"
+        },
+        {
+          "name": "Vault (per client)",
+          "price": 3,
+          "notes": "Per client per month"
+        },
+        {
+          "name": "ClientGo (first 25 client licenses)",
+          "price": 100,
+          "notes": "Per month; additional 25-license bundles $75/month"
+        }
+      ],
+      "note": "Snapshot is price-on-request; Enterprise Solutions has no price listed. Only monthly prices shown."
+    },
+    {
+      "id": "master-app-1795130812313",
+      "name": "Gemini",
+      "status": "not_found",
+      "sourceUrl": "https://knowledge.workspace.google.com/admin/gemini/how-google-workspace-with-gemini-billing-works",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Only Google AI Pro for Education prices found ($24 flexible / $20 annual-plan per user per month); consumer and Business plans not confirmed from an official page."
     }
   ]
 }
