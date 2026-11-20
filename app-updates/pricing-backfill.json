@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:19:14Z",
+  "generatedAt": "2026-11-20T00:20:51Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1614,11 +1614,11 @@
     {
       "id": "master-app-1788305420959",
       "name": "Morningstar",
-      "status": "not_found",
+      "status": "quote_only",
       "sourceUrl": "https://www.morningstar.com/products/morningstar-office",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Fetched page returned no readable content; second URL failed."
+      "note": "Pricing by quote only (confirmed by user)."
     },
     {
       "id": "master-app-1788305433304",
