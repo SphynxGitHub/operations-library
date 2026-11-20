@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:29:45Z",
+  "generatedAt": "2026-11-20T01:30:05Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1299,11 +1299,32 @@
     {
       "id": "master-app-1788305207360",
       "name": "ActiveCampaign",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://www.activecampaign.com/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Pricing page (rechecked) still shows only \"--\" placeholders (billed yearly); no USD amounts readable."
+      "tiers": [
+        {
+          "name": "Starter (annual billing)",
+          "price": 15,
+          "notes": "starts at, 1,000 contacts, 10,000 sends/month, 1 seat; monthly price not shown; billed yearly"
+        },
+        {
+          "name": "Plus (annual billing)",
+          "price": 49,
+          "notes": "starts at, 1,000 contacts, 10,000 sends/month, 1 seat; monthly price not shown; billed yearly"
+        },
+        {
+          "name": "Pro (annual billing)",
+          "price": 79,
+          "notes": "starts at, 1,000 contacts, 12,000 sends/month, 3 seats; monthly price not shown; billed yearly"
+        },
+        {
+          "name": "Enterprise (annual billing)",
+          "price": 145,
+          "notes": "starts at, 1,000 contacts, 15,000 sends/month, 5 seats; monthly price not shown; billed yearly"
+        }
+      ],
+      "note": "Prices from user-supplied screenshot at 1,000 contacts; price scales with contact count."
     },
     {
       "id": "master-app-1788305222824",
