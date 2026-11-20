@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:53:19Z",
+  "generatedAt": "2026-11-20T01:13:50Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1135,11 +1135,22 @@
     {
       "id": "master-app-1788305138842",
       "name": "GoTo Meeting",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://www.goto.com/pricing/meeting",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Pricing page opened (Professional and Business, per organizer, billed annually; Enterprise contact sales) but prices are loaded by JavaScript and were not readable; buy pages returned empty shells."
+      "tiers": [
+        {
+          "name": "Professional (per organizer) (annual billing)",
+          "price": 14,
+          "notes": "150 participants; page text says billed annually; screenshot showed Monthly toggle selected, so billing cycle not fully confirmed"
+        },
+        {
+          "name": "Business (per organizer) (annual billing)",
+          "price": 19,
+          "notes": "250 participants; page text says billed annually; screenshot showed Monthly toggle selected, so billing cycle not fully confirmed"
+        }
+      ],
+      "note": "Prices from user-supplied screenshot (page loads prices with JavaScript). Enterprise is contact sales."
     },
     {
       "id": "master-app-1788305150874",
