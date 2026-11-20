@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:31:17Z",
+  "generatedAt": "2026-11-20T01:31:52Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -430,11 +430,32 @@
     {
       "id": "master-app-1788301433749",
       "name": "Mailchimp",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://mailchimp.com/pricing/",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Page opened but shows only 12-month promo prices (Essentials $13, Standard $20, Premium $350) with the regular post-promo prices and contact tier not readable; Free plan limit 250 contacts."
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "Under 250 contacts"
+        },
+        {
+          "name": "Essentials",
+          "price": 13,
+          "notes": "Starts at, per month, 0-500 contacts"
+        },
+        {
+          "name": "Standard",
+          "price": 20,
+          "notes": "Starts at, per month, 0-500 contacts; sends up to 6,000 emails/month"
+        },
+        {
+          "name": "Premium",
+          "price": 350,
+          "notes": "Starts at, per month; unlimited contacts"
+        }
+      ],
+      "note": "From user-supplied screenshot of the pricing page; prices start at the 0-500 contact tier and scale with contacts. Billing cycle not stated."
     },
     {
       "id": "master-app-1788301490005",
