@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:02:46Z",
+  "generatedAt": "2026-11-20T00:05:52Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -421,15 +421,6 @@
       "note": "Page showed promo prices for 12 months; could not verify standard monthly price per contact tier"
     },
     {
-      "id": "master-app-1788301472847",
-      "name": "AdobeSign",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official adobe.com pricing page could not be fetched this run"
-    },
-    {
       "id": "master-app-1788301490005",
       "name": "SEI",
       "status": "no_software_pricing",
@@ -507,24 +498,6 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Priced per client household; no prices published, get a quote"
-    },
-    {
-      "id": "master-app-1788301624437",
-      "name": "Kwanti",
-      "status": "not_found",
-      "sourceUrl": "https://www.kwanti.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows prices billed annually only (Single $224, Multi $195 per user/mo, 5-user min); monthly-billing price not verified"
-    },
-    {
-      "id": "master-app-1788301644397",
-      "name": "Jump.ai",
-      "status": "not_found",
-      "sourceUrl": "https://jump.ai/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows Meet $100, Onboard $50, Grow $50 per advisor/mo but monthly vs annual toggle state could not be confirmed"
     },
     {
       "id": "master-app-1788301651757",
@@ -907,15 +880,6 @@
       "note": "No official pricing page found in search results."
     },
     {
-      "id": "master-app-1788305061630",
-      "name": "Fathom",
-      "status": "not_found",
-      "sourceUrl": "https://fathom.ai/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows several figures per paid plan (e.g. Premium $20/$16) without labeling which is monthly vs annual; cannot verify monthly price."
-    },
-    {
       "id": "master-app-1788305071985",
       "name": "Fireflies.ai",
       "status": "not_found",
@@ -962,15 +926,6 @@
         }
       ],
       "note": "Enterprise and Research Flow are contact-sales; Growth Flow cycle labeling unclear so omitted."
-    },
-    {
-      "id": "master-app-1788305111585",
-      "name": "Cognito Form",
-      "status": "not_found",
-      "sourceUrl": "https://cognitoforms.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows conflicting overlapping price blocks without labeling monthly vs annual; cannot verify."
     },
     {
       "id": "master-app-1788305129772",
@@ -1079,15 +1034,6 @@
       "note": "Google Meet is a feature of Google Workspace; prices are parent Workspace plans. Enterprise is contact sales."
     },
     {
-      "id": "master-app-1788305178354",
-      "name": "OnceHub",
-      "status": "not_found",
-      "sourceUrl": "https://www.oncehub.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows two figures per plan (e.g. $12 $10/seat/month) without clear labeling of which is monthly vs discounted."
-    },
-    {
       "id": "master-app-1788305186754",
       "name": "YouCanBookMe",
       "status": "not_found",
@@ -1167,15 +1113,6 @@
       "note": "Only en-au page opened and currency of \"$\" prices not stated as USD; en-us pricing fetch refused"
     },
     {
-      "id": "master-app-1788305249515",
-      "name": "Dropbox",
-      "status": "not_found",
-      "sourceUrl": "https://dropbox.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page opened (Plus $9.99, Standard $15/user, Advanced $24/user, Basic free) but page text did not say whether figures are monthly or annual billing; not recorded"
-    },
-    {
       "id": "master-app-1788305254068",
       "name": "Egnyte",
       "status": "found",
@@ -1222,15 +1159,6 @@
       "checkedAt": "2026-11-19",
       "tiers": [],
       "note": "Only en-au page opened (AUD prices); en-us page fetch refused; USD not verified"
-    },
-    {
-      "id": "master-app-1788305283435",
-      "name": "ShareFile",
-      "status": "not_found",
-      "sourceUrl": "https://www.sharefile.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows two figures per plan without clear labeling of monthly vs annual; cannot verify monthly price."
     },
     {
       "id": "master-app-1788305293993",
@@ -1613,15 +1541,6 @@
       "note": "Bundles and a la carte options also listed; multi-advisor is quote-only."
     },
     {
-      "id": "master-app-1788305673974",
-      "name": "Koyfin",
-      "status": "not_found",
-      "sourceUrl": "https://www.koyfin.com/pricing/",
-      "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Page shows /month prices ($39/$79/$209/$299) but does not clarify whether monthly or annual billing is displayed."
-    },
-    {
       "id": "master-app-1788305686024",
       "name": "Allo",
       "status": "found",
@@ -1704,15 +1623,6 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Social platform; no software subscription pricing."
-    },
-    {
-      "id": "master-app-1788306029782",
-      "name": "Acuity",
-      "status": "not_found",
-      "sourceUrl": "https://acuityscheduling.com/pricing",
-      "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Page shows two prices per plan without explicit labels for which is monthly vs annual."
     },
     {
       "id": "master-app-1788306079198",
@@ -1879,6 +1789,294 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "No published pricing; page is a contact/demo page."
+    },
+    {
+      "id": "master-app-1788301472847",
+      "name": "AdobeSign",
+      "status": "found",
+      "sourceUrl": "https://www.adobe.com/acrobat/business/pricing-plans.html",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Acrobat Express for teams (per license) (annual billing)",
+          "price": 11.99,
+          "notes": "annual commitment billed monthly; regular price, promo $8.26 first year with 2+ licenses; prepaid annual $143.88/yr"
+        },
+        {
+          "name": "Acrobat Standard for teams (per license) (annual billing)",
+          "price": 16.99,
+          "notes": "annual commitment billed monthly; prepaid annual $203.88/yr"
+        },
+        {
+          "name": "Acrobat Pro for teams (per license) (annual billing)",
+          "price": 23.99,
+          "notes": "annual commitment billed monthly; prepaid annual $287.88/yr"
+        },
+        {
+          "name": "Acrobat Studio for teams (per license) (annual billing)",
+          "price": 29.99,
+          "notes": "annual commitment billed monthly; prepaid annual $359.88/yr"
+        }
+      ],
+      "note": "Acrobat Sign Solutions and Studio for enterprise are contact-sales; no plain month-to-month option shown."
+    },
+    {
+      "id": "master-app-1788305061630",
+      "name": "Fathom",
+      "status": "found",
+      "sourceUrl": "https://fathom.ai/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Premium (per user) (annual billing)",
+          "price": 16,
+          "notes": "monthly price not shown; annual-billing rate (annual toggle, 25%+ savings)"
+        },
+        {
+          "name": "Team (per user) (annual billing)",
+          "price": 15,
+          "notes": "monthly price not shown; annual-billing rate; 2 user min"
+        },
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 25,
+          "notes": "monthly price not shown; annual-billing rate; 2 user min"
+        },
+        {
+          "name": "Enterprise (per user) (annual billing)",
+          "price": 35,
+          "notes": "annual only"
+        }
+      ],
+      "note": "Annual figure identified as the middle of three figures shown per plan, consistent with the 25%+ annual savings label."
+    },
+    {
+      "id": "master-app-1788305111585",
+      "name": "Cognito Form",
+      "status": "found",
+      "sourceUrl": "https://cognitoforms.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Individual",
+          "price": 0,
+          "notes": "100 entries/mo"
+        },
+        {
+          "name": "Pro (annual billing)",
+          "price": 19,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Team (annual billing)",
+          "price": 39,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Enterprise (annual billing)",
+          "price": 129,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Page contains overlapping price blocks with conflicting figures; recorded the block labeled Billed Annually."
+    },
+    {
+      "id": "master-app-1788305178354",
+      "name": "OnceHub",
+      "status": "found",
+      "sourceUrl": "https://www.oncehub.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Schedule (per seat) (annual billing)",
+          "price": 10,
+          "notes": "monthly price not shown; annual-billing rate (lower figure; yearly saves up to 18%)"
+        },
+        {
+          "name": "Route (per seat) (annual billing)",
+          "price": 19,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Engage (per seat) (annual billing)",
+          "price": 39,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Annual rate inferred as the lower of two figures per plan matching the ~17-18% yearly savings label. Enterprise is custom."
+    },
+    {
+      "id": "master-app-1788305283435",
+      "name": "ShareFile",
+      "status": "found",
+      "sourceUrl": "https://www.sharefile.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Advanced (per user) (annual billing)",
+          "price": 16.5,
+          "notes": "monthly price not shown; annual-billing rate; 3 user min"
+        },
+        {
+          "name": "Premium (per user) (annual billing)",
+          "price": 26,
+          "notes": "monthly price not shown; annual-billing rate; 3 user min"
+        },
+        {
+          "name": "Enterprise (per user) (annual billing)",
+          "price": 35,
+          "notes": "monthly price not shown; annual-billing rate; 3 user min"
+        },
+        {
+          "name": "Virtual Data Room (per user) (annual billing)",
+          "price": 69.3,
+          "notes": "monthly price not shown; annual-billing rate; 5 user min"
+        }
+      ],
+      "note": "Annual rate taken as the lower figure of each pair (toggled value); not explicitly labeled on the fetched text."
+    },
+    {
+      "id": "master-app-1788305673974",
+      "name": "Koyfin",
+      "status": "found",
+      "sourceUrl": "https://www.koyfin.com/pricing/",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Plus (annual billing)",
+          "price": 39,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Premium (annual billing)",
+          "price": 79,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Advisor Core (annual billing)",
+          "price": 209,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Advisor Pro (annual billing)",
+          "price": 299,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Page header shows the Annual option with 'save up to 30%'; Teams is contact-sales."
+    },
+    {
+      "id": "master-app-1788306029782",
+      "name": "Acuity",
+      "status": "found",
+      "sourceUrl": "https://acuityscheduling.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starter (annual billing)",
+          "price": 16,
+          "notes": "monthly price not shown; annual-billing rate (Pay annually, save 20%)"
+        },
+        {
+          "name": "Standard (annual billing)",
+          "price": 27,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Premium (annual billing)",
+          "price": 55,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788301624437",
+      "name": "Kwanti",
+      "status": "found",
+      "sourceUrl": "https://www.kwanti.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Single (per user) (annual billing)",
+          "price": 224,
+          "notes": "monthly price not shown; annual-billing rate; 5-user min"
+        },
+        {
+          "name": "Multi (per user) (annual billing)",
+          "price": 195,
+          "notes": "monthly price not shown; annual-billing rate; 5-user min"
+        }
+      ]
+    },
+    {
+      "id": "master-app-1788305249515",
+      "name": "Dropbox",
+      "status": "found",
+      "sourceUrl": "https://www.dropbox.com/plans",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 0,
+          "notes": "2 GB"
+        },
+        {
+          "name": "Plus",
+          "price": 9.99,
+          "notes": "1 person; billing cycle not stated on page"
+        },
+        {
+          "name": "Standard (per user)",
+          "price": 15,
+          "notes": "billing cycle not stated on page"
+        },
+        {
+          "name": "Advanced (per user)",
+          "price": 24,
+          "notes": "3+ users; billing cycle not stated on page"
+        }
+      ],
+      "note": "Page has a billing-cycle toggle but no billing label next to prices. Enterprise is contact-sales."
+    },
+    {
+      "id": "master-app-1788301644397",
+      "name": "Jump.ai",
+      "status": "found",
+      "sourceUrl": "https://jump.ai/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Meet (per advisor)",
+          "price": 100,
+          "notes": "billing cycle not stated; save up to 20% paying annually"
+        },
+        {
+          "name": "Onboard add-on (per advisor)",
+          "price": 50,
+          "notes": "billing cycle not stated"
+        },
+        {
+          "name": "Grow add-on (per advisor)",
+          "price": 50,
+          "notes": "billing cycle not stated"
+        }
+      ],
+      "note": "Enterprise is contact-sales."
     }
   ]
 }
