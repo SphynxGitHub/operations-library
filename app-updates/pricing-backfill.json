@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:25:41Z",
+  "generatedAt": "2026-11-20T01:28:08Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1023,10 +1023,10 @@
       "id": "master-app-1788305036740",
       "name": "LastPass",
       "status": "not_found",
-      "sourceUrl": "https://lastpass.com/pricing",
+      "sourceUrl": "https://www.lastpass.com/pricing",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "note": "Pricing page (rechecked) still shows only unrendered template placeholders ({LPTeams} etc.), billed annually; no USD amounts readable."
     },
     {
       "id": "master-app-1788305042794",
@@ -1041,10 +1041,10 @@
       "id": "master-app-1788305047770",
       "name": "Keeper",
       "status": "not_found",
-      "sourceUrl": "https://keepersecurity.com/es_ES/pricing.html",
+      "sourceUrl": "https://www.keepersecurity.com/pricing/business-and-enterprise.html",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "note": "English pricing page and affiliate page (rechecked) show Business Starter, Business, Enterprise as per user per month billed annually but no amounts render; affiliate page shows only percent-off."
     },
     {
       "id": "master-app-1788305055593",
@@ -1264,7 +1264,7 @@
       "sourceUrl": "https://youcanbook.me/pricing",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "note": "Pricing page (rechecked) still shows $0 placeholders for paid plans; yearly 10% and 2-year 20% discounts mentioned but no amounts."
     },
     {
       "id": "master-app-1788305193002",
@@ -1279,19 +1279,35 @@
       "id": "master-app-1788305207360",
       "name": "ActiveCampaign",
       "status": "not_found",
-      "sourceUrl": "",
+      "sourceUrl": "https://www.activecampaign.com/pricing",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Pricing page (rechecked) still shows only placeholder prices (billed yearly); no USD amounts readable."
+      "note": "Pricing page (rechecked) still shows only \"--\" placeholders (billed yearly); no USD amounts readable."
     },
     {
       "id": "master-app-1788305222824",
       "name": "MailerLite",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://www.mailerlite.com/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "up to 250 subscribers"
+        },
+        {
+          "name": "Comfort",
+          "price": 12,
+          "notes": "'starting' price from page FAQ; billing cycle and subscriber tier not stated; yearly billing saves 10%"
+        },
+        {
+          "name": "Power",
+          "price": 25,
+          "notes": "'starting' price from page FAQ; billing cycle and subscriber tier not stated; yearly billing saves 10%"
+        }
+      ],
+      "note": "Card prices did not render; starting prices taken from page FAQ text. Enterprise is custom."
     },
     {
       "id": "master-app-1788305228624",
