@@ -1,27 +1,11 @@
 {
-  "updatedAt": "2026-11-20T02:50:30Z",
+  "updatedAt": "2026-11-20T02:52:25Z",
   "items": [
     {
       "app": "Schwab",
       "kind": "feature",
       "date": "2026-11-19",
       "summary": "Schwab Advisor Services' digital onboarding now lets firms add PDF forms to digital envelopes and countersign their own documents.",
-      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
-      "checkedAt": "2026-11-19"
-    },
-    {
-      "app": "Schwab",
-      "kind": "feature",
-      "date": "2026-11-19",
-      "summary": "Syntax Direct personalized indexing is now available through iRebal without changing existing workflows.",
-      "sourceUrl": "https://advisorservices.schwab.com/whats-new",
-      "checkedAt": "2026-11-19"
-    },
-    {
-      "app": "Schwab",
-      "kind": "feature",
-      "date": "2026-11-19",
-      "summary": "Clients can eAuthorize wires and checks submitted via Import Transactions, with up to 2,000 transactions per upload.",
       "sourceUrl": "https://advisorservices.schwab.com/whats-new",
       "checkedAt": "2026-11-19"
     },
@@ -71,14 +55,6 @@
       "date": "2026-11-16",
       "summary": "The unified Chat and Cowork experience turns on by default for Enterprise organizations whose admins hadn't set it; it needs Chat and code execution enabled and excludes zero-data-retention, HIPAA-ready and customer-managed-key orgs.",
       "sourceUrl": "https://support.claude.com/en/articles/17444462-set-up-and-manage-the-new-unified-claude-experience-for-your-enterprise-organization",
-      "checkedAt": "2026-11-20"
-    },
-    {
-      "app": "Morningstar",
-      "kind": "release",
-      "date": "2026-11-12",
-      "summary": "Morningstar's 11-12-26 update fixes ETF and closed-end fund 3-year standard deviation showing an outdated month, removed watchlist items reappearing, and embedded video sizing.",
-      "sourceUrl": "https://www.morningstar.com/whats-new/11-12-26-product-enhancement-bug-fixes",
       "checkedAt": "2026-11-20"
     },
     {
@@ -162,14 +138,6 @@
       "checkedAt": "2026-11-20"
     },
     {
-      "app": "Altruist",
-      "kind": "feature",
-      "date": "2026-10-29",
-      "summary": "Altruist launched donor-advised funds with no minimums and fees from 50 bps, plus household rebalancing with asset location at no extra cost, paperless security journaling for eligible same-client accounts, off-model manual trades and bulk DRIP settings.",
-      "sourceUrl": "https://altruist.com/news/all-new-altruist-october-2026-product-updates/",
-      "checkedAt": "2026-11-20"
-    },
-    {
       "app": "RightCapital",
       "kind": "feature",
       "date": "2026-10-01",
@@ -190,14 +158,6 @@
       "kind": "feature",
       "date": "2026-10-16",
       "summary": "Addepar posted about enhanced reporting that replaces manual reporting steps with automated workflows.",
-      "sourceUrl": "https://addepar.com/blog",
-      "checkedAt": "2026-11-20"
-    },
-    {
-      "app": "Addepar",
-      "kind": "feature",
-      "date": "2026-10-07",
-      "summary": "Addepar added more than 1,000 geography-specific regional private fund benchmark views and enhanced management.",
       "sourceUrl": "https://addepar.com/blog",
       "checkedAt": "2026-11-20"
     },
