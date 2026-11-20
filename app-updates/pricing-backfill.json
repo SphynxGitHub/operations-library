@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:28:39Z",
+  "generatedAt": "2026-11-20T01:29:45Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1260,11 +1260,32 @@
     {
       "id": "master-app-1788305186754",
       "name": "YouCanBookMe",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://youcanbook.me/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Pricing page (rechecked) still shows $0 placeholders for paid plans; yearly 10% and 2-year 20% discounts mentioned but no amounts."
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "1 calendar, 1 booking page, 30 bookings/month"
+        },
+        {
+          "name": "Individual",
+          "price": 9,
+          "notes": "monthly billing; yearly 10% off, 2-year 20% off"
+        },
+        {
+          "name": "Professional",
+          "price": 13,
+          "notes": "monthly billing; yearly 10% off, 2-year 20% off"
+        },
+        {
+          "name": "Team (per member)",
+          "price": 18,
+          "notes": "monthly billing; yearly 10% off, 2-year 20% off"
+        }
+      ],
+      "note": "Prices from user-supplied screenshot (Billed Monthly selected). Teams of 50+ contact sales."
     },
     {
       "id": "master-app-1788305193002",
