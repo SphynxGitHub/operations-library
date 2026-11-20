@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:09:38Z",
+  "generatedAt": "2026-11-20T00:13:23Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -602,11 +602,27 @@
     {
       "id": "master-app-1788301691261",
       "name": "Quo",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+      "status": "found",
+      "sourceUrl": "https://www.quo.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starter (per user)",
+          "price": 19,
+          "notes": "monthly billing; $15 billed annually"
+        },
+        {
+          "name": "Business (per user)",
+          "price": 33,
+          "notes": "monthly billing; $23 billed annually"
+        },
+        {
+          "name": "Scale (per user)",
+          "price": 47,
+          "notes": "monthly billing; $35 billed annually"
+        }
+      ],
+      "note": "Sona AI credit tiers and number fees listed separately on page."
     },
     {
       "id": "master-app-1788301697524",
@@ -626,11 +642,37 @@
     {
       "id": "master-app-1788301705949",
       "name": "Intulse",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+      "status": "found",
+      "sourceUrl": "https://intulse.com/business/unified-communications/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "2-4 extensions (per extension)",
+          "price": 42,
+          "notes": "monthly; billed per extension not per user; 2 extension billing minimum; 12-month initial contract under 5 extensions"
+        },
+        {
+          "name": "5-9 extensions (per extension)",
+          "price": 36,
+          "notes": "monthly"
+        },
+        {
+          "name": "10-24 extensions (per extension)",
+          "price": 34,
+          "notes": "monthly"
+        },
+        {
+          "name": "25-99 extensions (per extension)",
+          "price": 28,
+          "notes": "monthly"
+        },
+        {
+          "name": "100+ extensions (per extension)",
+          "price": 26,
+          "notes": "monthly"
+        }
+      ],
+      "note": "No named plans; priced by extension count. Add-ons listed separately."
     },
     {
       "id": "master-app-1788304821577",
@@ -644,11 +686,17 @@
     {
       "id": "master-app-1788304836330",
       "name": "MyRepChat",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+      "status": "found",
+      "sourceUrl": "https://myrepchat.com/pricing/",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starting price",
+          "price": 25,
+          "notes": "monthly; 'starts at'; per-user/seat basis not stated; add-ons from $5/mo"
+        }
+      ],
+      "note": "No named plans; seat-band pricing (1-4, 5-30, 30+) is quote-based via sales form."
     },
     {
       "id": "master-app-1788304884426",
@@ -773,11 +821,37 @@
     {
       "id": "master-app-1788304962643",
       "name": "Wix",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "status": "found",
+      "sourceUrl": "https://www.wix.com/plans",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Light (annual billing)",
+          "price": 17.77,
+          "notes": "monthly price not shown; yearly subscription paid in full, monthly equivalent"
+        },
+        {
+          "name": "Core (annual billing)",
+          "price": 29.77,
+          "notes": "monthly price not shown; yearly subscription monthly equivalent"
+        },
+        {
+          "name": "Business (annual billing)",
+          "price": 39.77,
+          "notes": "monthly price not shown; yearly subscription monthly equivalent"
+        },
+        {
+          "name": "Business Elite (annual billing)",
+          "price": 159.77,
+          "notes": "monthly price not shown; yearly subscription monthly equivalent"
+        }
+      ],
+      "note": "Page says displayed prices are for yearly subscriptions paid in full; prices vary by location. Enterprise is custom."
     },
     {
       "id": "master-app-1788304971641",
@@ -791,29 +865,51 @@
     {
       "id": "master-app-1788304982284",
       "name": "Pulse360",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "note": "Vendor is closed (per user); no pricing."
     },
     {
       "id": "master-app-1788304990819",
       "name": "Notion",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "status": "found",
+      "sourceUrl": "https://www.notion.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Plus (per member)",
+          "price": 10,
+          "notes": "billing cycle not stated on page; yearly saves up to 20%"
+        },
+        {
+          "name": "Business (per member)",
+          "price": 20,
+          "notes": "billing cycle not stated on page; yearly saves up to 20%"
+        }
+      ],
+      "note": "Enterprise is custom pricing."
     },
     {
       "id": "master-app-1788304998785",
       "name": "OneNote",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "status": "found",
+      "sourceUrl": "https://www.microsoft.com/en-us/microsoft-365/onenote/digital-note-taking-app",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": "Included free / with Microsoft 365 (per user)"
+        }
+      ],
+      "note": "OneNote is free and included in Microsoft 365; see Office 365 for plan prices."
     },
     {
       "id": "master-app-1788305004213",
@@ -930,11 +1026,32 @@
     {
       "id": "master-app-1788305071985",
       "name": "Fireflies.ai",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Fetch of fireflies.ai/pricing refused (permission/provenance error)."
+      "status": "found",
+      "sourceUrl": "https://fireflies.ai/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Free",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Pro (per seat) (annual billing)",
+          "price": 10,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Business (per seat) (annual billing)",
+          "price": 19,
+          "notes": "monthly price not shown; annual-billing rate"
+        },
+        {
+          "name": "Enterprise (per seat) (annual billing)",
+          "price": 39,
+          "notes": "annual only"
+        }
+      ],
+      "note": "Page has monthly/annual toggle; monthly-billing figures not labeled in fetched text."
     },
     {
       "id": "master-app-1788305081307",
@@ -1104,9 +1221,9 @@
       "name": "ActiveCampaign",
       "status": "not_found",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Official pricing page fetch refused (permission not granted); price not verified"
+      "note": "Pricing page (rechecked) still shows only placeholder prices (billed yearly); no USD amounts readable."
     },
     {
       "id": "master-app-1788305222824",
