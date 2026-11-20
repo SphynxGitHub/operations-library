@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-20T02:34:35Z",
+  "updatedAt": "2026-11-20T02:50:30Z",
   "items": [
     {
       "app": "Schwab",
@@ -103,6 +103,110 @@
       "date": "2026-11-19",
       "summary": "Google Meet adds an optional setting that shows participants a clickable link to the presented Docs, Sheets or Slides file; it is off by default.",
       "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/seamlessly-share-presented-file-links-with-viewers-in-Google-Meet.html",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "feature",
+      "date": "2026-11-04",
+      "summary": "Wealthbox AI Agents are now available on every plan, starting with 24 pre-built agents plus the ability to build custom ones that run on a schedule or when records change.",
+      "sourceUrl": "https://www.wealthbox.com/introducing-wealthbox-ai-agents-included-on-every-plan/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "feature",
+      "date": "2026-11-03",
+      "summary": "Formula Fields arrive on Premier and Enterprise plans, calculating numbers and dates that show on records, report columns and filters.",
+      "sourceUrl": "https://www.wealthbox.com/introducing-formula-fields-in-wealthbox/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "feature",
+      "date": "2026-10-29",
+      "summary": "Wealthbox is available in Apple CarPlay on all plans for voice-created contacts, notes and tasks and asking about your day; it needs iOS 26.4 or later and a CarPlay-compatible vehicle.",
+      "sourceUrl": "https://www.wealthbox.com/wealthbox-is-now-available-in-carplay/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "pricing",
+      "date": "2026-10-28",
+      "summary": "Wealthbox Vault is a $29 per user per month add-on with unlimited file storage, full-content search, file versions and a Compliance Monitor role; AI document features are included on every plan.",
+      "sourceUrl": "https://www.wealthbox.com/introducing-wealthbox-vault-advanced-file-storage-and-ai-powered-document-management/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Wealthbox",
+      "kind": "feature",
+      "date": "2026-10-27",
+      "summary": "Wealthbox opened an MCP-based Developer Portal for approved technology partners to build and submit AI integrations; Holistiplan and Nitrogen integrations are already available.",
+      "sourceUrl": "https://www.wealthbox.com/wealthbox-introduces-developer-portal-to-expand-ai-integrations-for-financial-advisors/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Zocks",
+      "kind": "feature",
+      "date": "2026-10-29",
+      "summary": "Zocks adds prefilled, validated Schwab account opening (Ultimate plan) and live Schwab balances, positions, cost basis and gains in Meeting Prep, Ask Anything and forms on all plans.",
+      "sourceUrl": "https://www.zocks.io/blog/october-2026-product-update",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Zocks",
+      "kind": "feature",
+      "date": "2026-10-29",
+      "summary": "Zocks adds Collaborative Booking for multi-participant scheduling, customizable scheduling email templates and two dedicated Administrative Assistant roles.",
+      "sourceUrl": "https://www.zocks.io/blog/october-2026-product-update",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Altruist",
+      "kind": "feature",
+      "date": "2026-10-29",
+      "summary": "Altruist launched donor-advised funds with no minimums and fees from 50 bps, plus household rebalancing with asset location at no extra cost, paperless security journaling for eligible same-client accounts, off-model manual trades and bulk DRIP settings.",
+      "sourceUrl": "https://altruist.com/news/all-new-altruist-october-2026-product-updates/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "RightCapital",
+      "kind": "feature",
+      "date": "2026-10-01",
+      "summary": "RightCapital's Q3 2026 update adds an Iris Find Opportunities preset and document uploads, renames and enhances the Medicare module as Health Care, adds bulk CSV transaction import, and updates student-loan planning for the repayment-plan changes.",
+      "sourceUrl": "https://www.rightcapital.com/blog/q3-2026-updates/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Holistiplan",
+      "kind": "feature",
+      "date": "2026-10-27",
+      "summary": "Holistiplan launched a Strategy Library of pre-built tax planning scenarios and expanded document collection (IRS transcripts, pay stubs) and modeling (Schedule E, scenario analysis).",
+      "sourceUrl": "https://www.holistiplan.com/news/holistiplan-announces-strategy-library-with-pre-built-planning-scenarios-expands-document-collection-and-modeling-capabilities-2/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Addepar",
+      "kind": "feature",
+      "date": "2026-10-16",
+      "summary": "Addepar posted about enhanced reporting that replaces manual reporting steps with automated workflows.",
+      "sourceUrl": "https://addepar.com/blog",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Addepar",
+      "kind": "feature",
+      "date": "2026-10-07",
+      "summary": "Addepar added more than 1,000 geography-specific regional private fund benchmark views and enhanced management.",
+      "sourceUrl": "https://addepar.com/blog",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "AdvicePay",
+      "kind": "feature",
+      "date": "2026-09-30",
+      "summary": "AdvicePay added a Resource Center icon on every page, clearer invoice reminders that send on the lead-time date, and a faster transfer-date filter.",
+      "sourceUrl": "https://advicepay.com/changelog/september-30-2026",
       "checkedAt": "2026-11-20"
     }
   ]
