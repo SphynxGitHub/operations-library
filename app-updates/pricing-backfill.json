@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:17:41Z",
+  "generatedAt": "2026-11-20T01:19:24Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -178,11 +178,27 @@
     {
       "id": "master-app-1767934799829",
       "name": "Hazel",
-      "status": "not_found",
-      "sourceUrl": "https://store.noodlesoft.com/store",
+      "status": "found",
+      "sourceUrl": "https://hazel.ai/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "tiers": [
+        {
+          "name": "Hazel Platform (per seat)",
+          "price": 60,
+          "notes": "shown as month/seat; billing cycle not stated; 14-day trial"
+        },
+        {
+          "name": "Tax Planning Agent (per seat)",
+          "price": 160,
+          "notes": "shown as month/seat; billing cycle not stated; includes Platform features"
+        },
+        {
+          "name": "Financial Planning Agent (per seat)",
+          "price": 300,
+          "notes": "shown as month/seat; billing cycle not stated; includes Tax Planning Agent features"
+        }
+      ],
+      "note": "Hazel (hazel.ai). Enterprise (full Hazel suite) is contact sales. Earlier not_found note referred to an unrelated one-time-license app named Hazel."
     },
     {
       "id": "master-app-1767977842769",
