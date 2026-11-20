@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:21:28Z",
+  "generatedAt": "2026-11-20T01:21:48Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2082,7 +2082,7 @@
       "id": "master-app-1789090841592",
       "name": "Levitate",
       "status": "found",
-      "sourceUrl": "",
+      "sourceUrl": "https://www.levitate.ai/plans",
       "checkedAt": "2026-11-20",
       "tiers": [
         {
@@ -2096,7 +2096,7 @@
           "notes": "per month, as stated by user; exact price by quote"
         }
       ],
-      "note": "Price range supplied by user ($349-$449/month, all-inclusive plans); exact pricing is quote-only. Official page could not be fetched."
+      "note": "Official plans page is quote-only (Contact Sales; plans billed annually, one-year commitment). The $349-$449/month range was supplied by user."
     },
     {
       "id": "master-app-1789527521775",
