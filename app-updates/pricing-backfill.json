@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:24:55Z",
+  "generatedAt": "2026-11-20T00:53:19Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -180,9 +180,9 @@
       "name": "Hazel",
       "status": "not_found",
       "sourceUrl": "https://store.noodlesoft.com/store",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Official store lists one-time licenses only (Hazel 6 $42, Family Pack $65, Upgrade $20), no monthly price; store page footer may be dated"
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1767977842769",
@@ -416,9 +416,9 @@
       "name": "Mailchimp",
       "status": "not_found",
       "sourceUrl": "https://mailchimp.com/pricing/",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Page showed promo prices for 12 months; could not verify standard monthly price per contact tier"
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788301490005",
@@ -477,9 +477,9 @@
       "name": "Allbridge",
       "status": "not_found",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "No official vendor pricing page identified or opened"
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified. Official site not identified."
     },
     {
       "id": "master-app-1788301597628",
@@ -730,9 +730,9 @@
       "name": "Garret Planning Network",
       "status": "not_found",
       "sourceUrl": "",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Vendor official pricing page could not be opened in this run (fetch permission refused); price not verified."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788304927155",
@@ -983,36 +983,36 @@
       "name": "Asana",
       "status": "not_found",
       "sourceUrl": "https://asana.com/pricing.md",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Fetched pricing page showed no per-seat USD prices (only AI request prices); seat prices likely rendered dynamically."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305036740",
       "name": "LastPass",
       "status": "not_found",
       "sourceUrl": "https://lastpass.com/pricing",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Pricing page rendered only unfilled template placeholders; no USD amounts readable."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305042794",
       "name": "Dashlane",
       "status": "not_found",
       "sourceUrl": "https://dashlane.com/plans",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Pricing page showed '--' placeholders (annual billing only); no USD amounts readable."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305047770",
       "name": "Keeper",
       "status": "not_found",
       "sourceUrl": "https://keepersecurity.com/es_ES/pricing.html",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Fetched page showed no readable amounts or currency (billed annually); English page not fetched."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305055593",
@@ -1219,9 +1219,9 @@
       "name": "YouCanBookMe",
       "status": "not_found",
       "sourceUrl": "https://youcanbook.me/pricing",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Fetched page rendered $0 placeholders for paid plans; real prices not readable."
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305193002",
@@ -1246,9 +1246,9 @@
       "name": "MailerLite",
       "status": "not_found",
       "sourceUrl": "https://www.mailerlite.com/pricing",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Page opened but Comfort/Power price figures were blank in fetched text (FAQ only says \"starting $12\" and \"$25\" without subscriber tier); Free plan is 0 up to 250 subscribers; not verified"
+      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
     },
     {
       "id": "master-app-1788305228624",
