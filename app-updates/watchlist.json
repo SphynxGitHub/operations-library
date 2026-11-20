@@ -122,7 +122,7 @@
     },
     {
       "name": "fpPathfinder",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.fppathfinder.com/become-a-member/",
       "releaseNotesUrl": ""
     },
     {
@@ -132,7 +132,7 @@
     },
     {
       "name": "Hazel (Altruist AI platform for advisors)",
-      "pricingUrl": "",
+      "pricingUrl": "https://hazel.ai/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -162,7 +162,7 @@
     },
     {
       "name": "SSG (custodian)",
-      "pricingUrl": "",
+      "pricingUrl": "https://ssginstitutional.com/",
       "releaseNotesUrl": ""
     },
     {
@@ -173,6 +173,416 @@
     {
       "name": "Altruist",
       "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Constant Contact",
+      "pricingUrl": "https://www.constantcontact.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Google Workspace",
+      "pricingUrl": "https://workspace.google.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Zoom",
+      "pricingUrl": "https://zoom.us/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "1Password",
+      "pricingUrl": "https://1password.com/business-pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Zapier Email",
+      "pricingUrl": "https://zapier.com/pricing.md",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Blueleaf",
+      "pricingUrl": "https://blueleaf.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Zocks",
+      "pricingUrl": "https://zocks.io/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Otter.ai",
+      "pricingUrl": "https://otter.ai/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Zoom Phone",
+      "pricingUrl": "https://zoom.us/pricing/zoom-phone",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "RingCentral",
+      "pricingUrl": "https://www.ringcentral.com/pricing/business-phone",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Quo",
+      "pricingUrl": "https://www.quo.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "CurrentClient",
+      "pricingUrl": "https://currentclient.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Intulse",
+      "pricingUrl": "https://intulse.com/business/unified-communications/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "MyRepChat",
+      "pricingUrl": "https://myrepchat.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Garret Planning Network",
+      "pricingUrl": "https://garrettplanningnetwork.com/for-advisors/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "XY Planning Network",
+      "pricingUrl": "https://xyplanningnetwork.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Squarespace",
+      "pricingUrl": "https://www.squarespace.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Wordpress",
+      "pricingUrl": "https://wordpress.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "TwentyOverTen",
+      "pricingUrl": "https://twentyoverten.com/pricing/enhanced",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Wix",
+      "pricingUrl": "https://www.wix.com/plans",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Notion",
+      "pricingUrl": "https://www.notion.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "OneNote",
+      "pricingUrl": "https://www.microsoft.com/en-us/microsoft-365/onenote/digital-note-taking-app",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Todoist",
+      "pricingUrl": "https://www.todoist.com/help/articles/todoist-plans-pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Microsoft To Do",
+      "pricingUrl": "https://www.microsoft.com/en-us/microsoft-365/microsoft-to-do-list-app",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Trello",
+      "pricingUrl": "https://trello.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Asana",
+      "pricingUrl": "https://asana.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "LastPass",
+      "pricingUrl": "https://www.lastpass.com/pricing?business",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Dashlane",
+      "pricingUrl": "https://www.dashlane.com/lp/enterprise-password-manager",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Keeper",
+      "pricingUrl": "https://www.keepersecurity.com/affiliate/personal-and-business",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Vega Minds",
+      "pricingUrl": "https://vegaminds.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Fireflies.ai",
+      "pricingUrl": "https://fireflies.ai/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Typeform",
+      "pricingUrl": "https://www.typeform.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "GoTo Meeting",
+      "pricingUrl": "https://www.goto.com/pricing/meeting",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Microsoft Teams",
+      "pricingUrl": "https://www.microsoft.com/en-us/microsoft-teams/compare-microsoft-teams-options",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "RingCentral Meeting",
+      "pricingUrl": "https://ringcentral.com/online-meetings/plansandpricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "YouCanBookMe",
+      "pricingUrl": "https://youcanbook.me/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "ActiveCampaign",
+      "pricingUrl": "https://www.activecampaign.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "MailerLite",
+      "pricingUrl": "https://www.mailerlite.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Kit",
+      "pricingUrl": "https://kit.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Keap",
+      "pricingUrl": "https://keap.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Box",
+      "pricingUrl": "https://www.box.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Egnyte",
+      "pricingUrl": "https://www.egnyte.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "OneDrive",
+      "pricingUrl": "https://www.microsoft.com/en-ie/microsoft-365/onedrive/compare-onedrive-plans-b",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "FGM Suite",
+      "pricingUrl": "https://fmgsuite.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Airtable",
+      "pricingUrl": "https://airtable.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Monday",
+      "pricingUrl": "https://monday.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Process Street",
+      "pricingUrl": "https://www.process.st/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Canva",
+      "pricingUrl": "https://www.canva.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Morningstar",
+      "pricingUrl": "https://www.morningstar.com/products/morningstar-office",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Orion",
+      "pricingUrl": "https://orion.com/plans-orion-trading-software",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Capitect",
+      "pricingUrl": "https://www.capitect.com/#pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "First Ascent",
+      "pricingUrl": "https://geowealth.com/first-ascent-homepage/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Roboforms",
+      "pricingUrl": "https://www.roboform.com/pricing-business",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Snappy Kraken",
+      "pricingUrl": "https://snappykraken.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Allo",
+      "pricingUrl": "https://www.withallo.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Wave",
+      "pricingUrl": "https://www.waveapps.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Slack",
+      "pricingUrl": "https://slack.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Loom",
+      "pricingUrl": "https://www.loom.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Office 365",
+      "pricingUrl": "https://www.microsoft.com/en-us/microsoft-teams/compare-microsoft-teams-options",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "BombBomb",
+      "pricingUrl": "https://bombbomb.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Levitate",
+      "pricingUrl": "https://www.levitate.ai/plans",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "17 Hats",
+      "pricingUrl": "https://www.17hats.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Wealth.com",
+      "pricingUrl": "https://wealth.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Addepar",
+      "pricingUrl": "https://addepar.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "AdobeSign",
+      "pricingUrl": "https://www.adobe.com/acrobat/business/pricing-plans.html",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Fathom",
+      "pricingUrl": "https://fathom.ai/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Cognito Form",
+      "pricingUrl": "https://cognitoforms.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "OnceHub",
+      "pricingUrl": "https://www.oncehub.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "ShareFile",
+      "pricingUrl": "https://www.sharefile.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Koyfin",
+      "pricingUrl": "https://www.koyfin.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Acuity",
+      "pricingUrl": "https://acuityscheduling.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Kwanti",
+      "pricingUrl": "https://www.kwanti.com/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Jump.ai",
+      "pricingUrl": "https://jump.ai/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Income Lab",
+      "pricingUrl": "https://incomelaboratory.com/pricing/",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Granola",
+      "pricingUrl": "https://www.granola.ai/blog/granola-pricing-plans-features-roi",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "MoneyGuidePro",
+      "pricingUrl": "https://www.moneyguidepro.com/ifa/home/myblockspricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Holistiplan",
+      "pricingUrl": "https://help.holistiplan.com/new-pricing-structure-coming-in-2025",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Voyant",
+      "pricingUrl": "https://planwithvoyant.com/us/pricing",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Smarsh",
+      "pricingUrl": "https://www.smarsh.com/media/2021-06-Pro-Archive-FeatureMatrix-Business.pdf",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "RIA in a Box",
+      "pricingUrl": "https://www.comply.com/products/comply-ria",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Orion Eclipse",
+      "pricingUrl": "https://orionadvisorservices.my.site.com/OrionSupportApp/s/article/Communities-FAQ",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "BNY Pershing",
+      "pricingUrl": "https://www.bny.com/corporate/global/en/about-us/newsroom/press-release/bny-mellon-s-pershing-unveils-subscription-pricing-for-ria-custod-brings-more-choice-to-advisors-130101.html",
       "releaseNotesUrl": ""
     }
   ]
