@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:39:59Z",
+  "generatedAt": "2026-11-20T01:48:22Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2647,6 +2647,104 @@
         }
       ],
       "note": "Enterprise is contact-sales."
+    },
+    {
+      "id": "master-app-1795139057915",
+      "name": "Income Lab",
+      "status": "found",
+      "sourceUrl": "https://incomelaboratory.com/pricing/",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Core",
+          "price": 199,
+          "notes": "Billed monthly; $1,990/yr if billed annually"
+        },
+        {
+          "name": "Pro",
+          "price": 299,
+          "notes": "Billed monthly; $2,990/yr if billed annually"
+        },
+        {
+          "name": "Support Staff Seat (add-on)",
+          "price": 80,
+          "notes": "Per seat per month; $800/yr billed annually"
+        }
+      ],
+      "note": "Enterprise (volume licensing, SSO) is quote-only. Core/Pro per-user vs per-firm basis not stated."
+    },
+    {
+      "id": "master-app-1795130744168",
+      "name": "Claude",
+      "status": "found",
+      "sourceUrl": "https://support.claude.com/en/articles/9266767-what-is-the-team-plan",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Pro",
+          "price": 20,
+          "notes": "US$20/month; discounted annual option exists, amount not stated"
+        },
+        {
+          "name": "Max",
+          "price": 100,
+          "notes": "Monthly only"
+        },
+        {
+          "name": "Team Standard seat (per user)",
+          "price": 25,
+          "notes": "Billed monthly; $20/user/month billed annually; minimum 2 members"
+        },
+        {
+          "name": "Team Premium seat (per user)",
+          "price": 125,
+          "notes": "Billed monthly; $100/user/month billed annually; minimum 2 members"
+        }
+      ],
+      "note": "Enterprise price not published. Free plan also available."
+    },
+    {
+      "id": "master-app-1795130873112",
+      "name": "Granola",
+      "status": "found",
+      "sourceUrl": "https://www.granola.ai/blog/granola-pricing-plans-features-roi",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Business (per user)",
+          "price": 14,
+          "notes": "Billing cycle not stated"
+        },
+        {
+          "name": "Enterprise (per user)",
+          "price": 35,
+          "notes": "Billing cycle not stated; no minimum seats; contact sales for 50+ seats"
+        }
+      ],
+      "note": "Source is a Granola blog post (Feb 2026), not the pricing page (granola.ai/pricing); verify."
+    },
+    {
+      "id": "master-app-1795138988965",
+      "name": "MoneyGuidePro",
+      "status": "not_found",
+      "sourceUrl": "https://www.moneyguidepro.com/ifa/home/myblockspricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "MyBlocks page shows $1,400 and $125 per advisor but billing cycles are unclear; Ensemble & Enterprise is quote-only. Needs confirmation."
+    },
+    {
+      "id": "master-app-1795139017664",
+      "name": "Holistiplan",
+      "status": "not_found",
+      "sourceUrl": "https://help.holistiplan.com/new-pricing-structure-coming-in-2025",
+      "checkedAt": "2026-11-20",
+      "tiers": [],
+      "note": "Pricing is per household; help article gives no dollar amounts."
     }
   ]
 }
