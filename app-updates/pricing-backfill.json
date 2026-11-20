@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:18:36Z",
+  "generatedAt": "2026-11-20T00:19:00Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1408,9 +1408,24 @@
           "name": "Website: Premium",
           "price": 149,
           "notes": "monthly; 'starting at'; $2,995 setup"
+        },
+        {
+          "name": "Marketing: Essential",
+          "price": 99,
+          "notes": "monthly; 'starting at'; $199 setup"
+        },
+        {
+          "name": "Marketing: Premium",
+          "price": 269,
+          "notes": "monthly; 'starting at'; $199 setup"
+        },
+        {
+          "name": "Marketing: Do It For Me",
+          "price": 895,
+          "notes": "monthly; 'starting at'; $499 setup"
         }
       ],
-      "note": "Page has tabs (All In One, Marketing, Website, Testimonials) with different prices per tab. All In One and Website tabs recorded; Marketing and Testimonials tab prices not verified."
+      "note": "Page has tabs (All In One, Marketing, Website, Testimonials) with different prices per tab. All In One, Marketing and Website tabs recorded; Testimonials tab not verified."
     },
     {
       "id": "master-app-1788305306064",
