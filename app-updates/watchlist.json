@@ -12,7 +12,7 @@
     },
     {
       "name": "Slant",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.slant.app/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -22,17 +22,17 @@
     },
     {
       "name": "Redtail",
-      "pricingUrl": "",
+      "pricingUrl": "https://redtailtechnology.com/pricing",
       "releaseNotesUrl": ""
     },
     {
       "name": "RightCapital",
-      "pricingUrl": "",
+      "pricingUrl": "https://rightcapital.com/pricing",
       "releaseNotesUrl": ""
     },
     {
       "name": "Claude",
-      "pricingUrl": "",
+      "pricingUrl": "https://support.claude.com/en/articles/9266767-what-is-the-team-plan",
       "releaseNotesUrl": ""
     },
     {
@@ -47,7 +47,7 @@
     },
     {
       "name": "ChatGPT",
-      "pricingUrl": "",
+      "pricingUrl": "https://chatgpt.com/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -62,7 +62,7 @@
     },
     {
       "name": "Calendly",
-      "pricingUrl": "",
+      "pricingUrl": "https://calendly.com/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -72,17 +72,17 @@
     },
     {
       "name": "AdvicePay",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.advicepay.com/pricing",
       "releaseNotesUrl": ""
     },
     {
       "name": "QuickBooks",
-      "pricingUrl": "",
+      "pricingUrl": "https://quickbooks.intuit.com/pricing/",
       "releaseNotesUrl": ""
     },
     {
       "name": "Circle Black",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.circleblack.com/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -102,22 +102,22 @@
     },
     {
       "name": "DocuSign",
-      "pricingUrl": "",
+      "pricingUrl": "https://ecom.docusign.com/plans-and-pricing/esignature",
       "releaseNotesUrl": ""
     },
     {
       "name": "Dropbox",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.dropbox.com/plans",
       "releaseNotesUrl": ""
     },
     {
       "name": "Datapoints",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.datapoints.com/pricing",
       "releaseNotesUrl": ""
     },
     {
       "name": "Riskalyze",
-      "pricingUrl": "",
+      "pricingUrl": "https://nitrogenwealth.com/pricing",
       "releaseNotesUrl": ""
     },
     {
@@ -127,7 +127,7 @@
     },
     {
       "name": "PreciseFp",
-      "pricingUrl": "",
+      "pricingUrl": "https://precisefp.com/pricing/",
       "releaseNotesUrl": ""
     },
     {
@@ -137,12 +137,12 @@
     },
     {
       "name": "Hubly",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.myhubly.com/pricing",
       "releaseNotesUrl": ""
     },
     {
       "name": "Mailchimp",
-      "pricingUrl": "",
+      "pricingUrl": "https://mailchimp.com/pricing/",
       "releaseNotesUrl": ""
     },
     {
@@ -152,7 +152,7 @@
     },
     {
       "name": "SharePoint",
-      "pricingUrl": "",
+      "pricingUrl": "https://www.microsoft.com/en-au/microsoft-365/sharepoint/sharepoint-business-plans-and-pricing",
       "releaseNotesUrl": ""
     },
     {
