@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:09:10Z",
+  "generatedAt": "2026-11-20T00:09:38Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -577,11 +577,27 @@
     {
       "id": "master-app-1788301684499",
       "name": "RingCentral",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+      "status": "found",
+      "sourceUrl": "https://www.ringcentral.com/pricing/business-phone",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Core (per user)",
+          "price": 30,
+          "notes": "monthly billing; $20 billed annually"
+        },
+        {
+          "name": "Advanced (per user)",
+          "price": 35,
+          "notes": "monthly billing; $25 billed annually"
+        },
+        {
+          "name": "Ultra (per user)",
+          "price": 45,
+          "notes": "monthly billing; $35 billed annually"
+        }
+      ],
+      "note": "Page has a users selector (1-5, 6-100, 100+); the tab the prices apply to was not clear. AI Customer Engagement Bundle is contact-sales."
     },
     {
       "id": "master-app-1788301691261",
