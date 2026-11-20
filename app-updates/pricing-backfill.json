@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:30:05Z",
+  "generatedAt": "2026-11-20T01:31:11Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1040,11 +1040,27 @@
     {
       "id": "master-app-1788305047770",
       "name": "Keeper",
-      "status": "not_found",
-      "sourceUrl": "https://www.keepersecurity.com/pricing/business-and-enterprise.html",
+      "status": "found",
+      "sourceUrl": "https://www.keepersecurity.com/affiliate/personal-and-business",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "English pricing page and affiliate page (rechecked) show Business Starter, Business, Enterprise as per user per month billed annually but no amounts render; affiliate page shows only percent-off."
+      "tiers": [
+        {
+          "name": "Personal (1 user)",
+          "price": 3.58,
+          "notes": "Regular (struck-through) price; promo $1.79/month (50% off)"
+        },
+        {
+          "name": "Family (5 users)",
+          "price": 7.67,
+          "notes": "Regular (struck-through) price; promo $3.83/month (50% off)"
+        },
+        {
+          "name": "Business Starter (per user) (annual billing)",
+          "price": 10,
+          "notes": "monthly price not shown; annual-billing rate. Regular (struck-through) price; promo $7.00/month (30% off); minimum 5 users, billed annually"
+        }
+      ],
+      "note": "Prices are the regular struck-through prices from a user-supplied screenshot of the pricing page; promo prices noted per tier."
     },
     {
       "id": "master-app-1788305055593",
