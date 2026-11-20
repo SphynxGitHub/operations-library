@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:23:00Z",
+  "generatedAt": "2026-11-20T00:24:55Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -812,11 +812,11 @@
     {
       "id": "master-app-1788304956954",
       "name": "TwentyOverTen",
-      "status": "not_found",
+      "status": "no_software_pricing",
       "sourceUrl": "https://twentyoverten.com/pricing/enhanced",
-      "checkedAt": "2026-11-19",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Opened page shows only that Twenty Over Ten was acquired by FMG (Nov 2020); no pricing published there."
+      "note": "Acquired by FMG (Nov 2020); see FMG Suite entry for pricing."
     },
     {
       "id": "master-app-1788304962643",
@@ -1136,10 +1136,10 @@
       "id": "master-app-1788305138842",
       "name": "GoTo Meeting",
       "status": "not_found",
-      "sourceUrl": "https://www.goto.com/meeting/pricing",
-      "checkedAt": "2026-11-19",
+      "sourceUrl": "https://www.goto.com/pricing/meeting",
+      "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Fetch of official pricing page failed (client error)."
+      "note": "Pricing page opened (Professional and Business, per organizer, billed annually; Enterprise contact sales) but prices are loaded by JavaScript and were not readable; buy pages returned empty shells."
     },
     {
       "id": "master-app-1788305150874",
