@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-20T10:18:59Z",
+  "updatedAt": "2026-11-20T19:24:35Z",
   "items": [
     {
       "app": "Schwab",
@@ -167,6 +167,22 @@
       "date": "2026-09-30",
       "summary": "AdvicePay added a Resource Center icon on every page, clearer invoice reminders that send on the lead-time date, and a faster transfer-date filter.",
       "sourceUrl": "https://advicepay.com/changelog/september-30-2026",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "FGM Suite",
+      "kind": "feature",
+      "date": "2026-11-17",
+      "summary": "FMG Suite announced that Aidentified will launch on FMG Connect starting in December, automatically starting an advisor-chosen outreach campaign when a tracked client or prospect has a wealth event such as a job change or liquidity event.",
+      "sourceUrl": "https://fmgsuite.com/company/in-the-news/press-releases/aidentified-launches-on-fmg-connect/",
+      "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Hazel (Altruist AI platform for advisors)",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Altruist's Hazel and Vanilla are building an AI estate planning module with estate summaries, a health check and a document builder, expected in early 2027 with a waitlist open; timing and features may change.",
+      "sourceUrl": "https://www.wealthmanagement.com/advisor-support-platforms/vanilla-partners-with-hazel-on-ai-estate-planning-tool",
       "checkedAt": "2026-11-20"
     }
   ]
