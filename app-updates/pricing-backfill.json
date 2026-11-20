@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:23:03Z",
+  "generatedAt": "2026-11-20T01:24:07Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1717,11 +1717,17 @@
     {
       "id": "master-app-1788305446623",
       "name": "Tamarac",
-      "status": "not_found",
-      "sourceUrl": "https://www.envestnet.com/financial-intelligence/tamarac",
+      "status": "found",
+      "sourceUrl": "",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch failed (client error); no pricing read."
+      "tiers": [
+        {
+          "name": "Estimated starting price (annual billing)",
+          "price": 1666.67,
+          "notes": "estimated $20,000 per year starting price, as stated by user; per-month figure is $20,000 divided by 12; exact price by quote"
+        }
+      ],
+      "note": "Quote-only; $20,000/year starting estimate supplied by user. Official page could not be fetched."
     },
     {
       "id": "master-app-1788305453759",
