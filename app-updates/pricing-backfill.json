@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:36:20Z",
+  "generatedAt": "2026-11-20T01:37:53Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1894,11 +1894,27 @@
     {
       "id": "master-app-1788305439455",
       "name": "Orion",
-      "status": "not_found",
-      "sourceUrl": "https://orion.com/pricing",
+      "status": "found",
+      "sourceUrl": "https://orion.com/plans-orion-trading-software",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "Orion Trading (annual billing)",
+          "price": 1000,
+          "notes": "monthly price not shown; annual-billing rate. Starting at $12,000/year, converted to per-month"
+        },
+        {
+          "name": "Essentials Stack (annual billing)",
+          "price": 1500,
+          "notes": "monthly price not shown; annual-billing rate. Starting at $18,000/year, converted to per-month"
+        },
+        {
+          "name": "Advantage Stack (annual billing)",
+          "price": 2333.33,
+          "notes": "monthly price not shown; annual-billing rate. Starting at $28,000/year, converted to per-month"
+        }
+      ],
+      "note": "Page lists yearly \"starting at\" prices only; divided by 12 for monthly."
     },
     {
       "id": "master-app-1788305446623",
