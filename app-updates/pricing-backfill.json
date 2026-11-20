@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:07:57Z",
+  "generatedAt": "2026-11-20T00:09:10Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -527,11 +527,27 @@
     {
       "id": "master-app-1788301658996",
       "name": "Otter.ai",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened in this run (fetch permission failure)"
+      "status": "found",
+      "sourceUrl": "https://otter.ai/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Basic",
+          "price": 0,
+          "notes": ""
+        },
+        {
+          "name": "Pro (per user)",
+          "price": 16.99,
+          "notes": "monthly billing standard price; annual toggle shows $8.33/user/mo; promotional prices also shown on page"
+        },
+        {
+          "name": "Business (per user)",
+          "price": 30,
+          "notes": "monthly billing standard price; promo $24 for first 3 months; annual toggle shows $19.99/user/mo"
+        }
+      ],
+      "note": "Enterprise is custom pricing."
     },
     {
       "id": "master-app-1788301678916",
