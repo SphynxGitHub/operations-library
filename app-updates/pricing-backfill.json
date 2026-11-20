@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:22:30Z",
+  "generatedAt": "2026-11-20T01:23:03Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1814,11 +1814,17 @@
     {
       "id": "master-app-1788305522863",
       "name": "Roboforms",
-      "status": "not_found",
-      "sourceUrl": "https://www.roboform.com/pricing",
+      "status": "found",
+      "sourceUrl": "https://www.roboform.com/pricing-business",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Fetch of pricing page failed (client error)."
+      "tiers": [
+        {
+          "name": "Business (per user) (annual billing)",
+          "price": 3.33,
+          "notes": "monthly price not shown; annual-billing rate; renews at $39.95/yr; multi-year discount available"
+        }
+      ],
+      "note": "Enterprise is custom volume-based pricing. Promo/banner values on the page were unrendered placeholders."
     },
     {
       "id": "master-app-1788305564335",
