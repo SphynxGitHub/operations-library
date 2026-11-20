@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:28:08Z",
+  "generatedAt": "2026-11-20T01:28:39Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1578,11 +1578,32 @@
     {
       "id": "master-app-1788305382167",
       "name": "Quickbooks",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://quickbooks.intuit.com/pricing/",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows struck-through regular prices and 70%-off promo prices without labeling regular price as monthly vs annual; cannot verify."
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Simple Start",
+          "price": 38,
+          "notes": "regular (struck-through) price per month; promo 70% off first 3 months ($11.40); free 30-day trial"
+        },
+        {
+          "name": "Essentials",
+          "price": 85,
+          "notes": "regular (struck-through) price per month; promo 70% off first 3 months ($25.50)"
+        },
+        {
+          "name": "Plus",
+          "price": 140,
+          "notes": "regular (struck-through) price per month; promo 70% off first 3 months ($42)"
+        },
+        {
+          "name": "Advanced",
+          "price": 340,
+          "notes": "regular (struck-through) price per month; promo 70% off first 3 months ($102)"
+        }
+      ],
+      "note": "Regular struck-through prices used per user instruction. A second page (/oa/get-quickbooks) showed different, partly unlabeled prices ($35, $99, $235 with 50% off); the named /pricing/ page was used."
     },
     {
       "id": "master-app-1788305387920",
