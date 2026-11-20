@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:24:07Z",
+  "generatedAt": "2026-11-20T01:25:41Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -434,7 +434,7 @@
       "sourceUrl": "https://mailchimp.com/pricing/",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "note": "Page opened but shows only 12-month promo prices (Essentials $13, Standard $20, Premium $350) with the regular post-promo prices and contact tier not readable; Free plan limit 250 contacts."
     },
     {
       "id": "master-app-1788301490005",
@@ -997,11 +997,27 @@
     {
       "id": "master-app-1788305030625",
       "name": "Asana",
-      "status": "not_found",
-      "sourceUrl": "https://asana.com/pricing.md",
+      "status": "found",
+      "sourceUrl": "https://asana.com/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "Retry 2026-11-20: official pricing page fetch refused (permission/provenance error) and search returned only third-party pages; price not verified."
+      "tiers": [
+        {
+          "name": "Personal",
+          "price": 0,
+          "notes": "up to 2 users"
+        },
+        {
+          "name": "Starter (per user)",
+          "price": 13.49,
+          "notes": "monthly billing; $10.99 billed annually"
+        },
+        {
+          "name": "Advanced (per user)",
+          "price": 30.49,
+          "notes": "monthly billing; $24.99 billed annually"
+        }
+      ],
+      "note": "Enterprise and Enterprise+ are contact-sales. AI usage priced separately per request."
     },
     {
       "id": "master-app-1788305036740",
