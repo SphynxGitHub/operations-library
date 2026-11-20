@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:50:39Z",
+  "generatedAt": "2026-11-20T01:51:45Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2805,6 +2805,31 @@
       "checkedAt": "2026-11-20",
       "tiers": [],
       "note": "Per user: Gemini is included in Google Workspace; no separate software pricing."
+    },
+    {
+      "id": "master-app-1795130795921",
+      "name": "ChatGPT",
+      "status": "found",
+      "sourceUrl": "https://chatgpt.com/pricing",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Business Standard seat (per user)",
+          "price": 25,
+          "notes": "Billed monthly; $20/month if billed annually"
+        },
+        {
+          "name": "Business Premium seat (per user)",
+          "price": 125,
+          "notes": "Billed monthly; $100/month if billed annually"
+        },
+        {
+          "name": "Enterprise",
+          "price": null,
+          "notes": "Custom pricing; contact sales"
+        }
+      ],
+      "note": "Business & Enterprise tab from user-supplied screenshot. Individual plans (Go, Plus, Pro) not recorded: amounts did not render when fetched."
     }
   ]
 }
