@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:48:48Z",
+  "generatedAt": "2026-11-20T01:50:39Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -2731,11 +2731,27 @@
     {
       "id": "master-app-1795138988965",
       "name": "MoneyGuidePro",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://www.moneyguidepro.com/ifa/home/myblockspricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "MyBlocks page shows $1,400 and $125 per advisor but billing cycles are unclear; Ensemble & Enterprise is quote-only. Needs confirmation."
+      "tiers": [
+        {
+          "name": "MoneyGuide (per advisor) (annual billing)",
+          "price": 175,
+          "notes": "monthly price not shown; annual-billing rate. Annual subscription, paid monthly"
+        },
+        {
+          "name": "Wealth Studios (per advisor) (annual billing)",
+          "price": 216.67,
+          "notes": "monthly price not shown; annual-billing rate. Annual subscription, paid monthly"
+        },
+        {
+          "name": "Platform (per advisor) (annual billing)",
+          "price": 258.33,
+          "notes": "monthly price not shown; annual-billing rate. Includes MoneyGuide, Wealth Studios, Dash, My Blocks"
+        }
+      ],
+      "note": "From user-supplied screenshot of the Envestnet MoneyGuide pricing page; list prices exclude taxes. Ensemble/Enterprise is quote-only."
     },
     {
       "id": "master-app-1795139017664",
@@ -2744,7 +2760,7 @@
       "sourceUrl": "https://help.holistiplan.com/new-pricing-structure-coming-in-2025",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Pricing is per household; help article gives no dollar amounts."
+      "note": "Priced per household (not per user); no dollar amounts found on the official help article."
     },
     {
       "id": "master-app-1795139000587",
@@ -2784,11 +2800,11 @@
     {
       "id": "master-app-1795130812313",
       "name": "Gemini",
-      "status": "not_found",
-      "sourceUrl": "https://knowledge.workspace.google.com/admin/gemini/how-google-workspace-with-gemini-billing-works",
+      "status": "no_software_pricing",
+      "sourceUrl": "",
       "checkedAt": "2026-11-20",
       "tiers": [],
-      "note": "Only Google AI Pro for Education prices found ($24 flexible / $20 annual-plan per user per month); consumer and Business plans not confirmed from an official page."
+      "note": "Per user: Gemini is included in Google Workspace; no separate software pricing."
     }
   ]
 }
