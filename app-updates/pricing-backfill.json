@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:15:59Z",
+  "generatedAt": "2026-11-20T00:17:07Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1707,11 +1707,17 @@
     {
       "id": "master-app-1788305564335",
       "name": "Slant",
-      "status": "not_found",
-      "sourceUrl": "https://slantfinancial.com/",
+      "status": "found",
+      "sourceUrl": "https://www.slant.app/pricing",
       "checkedAt": "2026-11-20",
-      "tiers": [],
-      "note": "No pricing page found; site is contact-form only and vendor identity unconfirmed."
+      "tiers": [
+        {
+          "name": "All-inclusive (per seat) (annual billing)",
+          "price": 150,
+          "notes": "monthly price not shown; annual-billing rate"
+        }
+      ],
+      "note": "Single all-inclusive price; no named plans."
     },
     {
       "id": "master-app-1788305610207",
