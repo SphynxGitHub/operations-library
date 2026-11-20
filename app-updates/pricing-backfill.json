@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:17:07Z",
+  "generatedAt": "2026-11-20T00:18:36Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1381,26 +1381,36 @@
       "id": "master-app-1788305293993",
       "name": "FGM Suite",
       "status": "found",
-      "sourceUrl": "https://fmgsuite.com/pricing",
-      "checkedAt": "2026-11-19",
+      "sourceUrl": "https://fmgsuite.com/pricing/",
+      "checkedAt": "2026-11-20",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "All In One: Essential",
           "price": 178,
-          "notes": "monthly; $994 setup fee; 'starting at'"
+          "notes": "monthly; 'starting at'; $994 setup"
         },
         {
-          "name": "Premium",
+          "name": "All In One: Premium",
           "price": 418,
-          "notes": "monthly; $3,194 setup fee; 'starting at'"
+          "notes": "monthly; 'starting at'; $3,194 setup"
         },
         {
-          "name": "Do It For Me + Premium Website",
+          "name": "All In One: Do It For Me + Premium Website",
           "price": 1044,
-          "notes": "monthly; $3,494 setup fee; 'starting at'"
+          "notes": "monthly; 'starting at'; $3,494 setup"
+        },
+        {
+          "name": "Website: Essential",
+          "price": 79,
+          "notes": "monthly; 'starting at'; $795 setup"
+        },
+        {
+          "name": "Website: Premium",
+          "price": 149,
+          "notes": "monthly; 'starting at'; $2,995 setup"
         }
       ],
-      "note": "Lower part of page showed different unverified figures; top pricing section recorded."
+      "note": "Page has tabs (All In One, Marketing, Website, Testimonials) with different prices per tab. All In One and Website tabs recorded; Marketing and Testimonials tab prices not verified."
     },
     {
       "id": "master-app-1788305306064",
