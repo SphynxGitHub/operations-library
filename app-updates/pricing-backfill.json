@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:19:00Z",
+  "generatedAt": "2026-11-20T00:19:14Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1423,9 +1423,14 @@
           "name": "Marketing: Do It For Me",
           "price": 895,
           "notes": "monthly; 'starting at'; $499 setup"
+        },
+        {
+          "name": "Testimonials: Solo (per advisor)",
+          "price": 99,
+          "notes": "monthly; 1 advisor; $99 one-time setup"
         }
       ],
-      "note": "Page has tabs (All In One, Marketing, Website, Testimonials) with different prices per tab. All In One, Marketing and Website tabs recorded; Testimonials tab not verified."
+      "note": "Page has tabs (All In One, Marketing, Website, Testimonials) with different prices per tab; all four tabs recorded."
     },
     {
       "id": "master-app-1788305306064",
