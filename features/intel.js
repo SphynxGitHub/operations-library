@@ -193,9 +193,9 @@ OL.openIntelModal = async function(idOrNull, prefill = null, returnTo = null) {
                     <div class="tiny muted" style="margin-bottom:4px;">Tick more than one for something that only matters when apps are used together.</div>
                     <input type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box; margin-bottom:6px;" placeholder="Filter apps..." oninput="OL.filterIntelApps(this.value)">
                     <div id="intel-app-list" style="max-height:260px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:6px;">
-                        ${library.length ? library.map((a) => `
-                            <label data-name="${esc(String(a.name).toLowerCase())}" style="display:flex !important; align-items:center; gap:8px; padding:3px 4px; margin:0 !important; cursor:pointer; font-size:12px;">
-                                <input type="checkbox" class="intel-app-box" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${pickedKeys.has(`id:${a.id}`) || pickedKeys.has(`name:${String(a.name).trim().toLowerCase()}`) ? 'checked' : ''}>
+                        ${library.length ? library.map((a, idx) => `
+                            <label data-name="${esc(String(a.name).toLowerCase())}" data-idx="${idx}" style="display:flex !important; align-items:center; gap:8px; padding:3px 4px; margin:0 !important; cursor:pointer; font-size:12px;">
+                                <input type="checkbox" class="intel-app-box" onchange="OL.sortIntelApps()" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${pickedKeys.has(`id:${a.id}`) || pickedKeys.has(`name:${String(a.name).trim().toLowerCase()}`) ? 'checked' : ''}>
                                 ${esc(a.name)}
                             </label>`).join('') : `<div class="tiny muted">No apps in the Master Apps library yet.</div>`}
                     </div>
@@ -212,6 +212,20 @@ OL.openIntelModal = async function(idOrNull, prefill = null, returnTo = null) {
         </div>`;
     window.openModal(html);
     if (window.lucide) lucide.createIcons();
+    OL.sortIntelApps();
+};
+
+// Ticked apps first (so they are easy to see and untick), the rest alphabetical as in the library.
+OL.sortIntelApps = function() {
+    const list = document.getElementById('intel-app-list');
+    if (!list) return;
+    const labels = [...list.querySelectorAll('label[data-idx]')];
+    labels.sort((a, b) => {
+        const ca = a.querySelector('.intel-app-box')?.checked ? 0 : 1, cb = b.querySelector('.intel-app-box')?.checked ? 0 : 1;
+        return ca - cb || Number(a.dataset.idx) - Number(b.dataset.idx);
+    });
+    labels.forEach((l) => list.appendChild(l));
+    list.scrollTop = 0;
 };
 
 OL.filterIntelApps = function(q) {
