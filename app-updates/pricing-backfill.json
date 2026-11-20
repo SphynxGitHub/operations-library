@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T01:35:41Z",
+  "generatedAt": "2026-11-20T01:36:20Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -1464,11 +1464,17 @@
     {
       "id": "master-app-1788305233860",
       "name": "Keap",
-      "status": "not_found",
+      "status": "found",
       "sourceUrl": "https://keap.com/pricing",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Page shows \"Starting at $320/mo\" with \"Billed at $3,195/year\" but does not label which is monthly vs annual; contact/user selectors not readable; implementation package required"
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "Starting plan (2 users, 1,500 contacts)",
+          "price": 320,
+          "notes": "Starts at, billed monthly; $3,195/yr alternative seen on page"
+        }
+      ],
+      "note": "Per user: starts at $320/month billed monthly for 2 users and 1,500 contacts."
     },
     {
       "id": "master-app-1788305243385",
