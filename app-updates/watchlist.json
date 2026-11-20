@@ -594,6 +594,21 @@
       "name": "Google Voice",
       "pricingUrl": "https://workspace.google.com/products/voice/",
       "releaseNotesUrl": ""
+    },
+    {
+      "name": "Docupace",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "Global Relay",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "NaviPlan",
+      "pricingUrl": "",
+      "releaseNotesUrl": ""
     }
   ]
 }
