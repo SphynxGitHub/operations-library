@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T00:06:15Z",
+  "generatedAt": "2026-11-20T00:07:57Z",
   "apps": [
     {
       "id": "master-app-1767936076742",
@@ -536,11 +536,27 @@
     {
       "id": "master-app-1788301678916",
       "name": "Zoom Phone",
-      "status": "not_found",
-      "sourceUrl": "",
-      "checkedAt": "2026-11-19",
-      "tiers": [],
-      "note": "Official pricing page could not be opened (fetch permission not granted this run); price not verified"
+      "status": "found",
+      "sourceUrl": "https://zoom.us/pricing/zoom-phone",
+      "checkedAt": "2026-11-20",
+      "tiers": [
+        {
+          "name": "US & CA Unlimited (per user)",
+          "price": 18,
+          "notes": "monthly billing; $16 billed annually; added to Workplace Basic"
+        },
+        {
+          "name": "Pro Plus (per user)",
+          "price": 24,
+          "notes": "monthly billing; $20.50 billed annually; bundle of Workplace Pro with Phone"
+        },
+        {
+          "name": "Business Plus (per user)",
+          "price": 29,
+          "notes": "monthly billing; $24.50 billed annually; bundle of Workplace Business with Phone"
+        }
+      ],
+      "note": "Other Zoom Phone plans (Pro, Pro Global Select, regional) are contact-sales."
     },
     {
       "id": "master-app-1788301684499",
