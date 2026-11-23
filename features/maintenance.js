@@ -1165,14 +1165,23 @@ export async function maintenanceHoursSummary(client) {
     if (!slot.grants.length) return null;
     syncGrantLabel(client);
     const ledger = ledgerFor(client, slot);
-    const f = currentBlockFigures(ledger);
-    if (!f) return null;
-    const active = slot.periods.find((p) => p.status === 'active') || null;
+    const pool = poolOf(ledger);                 // every block available for new work: plan allotment, carryover, purchases
+    if (!pool.length) return null;
     const r = (n) => Math.round(n * 1000) / 1000;
+    const total = pool.reduce((sum, g) => sum + Number(g.hours_granted || 0), 0);
+    const used = pool.reduce((sum, g) => sum + usedHoursOf(ledger, g), 0);
+    const carry = pool.filter((g) => g.source === 'courtesy_carryover');
+    const plan = pool.find((g) => g.source === 'plan_allotment') || null;
+    const active = slot.periods.find((p) => p.status === 'active') || null;
+    const planHours = plan ? Number(plan.hours_granted || 0) : 0;
+    const expires = pool.map((g) => String(g.expires_on || '').slice(0, 10)).filter(Boolean).sort();
     return {
-        total: r(f.total), used: r(f.used), remaining: r(f.left), blockOpen: f.open,
-        periodStart: active ? active.start_date : '', periodEnd: active ? active.due_date : '', blockEnds: String(f.grant.expires_on || '').slice(0, 10),
-        label: GRANT_LABEL[f.grant.source] || 'Hours',
+        coaching: isCoachingClient(client),
+        tier: active ? periodTierTitle(active, planHours) : '',
+        total: r(total), used: r(used), remaining: r(total - used),
+        carryoverHours: r(carry.reduce((sum, g) => sum + Number(g.hours_granted || 0), 0)),
+        periodStart: active ? String(active.start_date).slice(0, 10) : '', periodEnd: active ? String(active.due_date).slice(0, 10) : '',
+        lastExpires: expires.length ? expires[expires.length - 1] : '',
     };
 }
 

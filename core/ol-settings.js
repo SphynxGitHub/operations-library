@@ -27,9 +27,10 @@ export const DEFAULT_OL_SETTINGS = {
             closing: 'Thank you,',
         },
         hoursCheckIn: {
-            subject: '{client} — your maintenance hours update',
-            intro: 'Here is your monthly update on your Ongoing Maintenance hours:',
-            closing: 'Let us know if you have any questions or anything new you would like us to take on.\n\nThank you,',
+            subject: '{client} — your maintenance subscription status',
+            intro: 'Happy {month}! This email serves as a notification of your current subscription status.',
+            notes: 'Likewise, if you have ideas about new automations or improvements to what we\'ve already built out, please let us know!\n\nFor more information on [maintenance plan tiers](https://www.sphynxautomation.com/ongoing-maintenance), please refer to our website.',
+            closing: 'Thank you,',
         },
     },
     // A working round that sits in Drafting this long gets a task to follow up with the client or change its status.

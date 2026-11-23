@@ -71,7 +71,8 @@ OL.renderOlSettingsPanel = function() {
 
         ${section('Monthly hours check-in email', 'The email drafted from the Monthly hours check-in task. The hours figures are filled in from Maintenance & Hours; this is the wording around them.',
             field('Subject', text('os-hc-subject', t.hoursCheckIn.subject), 'Fills in: {client} {sender}') +
-            field('Opening line', area('os-hc-intro', t.hoursCheckIn.intro), 'Comes right after "Hi [first name],". Fills in: {client} {sender}') +
+            field('Opening line', area('os-hc-intro', t.hoursCheckIn.intro), 'Comes right after "Hi [first name],". Fills in: {month} {client} {sender}') +
+            field('Notes under the hours', area('os-hc-notes', t.hoursCheckIn.notes, 4), 'Shown after the hours list. A link is written [words](https://address). Fills in: {client} {sender}') +
             field('Closing', area('os-hc-closing', t.hoursCheckIn.closing, 3), 'Your signature is added under the closing. Also fills in: {client} {sender}'))}
 
         ${section('Working rounds left in Drafting', 'When a working round sits in Drafting too long, a task is created to follow up with the client or change the round\'s status (Approved, Declined or On Hold) to record the outcome.',
@@ -148,7 +149,7 @@ OL.saveOlSettings = function() {
         templates: {
             meetingSummary: { subject: v('os-ms-subject'), intro: v('os-ms-intro'), closing: v('os-ms-closing') },
             clientFollowUp: { subject: v('os-cf-subject'), intro: v('os-cf-intro'), closing: v('os-cf-closing') },
-            hoursCheckIn: { subject: v('os-hc-subject'), intro: v('os-hc-intro'), closing: v('os-hc-closing') },
+            hoursCheckIn: { subject: v('os-hc-subject'), intro: v('os-hc-intro'), notes: v('os-hc-notes'), closing: v('os-hc-closing') },
         },
         draftingFollowUp: {
             enabled: on('os-df-enabled'), afterDays: Math.max(1, num('os-df-after', d.draftingFollowUp.afterDays)), repeatEveryDays: Math.max(1, num('os-df-repeat', d.draftingFollowUp.repeatEveryDays)),
