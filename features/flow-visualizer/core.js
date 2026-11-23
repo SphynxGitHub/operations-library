@@ -508,7 +508,6 @@ export function _fvNormalizeStepCoords() {
         (res.steps || []).forEach(step => {
             // Don't set 0,0 — leave null so _fvComputeLayout handles it
             if (!step.coords) step.coords = null;
-            if (step.pinned === undefined) step.pinned = false;
         });
     });
 };
@@ -747,7 +746,6 @@ if (!OL._fv) OL._fv = {
     stageFilter: '',
     globalsExpanded: false,
     searchMatches: [], searchIdx: -1,
-    snapToGrid: false, gridSize: 20,
     _searchQuery: '',
     railCollapsed: sessionStorage.getItem('fv_rail_collapsed') === 'true',
 };
@@ -857,7 +855,6 @@ export function renderVisualizer() {
         showConnections: true, stageFilter: '',
         globalsExpanded: false,
         searchMatches: [], searchIdx: -1,
-        snapToGrid: false, gridSize: 20,
         _searchQuery: '',
     };
     
@@ -974,24 +971,6 @@ export function renderVisualizer() {
 
         <!-- Steps view controls -->
         ${OL._fv.layout === 'steps' ? `
-          <button class="fv-toggle-btn ${OL._fv.snapToGrid ? 'on' : ''}"
-                  onclick="OL._fv.snapToGrid=!OL._fv.snapToGrid; OL.renderVisualizer();"
-                  title="Snap to grid">
-            <i data-lucide="grid"></i>
-            Grid ${OL._fv.snapToGrid ? 'On' : 'Off'}
-          </button>
-
-          <!-- Tidy dropdown -->
-          <div style="position:relative;display:inline-flex;">
-            <button class="fv-btn" onclick="OL._fvTidy('global')"
-                    title="Tidy layout (respects pinned)">
-              <i data-lucide="align-justify"></i> Tidy
-            </button>
-            <button class="fv-btn fv-icon" style="border-left:none;border-radius:0 8px 8px 0;padding:7px 6px;"
-                    onclick="OL._fvShowTidyMenu(event)">
-              <i data-lucide="chevron-down"></i>
-            </button>
-          </div>
           <!-- Arrangement: fit the window, or force side by side / one column -->
           <select class="fv-select" style="max-width:140px;" title="How the diagram is arranged: fit the window, or the most columns allowed across a row"
                   onchange="OL.fvSetFlowShape(this.value)">
@@ -1949,13 +1928,10 @@ export function _fvComputeLayout(resources, stageFilter) {
   const PAD_Y = 60;
 
   allSteps.forEach(({ step, col, row }) => {
-    // Only update if not pinned
-    if (!step.pinned) {
-      step.coords = {
-        x: PAD_X + col * COL_W,
-        y: PAD_Y + row * ROW_H,
-      };
-    }
+    step.coords = {
+      x: PAD_X + col * COL_W,
+      y: PAD_Y + row * ROW_H,
+    };
   });
 };
 
@@ -2873,7 +2849,6 @@ export function _fvRenderSteps(resources) {
                 <!-- the ways out are drawn as small cards beside this one (see sideInfo in _fvRenderSteps), not as rows here -->
                 <!-- Connection ports removed: their handler (OL._fvStartConnection) never existed, so they only
                      showed dots that threw an error when pressed, and added ~5,000 elements to big maps. -->`;
-              if (!res._inst) OL._fvSetupCardDrag(div, res.id, step.id);   // copies are placed by the layout; moving one would move the real step
               frag.appendChild(div);
               sectionCards.push({ res, step, el: div, idx });
             });
@@ -3778,98 +3753,6 @@ export function _fvDrawStepConnections(resources) {
   group.appendChild(frag);
 };
 
-export function _fvSetupCardDrag(el, resId, stepId) {
-  let startX, startY, startLeft, startTop, hasMoved = false;
-
-  el.addEventListener('mousedown', e => {
-    // Don't drag if clicking interactive elements
-    if (e.target.closest('.fv-pin-btn, .fv-res-tidy-btn, .fv-port, .fv-step-card-body')) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    startX    = e.clientX;
-    startY    = e.clientY;
-    startLeft = parseFloat(el.style.left) || 0;
-    startTop  = parseFloat(el.style.top)  || 0;
-    hasMoved  = false;
-
-    const zoom = OL._fv.zoom || 1;
-
-    const onMove = e => {
-      const dx = (e.clientX - startX) / zoom;
-      const dy = (e.clientY - startY) / zoom;
-
-      if (!hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-        hasMoved = true;
-        el.classList.add('is-dragging');
-      }
-      if (!hasMoved) return;
-
-      let newX = startLeft + dx;
-      let newY = startTop  + dy;
-
-      // Snap to grid
-      if (OL._fv.snapToGrid) {
-        const g = OL._fv.gridSize || 20;
-        newX = Math.round(newX / g) * g;
-        newY = Math.round(newY / g) * g;
-      }
-
-      newX = Math.max(0, newX);
-      newY = Math.max(0, newY);
-
-      el.style.left = newX + 'px';
-      el.style.top  = newY + 'px';
-
-      // Redraw connections live (at most once per frame; mousemove fires far more often)
-      if (!el._fvLineFrame) {
-        el._fvLineFrame = requestAnimationFrame(() => {
-          el._fvLineFrame = null;
-          const data = OL.getCurrentProjectData();
-          const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-          OL._fvDrawStepConnections(resources);
-        });
-      }
-    };
-
-    const onUp = async () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup',   onUp);
-      el.classList.remove('is-dragging');
-
-      if (!hasMoved) return;
-
-      // Save coords and auto-pin
-      const data = OL.getCurrentProjectData();
-      const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-      const step = res?.steps?.find(s => String(s.id) === String(stepId));
-
-      if (step) {
-        step.coords = {
-          x: parseFloat(el.style.left) || 0,
-          y: parseFloat(el.style.top)  || 0,
-        };
-        step.pinned = true; // Auto-pin on first drag
-        el.classList.add('is-pinned');
-
-        // Update pin button
-        const pinBtn = el.querySelector('.fv-pin-btn');
-        if (pinBtn) {
-          pinBtn.classList.add('pinned');
-          pinBtn.title = 'Unpin (allow auto-layout)';
-          pinBtn.innerHTML = '<i data-lucide="pin"></i>';
-          if (window.lucide) lucide.createIcons();
-        }
-
-        await OL.persist();
-      }
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup',   onUp);
-  });
-};
-
 // ── STAGE NAME EDITING ────────────────────────────────────
 export function _fvEditStageName(stageId, name) {
     const data  = OL.getCurrentProjectData();
@@ -4048,126 +3931,6 @@ export function _fvHighlightGlobalConnections(resId, on) {
       card.classList.toggle('dimmed', on && !isConnected);
     }
   });
-};
-
-// TIDY FUNCTIONS
-
-export async function _fvTidy(scope, resourceId) {
-  const data      = OL.getCurrentProjectData();
-  const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-
-  if (scope === 'global') {
-    resources.forEach(res => {
-      (res.steps||[]).forEach(step => {
-        if (!step.pinned) step.coords = null;
-      });
-    });
-  } else if (scope === 'force') {
-    resources.forEach(res => {
-      (res.steps||[]).forEach(step => {
-        step.pinned = false;
-        step.coords = null;
-      });
-    });
-  } else if (scope === 'stage') {
-    const stageId = resourceId;
-    resources
-      .filter(r => r.stageId === stageId)
-      .forEach(res => {
-        (res.steps||[]).forEach(step => {
-          if (!step.pinned) step.coords = null;
-        });
-      });
-  } else if (scope === 'resource') {
-    const res = resources.find(r => String(r.id) === String(resourceId));
-    if (res) {
-      (res.steps||[]).forEach(step => {
-        step.pinned = false;
-        step.coords = null;
-      });
-    }
-  }
-
-  OL._fvNormalizeStepCoords();
-  OL._fvComputeLayout(resources, OL._fv.stageFilter);
-  await OL.persist();
-  OL.renderVisualizer();
-};
-
-export function _fvShowTidyMenu(e) {
-  e.stopPropagation();
-  const existing = document.getElementById('fv-tidy-menu');
-  if (existing) { existing.remove(); return; }
-
-  const btn    = e.currentTarget;
-  const rect   = btn.getBoundingClientRect();
-  const stages = OL.getCurrentProjectData().stages || [];
-
-  const menu = document.createElement('div');
-  menu.id = 'fv-tidy-menu';
-  menu.style.cssText = `
-    position:fixed; top:${rect.bottom+4}px; left:${rect.left}px;
-    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px;
-    box-shadow:0 4px 16px rgba(0,0,0,0.1); z-index:1000;
-    min-width:200px; overflow:hidden;
-  `;
-
-  const items = [
-    { label: 'Tidy All (respect pinned)', action: `OL._fvTidy('global')` },
-    { label: 'Force Tidy All', action: `OL._fvTidy('force')`, danger: true },
-    { label: '─────────────────', divider: true },
-    ...stages.map(s => ({
-      label: `Tidy: ${s.name}`,
-      action: `OL._fvTidy('stage','${s.id}')`,
-    })),
-  ];
-
-  items.forEach(item => {
-    if (item.divider) {
-      const d = document.createElement('div');
-      d.style.cssText = 'padding:4px 12px;font-size:10px;color:var(--line);';
-      d.textContent = item.label;
-      menu.appendChild(d);
-      return;
-    }
-    const el = document.createElement('div');
-    el.style.cssText = `
-      padding:9px 14px; font-size:12px; cursor:pointer;
-      color:${item.danger ? '#d4472a' : '#374151'};
-      transition:background 0.1s;
-    `;
-    el.textContent = item.label;
-    el.onmouseenter = () => el.style.background = '#f5f6f8';
-    el.onmouseleave = () => el.style.background = '';
-    el.onclick = () => { menu.remove(); eval(item.action); };
-    menu.appendChild(el);
-  });
-
-  document.body.appendChild(menu);
-  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
-};
-
-export async function _fvTogglePin(resId, stepId) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-  const step = res?.steps?.find(s => String(s.id) === String(stepId));
-  if (!step) return;
-
-  step.pinned = !step.pinned;
-  await OL.persist();
-
-  // Surgical update — just update the pin button without full re-render
-  const card = document.getElementById(`fv-step-${resId}-${stepId}`);
-  if (card) {
-    const btn = card.querySelector('.fv-pin-btn');
-    if (btn) {
-      btn.classList.toggle('pinned', step.pinned);
-      btn.title = step.pinned ? 'Unpin (allow auto-layout)' : 'Pin (manual position)';
-      btn.innerHTML = `<i data-lucide="${step.pinned ? 'pin' : 'pin-off'}"></i>`;
-      if (window.lucide) lucide.createIcons();
-    }
-    card.classList.toggle('is-pinned', step.pinned);
-  }
 };
 
 // WORKBENCH PANEL
@@ -10067,9 +9830,9 @@ Object.assign(window.OL, {
     getLucideSVG, _fvBuildCard, _fvCardDragStart, _fvCardDragEnd,
     _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, _fvSetGroupTitle,
     _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, fvSetFlowShape, printFlowDiagram,
-    _fvDrawStepConnections, _fvSetupCardDrag, _fvEditStageName, _fvJumpToLane,
-    _fvSyncRailHeights, _fvDrawConnections, _fvHighlightGlobalConnections, _fvTidy,
-    _fvShowTidyMenu, _fvTogglePin, _fvToggleWb, _fvPopulateWb,
+    _fvDrawStepConnections, _fvEditStageName, _fvJumpToLane,
+    _fvSyncRailHeights, _fvDrawConnections, _fvHighlightGlobalConnections,
+    _fvToggleWb, _fvPopulateWb,
     _fvRenderWbItems, _fvFilterWb, _fvWbDragStart, _fvSetupRailScroll,
     _fvUnmapResource, _fvHandleCanvasClick, closeInspectorPanel, _fvSelectStep,
     _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas, fvJumpToPlacement, placementsEditor, placementSet, placementAdd, placementRemove, placementLabel, placementWhen, placementPlace, placementWhenText, getPlacements,
