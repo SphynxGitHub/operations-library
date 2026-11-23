@@ -1,5 +1,6 @@
 import { esc, decodeEntities, state, db, getBusinessScopedClients, isInBusinessScope, scopeQueryToBusinessClients } from '../../core/data.js';
 import { getCurrentRound } from '../../core/requests.js';
+import { isMaintenanceSheet } from '../../core/maintenance.js';
 import { deriveWorkStatus, testingPhaseFor, WORK_STATUS_LABELS } from '../../core/work-status.js';
 import { assigneeForRole } from '../../core/testing.js';
 import { findRequestForTask } from '../../core/request-links.js';
@@ -244,6 +245,7 @@ OL.getDashboardRequestItems = function() {
                     assignee: assignee || '', isUnassigned: !assignee,
                     dueDate: phase === 'review' && reviewState?.reviewEnd ? reviewState.reviewEnd : '',
                     stepsDone: w.stepsDone || 0, stepsTotal: w.stepsTotal || 0, openAsks: w.openAsks || 0,
+                    isMaintenance: isMaintenanceSheet(sheet),   // lives on the Maintenance & Hours page, not the scoping sheet
                     clientName: c.meta?.name || 'Unknown Client', clientId: c.id
                 });
             });
@@ -767,16 +769,22 @@ OL.groupDashboardItems = function(items, by) {
     return out;
 };
 
+// A maintenance request is not on the scoping sheet (it has no round); it is on the project's Maintenance & Hours page.
+OL.openDashboardRequest = function(clientId, isMaintenance) {
+    OL.navigateToClientProject(clientId);
+    if (isMaintenance) window.location.hash = '#/maintenance';
+};
+
 // Compact card for an active request, in the same style as the other rows in the stream.
 OL.renderDashboardRequestRowHTML = function(r) {
     const color = r.workStatus === 'in_testing' ? '#38bdf8' : r.workStatus === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b';
-    const sub = [r.requestType ? r.requestType.charAt(0).toUpperCase() + r.requestType.slice(1) : '', `Round ${r.round}`, r.assignee || 'Unassigned',
+    const sub = [r.isMaintenance ? 'Maintenance' : '', r.requestType ? r.requestType.charAt(0).toUpperCase() + r.requestType.slice(1) : '', r.isMaintenance ? '' : `Round ${r.round}`, r.assignee || 'Unassigned',
                  r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : '', r.openAsks ? `${r.openAsks} open ask${r.openAsks === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     const dueKey = r.dueDate ? OL.localDayKey(r.dueDate) : '';
     const reqOverdue = dueKey && dueKey < OL.localDateStr();
     return `
     <div class="task-row-card" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(100,198,162,0.04); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
-         onclick="OL.navigateToClientProject('${esc(r.clientId)}')">
+         onclick="OL.openDashboardRequest('${esc(r.clientId)}', ${r.isMaintenance ? 'true' : 'false'})">
         <div style="display:flex; align-items:center;" title="Request"><i data-lucide="git-pull-request" style="width:14px;height:14px; color:#64c6a2;"></i></div>
         <div style="flex:1; min-width:0; overflow:hidden;">
             <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title)}</strong>

@@ -161,7 +161,7 @@ function bodyFor(key) {
         const tone = (w) => (w === 'in_testing' ? '#38bdf8' : w === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b');
         const type = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
         return { count: list.length, extra: '', body: list.map((r) => row(r.title, r.clientId,
-            [r.clientName, type(r.requestType), `Round ${r.round}`, r.assignee || 'Unassigned', r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : ''].filter(Boolean).join(' · '),
+            [r.clientName, r.isMaintenance ? 'Maintenance' : '', type(r.requestType), r.isMaintenance ? '' : `Round ${r.round}`, r.assignee || 'Unassigned', r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : ''].filter(Boolean).join(' · '),
             chip(r.status, tone(r.workStatus)))).join('') || empty('No open requests.') };
     }
     if (key === 'pending_review') {
