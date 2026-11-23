@@ -756,7 +756,15 @@ const fvShapeFrom = (v) => (['auto', 'wide', 'tall'].includes(v) ? v : (Number(v
 // Width the Steps view lays itself out against: the whole visible screen, not the map area. The map area gets narrower
 // whenever the inspector or a side panel is open, and every edit redraws the map, so measuring it made the diagram
 // shrink to one column the moment a step was selected. (Printing passes its own exact column count instead.)
-const fvLayoutWidth = () => window.innerWidth / (OL._fv.zoom || 1);
+// It still ignores the inspector (so selecting a step never reflows the map), but it does take off the left sidebar
+// and the scrollbar, which sit beside the map whatever else is open; without that the right-most column ran off the edge.
+const fvLayoutWidth = () => {
+    const wrap = document.getElementById('fv-canvas-wrap');
+    const side = document.querySelector('.sidebar');
+    const left = wrap ? wrap.getBoundingClientRect().left : (side ? side.getBoundingClientRect().right : 0);
+    const SCROLLBAR = 20;
+    return Math.max(320, (window.innerWidth - Math.max(0, left) - SCROLLBAR) / (OL._fv.zoom || 1));
+};
 if (!OL._fv.flowShape) OL._fv.flowShape = fvShapeFrom(sessionStorage.getItem('fv_flow_shape') || 'auto');
 // When the window is resized in Auto, re-flow the Steps view if the number of columns that fit has changed
 if (!OL._fv._resizeBound) {
