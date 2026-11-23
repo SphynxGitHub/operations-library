@@ -207,32 +207,34 @@ const CARRY_COLOR = '#BA7517', PLAN_COLOR = '#1D9E75';
 // carryover first). null when there is no carryover to fold in. Blocks held for specific tasks stay out of it.
 function planMerge(ledger) {
     const pool = poolOf(ledger);
-    const plan = pool.find((g) => g.source === 'plan_allotment');
-    const carries = plan ? pool.filter((g) => g.source === 'courtesy_carryover') : [];
-    return carries.length ? { plan, carries } : null;
+    const plans = pool.filter((g) => g.source === 'plan_allotment').sort(newestBlockFirst);   // more than one after an upgrade or downgrade mid-term
+    const carries = plans.length ? pool.filter((g) => g.source === 'courtesy_carryover') : [];
+    return carries.length || plans.length > 1 ? { plan: plans[0], plans, carries } : null;
 }
 function planMergeFigures(ledger, m) {
     const carryTotal = m.carries.reduce((t, g) => t + Number(g.hours_granted || 0), 0);
     const carryUsed = m.carries.reduce((t, g) => t + usedHoursOf(ledger, g), 0);
-    const planTotal = Number(m.plan.hours_granted || 0), planUsed = usedHoursOf(ledger, m.plan);
+    const planTotal = m.plans.reduce((t, g) => t + Number(g.hours_granted || 0), 0), planUsed = m.plans.reduce((t, g) => t + usedHoursOf(ledger, g), 0);
     const total = carryTotal + planTotal, used = carryUsed + planUsed;
-    const carryEnds = m.carries.map((g) => String(g.expires_on).slice(0, 10)).sort()[0];
-    return { carryTotal, carryUsed, planTotal, planUsed, total, used, left: Math.round((total - used) * 1000) / 1000, carryEnds, planEnds: String(m.plan.expires_on).slice(0, 10) };
+    const carryEnds = m.carries.map((g) => String(g.expires_on).slice(0, 10)).sort()[0] || '';
+    return { carryTotal, carryUsed, planTotal, planUsed, total, used, left: Math.round((total - used) * 1000) / 1000, carryEnds, planEnds: m.plans.map((g) => String(g.expires_on).slice(0, 10)).sort().pop(), planParts: m.plans.map((g) => Number(g.hours_granted || 0)), hasCarry: m.carries.length > 0 };
 }
 // One bar for both: the carryover hours first (amber), then the plan hours (teal), a divider where the carryover ends.
 function planMergeBarHtml(f, { height = 10, label = true } = {}) {
     const w = (h) => (f.total > 0 ? Math.min(100, (h / f.total) * 100) : 0);
     const divider = w(f.carryTotal);
-    return `<div style="position:relative; margin-top:${label ? 22 : 8}px;">
-        ${label ? `<div style="position:absolute; left:${divider}%; top:-17px; transform:translateX(-50%); font-size:11px; white-space:nowrap;" class="muted">Carryover ends ${esc(niceDate(f.carryEnds))}*</div>` : ''}
+    return `<div style="position:relative; margin-top:${label && f.hasCarry ? 22 : 8}px;">
+        ${label && f.hasCarry ? `<div style="position:absolute; left:${divider}%; top:-17px; transform:translateX(-50%); font-size:11px; white-space:nowrap;" class="muted">Carryover ends ${esc(niceDate(f.carryEnds))}*</div>` : ''}
         <div style="display:flex; height:${height}px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden;">
             <div style="width:${w(f.carryUsed)}%; background:${CARRY_COLOR};"></div><div style="width:${w(f.planUsed + Math.max(0, f.carryUsed - f.carryTotal))}%; background:${f.left < 0 ? '#ef4444' : PLAN_COLOR};"></div></div>
-        <div style="position:absolute; left:${divider}%; top:-3px; height:${height + 6}px; border-left:1.5px solid var(--text);"></div></div>
+        ${f.hasCarry ? `<div style="position:absolute; left:${divider}%; top:-3px; height:${height + 6}px; border-left:1.5px solid var(--text);"></div>` : ''}</div>
         <div class="tiny muted" style="display:flex; gap:14px; flex-wrap:wrap; margin-top:8px;">
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${CARRY_COLOR}; margin-right:5px; vertical-align:-1px;"></span>Carryover used ${esc(hoursText(f.carryUsed))} of ${esc(hoursText(f.carryTotal))}</span>
+            ${f.hasCarry ? `<span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${CARRY_COLOR}; margin-right:5px; vertical-align:-1px;"></span>Carryover used ${esc(hoursText(f.carryUsed))} of ${esc(hoursText(f.carryTotal))}</span>` : ''}
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${PLAN_COLOR}; margin-right:5px; vertical-align:-1px;"></span>Plan used ${esc(hoursText(f.planUsed))} of ${esc(hoursText(f.planTotal))}</span></div>`;
 }
-const planMergeFootnote = (f) => `<div class="tiny muted" style="margin-top:6px;">*Courtesy hours carried over from the old plan period. Any not used by ${esc(niceDate(f.carryEnds))} expire. The plan hours run to ${esc(niceDate(f.planEnds))}.</div>`;
+// "2 h + 20 h plan allotment + 6.39 h courtesy carryover = 28.39 h available"
+const planMergeSummary = (f) => `${f.planParts.map((h) => hoursText(h)).join(' + ')} plan allotment${f.planParts.length > 1 ? 's' : ''}${f.hasCarry ? ` + ${hoursText(f.carryTotal)} courtesy carryover` : ''} = ${hoursText(f.total)} available`;
+const planMergeFootnote = (f) => !f.hasCarry ? (f.planParts.length > 1 ? `<div class="tiny muted" style="margin-top:6px;">*Hours from the plan tier before and after a mid-term change, added together.</div>` : '') : `<div class="tiny muted" style="margin-top:6px;">*Courtesy hours carried over from the old plan period. Any not used by ${esc(niceDate(f.carryEnds))} expire. The plan hours run to ${esc(niceDate(f.planEnds))}.</div>`;
 
 const durText = (min) => { const a = Math.abs(Math.round(min)); const h = Math.floor(a / 60), m = a % 60; return (min < 0 ? '−' : '') + (h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`); };
 const grantShort = (g) => `${GRANT_LABEL[g.source] || g.source} · ${hoursText(g.hours_granted)}${g.source === 'plan_allotment' ? '' : ` · exp ${niceDate(g.expires_on)}`}`;
@@ -350,7 +352,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     // The plan allotment and the courtesy carryover from the old plan period read as ONE block of plan hours (one bar, a divider
     // where the carryover ends). Blocks held for specific tasks, and purchases, stay on their own rows.
     const merge = planMerge(ledger);
-    const folded = new Set(merge ? merge.carries.map((g) => String(g.id)) : []);
+    const folded = new Set(merge ? [...merge.carries, ...merge.plans.filter((g) => g.id !== merge.plan.id)].map((g) => String(g.id)) : []);
     const rows = newestFirst.filter((g) => !folded.has(String(g.id))).map((g) => {
         if (merge && g.id === merge.plan.id) {
             const f = planMergeFigures(ledger, merge);
@@ -435,8 +437,8 @@ function planPeriodCardHtml(client, merge, ledger, gt) {
     const pct = f.total > 0 ? Math.round((f.used / f.total) * 100) : 0;
     const daysLeft = daysBetween(todayIso(), f.planEnds);
     const carryLeft = Math.max(0, f.carryTotal - f.carryUsed);
-    const carryDays = daysBetween(todayIso(), f.carryEnds);
-    const merged = [merge.plan, ...merge.carries];
+    const carryDays = f.hasCarry ? daysBetween(todayIso(), f.carryEnds) : 0;
+    const merged = [...merge.plans, ...merge.carries];
     const tag = (g) => (g.source === 'plan_allotment' ? 'Plan' : 'Carryover');
     const tasks = new Map();
     merged.forEach((g) => (gt.byGrant[g.id] ? [...gt.byGrant[g.id].values()] : []).forEach((t) => {
@@ -453,12 +455,12 @@ function planPeriodCardHtml(client, merge, ledger, gt) {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
                     <div class="bold">Plan period</div>
-                    <div class="tiny muted">${esc(hoursText(f.planTotal))} plan allotment + ${esc(hoursText(f.carryTotal))} courtesy carryover = ${esc(hoursText(f.total))} available · ${daysLeft >= 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'ended'}</div>
+                    <div class="tiny muted">${esc(planMergeSummary(f))} · ${daysLeft >= 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'ended'}</div>
                 </div>
                 <span class="tiny bold" style="color:${f.left < 0 ? '#ef4444' : 'var(--text)'};">${esc(hoursText(f.used))} of ${esc(hoursText(f.total))} (${pct}%)</span>
             </div>
             ${planMergeBarHtml(f, { height: 8, label: false })}
-            <div class="tiny muted" style="margin-top:6px;">Carryover ${carryLeft > EPS ? `${esc(hoursText(carryLeft))} left, ${carryDays >= 0 ? `${carryDays} day${carryDays === 1 ? '' : 's'} until it expires (${esc(niceDate(f.carryEnds))})` : 'expired'}` : 'used up'}. Plan hours run to ${esc(niceDate(f.planEnds))}.</div>
+            ${f.hasCarry ? `<div class="tiny muted" style="margin-top:6px;">Carryover ${carryLeft > EPS ? `${esc(hoursText(carryLeft))} left, ${carryDays >= 0 ? `${carryDays} day${carryDays === 1 ? '' : 's'} until it expires (${esc(niceDate(f.carryEnds))})` : 'expired'}` : 'used up'}. Plan hours run to ${esc(niceDate(f.planEnds))}.</div>` : ''}
             <div class="tiny muted" style="cursor:pointer; user-select:none; margin-top:6px;" onclick="OL._maintOpenGrant = OL._maintOpenGrant || {}; OL._maintOpenGrant['${esc(key)}'] = ${open ? 'false' : 'true'}; OL.renderMaintenancePage()">${open ? '▾' : '▸'} ${list.length} task${list.length === 1 ? '' : 's'} charged here</div>
             ${open ? `<div class="tiny" style="margin-top:4px;">${rows || '<div class="muted" style="padding:4px 0;">Nothing charged yet.</div>'}</div>` : ''}
         </div>`;
@@ -469,7 +471,7 @@ function grantCardsHtml(client, slot, ledger) {
     const gt = grantTasks(ledger);
     // Every block in one list, newest first; used-up and expired ones are dimmed by their cards.
     const merge = planMerge(ledger);
-    const mergedIds = new Set(merge ? [merge.plan, ...merge.carries].map((g) => String(g.id)) : []);
+    const mergedIds = new Set(merge ? [...merge.plans, ...merge.carries].map((g) => String(g.id)) : []);
     const all = slot.grants.slice().sort(newestBlockFirst);
     const cards = all.map((g) => (merge && String(g.id) === String(merge.plan.id) ? planPeriodCardHtml(client, merge, ledger, gt)
         : mergedIds.has(String(g.id)) ? '' : grantCardHtml(client, g, ledger, gt)));
@@ -554,7 +556,7 @@ function periodCardHtml(client, slot, ledger) {
                 <div>
                     <div class="tiny muted uppercase bold">Current plan period</div>
                     <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(active.start_date))} to ${esc(niceDate(active.due_date))}</div>
-                    <div class="tiny muted">${tier ? `<span class="pill tiny soft" style="margin-right:6px;">${esc(tier)}</span>` : ''}${(() => { const m = planMerge(ledger); if (!m) return `${esc(hoursText(allot))} allotment`; const f = planMergeFigures(ledger, m); return `${esc(hoursText(f.planTotal))} allotment + ${esc(hoursText(f.carryTotal))} courtesy carryover = ${esc(hoursText(f.total))} available`; })()}</div>
+                    <div class="tiny muted">${tier ? `<span class="pill tiny soft" style="margin-right:6px;">${esc(tier)}</span>` : ''}${(() => { const m = planMerge(ledger); if (!m) return `${esc(hoursText(allot))} allotment`; return esc(planMergeSummary(planMergeFigures(ledger, m))); })()}</div>
                 </div>
                 ${canManage() ? `<div style="display:flex; gap:8px; align-items:center;">
                     <label class="tiny" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Renewing clients get a 6 month carryover instead of 3">
