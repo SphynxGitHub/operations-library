@@ -534,6 +534,10 @@ function hoursLogHtml(client, ledger, window, heading, { showGrants = true } = {
         </div>`;
 }
 
+// The first day of the plan year the active period belongs to: after a mid-term tier change, the earlier period that ends the same day.
+const planYearStart = (slot, active) => slot.periods.filter((p) => p.id !== active.id && String(p.due_date).slice(0, 10) === String(active.due_date).slice(0, 10) && String(p.start_date).slice(0, 10) < String(active.start_date).slice(0, 10))
+    .map((p) => String(p.start_date).slice(0, 10)).sort()[0] || active.start_date;
+
 function periodCardHtml(client, slot, ledger) {
     const active = slot.periods.find((p) => p.status === 'active');
     const today = todayIso();
@@ -549,13 +553,21 @@ function periodCardHtml(client, slot, ledger) {
     const pr = periodProgress(active, today);
     const allot = slot.grants.filter((g) => g.period_id === active.id && g.source === 'plan_allotment').reduce((s, g) => s + Number(g.hours_granted), 0);
     const tier = periodTierTitle(active, allot);
-    const { nonBillableHours } = summarizePeriodTime(ledger.entries.filter((e) => e.date >= active.start_date && e.date <= active.due_date));
+    // A mid-term tier change closes the old period and starts a new one that ends on the same date. Together they are one plan year:
+    // show that year's dates, with each tier and when it ran, instead of only the later stretch.
+    const dueDay = (p) => String(p.due_date).slice(0, 10), startDay = (p) => String(p.start_date).slice(0, 10);
+    const earlier = slot.periods.filter((p) => p.id !== active.id && dueDay(p) === dueDay(active) && startDay(p) < startDay(active)).sort((a, b) => startDay(a).localeCompare(startDay(b)));
+    const termStart = earlier.length ? startDay(earlier[0]) : active.start_date;
+    const allotOf = (p) => slot.grants.filter((g) => g.period_id === p.id && g.source === 'plan_allotment').reduce((t, g) => t + Number(g.hours_granted || 0), 0);
+    const tierRun = earlier.length ? [...earlier, active].map((p, i, all) => `<strong>${esc(periodTierTitle(p, allotOf(p)) || 'Earlier tier')}</strong> ${esc(niceDate(startDay(p)))} to ${esc(niceDate(i < all.length - 1 ? addDaysIso(startDay(all[i + 1]), -1) : dueDay(p)))}`).join(' <span class="muted">then</span> ') : '';
+    const { nonBillableHours } = summarizePeriodTime(ledger.entries.filter((e) => e.date >= termStart && e.date <= active.due_date));
     return `
         <div class="card" style="padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
                 <div>
                     <div class="tiny muted uppercase bold">Current plan period</div>
-                    <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(active.start_date))} to ${esc(niceDate(active.due_date))}</div>
+                    <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(termStart))} to ${esc(niceDate(active.due_date))}</div>
+                    ${tierRun ? `<div class="tiny" style="margin:2px 0 4px;">${tierRun}</div>` : ''}
                     <div class="tiny muted">${tier ? `<span class="pill tiny soft" style="margin-right:6px;">${esc(tier)}</span>` : ''}${(() => { const m = planMerge(ledger); if (!m) return `${esc(hoursText(allot))} allotment`; return esc(planMergeSummary(planMergeFigures(ledger, m))); })()}</div>
                 </div>
                 ${canManage() ? `<div style="display:flex; gap:8px; align-items:center;">
@@ -653,7 +665,7 @@ export function renderMaintenancePage() {
     const ledger = slot.loaded && !slot.error ? ledgerFor(client, slot) : null;
     const body = !slot.loaded ? '<div class="tiny muted">Loading...</div>' : slot.error ? `<div class="card" style="padding:16px; border-left:3px solid #ef4444;">Could not load the maintenance data: ${esc(slot.error)}</div>` : `
         ${mode === ONGOING
-            ? periodCardHtml(client, slot, ledger) + (activePeriod ? hoursLogHtml(client, ledger, activePeriod, 'Hours log · this period') : '')
+            ? periodCardHtml(client, slot, ledger) + (activePeriod ? hoursLogHtml(client, ledger, { ...activePeriod, start_date: planYearStart(slot, activePeriod) }, 'Hours log · this plan year') : '')
             : adHocCardHtml(ledger) + (ledger.current.length ? hoursLogHtml(client, ledger, adHocWindow(ledger), 'Hours log · active purchases') : '')}
         <div class="card" style="padding:16px; margin-top:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
