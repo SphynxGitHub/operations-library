@@ -293,6 +293,24 @@ export function memberDayHours(name, dayKey, cfg = getOlSettings().scheduling) {
     return Math.max(0, avail - offHoursForDay(sched, dayKey));   // a partial day off shortens the day
 }
 
+// The first day on or after dayKey that every named person on the task is available (hours > 0: not a day off, not a
+// weekend they do not work). Used by every automatic date setter (recurring tasks, "due N days after" dates) so a task is
+// never put on a day someone cannot work. Generic buckets (Sphynx Task / Client Task) have no schedule and are left alone.
+// Throws if no such day exists within a year, so a date is never silently wrong.
+export function nextAvailableDayKey(task, dayKey, cfg = getOlSettings().scheduling) {
+    const key = String(dayKey || '').slice(0, 10);
+    if (!key) return key;
+    const people = taskAssignees(task).filter((n) => n && !isGenericAssignee(n));
+    if (!people.length) return key;
+    const cursor = fromDayKey(key);
+    for (let i = 0; i < 366; i++) {
+        const k = toDayKey(cursor);
+        if (people.every((n) => memberDayHours(n, k, cfg) > 0)) return k;
+        cursor.setDate(cursor.getDate() + 1);
+    }
+    throw new Error(`No available day found within a year after ${key} for ${people.join(', ')}; check their schedule.`);
+}
+
 // The most a person's day may hold before the roll-over moves tasks off it. Unlike memberDayHours, a weekend with no hours
 // set is NOT treated as off here (a task someone dated on a Saturday by hand is left alone): only a day off or an explicit
 // 0 is 0.

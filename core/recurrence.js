@@ -14,6 +14,7 @@
 // which screen (row, modal, bulk edit, board) closed the task.
 
 import { state } from './data.js';
+import { nextAvailableDayKey } from './scheduling.js';
 
 export const RECURRENCE_PRESETS = {
     '': { label: 'Does not repeat' },
@@ -132,7 +133,7 @@ export function spawnRecurringTasksFor(client) {
         const index = Number(t.recurrenceIndex) || 1;
         if (Number(t.recurrence.count) > 0 && index >= Number(t.recurrence.count)) { t.recurrenceNextId = 'ended'; return; }
         const nextId = 'tk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-        const due = nextDueDate(t.dueDate || today, t.recurrence, today);
+        const due = nextAvailableDayKey(t, nextDueDate(t.dueDate || today, t.recurrence, today));   // never on a day the assignee is off
         if (t.recurrence.until && due > String(t.recurrence.until)) { t.recurrenceNextId = 'ended'; return; }
         const firstStatus = statuses().find((s) => !s.isClosed)?.name || 'Pending Sphynx Action';
         created.push({

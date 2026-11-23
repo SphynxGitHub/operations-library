@@ -1,5 +1,5 @@
 import { esc, uid, state, db, updateAndSync, loadFullClient, switchClient, getBusinessScopedClients } from '../../core/data.js';
-import { taskEstimatedHours, memberDayHours, dailyLoadHours, taskDaySlots, taskRemainingSlots, workdayGoneHours } from '../../core/scheduling.js';
+import { nextAvailableDayKey, taskEstimatedHours, memberDayHours, dailyLoadHours, taskDaySlots, taskRemainingSlots, workdayGoneHours } from '../../core/scheduling.js';
 import { findRequestForTask } from '../../core/request-links.js';
 import { requestIdsForTask, taskAppliesToRequest, linksForTask, addLink, removeLink, removeResourceFromLink } from '../../core/task-links.js';
 import { requestResourceIds } from '../../core/request-pricing.js';
@@ -1148,7 +1148,7 @@ OL.handleTaskCompletionCascade = function(client, task, previousStatus) {
         if (other.dueRelativeTo?.taskId === task.id) {
             const d = new Date(task.completedAt);
             d.setDate(d.getDate() + Number(other.dueRelativeTo.offsetDays || 0));
-            other.dueDate = d.toISOString().slice(0, 10);
+            other.dueDate = nextAvailableDayKey(other, d.toISOString().slice(0, 10));   // never on a day the assignee is off
         }
     });
 };
