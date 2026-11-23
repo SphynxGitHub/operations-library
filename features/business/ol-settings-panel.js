@@ -87,7 +87,7 @@ OL.renderOlSettingsPanel = function() {
             field('Task title', text('os-zr-title', zr.taskTitle), 'Fills in: {client} {reason}') +
             field('Task description', area('os-zr-desc', zr.taskDescription), 'Fills in: {client} {reason}') +
             `<div class="os-row">${field('Due (days from creation)', numIn('os-zr-due', zr.dueInDays), 'For a new plan period, the task is due on its start date if that is later.')}` +
-            `${field('Assigned to', personSelect('os-zr-assignee', zr.assignee, 'The project\'s Communications person'))}</div>`)}
+            `${field('Assigned to', personSelect('os-zr-assignee', zr.assignee, 'The project\'s Implementation person'))}</div>`)}
 
         ${section('Outside services (auto-pull)', 'Calendly, Wealthbox, Redtail, Jotform, ActiveCampaign, MailerLite, Mailchimp, Slant, YouCanBook.me and Process Street. A service already pulled once in a project is pulled again by itself when that project is opened, so the flow map keeps up with changes made in those apps. A first pull is always a click in the Importer Hub.',
             `<div style="margin-bottom:10px;">${check('os-ig-enabled', ig.autoPull !== false, 'Refresh connected services automatically')}</div>` +

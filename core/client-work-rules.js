@@ -70,6 +70,13 @@ function communicationAssignee(client, ctx) {
     return (a && a.memberName) || 'Sphynx Task';
 }
 
+// The project's Implementation person (project > Role Defaults); the Communications person when the project has none.
+function implementationAssignee(client, ctx) {
+    const role = (ctx.roles || []).find((r) => /implement/i.test(String(r?.name || '')));
+    const a = role ? (client?.projectData?.roleAssignments || []).find((x) => x.roleId === role.id) : null;
+    return (a && a.memberName) || communicationAssignee(client, ctx);
+}
+
 // The project's Scoping person (project > Role Defaults), for settings that hand a task to "the project's Scoping person".
 // Falls back to the Communications person when the project has no Scoping person set.
 export const SCOPING_ASSIGNEE = '@scoping';
@@ -744,7 +751,7 @@ export function planZapRepull(client, periods, ctx) {
         const due = dueFrom && dueFrom > ctx.today ? dueFrom : addDays(ctx.today, Math.max(0, Number(cfg.dueInDays) || 0));
         const t = {
             id: ctx.uid(), title, name: title, description: fillTemplate(cfg.taskDescription, vars),
-            status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || communicationAssignee(client, ctx), dueDate: due,
+            status: OPEN_STATUS, assignee: (cfg.assignee || '').trim() || implementationAssignee(client, ctx), dueDate: due,
             isClientTask: false, loggedHours: 0, parentTaskId: null, createdBy: 'maintenance', createdAt: ctx.now, autoTag: ZAP_REPULL_TAG,
         };
         pd.clientTasks.unshift(t);
