@@ -31,7 +31,11 @@ function figures(sum) {
     }
     lines.push(`Hours Used: ${hoursText(sum.used)}${star}`);
     lines.push(sum.remaining >= 0 ? `Hours Remaining: ${hoursText(sum.remaining)}${star}` : `Hours Over: ${hoursText(-sum.remaining)}${star}`);
-    const footnote = star ? `*Includes ${hoursText(sum.carryoverHours)} carried over from your previous plan period` : '';
+    // Courtesy hours rolled over from the last plan period: how many, how many are still unused, and when they expire.
+    const left = Math.max(0, Math.round((sum.carryoverHours - sum.carryoverUsed) * 1000) / 1000);
+    const footnote = star
+        ? `*Includes ${hoursText(sum.carryoverHours)} of courtesy hours rolled over from your previous plan period (${hoursText(left)} still unused${sum.carryoverExpires ? `; they expire ${niceDate(sum.carryoverExpires)}` : ''}).`
+        : '';
     return { lines, footnote };
 }
 const figuresText = (f) => f.lines.map((l) => `* ${l}`).join('\n') + (f.footnote ? `\n\n${f.footnote}` : '');

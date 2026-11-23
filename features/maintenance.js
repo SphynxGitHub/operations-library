@@ -1180,6 +1180,8 @@ export async function maintenanceHoursSummary(client) {
         tier: active ? periodTierTitle(active, planHours) : '',
         total: r(total), used: r(used), remaining: r(total - used),
         carryoverHours: r(carry.reduce((sum, g) => sum + Number(g.hours_granted || 0), 0)),
+        carryoverUsed: r(carry.reduce((sum, g) => sum + usedHoursOf(ledger, g), 0)),
+        carryoverExpires: carry.map((g) => String(g.expires_on || '').slice(0, 10)).filter(Boolean).sort()[0] || '',
         periodStart: active ? String(active.start_date).slice(0, 10) : '', periodEnd: active ? String(active.due_date).slice(0, 10) : '',
         lastExpires: expires.length ? expires[expires.length - 1] : '',
     };
