@@ -2653,16 +2653,41 @@ OL.renderInContextTaskModal = function(client, task) {
                             </select>
                             ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<a href="#" class="tiny" style="margin-left:6px;" onclick="event.preventDefault(); OL.toggleCustomRecurrence('${task.id}')">Edit</a>` : ''}
                             <div id="rec-custom-${task.id}" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--line); border-radius:6px;">
+                                ${(() => {
+                                    const r = task.recurrence || {};
+                                    const endKind = r.count ? 'count' : r.until ? 'date' : 'never';
+                                    const sel = new Set((r.days || []).map(Number));
+                                    return `
                                 <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
                                     <span class="tiny muted">Every</span>
-                                    <input type="number" min="1" max="365" step="1" id="rec-n-${task.id}" class="modal-input tiny" style="width:64px;" value="${Number(task.recurrence?.interval) || 1}">
+                                    <input type="number" min="1" max="365" step="1" id="rec-n-${task.id}" class="modal-input tiny" style="width:64px;" value="${Number(r.interval) || 1}">
                                     <select id="rec-f-${task.id}" class="modal-input tiny" style="width:auto;">
-                                        ${[['daily', 'day(s)'], ['weekdays', 'weekday(s)'], ['weekly', 'week(s)'], ['monthly', 'month(s)'], ['yearly', 'year(s)']].map(([v, l]) => `<option value="${v}" ${(task.recurrence?.freq || 'weekly') === v ? 'selected' : ''}>${l}</option>`).join('')}
+                                        ${[['daily', 'day(s)'], ['weekdays', 'weekday(s)'], ['weekly', 'week(s)'], ['monthly', 'month(s)'], ['yearly', 'year(s)']].map(([v, l]) => `<option value="${v}" ${(r.freq || 'weekly') === v ? 'selected' : ''}>${l}</option>`).join('')}
                                     </select>
-                                    <span class="tiny muted">Ends</span>
-                                    <input type="date" id="rec-u-${task.id}" class="modal-input tiny" style="width:auto;" value="${esc(String(task.recurrence?.until || '').slice(0, 10))}" title="Optional. Leave blank to repeat until you stop it.">
-                                    <button type="button" class="btn tiny primary" onclick="OL.applyCustomRecurrence('${client?.id}', '${task.id}')">Apply</button>
                                 </div>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+                                    <select id="rec-m-${task.id}" class="modal-input tiny" style="width:auto;" title="Only on: weekly repeats land on the checked days. Not on: those days are skipped.">
+                                        <option value="include" ${r.dayMode !== 'exclude' ? 'selected' : ''}>Only on</option>
+                                        <option value="exclude" ${r.dayMode === 'exclude' ? 'selected' : ''}>Not on</option>
+                                    </select>
+                                    ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((n, d) => `<label class="tiny" style="display:inline-flex; gap:2px; align-items:center; cursor:pointer;"><input type="checkbox" class="rec-d-${task.id}" value="${d}" ${sel.has(d) ? 'checked' : ''}>${n}</label>`).join('')}
+                                    <span class="tiny muted">(leave all unchecked for any day)</span>
+                                </div>
+                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+                                    <span class="tiny muted">Ends</span>
+                                    <select id="rec-e-${task.id}" class="modal-input tiny" style="width:auto;" onchange="OL.syncCustomRecurrenceEnd('${task.id}')">
+                                        <option value="never" ${endKind === 'never' ? 'selected' : ''}>Never</option>
+                                        <option value="date" ${endKind === 'date' ? 'selected' : ''}>On date</option>
+                                        <option value="count" ${endKind === 'count' ? 'selected' : ''}>After number of times</option>
+                                    </select>
+                                    <input type="date" id="rec-u-${task.id}" class="modal-input tiny" style="width:auto; display:${endKind === 'date' ? 'inline-block' : 'none'};" value="${esc(String(r.until || '').slice(0, 10))}">
+                                    <span id="rec-c-wrap-${task.id}" style="display:${endKind === 'count' ? 'inline-flex' : 'none'}; gap:4px; align-items:center;">
+                                        <input type="number" min="2" max="999" step="1" id="rec-c-${task.id}" class="modal-input tiny" style="width:64px;" value="${Number(r.count) || 5}">
+                                        <span class="tiny muted">times, counting this task</span>
+                                    </span>
+                                    <button type="button" class="btn tiny primary" style="margin-left:auto;" onclick="OL.applyCustomRecurrence('${client?.id}', '${task.id}')">Apply</button>
+                                </div>`;
+                                })()}
                             </div>
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
@@ -4293,19 +4318,40 @@ OL.onTaskRecurrenceSelect = function(clientId, taskId, key) {
     OL.setTaskRecurrence(clientId, taskId, key);
 };
 
+OL.syncCustomRecurrenceEnd = function(taskId) {
+    const kind = document.getElementById(`rec-e-${taskId}`)?.value;
+    const u = document.getElementById(`rec-u-${taskId}`), c = document.getElementById(`rec-c-wrap-${taskId}`);
+    if (!u || !c) throw new Error('Custom repeat editor not found on this task.');
+    u.style.display = kind === 'date' ? 'inline-block' : 'none';
+    c.style.display = kind === 'count' ? 'inline-flex' : 'none';
+};
+
 OL.applyCustomRecurrence = async function(clientId, taskId) {
+    const fail = (msg) => { alert(msg); throw new Error(`Custom repeat: ${msg}`); };
     const n = Number(document.getElementById(`rec-n-${taskId}`)?.value);
     const freq = document.getElementById(`rec-f-${taskId}`)?.value;
-    const until = document.getElementById(`rec-u-${taskId}`)?.value || '';
-    if (!Number.isInteger(n) || n < 1 || n > 365) { alert('Enter a whole number from 1 to 365.'); throw new Error('Custom repeat: interval must be a whole number from 1 to 365.'); }
-    if (!['daily', 'weekdays', 'weekly', 'monthly', 'yearly'].includes(freq)) { alert('Pick how often it repeats.'); throw new Error(`Custom repeat: unknown frequency "${freq}".`); }
-    if (until && until < OL.localDateStr()) { alert('The end date is already past.'); throw new Error('Custom repeat: end date is in the past.'); }
+    const endKind = document.getElementById(`rec-e-${taskId}`)?.value;
+    const dayMode = document.getElementById(`rec-m-${taskId}`)?.value === 'exclude' ? 'exclude' : 'include';
+    const days = Array.from(document.querySelectorAll(`.rec-d-${taskId}:checked`)).map(el => Number(el.value));
+    if (!Number.isInteger(n) || n < 1 || n > 365) fail('Enter a whole number from 1 to 365.');
+    if (!['daily', 'weekdays', 'weekly', 'monthly', 'yearly'].includes(freq)) fail(`Unknown frequency "${freq}".`);
+    if (dayMode === 'exclude' && days.length === 7) fail('Every day is excluded. Uncheck at least one day.');
+    let until = '', count = 0;
+    if (endKind === 'date') {
+        until = document.getElementById(`rec-u-${taskId}`)?.value || '';
+        if (!until) fail('Pick an end date, or choose Never.');
+        if (until < OL.localDateStr()) fail('The end date is already past.');
+    } else if (endKind === 'count') {
+        count = Number(document.getElementById(`rec-c-${taskId}`)?.value);
+        if (!Number.isInteger(count) || count < 2 || count > 999) fail('Enter a whole number of times from 2 to 999.');
+    }
     let found = false;
-    updateAndSync(() => {
+    await updateAndSync(() => {
         const task = state.clients?.[clientId]?.projectData?.clientTasks?.find(t => t.id === taskId);
         if (!task) return;
         found = true;
-        task.recurrence = { freq, interval: n, ...(until ? { until } : {}) };
+        task.recurrence = { freq, interval: n, ...(days.length ? { days, dayMode } : {}), ...(until ? { until } : {}), ...(count ? { count } : {}) };
+        task.recurrenceIndex = 1; // the count starts at this task
         delete task.recurrenceNextId; // re-arm if it was set on an already-closed task
     }, clientId);
     if (!found) throw new Error('Custom repeat: task not found, nothing was saved.');

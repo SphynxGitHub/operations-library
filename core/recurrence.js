@@ -1,7 +1,9 @@
 //======================= CORE / RECURRING TASKS =======================//
 // A task can repeat: task.recurrence = { freq, interval }.
 //   freq: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly'
-//   interval: every N of those (default 1). "Every 2 weeks" = weekly/2,
+//   interval: every N of those (default 1).
+//   Optional: until ('YYYY-MM-DD'), count (total occurrences, counting the first), days (array of 0-6, Sun-Sat) with
+//   dayMode ('include' = only these days, 'exclude' = never these days). "Every 2 weeks" = weekly/2,
 //   quarterly = monthly/3.
 // When a repeating task is closed, the next occurrence is created once
 // (task.recurrenceNextId records it, so closing/reopening/closing never
@@ -26,7 +28,7 @@ export const RECURRENCE_PRESETS = {
 
 export function recurrencePresetKey(rec) {
     if (!rec || !rec.freq) return '';
-    if (rec.until) return 'custom'; // an end date makes it a custom schedule
+    if (rec.until || rec.count || (rec.days && rec.days.length)) return 'custom'; // an end, a count or a day filter makes it custom
     const n = Number(rec.interval) || 1;
     for (const [k, p] of Object.entries(RECURRENCE_PRESETS)) {
         if (p.freq === rec.freq && (p.interval || 1) === n) return k;
@@ -41,14 +43,25 @@ export function describeRecurrence(rec) {
     const n = Number(rec.interval) || 1;
     const units = { daily: 'day', weekdays: 'weekday', weekly: 'week', monthly: 'month', yearly: 'year' };
     const unit = units[rec.freq] || rec.freq;
-    return `Every ${n === 1 ? '' : n + ' '}${unit}${n === 1 ? '' : 's'}${rec.until ? ` until ${String(rec.until).slice(0, 10)}` : ''}`;
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayPart = rec.days && rec.days.length ? ` ${rec.dayMode === 'exclude' ? 'except' : 'on'} ${[...rec.days].sort((x, y) => x - y).map((d) => names[d]).join(', ')}` : '';
+    const endPart = rec.count ? `, ${rec.count} times` : rec.until ? ` until ${String(rec.until).slice(0, 10)}` : '';
+    return `Every ${n === 1 ? '' : n + ' '}${unit}${n === 1 ? '' : 's'}${dayPart}${endPart}`;
 }
 
 const pad = (n) => String(n).padStart(2, '0');
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fromKey = (k) => { const [y, m, d] = String(k).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 
-function step(date, rec) {
+// Days of the week (0-6) an occurrence may fall on, or null when there is no filter.
+function allowedDays(rec) {
+    if (!rec.days || !rec.days.length) return null;
+    const set = new Set(rec.days.map(Number));
+    if (rec.dayMode === 'exclude') return new Set([0, 1, 2, 3, 4, 5, 6].filter((d) => !set.has(d)));
+    return set;
+}
+
+function baseStep(date, rec) {
     const n = Math.max(1, Number(rec.interval) || 1);
     const d = new Date(date);
     if (rec.freq === 'daily') d.setDate(d.getDate() + n);
@@ -65,6 +78,27 @@ function step(date, rec) {
     }
     else if (rec.freq === 'yearly') d.setFullYear(d.getFullYear() + n);
     else d.setDate(d.getDate() + 7 * n);
+    return d;
+}
+
+function step(date, rec) {
+    const allowed = allowedDays(rec);
+    if (!allowed) return baseStep(date, rec);
+    if (!allowed.size) throw new Error('Recurring task: every day of the week is excluded, so there is no valid next date.');
+    const n = Math.max(1, Number(rec.interval) || 1);
+    if (rec.freq === 'weekly' && rec.dayMode !== 'exclude') {
+        // "Weekly on Mon and Wed": the next chosen day later this week, else the first chosen day N weeks on.
+        const sorted = [...allowed].sort((x, y) => x - y);
+        const d = new Date(date);
+        const later = sorted.find((x) => x > d.getDay());
+        if (later !== undefined) { d.setDate(d.getDate() + (later - d.getDay())); return d; }
+        d.setDate(d.getDate() - d.getDay() + 7 * n + sorted[0]);
+        return d;
+    }
+    // Any other cadence: take the normal step, then slide forward to the next allowed day.
+    const d = baseStep(date, rec);
+    let guard = 0;
+    while (!allowed.has(d.getDay()) && guard++ < 7) d.setDate(d.getDate() + 1);
     return d;
 }
 
@@ -95,6 +129,8 @@ export function spawnRecurringTasksFor(client) {
         // Monthly hours check-in: no next one while the plan has expired and the client is not renewing (see checkInWanted).
         if (t.recurrenceTag === 'monthly-touch-base' && client?.projectData?.maintenanceSetup?.checkInPaused) { t.recurrenceNextId = 'ended'; return; }
         if (t.recurrence.until && String(t.recurrence.until) < today) { t.recurrenceNextId = 'ended'; return; }
+        const index = Number(t.recurrenceIndex) || 1;
+        if (Number(t.recurrence.count) > 0 && index >= Number(t.recurrence.count)) { t.recurrenceNextId = 'ended'; return; }
         const nextId = 'tk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
         const due = nextDueDate(t.dueDate || today, t.recurrence, today);
         if (t.recurrence.until && due > String(t.recurrence.until)) { t.recurrenceNextId = 'ended'; return; }
@@ -114,7 +150,8 @@ export function spawnRecurringTasksFor(client) {
             // manual billable choices carry over; rules re-evaluate anyway
             ...(t.billable === true || t.billable === false ? { billable: t.billable } : {}),
             ...(t.recurrenceTag ? { recurrenceTag: t.recurrenceTag } : {}),
-            recurrence: { ...t.recurrence },
+            recurrence: { ...t.recurrence, ...(t.recurrence.days ? { days: [...t.recurrence.days] } : {}) },
+            recurrenceIndex: index + 1,
             recurrenceSeriesId: t.recurrenceSeriesId || t.id,
             recurrencePrevId: t.id,
             loggedHours: 0,
