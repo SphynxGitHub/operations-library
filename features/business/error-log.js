@@ -62,6 +62,10 @@ OL.errorLogState = {
     services: [],
     resources: [],
     loading: false,
+    pageSize: 50,           // how many errors to load and draw; "Show more" adds another page
+    hasMore: false,         // true when the table has more errors than pageSize for the current filters
+    loadError: '',          // set when the last load failed, so the page can say so
+    optionsForScope: null,  // the scope the service/resource dropdown values were loaded for
     loadedOnce: false,
     loadedForScope: null,
     lockedClientId: null    // set when viewing from inside a specific client's project
@@ -125,7 +129,8 @@ OL._renderErrorLogShell = function(title, subtitle) {
     if ((!OL.errorLogState.loadedOnce || OL.errorLogState.loadedForScope !== desiredScope) && !OL.errorLogState.loading) {
         OL.errorLogState.loadedOnce = true;
         OL.errorLogState.loadedForScope = desiredScope;
-        OL.loadErrorLog().then(() => OL._rerenderErrorLog());
+        OL.errorLogState.pageSize = 50;
+        OL.loadErrorLog().then(() => OL._rerenderErrorLog()).catch(e => { console.error(e); OL._rerenderErrorLog(); });
     }
 
     const locked = !!OL.errorLogState.lockedClientId;
@@ -168,11 +173,11 @@ OL._renderErrorLogShell = function(title, subtitle) {
                         placeholder: 'All Clients'
                     })}
                 ` : ''}
-                <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('serviceFilter', this.value)">
+                <select id="error-log-service-filter" class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('serviceFilter', this.value)">
                     <option value="">All Services</option>
                     ${OL.errorLogState.services.map(s => `<option value="${esc(s)}" ${OL.errorLogState.serviceFilter === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
                 </select>
-                <select class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('resourceFilter', this.value)">
+                <select id="error-log-resource-filter" class="modal-input tiny" style="width:180px;" onchange="OL.setErrorLogFilter('resourceFilter', this.value)">
                     <option value="">All Resources</option>
                     ${OL.errorLogState.resources.map(s => `<option value="${esc(s)}" ${OL.errorLogState.resourceFilter === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
                 </select>
@@ -190,6 +195,7 @@ OL._renderErrorLogShell = function(title, subtitle) {
             ${rows.length ? OL.errorBulkBarHtml(rows) : ''}
 
             ${OL.errorLogState.loading ? `<div class="tiny muted" style="text-align:center; padding:30px;">Loading...</div>` : ''}
+            ${OL.errorLogState.loadError ? `<div class="tiny" style="color:#ef4444; padding:10px 0;">Could not load errors: ${esc(OL.errorLogState.loadError)}</div>` : ''}
 
             ${(!OL.errorLogState.loading && rows.length === 0) ? `
                 <div style="text-align:center; padding:40px; color:var(--muted);">
@@ -209,6 +215,7 @@ OL._renderErrorLogShell = function(title, subtitle) {
                     `).join('')}
                 </div>
             `)}
+            ${OL.errorLogState.hasMore ? `<div style="text-align:center; padding:14px 0 4px;"><button type="button" class="btn small soft" onclick="OL.errorLogLoadMore()">Show more</button></div>` : ''}
         </div>
         </div>
     `;
@@ -307,7 +314,8 @@ OL.renderErrorLogRow = function(r, locked, opts = {}) {
 OL.setErrorLogFilter = function(key, value) {
     OL.errorLogState[key] = value;
     if (key === 'groupBy') { OL._rerenderErrorLog(); return; } // pure client-side reorganization, no reload needed
-    OL.loadErrorLog().then(() => OL._rerenderErrorLog());
+    OL.errorLogState.pageSize = 50;
+    OL.loadErrorLog().then(() => OL._rerenderErrorLog()).catch(e => { console.error(e); OL._rerenderErrorLog(); });
 };
 
 // Typing in the search box: wait for a short pause, reload, redraw, then put the cursor back. The whole page shell is
@@ -317,7 +325,8 @@ OL.onErrorSearchInput = function(el) {
     clearTimeout(OL._errSearchTimer);
     const seq = OL._errSearchSeq = (OL._errSearchSeq || 0) + 1;
     OL._errSearchTimer = setTimeout(async () => {
-        await OL.loadErrorLog();
+        OL.errorLogState.pageSize = 50;
+        try { await OL.loadErrorLog(); } catch (e) { console.error(e); }
         if (seq !== OL._errSearchSeq) return;   // a newer search replaced this one
         const live = document.getElementById('error-log-search');
         const start = live && document.activeElement === live ? live.selectionStart : null;
@@ -338,6 +347,7 @@ OL.setErrorLogClientFilter = function(clientId) {
 
 OL.loadErrorLog = async function() {
     OL.errorLogState.loading = true;
+    OL.errorLogState.loadError = '';
 
     // Inside one project's own Error Tracking tab the list is that project only (and a partner/client login
     // may only open a project that is theirs or one they manage). Everywhere else it is limited to the
@@ -347,7 +357,7 @@ OL.loadErrorLog = async function() {
     if (lockedId && window.IS_GUEST === true) {
         const managed = getBusinessScopeClientIds();
         const allowed = String(lockedId) === String(state.loginClientId) || (managed && managed.has(String(lockedId)));
-        if (!allowed) { OL.errorLogState.loading = false; OL.errorLogState.rows = []; return; }
+        if (!allowed) { OL.errorLogState.loading = false; OL.errorLogState.rows = []; OL.errorLogState.hasMore = false; return; }
     }
 
     let query = scopeErrors(db.from('error_log').select('*'));
@@ -374,22 +384,51 @@ OL.loadErrorLog = async function() {
         query = query.or(`title.ilike.%${q}%,message.ilike.%${q}%`);
     }
 
-    const { data, error } = await query.order('occurred_at', { ascending: false }).limit(300);
+    // One extra row tells us whether there is another page without a separate count query.
+    const size = Math.max(1, Number(OL.errorLogState.pageSize) || 50);
+    const { data, error } = await query.order('occurred_at', { ascending: false }).range(0, size);
     OL.errorLogState.loading = false;
 
-    if (error) { console.error('Failed to load error log:', error.message); OL.errorLogState.rows = []; return; }
-    OL.errorLogState.rows = (data || []).filter(r => lockedId || isInBusinessScope(r.client_id));
+    if (error) {
+        OL.errorLogState.rows = []; OL.errorLogState.hasMore = false;
+        OL.errorLogState.loadError = error.message;
+        throw new Error(`Failed to load the error log: ${error.message}`);
+    }
+    const got = data || [];
+    OL.errorLogState.hasMore = got.length > size;
+    OL.errorLogState.rows = got.slice(0, size).filter(r => lockedId || isInBusinessScope(r.client_id));
     // Keep only ticked errors that are still in the list.
     const present = new Set(OL.errorLogState.rows.map(r => String(r.id)));
     OL.errorLogState.selected = new Set([...OL.errorLogState.selected].filter(id => present.has(id)));
 
-    // Populate the service filter dropdown from whatever's actually in the table
-    const { data: serviceRows } = await scopeErrors(db.from('error_log').select('service').not('service', 'is', null));
-    OL.errorLogState.services = [...new Set((serviceRows || []).map(r => r.service).filter(Boolean))].sort();
+    // The Service / Resource dropdowns fill in the background, once per project; they never hold up the list.
+    OL.loadErrorFilterOptions(scopeErrors).catch(e => { OL.errorLogState.loadError = e.message; console.error(e); });
+};
 
-    // Same, for the resource filter dropdown
-    const { data: resourceRows } = await scopeErrors(db.from('error_log').select('resource_name').not('resource_name', 'is', null));
-    OL.errorLogState.resources = [...new Set((resourceRows || []).map(r => r.resource_name).filter(Boolean))].sort();
+OL.errorLogLoadMore = function() {
+    OL.errorLogState.pageSize = (Number(OL.errorLogState.pageSize) || 50) + 50;
+    return OL.loadErrorLog().then(() => OL._rerenderErrorLog());
+};
+
+// Service and resource names for the filter dropdowns. One query for both, newest 1000 errors only (every status),
+// so a project with years of Zapier errors does not download its whole history just to fill two lists.
+OL.loadErrorFilterOptions = async function(scopeErrors) {
+    const scopeKey = OL.errorLogState.lockedClientId || '__global';
+    if (OL.errorLogState.optionsForScope === scopeKey) return;
+    OL.errorLogState.optionsForScope = scopeKey;   // set first so a second call while this one runs does not start another
+    const { data, error } = await scopeErrors(db.from('error_log').select('service, resource_name'))
+        .order('occurred_at', { ascending: false }).limit(1000);
+    if (error) { OL.errorLogState.optionsForScope = null; throw new Error(`Failed to load the error filter lists: ${error.message}`); }
+    const rows = data || [];
+    OL.errorLogState.services = [...new Set(rows.map(r => r.service).filter(Boolean))].sort();
+    OL.errorLogState.resources = [...new Set(rows.map(r => r.resource_name).filter(Boolean))].sort();
+    // Fill the two dropdowns in place so the page (and anything being typed) is not rebuilt.
+    const fill = (id, list, current, label) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `<option value="">${label}</option>` + list.map(v => `<option value="${esc(v)}" ${current === v ? 'selected' : ''}>${esc(v)}</option>`).join('');
+    };
+    fill('error-log-service-filter', OL.errorLogState.services, OL.errorLogState.serviceFilter, 'All Services');
+    fill('error-log-resource-filter', OL.errorLogState.resources, OL.errorLogState.resourceFilter, 'All Resources');
 };
 
 OL.assignErrorClient = async function(id, clientId) {
