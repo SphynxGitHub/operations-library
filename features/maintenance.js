@@ -220,7 +220,21 @@ function planMergeFigures(ledger, m) {
     return { carryTotal, carryUsed, planTotal, planUsed, total, used, left: Math.round((total - used) * 1000) / 1000, carryEnds, planEnds: m.plans.map((g) => String(g.expires_on).slice(0, 10)).sort().pop(), planParts: m.plans.map((g) => Number(g.hours_granted || 0)), hasCarry: m.carries.length > 0 };
 }
 // One bar for both: the carryover hours first (amber), then the plan hours (teal), a divider where the carryover ends.
+// After a mid-term tier change: one gapped bar, a block per tier sized by its hours, each filled with the hours used from it.
+function tiersBarHtml(f, height) {
+    const gap = 3, usable = f.tiers.length - 1;
+    const blocks = f.tiers.map((t) => {
+        const share = f.total > 0 ? (t.hours / f.total) * 100 : 100 / f.tiers.length;
+        const fill = t.hours > 0 ? Math.min(100, (t.used / t.hours) * 100) : 0;
+        return { share, fill, t };
+    });
+    return `<div style="display:flex; height:${height}px; border-radius:6px; overflow:hidden; gap:${gap}px; margin-top:8px;">
+            ${blocks.map((b) => `<div style="flex:${b.share} 1 0; min-width:6px; background:rgba(148,163,184,0.25); position:relative;"><div style="position:absolute; left:0; top:0; height:100%; width:${b.fill}%; background:${b.t.over ? '#ef4444' : PLAN_COLOR};"></div></div>`).join('')}</div>
+        <div class="tiny muted" style="display:flex; gap:${gap}px; margin-top:6px;">
+            ${blocks.map((b) => `<span style="flex:${b.share} 1 0; min-width:6px; white-space:nowrap;">${esc(hoursText(b.t.used))} of ${esc(hoursText(b.t.hours))} used</span>`).join('')}</div>`;
+}
 function planMergeBarHtml(f, { height = 10, label = true } = {}) {
+    if (f.tiers && f.tiers.length > 1 && !f.hasCarry) return tiersBarHtml(f, height + 2);
     const w = (h) => (f.total > 0 ? Math.min(100, (h / f.total) * 100) : 0);
     const divider = w(f.carryTotal);
     return `<div style="position:relative; margin-top:${label && f.hasCarry ? 22 : 8}px;">
@@ -234,7 +248,7 @@ function planMergeBarHtml(f, { height = 10, label = true } = {}) {
 }
 // "2 h + 20 h plan allotment + 6.39 h courtesy carryover = 28.39 h available"
 const planMergeSummary = (f) => `${f.planParts.map((h) => hoursText(h)).join(' + ')} plan allotment${f.planParts.length > 1 ? 's' : ''}${f.hasCarry ? ` + ${hoursText(f.carryTotal)} courtesy carryover` : ''} = ${hoursText(f.total)} available`;
-const planMergeFootnote = (f) => !f.hasCarry ? (f.planParts.length > 1 ? `<div class="tiny muted" style="margin-top:6px;">*Hours from the plan tier before and after a mid-term change, added together.</div>` : '') : `<div class="tiny muted" style="margin-top:6px;">*Courtesy hours carried over from the old plan period. Any not used by ${esc(niceDate(f.carryEnds))} expire. The plan hours run to ${esc(niceDate(f.planEnds))}.</div>`;
+const planMergeFootnote = (f) => (f.tiers && f.tiers.length > 1 && !f.hasCarry) ? '' : !f.hasCarry ? (f.planParts.length > 1 ? `<div class="tiny muted" style="margin-top:6px;">*Hours from the plan tier before and after a mid-term change, added together.</div>` : '') : `<div class="tiny muted" style="margin-top:6px;">*Courtesy hours carried over from the old plan period. Any not used by ${esc(niceDate(f.carryEnds))} expire. The plan hours run to ${esc(niceDate(f.planEnds))}.</div>`;
 
 const durText = (min) => { const a = Math.abs(Math.round(min)); const h = Math.floor(a / 60), m = a % 60; return (min < 0 ? '−' : '') + (h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`); };
 const grantShort = (g) => `${GRANT_LABEL[g.source] || g.source} · ${hoursText(g.hours_granted)}${g.source === 'plan_allotment' ? '' : ` · exp ${niceDate(g.expires_on)}`}`;
@@ -342,7 +356,7 @@ function grantTasks(ledger) {
 
 // The headline: one line and bar per block of hours available now (courtesy carryover, plan allotment, purchases),
 // newest block first. Each fills only to its own hours; any excess shows over on the most recent block alone.
-function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
+function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
@@ -355,13 +369,13 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     const folded = new Set(merge ? [...merge.carries, ...merge.plans.filter((g) => g.id !== merge.plan.id)].map((g) => String(g.id)) : []);
     const rows = newestFirst.filter((g) => !folded.has(String(g.id))).map((g) => {
         if (merge && g.id === merge.plan.id) {
-            const f = planMergeFigures(ledger, merge);
+            const f = { ...planMergeFigures(ledger, merge), tiers };
             const pct = f.total > 0 ? Math.round((f.used / f.total) * 100) : 0;
             const status = f.left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-f.left))} over</strong>` : f.left <= EPS ? 'used up' : `${esc(hoursText(f.left))} left`;
             return `<div style="margin:10px 0 0;">
                 <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">
                     <span style="${f.left < -EPS ? 'color:#ef4444;' : ''}"><strong>Plan hours</strong>: ${esc(hoursText(f.used))} of ${esc(hoursText(f.total))} used (${pct}%) · ${status}</span>
-                    <span class="muted">Ends ${esc(niceDate(f.planEnds))}*</span>
+                    <span class="muted">Ends ${esc(niceDate(f.planEnds))}${f.tiers && f.tiers.length > 1 && !f.hasCarry ? '' : '*'}</span>
                 </div>${planMergeBarHtml(f)}${planMergeFootnote(f)}</div>`;
         }
         const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
@@ -559,27 +573,14 @@ function periodCardHtml(client, slot, ledger) {
     const earlier = slot.periods.filter((p) => p.id !== active.id && dueDay(p) === dueDay(active) && startDay(p) < startDay(active)).sort((a, b) => startDay(a).localeCompare(startDay(b)));
     const termStart = earlier.length ? startDay(earlier[0]) : active.start_date;
     const allotOf = (p) => slot.grants.filter((g) => g.period_id === p.id && g.source === 'plan_allotment').reduce((t, g) => t + Number(g.hours_granted || 0), 0);
-    // One strip across the plan year, a segment per tier sized by its days, with a Today marker and the date each change took effect.
-    const tierStrip = (() => {
-        if (!earlier.length) return '';
-        const all = [...earlier, active], endAfter = addDaysIso(dueDay(active), 1);
-        const total = Math.max(1, daysBetween(termStart, endAfter));
-        const pos = (d) => Math.min(100, Math.max(0, (daysBetween(termStart, d) / total) * 100));
-        const shades = ['#9FE1CB', '#5DCAA5', '#1D9E75'];
-        const todayPos = pos(today);
-        const showToday = today >= termStart && today <= dueDay(active);
-        const segs = all.map((p, i) => {
-            const from = startDay(p), to = i < all.length - 1 ? startDay(all[i + 1]) : endAfter;
-            const name = periodTierTitle(p, allotOf(p)) || 'Earlier tier', h = allotOf(p);
-            return `<div style="width:${pos(to) - pos(from)}%; background:${shades[Math.min(i, shades.length - 1)]}; color:${i >= 2 ? '#fff' : '#04342C'}; display:flex; align-items:center; padding-left:8px; font-size:11px; white-space:nowrap; overflow:hidden; ${i ? 'border-left:1.5px solid var(--text);' : ''}" title="${esc(name)}: ${esc(niceDate(from))} to ${esc(niceDate(addDaysIso(to, -1)))}">${esc(name)}${h ? ` · ${esc(hoursText(h))}` : ''}</div>`;
-        }).join('');
-        const marks = all.slice(1).map((p) => `<span style="position:absolute; left:${pos(startDay(p))}%; transform:translateX(-50%); white-space:nowrap;">${esc(niceDate(startDay(p)))} · changed to ${esc(periodTierTitle(p, allotOf(p)) || 'new tier')}</span>`).join('');
-        return `<div style="position:relative; padding-top:16px; margin:6px 0 4px; min-width:260px;">
-            ${showToday ? `<div style="position:absolute; left:${todayPos}%; top:0; transform:translateX(-50%); font-size:11px;" class="muted">Today</div>` : ''}
-            <div style="display:flex; height:22px; border-radius:6px; overflow:hidden;">${segs}</div>
-            ${showToday ? `<div style="position:absolute; left:${todayPos}%; top:12px; height:30px; border-left:1.5px dashed var(--muted);"></div>` : ''}
-            <div class="tiny muted" style="position:relative; height:16px; margin-top:4px;"><span style="position:absolute; left:0;">${esc(niceDate(termStart))}</span>${marks}<span style="position:absolute; right:0;">${esc(niceDate(dueDay(active)))}</span></div></div>`;
-    })();
+    // The tiers of this plan year (one per period) with the hours each allotted and used, for the chips and the split bar.
+    const mergeNow = planMerge(ledger);
+    const tiers = earlier.length && mergeNow ? [...earlier, active].map((p, i, all) => {
+        const gs = mergeNow.plans.filter((g) => String(g.period_id) === String(p.id));
+        return { name: periodTierTitle(p, allotOf(p)) || 'Earlier tier', from: startDay(p), to: i < all.length - 1 ? addDaysIso(startDay(all[i + 1]), -1) : dueDay(p),
+                 hours: gs.reduce((t, g) => t + Number(g.hours_granted || 0), 0), used: gs.reduce((t, g) => t + usedHoursOf(ledger, g), 0) };
+    }).filter((t) => t.hours > 0) : null;
+    const tierChips = tiers && tiers.length > 1 ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 4px;">${tiers.map((t) => `<span class="pill tiny soft"><strong>${esc(t.name)}</strong> · ${esc(niceDate(t.from))} to ${esc(niceDate(t.to))} · ${esc(hoursText(t.hours))}</span>`).join('')}</div>` : '';
     const { nonBillableHours } = summarizePeriodTime(ledger.entries.filter((e) => e.date >= termStart && e.date <= active.due_date));
     return `
         <div class="card" style="padding:16px;">
@@ -599,8 +600,8 @@ function periodCardHtml(client, slot, ledger) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
-            ${tierStrip}
-            ${totalBarHtml(ledger, { nonBillableHours })}
+            ${tierChips}
+            ${totalBarHtml(ledger, { nonBillableHours, tiers })}
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
 }
