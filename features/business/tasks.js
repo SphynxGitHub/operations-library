@@ -3337,7 +3337,12 @@ OL.execCommentCommand = function(command) {
 
         // 3. Format link with protocol fallback
         const formattedUrl = url.match(/^https?:\/\//i) ? url : `https://${url}`;
-        document.execCommand('createLink', false, formattedUrl);
+        if (range.collapsed) {
+            // Nothing highlighted: insert the address itself as the link text
+            document.execCommand('insertHTML', false, `<a href="${esc(formattedUrl)}" target="_blank" rel="noopener noreferrer">${esc(formattedUrl)}</a>&nbsp;`);
+        } else {
+            document.execCommand('createLink', false, formattedUrl);
+        }
         return;
     }
     document.execCommand(command, false, null);
@@ -3862,17 +3867,31 @@ OL.linkifyHtml = function(html) {
     return container.innerHTML;
 };
 
+// Ctrl/Cmd+K in any editable rich field opens the same link prompt as the toolbar link button.
+if (!window._olRichLinkKey) {
+    window._olRichLinkKey = true;
+    document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || String(e.key).toLowerCase() !== 'k') return;
+        const field = e.target.closest && e.target.closest('[contenteditable="true"]');
+        if (!field) return;
+        e.preventDefault();
+        OL.execCommentCommand('createLink');
+    }, true);
+}
+
 // Links inside an editable field only place the cursor on click, so open them ourselves.
 if (!window._olRichLinkClick) {
     window._olRichLinkClick = true;
+    // Capture phase: runs before any other click/mousedown handler on the page can swallow the click.
     document.addEventListener('click', (e) => {
-        const a = e.target.closest && e.target.closest('.ol-richtext-body a[href]');
+        const a = e.target.closest && e.target.closest('.ol-richtext-body a[href], .ol-richtext-view a[href]');
         if (!a) return;
         const href = a.getAttribute('href') || '';
         if (!/^(https?:|mailto:)/i.test(href)) return;
         e.preventDefault();
+        e.stopPropagation();
         window.open(href, '_blank', 'noopener,noreferrer');
-    });
+    }, true);
 }
 
 // Wraps every "@Name" match with a highlighted span, operating on actual
