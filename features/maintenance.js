@@ -371,7 +371,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null, planYear = n
         if (merge && g.id === merge.plan.id) {
             const f = { ...planMergeFigures(ledger, merge), tiers };
             const pct = f.total > 0 ? Math.round((f.used / f.total) * 100) : 0;
-            const status = f.left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-f.left))} over</strong>` : f.left <= EPS ? 'used up' : `${esc(hoursText(f.left))} left`;
+            const status = f.left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-f.left))} over</strong>` : f.left <= EPS ? 'used up' : `<strong>${esc(hoursText(f.left))} left</strong>`;
             return `<div style="margin:10px 0 0;">
                 <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">
                     <span style="${f.left < -EPS ? 'color:#ef4444;' : ''}"><strong>Plan hours</strong>: ${esc(hoursText(f.used))} of ${esc(hoursText(f.total))} used (${pct}%) · ${status}</span>
@@ -383,7 +383,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null, planYear = n
         const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
         const n = g.source !== 'plan_allotment' ? allocatedCount(ledger, g) : 0;
         const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : GRANT_COLOR[g.source] || '#22c55e';
-        const status = left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : left <= EPS ? 'used up' : `${esc(hoursText(left))} left`;
+        const status = left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : left <= EPS ? 'used up' : `<strong>${esc(hoursText(left))} left</strong>`;
         return `<div style="margin:10px 0 0;">
             <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">
                 <span style="${left < -EPS ? 'color:#ef4444;' : ''}"><strong>${esc(GRANT_LABEL[g.source] || g.source)}</strong>${n ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}: ${esc(hoursText(u))} of ${esc(hoursText(h))} used (${pct}%) · ${status}</span>
@@ -588,8 +588,8 @@ function planYearModel(client, slot, ledger, active, earlier, termStart) {
         ? `<span class="pill tiny soft"><strong>${esc(b.name)}</strong> · ${esc(niceDate(b.from))} to ${esc(niceDate(b.to))} · ${esc(hoursText(b.hours))}</span>`
         : `<span class="pill tiny soft"><strong>Rolled over</strong> · ${b.closedOut ? (b.byTasks ? `closed, ${b.count} task${b.count === 1 ? '' : 's'} done` : `expired ${esc(niceDate(b.expires))}`) : `expires ${esc(niceDate(b.expires))}${b.held ? ` · held for ${b.count} task${b.count === 1 ? '' : 's'}${b.open ? ` (${b.open} open)` : ''}` : ''}`} · ${esc(hoursText(b.hours))}</span>`;
     const header = left < -EPS ? `${esc(hoursText(used))} used · <strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong> of ${esc(hoursText(total))}`
-        : written > EPS ? `${esc(hoursText(used))} used · ${esc(hoursText(written))} written off · ${esc(hoursText(left))} left of ${esc(hoursText(total))}`
-        : `${esc(hoursText(used))} used · ${esc(hoursText(left))} left of ${esc(hoursText(total))}${heldLeft > EPS ? ` <span class="muted">(${esc(hoursText(heldLeft))} of it held for tasks)</span>` : ''}`;
+        : written > EPS ? `${esc(hoursText(used))} used · ${esc(hoursText(written))} written off · <strong>${esc(hoursText(left))} left</strong> of ${esc(hoursText(total))}`
+        : `${esc(hoursText(used))} used · <strong>${esc(hoursText(left))} left</strong> of ${esc(hoursText(total))}${heldLeft > EPS ? ` <span class="muted">(${esc(hoursText(heldLeft))} of it held for tasks)</span>` : ''}`;
     const HATCH = 'repeating-linear-gradient(135deg, rgba(186,117,23,0.45) 0 4px, rgba(186,117,23,0.15) 4px 8px)';
     const bar = blocks.map((b) => {
         const fill = b.hours > 0 ? Math.min(100, (b.used / b.hours) * 100) : 0, c = b.kind === 'carry' ? CARRY_COLOR : (b.used > b.hours ? '#ef4444' : PLAN_COLOR);
