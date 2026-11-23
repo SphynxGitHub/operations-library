@@ -844,7 +844,21 @@ function fvRestoreScroll() {
     });
 }
 
+// How far right the drawn Steps map actually reaches (canvas pixels, before zoom), counting every placed card.
+function fvContentRight() {
+  let right = 0;
+  document.querySelectorAll('#fv-content .fv-step-card, #fv-content .fv-jump-card, #fv-content [id^="fv-reshead-"]').forEach(el => {
+    const l = parseFloat(el.style.left);
+    if (!Number.isFinite(l)) return;
+    const w = parseFloat(el.style.width) || el.offsetWidth || 0;
+    right = Math.max(right, l + w);
+  });
+  return right;
+}
+
 export function renderVisualizer() {
+  if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
+  if (OL._fv) OL._fv._fitRetry = false;
   const wasOpen = OL._fv._lastInspectorResId;
   const mainArea = document.getElementById('mainContent');
   if (!mainArea) return;
@@ -1136,6 +1150,28 @@ export function renderVisualizer() {
     OL._fvRenderSteps(resources);
   } else {
     OL._fvRenderList(stages, resources);
+  }
+
+  // Fit window: if the drawn map still reaches past the visible width, take a column off and draw again.
+  // If taking a column off does not make the map any narrower, the overflow is not about columns: go back and stop.
+  if (OL._fv.layout === 'steps' && !OL._fv._colsOverride && OL._fv.flowShape !== 'wide' && OL._fv.flowShape !== 'tall' && !OL._fv._fitDone) {
+    const need = fvContentRight() + 48;   // 48 = the map's right padding (PAD_X)
+    const have = fvLayoutWidth();
+    const cols = OL._fv._renderedCols;
+    const prev = OL._fv._fitPrevNeed;
+    if (prev !== undefined && need >= prev - 1) {
+      OL._fv._fitCapCols = cols + 1; OL._fv._fitDone = true; OL._fv._fitRetry = true; OL._fv._fitPrevNeed = undefined;
+      return OL.renderVisualizer();
+    }
+    if (need > have + 2 && Number.isFinite(cols) && cols > 1) {
+      if ((OL._fv._fitTries || 0) >= 8) throw new Error('Flow map Fit window: the diagram still runs past the visible width after 8 attempts.');
+      OL._fv._fitTries = (OL._fv._fitTries || 0) + 1;
+      OL._fv._fitPrevNeed = need;
+      OL._fv._fitCapCols = cols - 1;
+      OL._fv._fitRetry = true;
+      return OL.renderVisualizer();
+    }
+    OL._fv._fitPrevNeed = undefined;
   }
 
   // Populate workbench if open
@@ -2418,9 +2454,11 @@ export function _fvRenderSteps(resources) {
     const availW = fvLayoutWidth();
     const colBox = { cardW: CARD_W, colGap: COL_GAP, padX: PAD_X };
     // A number is a cap on columns across a row, never more than fit the window (printing passes its own exact count)
-    const maxCols = OL._fv._colsOverride ? chooseCols(OL._fv._colsOverride, availW, colBox)
+    const maxColsRaw = OL._fv._colsOverride ? chooseCols(OL._fv._colsOverride, availW, colBox)
       : typeof OL._fv.flowShape === 'number' ? Math.min(OL._fv.flowShape, chooseCols('auto', availW, colBox))
       : chooseCols(OL._fv.flowShape || 'auto', availW, colBox);
+    // A cap set by the fit check after a first draw that ran past the edge (see renderVisualizer)
+    const maxCols = OL._fv._fitCapCols ? Math.min(maxColsRaw, OL._fv._fitCapCols) : maxColsRaw;
     OL._fv._laneCols = Number.isFinite(maxCols) ? maxCols : undefined;   // read by _fvLayoutResource (paths wrap into rows)
     OL._fv._renderedCols = maxCols;
     if (Number.isFinite(maxCols)) {
