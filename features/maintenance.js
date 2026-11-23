@@ -356,7 +356,7 @@ function grantTasks(ledger) {
 
 // The headline: one line and bar per block of hours available now (courtesy carryover, plan allotment, purchases),
 // newest block first. Each fills only to its own hours; any excess shows over on the most recent block alone.
-function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null } = {}) {
+function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null, planYear = null } = {}) {
     const gs = ledger.current;
     if (!gs.length) return `<div class="tiny muted" style="margin-top:12px;">No hours available right now.${canManage() ? (GRANT_LABEL.ad_hoc_purchase === 'Prepaid hours' ? ' Log prepaid hours to add some.' : ' Add an ad hoc purchase or start a plan period.') : ''}</div>`;
     const allUsed = gs.every((g) => isBlockClosed(ledger, g));
@@ -365,8 +365,8 @@ function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null } = {}) {
     const newestFirst = gs.slice().sort(newestBlockFirst);
     // The plan allotment and the courtesy carryover from the old plan period read as ONE block of plan hours (one bar, a divider
     // where the carryover ends). Blocks held for specific tasks, and purchases, stay on their own rows.
-    const merge = planMerge(ledger);
-    const folded = new Set(merge ? [...merge.carries, ...merge.plans.filter((g) => g.id !== merge.plan.id)].map((g) => String(g.id)) : []);
+    const merge = planYear ? null : planMerge(ledger);
+    const folded = planYear ? planYear.foldIds : new Set(merge ? [...merge.carries, ...merge.plans.filter((g) => g.id !== merge.plan.id)].map((g) => String(g.id)) : []);
     const rows = newestFirst.filter((g) => !folded.has(String(g.id))).map((g) => {
         if (merge && g.id === merge.plan.id) {
             const f = { ...planMergeFigures(ledger, merge), tiers };
@@ -394,7 +394,7 @@ function totalBarHtml(ledger, { nonBillableHours = 0, tiers = null } = {}) {
         </div>`;
     }).join('');
     return `
-        <div style="margin:6px 0 4px;">${rows}</div>
+        <div style="margin:6px 0 4px;">${planYear ? planYear.html : ''}${rows}</div>
         ${nonBillableHours > 0 ? `<div class="tiny muted" style="margin:8px 0 4px;">${esc(hoursText(nonBillableHours))} non-billable, not counted</div>` : ''}
         ${allUsed ? `<div class="tiny" style="color:#f59e0b; margin:6px 0;">Every block of hours is used up. ${canManage() ? 'Add more hours before more billable time is logged.' : ''}</div>` : ''}
         ${ledger.alloc.unfundedMinutes > 0 ? `<div class="tiny" style="color:#f59e0b; margin-bottom:6px;">${esc(durText(ledger.alloc.unfundedMinutes))} of billable time falls outside every grant's dates.</div>` : ''}`;
@@ -552,6 +552,61 @@ function hoursLogHtml(client, ledger, window, heading, { showGrants = true } = {
 const planYearStart = (slot, active) => slot.periods.filter((p) => p.id !== active.id && String(p.due_date).slice(0, 10) === String(active.due_date).slice(0, 10) && String(p.start_date).slice(0, 10) < String(active.start_date).slice(0, 10))
     .map((p) => String(p.start_date).slice(0, 10)).sort()[0] || active.start_date;
 
+// The plan year as blocks on ONE bar: any courtesy carryover first (amber), then a block per tier (teal), each sized by its hours and
+// filled with the hours used from it. A carryover that is closed out (its set-aside tasks are done, or it passed its expiry) shows full:
+// the used part solid, the unused part hatched and written off, with the reason. Used when the year had a mid-term tier change or a
+// carryover that is held for tasks or already closed out; otherwise the plain Plan hours bar is used.
+function planYearModel(client, slot, ledger, active, earlier, termStart) {
+    const today = todayIso(), dueDay = (p) => String(p.due_date).slice(0, 10), startDay = (p) => String(p.start_date).slice(0, 10);
+    const chain = [...earlier, active];
+    const tasks = client.projectData?.clientTasks || [], closedSet = new Set(closedNames());
+    const r3 = (n) => Math.round(n * 1000) / 1000;
+    const tiers = chain.map((p, i) => {
+        const gs = slot.grants.filter((g) => g.source === 'plan_allotment' && String(g.period_id) === String(p.id));
+        const hours = gs.reduce((t, g) => t + Number(g.hours_granted || 0), 0);
+        return { kind: 'tier', gs, hours, used: gs.reduce((t, g) => t + usedHoursOf(ledger, g), 0), name: periodTierTitle(p, hours) || 'Earlier tier',
+                 from: startDay(p), to: i < chain.length - 1 ? addDaysIso(startDay(chain[i + 1]), -1) : dueDay(p) };
+    }).filter((t) => t.hours > 0);
+    const carries = slot.grants.filter((g) => g.source === 'courtesy_carryover' && String(g.expires_on).slice(0, 10) >= termStart).map((g) => {
+        const hours = Number(g.hours_granted || 0), used = Math.min(hours, usedHoursOf(ledger, g));
+        const set = tasks.filter((t) => t && String(t.hoursGrantId || '') === String(g.id));
+        const open = set.filter((t) => !closedSet.has(String(t.status))).length;
+        const expires = String(g.expires_on).slice(0, 10);
+        const closedOut = g.status === 'expired' || expires < today;
+        const written = closedOut ? (g.status === 'expired' && Number(g.hours_expired) > 0 ? Number(g.hours_expired) : Math.max(0, r3(hours - used))) : 0;
+        const byTasks = closedOut && set.length > 0 && open === 0;
+        return { kind: 'carry', g, hours, used, written, closedOut, held: !closedOut && set.length > 0, count: set.length, open, expires,
+                 reason: written > EPS ? (byTasks ? 'all set-aside tasks closed' : `expired ${niceDate(expires)}`) : '', byTasks };
+    });
+    const heldOrClosed = carries.some((c) => c.held || c.closedOut);
+    if (!(tiers.length > 1 || (carries.length && heldOrClosed))) return null;
+    const blocks = [...carries, ...tiers];
+    const total = blocks.reduce((t, b) => t + b.hours, 0), used = blocks.reduce((t, b) => t + b.used, 0), written = carries.reduce((t, c) => t + c.written, 0);
+    const heldLeft = carries.filter((c) => c.held).reduce((t, c) => t + Math.max(0, c.hours - c.used), 0);
+    const left = r3(total - used - written);
+    const chip = (b) => b.kind === 'tier'
+        ? `<span class="pill tiny soft"><strong>${esc(b.name)}</strong> · ${esc(niceDate(b.from))} to ${esc(niceDate(b.to))} · ${esc(hoursText(b.hours))}</span>`
+        : `<span class="pill tiny soft"><strong>Rolled over</strong> · ${b.closedOut ? (b.byTasks ? `closed, ${b.count} task${b.count === 1 ? '' : 's'} done` : `expired ${esc(niceDate(b.expires))}`) : `expires ${esc(niceDate(b.expires))}${b.held ? ` · held for ${b.count} task${b.count === 1 ? '' : 's'}${b.open ? ` (${b.open} open)` : ''}` : ''}`} · ${esc(hoursText(b.hours))}</span>`;
+    const header = left < -EPS ? `${esc(hoursText(used))} used · <strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong> of ${esc(hoursText(total))}`
+        : written > EPS ? `${esc(hoursText(used))} used · ${esc(hoursText(written))} written off · ${esc(hoursText(left))} left of ${esc(hoursText(total))}`
+        : `${esc(hoursText(used))} used · ${esc(hoursText(left))} left of ${esc(hoursText(total))}${heldLeft > EPS ? ` <span class="muted">(${esc(hoursText(heldLeft))} of it held for tasks)</span>` : ''}`;
+    const HATCH = 'repeating-linear-gradient(135deg, rgba(186,117,23,0.45) 0 4px, rgba(186,117,23,0.15) 4px 8px)';
+    const bar = blocks.map((b) => {
+        const fill = b.hours > 0 ? Math.min(100, (b.used / b.hours) * 100) : 0, c = b.kind === 'carry' ? CARRY_COLOR : (b.used > b.hours ? '#ef4444' : PLAN_COLOR);
+        return `<div style="flex:${b.hours} 1 0; min-width:6px; position:relative; background:${b.kind === 'carry' && b.written > EPS ? HATCH : 'rgba(148,163,184,0.25)'};"><div style="position:absolute; left:0; top:0; height:100%; width:${fill}%; background:${c};"></div></div>`;
+    }).join('');
+    const sw = (bg) => `<span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${bg}; margin-right:5px; vertical-align:-1px;"></span>`;
+    const legend = blocks.flatMap((b) => b.kind === 'tier'
+        ? [`<span>${sw(PLAN_COLOR)}${esc(b.name)}: ${esc(hoursText(b.used))} of ${esc(hoursText(b.hours))} used</span>`]
+        : [`<span>${sw(CARRY_COLOR)}Rolled over: ${esc(hoursText(b.used))} used</span>`, ...(b.written > EPS ? [`<span>${sw(HATCH)}${esc(hoursText(b.written))} written off: ${esc(b.reason)}</span>`] : [])]).join('');
+    const html = `<div style="margin:10px 0 0;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">${blocks.map(chip).join('')}</div>
+            <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;"><span><strong>Hours:</strong> ${header}</span><span class="muted">Ends ${esc(niceDate(dueDay(active)))}</span></div>
+            <div style="display:flex; height:12px; border-radius:6px; overflow:hidden; gap:3px; margin-top:8px;">${bar}</div>
+            <div class="tiny muted" style="display:flex; gap:6px 16px; flex-wrap:wrap; margin-top:10px;">${legend}</div></div>`;
+    return { html, foldIds: new Set([...carries.map((c) => String(c.g.id)), ...tiers.flatMap((t) => t.gs.map((g) => String(g.id)))]) };
+}
+
 function periodCardHtml(client, slot, ledger) {
     const active = slot.periods.find((p) => p.status === 'active');
     const today = todayIso();
@@ -573,14 +628,7 @@ function periodCardHtml(client, slot, ledger) {
     const earlier = slot.periods.filter((p) => p.id !== active.id && dueDay(p) === dueDay(active) && startDay(p) < startDay(active)).sort((a, b) => startDay(a).localeCompare(startDay(b)));
     const termStart = earlier.length ? startDay(earlier[0]) : active.start_date;
     const allotOf = (p) => slot.grants.filter((g) => g.period_id === p.id && g.source === 'plan_allotment').reduce((t, g) => t + Number(g.hours_granted || 0), 0);
-    // The tiers of this plan year (one per period) with the hours each allotted and used, for the chips and the split bar.
-    const mergeNow = planMerge(ledger);
-    const tiers = earlier.length && mergeNow ? [...earlier, active].map((p, i, all) => {
-        const gs = mergeNow.plans.filter((g) => String(g.period_id) === String(p.id));
-        return { name: periodTierTitle(p, allotOf(p)) || 'Earlier tier', from: startDay(p), to: i < all.length - 1 ? addDaysIso(startDay(all[i + 1]), -1) : dueDay(p),
-                 hours: gs.reduce((t, g) => t + Number(g.hours_granted || 0), 0), used: gs.reduce((t, g) => t + usedHoursOf(ledger, g), 0) };
-    }).filter((t) => t.hours > 0) : null;
-    const tierChips = tiers && tiers.length > 1 ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 4px;">${tiers.map((t) => `<span class="pill tiny soft"><strong>${esc(t.name)}</strong> · ${esc(niceDate(t.from))} to ${esc(niceDate(t.to))} · ${esc(hoursText(t.hours))}</span>`).join('')}</div>` : '';
+    const planYear = planYearModel(client, slot, ledger, active, earlier, termStart);
     const { nonBillableHours } = summarizePeriodTime(ledger.entries.filter((e) => e.date >= termStart && e.date <= active.due_date));
     return `
         <div class="card" style="padding:16px;">
@@ -600,8 +648,7 @@ function periodCardHtml(client, slot, ledger) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
-            ${tierChips}
-            ${totalBarHtml(ledger, { nonBillableHours, tiers })}
+            ${totalBarHtml(ledger, { nonBillableHours, planYear })}
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
 }
