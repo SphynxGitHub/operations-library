@@ -162,7 +162,7 @@ function bodyFor(key) {
         const type = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
         return { count: list.length, extra: '', body: list.map((r) => row(r.title, r.clientId,
             [r.clientName, r.isMaintenance ? 'Maintenance' : '', type(r.requestType), r.isMaintenance ? '' : `Round ${r.round}`, r.assignee || 'Unassigned', r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : ''].filter(Boolean).join(' · '),
-            chip(r.status, tone(r.workStatus)))).join('') || empty('No open requests.') };
+            `${r.isMaintenance ? chip('Maintenance', '#a78bfa') + ' ' : ''}${chip(r.status, tone(r.workStatus))}`)).join('') || empty('No open requests.') };
     }
     if (key === 'pending_review') {
         if (!reviewData) return { count: '', body: empty('Loading...'), extra: '' };

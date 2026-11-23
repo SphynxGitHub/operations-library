@@ -791,6 +791,7 @@ OL.renderDashboardRequestRowHTML = function(r) {
             <div class="tiny muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(sub)}</div>
         </div>
         ${dueKey ? `<span class="pill tiny ${reqOverdue ? 'due-overdue' : 'soft'}" style="flex-shrink:0;" title="Review period ends">${reqOverdue ? 'Overdue · ' : 'Due '}${esc(OL.formatDayKey(dueKey, { month: 'short', day: 'numeric' }))}</span>` : ''}
+        ${r.isMaintenance ? `<span class="pill tiny" style="flex-shrink:0; background:rgba(167,139,250,0.15); color:#a78bfa;" title="On the Maintenance & Hours page, not the scoping sheet">Maintenance</span>` : ''}
         <span class="pill tiny" style="flex-shrink:0; border:1px solid ${color}; color:${color};">${esc(r.status)}</span>
         ${r.clientName && r.clientId ? `<div style="flex-shrink:0;" onclick="event.stopPropagation();">${OL.renderProjectPill(r.clientId, r.clientName)}</div>` : ''}
     </div>`;
