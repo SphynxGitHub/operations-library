@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-22T10:23:45Z",
+  "updatedAt": "2026-11-23T02:04:59Z",
   "items": [
     {
       "app": "Schwab",
@@ -184,6 +184,62 @@
       "summary": "Altruist's Hazel and Vanilla are building an AI estate planning module with estate summaries, a health check and a document builder, expected in early 2027 with a waitlist open; timing and features may change.",
       "sourceUrl": "https://www.wealthmanagement.com/advisor-support-platforms/vanilla-partners-with-hazel-on-ai-estate-planning-tool",
       "checkedAt": "2026-11-20"
+    },
+    {
+      "app": "Claude",
+      "kind": "feature",
+      "date": "2026-11-20",
+      "summary": "Computer use is in beta on Team and Enterprise plans, rolling out gradually: Claude can see the user's screen and work in desktop apps the user allows, from Claude Desktop, web and mobile when computer access is turned on.",
+      "sourceUrl": "https://support.claude.com/en/articles/12138966-release-notes",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-16",
+      "summary": "Google Calendar replaces Speedy meetings with per-calendar Event duration & buffer settings (start 5 minutes later, end 5 minutes earlier, or none), with an admin default; useful for assistants managing several calendars. Scheduled Release domains get it from Dec 11.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/schedule-meetings-with-default-buffer-google-calendar.html",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Email guests in Google Calendar on the web now opens a full Gmail compose window prefilled with chosen recipients (by RSVP status, or their delegates), with attachments, signatures, schedule send and rich text. Rapid Release rollout started Nov 19; Scheduled Release starts Dec 18.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/email-meeting-guests-from-google-Calendar-with-the-full-capabilities-of-Gmail.html",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-20",
+      "summary": "Google Docs' Compare documents tool now supports Microsoft Word (.docx) files, so edits can be reviewed across Word and Docs files without converting. Edition and rollout details were not stated in the recap.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/weekly-recap-11-20-2026.html",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Jump.ai",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Jump expanded its Grow add-on with signals that flag opportunities (held-away assets, referrals, life events) and sync to the CRM as tasks, advisor coaching, a weekly digest, natural-language questions across client conversations, scorecards and playbooks, and a firmwide insights dashboard. Pricing not stated.",
+      "sourceUrl": "https://jump.ai/press/jump-expands-grow-to-help-advisory-firms-turn-client-conversations-into-organic-growth",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Jump.ai",
+      "kind": "feature",
+      "date": "2026-11-17",
+      "summary": "Jump introduced a version for accounting firms that gives tax, client advisory and wealth teams one shared client record with meeting prep and notes, follow-up tasks synced to practice management tools such as Karbon, opportunity signals, and prefilled onboarding forms.",
+      "sourceUrl": "https://jump.ai/blog/jump-for-accounting-purpose-built-ai-for-tax-accounting-and-advisory-teams",
+      "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Wealth.com",
+      "kind": "feature",
+      "date": "2026-11-23",
+      "summary": "Wealth.com's November update embeds Ester in Schwab Advisor Center (no Wealth.com license needed), extends its connector to ChatGPT, adds team report templates, QCD modeling for Tax Planning licensees, ten more custodial connections via BridgeFT from the week of Nov 23, and mobile notary ordering at $295 (trust/will) or $175 (single document). Exact post date not shown.",
+      "sourceUrl": "https://www.wealth.com/resources/articles/november-2026-wealth-com-updates",
+      "checkedAt": "2026-11-23"
     }
   ]
 }
