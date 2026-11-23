@@ -559,7 +559,27 @@ function periodCardHtml(client, slot, ledger) {
     const earlier = slot.periods.filter((p) => p.id !== active.id && dueDay(p) === dueDay(active) && startDay(p) < startDay(active)).sort((a, b) => startDay(a).localeCompare(startDay(b)));
     const termStart = earlier.length ? startDay(earlier[0]) : active.start_date;
     const allotOf = (p) => slot.grants.filter((g) => g.period_id === p.id && g.source === 'plan_allotment').reduce((t, g) => t + Number(g.hours_granted || 0), 0);
-    const tierRun = earlier.length ? [...earlier, active].map((p, i, all) => `<strong>${esc(periodTierTitle(p, allotOf(p)) || 'Earlier tier')}</strong> ${esc(niceDate(startDay(p)))} to ${esc(niceDate(i < all.length - 1 ? addDaysIso(startDay(all[i + 1]), -1) : dueDay(p)))}`).join(' <span class="muted">then</span> ') : '';
+    // One strip across the plan year, a segment per tier sized by its days, with a Today marker and the date each change took effect.
+    const tierStrip = (() => {
+        if (!earlier.length) return '';
+        const all = [...earlier, active], endAfter = addDaysIso(dueDay(active), 1);
+        const total = Math.max(1, daysBetween(termStart, endAfter));
+        const pos = (d) => Math.min(100, Math.max(0, (daysBetween(termStart, d) / total) * 100));
+        const shades = ['#9FE1CB', '#5DCAA5', '#1D9E75'];
+        const todayPos = pos(today);
+        const showToday = today >= termStart && today <= dueDay(active);
+        const segs = all.map((p, i) => {
+            const from = startDay(p), to = i < all.length - 1 ? startDay(all[i + 1]) : endAfter;
+            const name = periodTierTitle(p, allotOf(p)) || 'Earlier tier', h = allotOf(p);
+            return `<div style="width:${pos(to) - pos(from)}%; background:${shades[Math.min(i, shades.length - 1)]}; color:${i >= 2 ? '#fff' : '#04342C'}; display:flex; align-items:center; padding-left:8px; font-size:11px; white-space:nowrap; overflow:hidden; ${i ? 'border-left:1.5px solid var(--text);' : ''}" title="${esc(name)}: ${esc(niceDate(from))} to ${esc(niceDate(addDaysIso(to, -1)))}">${esc(name)}${h ? ` · ${esc(hoursText(h))}` : ''}</div>`;
+        }).join('');
+        const marks = all.slice(1).map((p) => `<span style="position:absolute; left:${pos(startDay(p))}%; transform:translateX(-50%); white-space:nowrap;">${esc(niceDate(startDay(p)))} · changed to ${esc(periodTierTitle(p, allotOf(p)) || 'new tier')}</span>`).join('');
+        return `<div style="position:relative; padding-top:16px; margin:6px 0 4px; min-width:260px;">
+            ${showToday ? `<div style="position:absolute; left:${todayPos}%; top:0; transform:translateX(-50%); font-size:11px;" class="muted">Today</div>` : ''}
+            <div style="display:flex; height:22px; border-radius:6px; overflow:hidden;">${segs}</div>
+            ${showToday ? `<div style="position:absolute; left:${todayPos}%; top:12px; height:30px; border-left:1.5px dashed var(--muted);"></div>` : ''}
+            <div class="tiny muted" style="position:relative; height:16px; margin-top:4px;"><span style="position:absolute; left:0;">${esc(niceDate(termStart))}</span>${marks}<span style="position:absolute; right:0;">${esc(niceDate(dueDay(active)))}</span></div></div>`;
+    })();
     const { nonBillableHours } = summarizePeriodTime(ledger.entries.filter((e) => e.date >= termStart && e.date <= active.due_date));
     return `
         <div class="card" style="padding:16px;">
@@ -567,7 +587,7 @@ function periodCardHtml(client, slot, ledger) {
                 <div>
                     <div class="tiny muted uppercase bold">Current plan period</div>
                     <div style="font-size:16px; font-weight:700; margin:2px 0;">${esc(niceDate(termStart))} to ${esc(niceDate(active.due_date))}</div>
-                    ${tierRun ? `<div class="tiny" style="margin:2px 0 4px;">${tierRun}</div>` : ''}
+                    
                     <div class="tiny muted">${tier ? `<span class="pill tiny soft" style="margin-right:6px;">${esc(tier)}</span>` : ''}${(() => { const m = planMerge(ledger); if (!m) return `${esc(hoursText(allot))} allotment`; return esc(planMergeSummary(planMergeFigures(ledger, m))); })()}</div>
                 </div>
                 ${canManage() ? `<div style="display:flex; gap:8px; align-items:center;">
@@ -579,6 +599,7 @@ function periodCardHtml(client, slot, ledger) {
                     <button class="btn tiny primary" onclick="OL.openClosePeriodModal('${esc(active.id)}')">Close period…</button>
                 </div>` : ''}
             </div>
+            ${tierStrip}
             ${totalBarHtml(ledger, { nonBillableHours })}
             <div class="tiny" style="color:${pr.overdue ? '#ef4444' : 'var(--muted)'};">${pr.notStarted ? 'Starts ' + esc(niceDate(active.start_date)) : pr.overdue ? `This period ended ${-pr.daysLeft} day${pr.daysLeft === -1 ? '' : 's'} ago. Close it, and renew if the client is continuing.` : `${pr.daysLeft} day${pr.daysLeft === 1 ? '' : 's'} left in the period (ends ${esc(niceDate(active.due_date))})`}</div>
         </div>`;
