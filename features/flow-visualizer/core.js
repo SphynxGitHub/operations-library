@@ -5579,6 +5579,31 @@ export function _fvRenderListStep(step, res, stepIdx, globalIds, allResources, d
 // SHARED CONTROLS
 // ══════════════════════════════════════════════
 
+// Wraps the searched text in the step names on screen in <mark>, putting every name back first so marks never pile up.
+function fvMarkSearchText(q) {
+  document.querySelectorAll('[data-fv-orig]').forEach(el => { el.textContent = el.dataset.fvOrig; delete el.dataset.fvOrig; });
+  if (!q) return;
+  const lower = q.toLowerCase();
+  document.querySelectorAll('.fv-list-step-name, .fv-step-name').forEach(el => {
+    const text = el.textContent;
+    if (!text.toLowerCase().includes(lower)) return;
+    el.dataset.fvOrig = text;
+    const frag = document.createDocumentFragment();
+    let at = 0, i;
+    while ((i = text.toLowerCase().indexOf(lower, at)) !== -1) {
+      if (i > at) frag.appendChild(document.createTextNode(text.slice(at, i)));
+      const mark = document.createElement('mark');
+      mark.className = 'fv-search-hit';
+      mark.textContent = text.slice(i, i + q.length);
+      frag.appendChild(mark);
+      at = i + q.length;
+    }
+    if (at < text.length) frag.appendChild(document.createTextNode(text.slice(at)));
+    el.textContent = '';
+    el.appendChild(frag);
+  });
+}
+
 export function fvSearch(query) {
   OL._fv._searchQuery = query;
   const q   = (query || '').toLowerCase().trim();
@@ -5588,6 +5613,7 @@ export function fvSearch(query) {
   document.querySelectorAll('.fv-card, .fv-step-card, .fv-list-item').forEach(el => el.classList.remove('search-match','search-active','dimmed'));
 
   if (!q) {
+    fvMarkSearchText('');
     OL._fv.searchMatches = []; OL._fv.searchIdx = -1;
     if (nav) nav.style.display = 'none';
     return;
@@ -5622,6 +5648,7 @@ export function fvSearch(query) {
     });
   }
 
+  fvMarkSearchText(q);
   OL._fv.searchMatches = matches;
   OL._fv.searchIdx = matches.length > 0 ? 0 : -1;
 

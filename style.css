@@ -1618,7 +1618,9 @@ body:not(.light-mode) .fv-swimlane:nth-child(even) { background: rgba(255,255,25
 .fv-list-item.is-decision { background: rgba(245,184,0,0.04); border-color: rgba(245,184,0,0.4); }
 .fv-list-item.is-global { border-style: dashed; background: rgba(124,58,237,0.03); }
 .fv-list-item.dimmed { opacity: 0.3; }
-.fv-list-item.search-match { border-color: #f5b800; }
+.fv-list-item.search-match { border-color: #f5b800; background: rgba(245,184,0,0.07); }
+.fv-list-item.search-active { border-color: #f5b800; background: rgba(245,184,0,0.16); box-shadow: 0 0 0 3px rgba(245,184,0,0.45); }
+.fv-search-hit { background: #f5b800; color: #111; border-radius: 2px; padding: 0 1px; }
 .fv-list-item.drag-over { border-top: 2px solid #3dd9c5 !important; background: rgba(61,217,197,0.05) !important; }
 .fv-list-type-dot { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; margin-top: 1px; }
 .fv-list-step-name { font-size: 12px; font-weight: 500; color: var(--text-main); flex: 1; }
