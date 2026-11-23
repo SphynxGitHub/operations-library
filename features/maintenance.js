@@ -775,8 +775,12 @@ export async function submitStartPeriod() {
 function findPeriod(periodId) { const client = getActiveClient(); return { client, period: slotFor(client?.id).periods.find((p) => p.id === periodId), grants: slotFor(client?.id).grants }; }
 
 // ---------------- recording an earlier plan period ----------------
+// An active courtesy carryover already on file (entered by hand, with no earlier period behind it). Recording the earlier
+// period must not create a second one beside it.
+const existingCarryover = (client) => (slotFor(client.id).grants || []).find((g) => g.source === 'courtesy_carryover' && g.status === 'active') || null;
 export function openPriorPeriodModal() {
     const client = getActiveClient(); if (!client || !canManage()) return;
+    const carry = existingCarryover(client);
     openModal(`${modalHead('Record an earlier plan period')}<div class="modal-body" style="padding-top:14px;">
         <p class="tiny muted" style="margin-bottom:14px;">For a plan period from before hours were logged here. Enter what it allotted and how much was used; any hours carried forward become a courtesy carryover that counts toward the hours available now, until the date you set.</p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -788,10 +792,11 @@ export function openPriorPeriodModal() {
             ${field('Hours used', `<input id="pr-used" type="number" min="0" step="0.25" class="modal-input" placeholder="e.g. 18" oninput="OL.priorRecalc()">`)}
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-            ${field('Hours carried forward', `<input id="pr-carry" type="number" min="0" step="0.25" class="modal-input" oninput="this.dataset.touched='1'; OL.priorRecalc()">`)}
+            ${field('Hours carried forward', `<input id="pr-carry" type="number" min="0" step="0.25" class="modal-input" ${carry ? 'value="0" data-touched="1"' : ''} oninput="this.dataset.touched='1'; OL.priorRecalc()">`)}
             ${field('Carried forward until', `<input id="pr-expires" type="date" class="modal-input" oninput="this.dataset.touched='1'">`)}
         </div>
         <div id="pr-hint" class="tiny muted" style="margin:-6px 0 12px;">Hours carried forward start as the unused hours; change them if you agreed on a different amount.</div>
+        ${carry ? `<div class="tiny" style="margin:0 0 12px; color:#f59e0b;">This client already has a ${esc(hoursText(carry.hours_granted))} courtesy carryover on file, so no new carryover is created. Leave "Hours carried forward" at 0.</div>` : ''}
         <button class="btn primary" style="width:100%; justify-content:center;" onclick="OL.submitPriorPeriod()">Save earlier period</button></div>`);
 }
 // Fills what can be worked out: the end date a year after the start, the unused hours as the carryforward, and an
@@ -810,6 +815,7 @@ export function priorRecalc() {
 }
 export async function submitPriorPeriod() {
     const client = getActiveClient(); if (!client) return;
+    if (existingCarryover(client) && (parseFloat(val('pr-carry')) || 0) > 0) { alert('This client already has a courtesy carryover on file. Set "Hours carried forward" to 0 so a second one is not created.'); return; }
     const res = await savePriorPeriod(client.id, { start: val('pr-start'), due: val('pr-due'), allotment: val('pr-allot'), used: val('pr-used'), carryHours: val('pr-carry'), carryExpires: val('pr-expires'), renewing: true });
     if (res.error) { alert(res.error); return; }
     OL.closeModal(); await reloadAndRedraw(client.id);
