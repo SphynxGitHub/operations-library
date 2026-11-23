@@ -197,6 +197,17 @@ OL.setClientTaskFilter = function(key, val) {
     renderClientTaskManager();
 };
 
+// Closes out a client (maintenance) request from the Tasks tab: same effect as "Mark done" on the Client Requests page.
+OL.markMaintenanceRequestDoneFromTasks = async function(itemId) {
+    const client = getActiveClient();
+    if (!client) throw new Error('Mark done: no project is open.');
+    const sheet = (client.projectData?.scopingSheets || []).find(sh => sh && (sh.kind === 'maintenance' || sh.id === 'maintenance'));
+    const item = (sheet?.lineItems || []).find(i => String(i.id) === String(itemId));
+    if (!item) throw new Error('Mark done: that request was not found on the maintenance sheet.');
+    await updateAndSync(() => { item.status = 'Done'; item.doneAt = OL.localDateStr(new Date()); });
+    renderClientTaskManager();
+};
+
 OL.renderFilteredClientTaskGroups = function(tasks) {
     const { query, status, assignee, groupBy, clientGroup } = OL.clientTaskFilterState;
     const now = new Date();
@@ -225,7 +236,16 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
         return (titleMatch || resourceMatch) && statusMatch && assigneeMatch;
     });
 
-    if (filtered.length === 0) {
+    // Open client (maintenance) requests with no task showing yet still get a group, so the request itself can be opened
+    // and closed out from here. Only when the list is not narrowed by a search or an assignee.
+    const maintReqs = (client?.projectData?.scopingSheets || []).filter(sh => sh && (sh.kind === 'maintenance' || sh.id === 'maintenance'))
+        .flatMap(sh => sh.lineItems || []).filter(i => i && i.id !== undefined && i.id !== null && String(i.id).trim() !== '');
+    const maintIds = new Set(maintReqs.map(i => String(i.id)));
+    const showEmptyReqs = groupBy === 'request' && !String(query || '').trim() && assignee === 'All' && (status === 'Open' || status === 'All');
+    const isOpenReq = (i) => String(i.status || '') !== 'Done' && !/^Don.t Do$/i.test(String(i.status || ''));
+    const emptyReqs = showEmptyReqs ? maintReqs.filter(isOpenReq).filter(i => !filtered.some(t => requestIdsForTask(t).map(String).includes(String(i.id)))) : [];
+
+    if (filtered.length === 0 && !emptyReqs.length) {
         return `<div class="p-20 muted text-center">No matching tasks in this workspace.</div>`;
     }
 
@@ -239,7 +259,7 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
     const rest = pinned ? filtered.filter(t => !clientIds.has(t.id) && !devIds.has(t.id)) : filtered;
 
     const renderRest = () => {
-        if (!rest.length) return '';
+        if (!rest.length && !emptyReqs.length) return '';
         if (groupBy === 'none') {
             return `<div style="display:grid; gap:8px; margin-bottom:20px;">${OL.sortTasksWithSubtasksNested(rest).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}</div>`;
         }
@@ -276,6 +296,13 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
             groups[groupKey].push(task);
         });
 
+        emptyReqs.forEach(item => {
+            const key = 'req:' + item.id;
+            if (groups[key]) return;
+            reqMeta[key] = { id: String(item.id), title: OL.requestItemTitle(client, item), type: item.requestType || 'revision', round: 1, status: item.status || '' };
+            groups[key] = [];
+        });
+
         // Requests first (as parents), loose tasks last.
         const entries = Object.entries(groups).sort(([a], [b]) => (a === 'No Request') - (b === 'No Request'));
 
@@ -289,14 +316,15 @@ OL.renderFilteredClientTaskGroups = function(tasks) {
                     <span onclick="event.stopPropagation();">${OL.renderGroupSelectCheckbox(groupTasks)}</span>
                     <i data-lucide="${req ? 'git-pull-request' : 'folder'}" style="width:13px;height:13px;"></i>
                     <span>${esc(groupTitle)}</span>
-                    ${req ? `<span class="pill tiny soft" style="font-size:9px;">${esc(req.type.charAt(0).toUpperCase() + req.type.slice(1))} · Round ${req.round}${req.status ? ' · ' + esc(req.status) : ''}</span>` : ''}
+                    ${req ? `<span class="pill tiny soft" style="font-size:9px;">${esc(req.type.charAt(0).toUpperCase() + req.type.slice(1))}${maintIds.has(req.id) ? ' · Maintenance' : ' · Round ' + req.round}${req.status ? ' · ' + esc(req.status) : ''}</span>` : ''}
                     <span class="pill tiny soft" style="font-size:10px;">${groupTasks.length}</span>
                 </div>
+                ${req && maintIds.has(req.id) && String(req.status || '') !== 'Done' ? `<button class="btn tiny soft" style="text-transform:none; letter-spacing:0;" onclick="event.stopPropagation(); OL.markMaintenanceRequestDoneFromTasks('${esc(req.id)}')" title="Close out this request">Mark done</button>` : ''}
             </div>
             <div style="display: grid; gap: 8px; ${req ? 'padding-left:14px; border-left:2px solid rgba(100,198,162,0.3);' : ''}">
-                ${OL.sortTasksWithSubtasksNested(groupTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('')}
+                ${groupTasks.length ? OL.sortTasksWithSubtasksNested(groupTasks).map(t => OL.renderTaskRowHTML(t, todayStr)).join('') : '<div class="tiny muted">No tasks on this request yet.</div>'}
             </div>
-            ${OL.taskGroupTotalHtml(groupTasks)}
+            ${groupTasks.length ? OL.taskGroupTotalHtml(groupTasks) : ''}
         </div>
     `;
         }).join('');

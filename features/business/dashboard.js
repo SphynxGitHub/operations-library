@@ -769,12 +769,6 @@ OL.groupDashboardItems = function(items, by) {
     return out;
 };
 
-// A maintenance request is not on the scoping sheet (it has no round); it is on the project's Maintenance & Hours page.
-OL.openDashboardRequest = function(clientId, isMaintenance) {
-    OL.navigateToClientProject(clientId);
-    if (isMaintenance) window.location.hash = '#/maintenance';
-};
-
 // Compact card for an active request, in the same style as the other rows in the stream.
 OL.renderDashboardRequestRowHTML = function(r) {
     const color = r.workStatus === 'in_testing' ? '#38bdf8' : r.workStatus === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b';
@@ -784,7 +778,7 @@ OL.renderDashboardRequestRowHTML = function(r) {
     const reqOverdue = dueKey && dueKey < OL.localDateStr();
     return `
     <div class="task-row-card" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(100,198,162,0.04); border-bottom:1px solid var(--line); border-radius:4px; cursor:pointer;"
-         onclick="OL.openDashboardRequest('${esc(r.clientId)}', ${r.isMaintenance ? 'true' : 'false'})">
+         onclick="OL.openRequestFromTask('${esc(r.clientId)}', '${esc(r.itemId)}')">
         <div style="display:flex; align-items:center;" title="Request"><i data-lucide="git-pull-request" style="width:14px;height:14px; color:#64c6a2;"></i></div>
         <div style="flex:1; min-width:0; overflow:hidden;">
             <strong style="display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(r.title)}</strong>
