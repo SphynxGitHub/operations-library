@@ -88,7 +88,7 @@ OL._rerenderErrorLog = function() {
     // current, instead of only ever handling the Error Tracking case.
     const hash = window.location.hash || '';
 
-    if (hash.includes('/errors')) {
+    if (hash.includes('/errors') || hash.includes('client-errors')) {
         if (OL.errorLogState.lockedClientId) OL.renderClientErrorLog();
         else OL.renderBusinessErrorLog();
         return;
