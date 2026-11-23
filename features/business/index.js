@@ -12,6 +12,7 @@ import './team.js';
 import './automations.js';
 import './activation-review.js';
 import './client-followup.js';
+import './hours-checkin.js';
 import './waiting-prompt.js';
 import './meeting-time-prompt.js';
 import './meeting-agenda.js';

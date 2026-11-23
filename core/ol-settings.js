@@ -26,6 +26,11 @@ export const DEFAULT_OL_SETTINGS = {
             intro: 'Touching base with you regarding the open items on your project. Please see below:',
             closing: 'Thank you,',
         },
+        hoursCheckIn: {
+            subject: '{client} — your maintenance hours update',
+            intro: 'Here is your monthly update on your Ongoing Maintenance hours:',
+            closing: 'Let us know if you have any questions or anything new you would like us to take on.\n\nThank you,',
+        },
     },
     // A working round that sits in Drafting this long gets a task to follow up with the client or change its status.
     draftingFollowUp: {

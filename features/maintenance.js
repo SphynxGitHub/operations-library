@@ -1155,6 +1155,27 @@ export async function migrateClientRequestsToBacklog(clientIds, { includeClosed 
     return results;
 }
 
+// Maintenance clients: the active plan period and the hours picture the monthly check-in email reports (the open block
+// only, the same figures as the tracking bar). Throws if the hours cannot be loaded; null when there is no plan period or
+// no hours block yet.
+export async function maintenanceHoursSummary(client) {
+    if (!client) throw new Error('Hours summary: no project given.');
+    const slot = await loadMaintenanceData(client.id);
+    if (slot.error) throw new Error(`Could not load the maintenance hours: ${slot.error}`);
+    if (!slot.grants.length) return null;
+    syncGrantLabel(client);
+    const ledger = ledgerFor(client, slot);
+    const f = currentBlockFigures(ledger);
+    if (!f) return null;
+    const active = slot.periods.find((p) => p.status === 'active') || null;
+    const r = (n) => Math.round(n * 1000) / 1000;
+    return {
+        total: r(f.total), used: r(f.used), remaining: r(f.left), blockOpen: f.open,
+        periodStart: active ? active.start_date : '', periodEnd: active ? active.due_date : '', blockEnds: String(f.grant.expires_on || '').slice(0, 10),
+        label: GRANT_LABEL[f.grant.source] || 'Hours',
+    };
+}
+
 // Coaching clients with prepaid hours: how many were paid for, used and are left, counting the same hours the Time Log
 // shows (unexpired prepaid hours only). null for anyone else, or when no prepaid hours are logged.
 export async function prepaidHoursSummary(client) {
@@ -1170,7 +1191,7 @@ export async function prepaidHoursSummary(client) {
 
 window.OL = window.OL || {};
 Object.assign(window.OL, {
-    prepaidHoursSummary, renderMaintenancePage, renderClientRequests, loadMaintenanceData,
+    prepaidHoursSummary, maintenanceHoursSummary, renderMaintenancePage, renderClientRequests, loadMaintenanceData,
     openStartPeriodModal, ppRecalc, maintTierPicked, maintHoursTyped, setTaskHoursGrant, openGrantTasksModal, submitGrantTasks,
     openEditGrantModal, egRecalc, submitEditGrant, deleteGrant, submitStartPeriod, openEditPeriodModal, submitEditPeriod, setPeriodRenewing, deletePeriod,
     openClosePeriodModal, submitClosePeriod, openUpgradeTierModal, utRecalc, submitUpgradeTier, openAdHocPurchaseModal, submitAdHocPurchase, openPriorPeriodModal, priorRecalc, submitPriorPeriod,

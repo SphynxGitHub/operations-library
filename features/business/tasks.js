@@ -2501,6 +2501,12 @@ OL.openTaskInContext = async function(clientId, taskId) {
             return;
         }
 
+        // The Monthly hours check-in opens as a drafted email with the plan's hours filled in.
+        if (task.recurrenceTag === 'monthly-touch-base' && typeof OL.openHoursCheckInEmail === 'function') {
+            OL.openHoursCheckInEmail(clientId, taskId);
+            return;
+        }
+
         if (typeof window.openTaskModal === 'function') {
             window.openTaskModal(taskId, false, clientId);
             return;

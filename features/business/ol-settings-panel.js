@@ -69,6 +69,11 @@ OL.renderOlSettingsPanel = function() {
             field('Opening line', area('os-cf-intro', t.clientFollowUp.intro), 'Comes right after "Hi [first name],". Fills in: {client} {sender}') +
             field('Closing', area('os-cf-closing', t.clientFollowUp.closing, 2), 'Your signature is added under the closing and carries your name, so {sender} fills in blank when a signature is attached. Also fills in: {client}'))}
 
+        ${section('Monthly hours check-in email', 'The email drafted from the Monthly hours check-in task. The hours figures are filled in from Maintenance & Hours; this is the wording around them.',
+            field('Subject', text('os-hc-subject', t.hoursCheckIn.subject), 'Fills in: {client} {sender}') +
+            field('Opening line', area('os-hc-intro', t.hoursCheckIn.intro), 'Comes right after "Hi [first name],". Fills in: {client} {sender}') +
+            field('Closing', area('os-hc-closing', t.hoursCheckIn.closing, 3), 'Your signature is added under the closing. Also fills in: {client} {sender}'))}
+
         ${section('Working rounds left in Drafting', 'When a working round sits in Drafting too long, a task is created to follow up with the client or change the round\'s status (Approved, Declined or On Hold) to record the outcome.',
             `<div style="margin-bottom:10px;">${check('os-df-enabled', d.enabled !== false, 'Create these follow-up tasks')}</div>` +
             `<div class="os-row">${field('After (days in Drafting)', numIn('os-df-after', d.afterDays))}${field('Then again every (days)', numIn('os-df-repeat', d.repeatEveryDays), 'Only once the previous task is closed.')}</div>` +
@@ -143,6 +148,7 @@ OL.saveOlSettings = function() {
         templates: {
             meetingSummary: { subject: v('os-ms-subject'), intro: v('os-ms-intro'), closing: v('os-ms-closing') },
             clientFollowUp: { subject: v('os-cf-subject'), intro: v('os-cf-intro'), closing: v('os-cf-closing') },
+            hoursCheckIn: { subject: v('os-hc-subject'), intro: v('os-hc-intro'), closing: v('os-hc-closing') },
         },
         draftingFollowUp: {
             enabled: on('os-df-enabled'), afterDays: Math.max(1, num('os-df-after', d.draftingFollowUp.afterDays)), repeatEveryDays: Math.max(1, num('os-df-repeat', d.draftingFollowUp.repeatEveryDays)),
