@@ -201,8 +201,8 @@ const slotFor = (clientId) => OL._maint[clientId] || { periods: [], grants: [], 
 const val = (id) => document.getElementById(id)?.value ?? '';
 const checked = (id) => !!document.getElementById(id)?.checked;
 
-const GRANT_COLOR = { plan_allotment: '#22c55e', courtesy_carryover: '#60a5fa', ad_hoc_purchase: '#a78bfa' };
 const CARRY_COLOR = '#BA7517', PLAN_COLOR = '#1D9E75';
+const GRANT_COLOR = { plan_allotment: '#22c55e', courtesy_carryover: CARRY_COLOR, ad_hoc_purchase: '#a78bfa' };      // the carryover is the same amber on the bar above and on its card
 // The plan allotment and the courtesy carryover from the old plan period are one pool of plan hours (time is charged to the
 // carryover first). null when there is no carryover to fold in. Blocks held for specific tasks stay out of it.
 function planMerge(ledger) {
