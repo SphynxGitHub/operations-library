@@ -1,6 +1,14 @@
 {
-  "updatedAt": "2026-11-23T10:23:11Z",
+  "updatedAt": "2026-11-23T15:51:38Z",
   "items": [
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-20",
+      "summary": "Google Docs now supports inline captions, cross-references and automatic tables of captions, making it easier to label and link figures and tables in longer client reports and documents.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/weekly-recap-11-20-2026.html",
+      "checkedAt": "2026-11-23"
+    },
     {
       "app": "Schwab",
       "kind": "feature",
