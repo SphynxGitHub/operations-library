@@ -315,18 +315,31 @@ function totalBarHtml(ledger, { nonBillableHours = 0 } = {}) {
     // Newest block on top (latest start, then latest expiry).
     // (A plan allotment is placed by its own start, not by an earlier covers-from date, so an upgraded period stays on top.)
     const newestFirst = gs.slice().sort(newestBlockFirst);
-    const rows = newestFirst.map((g) => {
-        const h = Number(g.hours_granted || 0), u = usedHoursOf(ledger, g);
+    // The plan allotment and the courtesy carryover from the old plan period read as ONE block of plan hours: the carryover is
+    // part of the same pool (time comes out of it first), so it is folded into the plan row and explained in a note. Blocks held
+    // for specific tasks, and purchases, stay on their own rows.
+    const pool = poolOf(ledger);
+    const planBlock = pool.find((g) => g.source === 'plan_allotment');
+    const carryBlocks = planBlock ? pool.filter((g) => g.source === 'courtesy_carryover') : [];
+    const folded = new Set(carryBlocks.map((g) => String(g.id)));
+    const rows = newestFirst.filter((g) => !folded.has(String(g.id))).map((g) => {
+        const merged = planBlock && g.id === planBlock.id && carryBlocks.length ? [g, ...carryBlocks] : null;
+        const h = merged ? merged.reduce((t, x) => t + Number(x.hours_granted || 0), 0) : Number(g.hours_granted || 0);
+        const u = merged ? merged.reduce((t, x) => t + usedHoursOf(ledger, x), 0) : usedHoursOf(ledger, g);
+        const carryNote = merged
+            ? `<div class="tiny muted" style="margin-top:3px;">Includes ${esc(hoursText(carryBlocks.reduce((t, x) => t + Number(x.hours_granted || 0), 0)))} of courtesy hours carried over from your old plan period${carryBlocks.length === 1 ? ` (expires ${esc(niceDate(carryBlocks[0].expires_on))})` : ''}. Time is charged to those first.</div>`
+            : '';
         const left = Math.round((h - u) * 1000) / 1000, pct = h > 0 ? Math.round((u / h) * 100) : 0;
         const n = g.source !== 'plan_allotment' ? allocatedCount(ledger, g) : 0;
         const color = left < 0 ? '#ef4444' : pct >= 80 ? '#f59e0b' : GRANT_COLOR[g.source] || '#22c55e';
         const status = left < -EPS ? `<strong style="color:#ef4444;">${esc(hoursText(-left))} over</strong>` : left <= EPS ? 'used up' : `${esc(hoursText(left))} left`;
         return `<div style="margin:10px 0 0;">
             <div class="tiny" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">
-                <span style="${left < -EPS ? 'color:#ef4444;' : ''}"><strong>${esc(GRANT_LABEL[g.source] || g.source)}</strong>${n ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}: ${esc(hoursText(u))} of ${esc(hoursText(h))} used (${pct}%) · ${status}</span>
+                <span style="${left < -EPS ? 'color:#ef4444;' : ''}"><strong>${esc(merged ? 'Plan hours' : (GRANT_LABEL[g.source] || g.source))}</strong>${n ? ` <span class="pill tiny soft" title="Only the tasks set aside for it are charged to these hours">held for ${n} task${n === 1 ? '' : 's'}</span>` : ''}: ${esc(hoursText(u))} of ${esc(hoursText(h))} used (${pct}%) · ${status}</span>
                 <span class="muted">${g.source === 'plan_allotment' ? 'ends' : 'expires'} ${esc(niceDate(g.expires_on))}</span>
             </div>
             <div style="height:8px; border-radius:6px; background:rgba(148,163,184,0.25); overflow:hidden; margin-top:4px;"><div style="height:100%; width:${Math.min(pct, 100)}%; background:${color};"></div></div>
+            ${carryNote}
         </div>`;
     }).join('');
     return `
