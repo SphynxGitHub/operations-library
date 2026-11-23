@@ -2904,7 +2904,7 @@ OL._findCommentHost = function(clientOrId, id) {
 };
 
 OL.toggleCommentClientVisible = function(clientId, hostId, commentId, checked) {
-    await updateAndSync(() => {
+    updateAndSync(() => {
         const host = OL._findCommentHost(clientId, hostId);
         const comment = host?.comments?.find(c => c.id === commentId);
         if (comment) { comment.clientVisible = !!checked; if (!checked) delete comment.isClientFacing; }
