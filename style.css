@@ -2316,3 +2316,6 @@ body.light-mode .fv-steps-res-head [style*="background:#e8a83a"] { background: #
 .fv-steps-res-head:hover .fv-col-ctl, .fv-steps-res-head:focus-within .fv-col-ctl { opacity: 1; }
 .fv-col-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border-radius: 6px; border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-dim); cursor: pointer; }
 .fv-col-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Links inside editable rich text show the hand cursor (the editable box otherwise forces the text cursor) */
+.ol-richtext-body a[href], .ol-richtext-view a[href] { cursor: pointer; }
