@@ -26,6 +26,7 @@ export const RECURRENCE_PRESETS = {
 
 export function recurrencePresetKey(rec) {
     if (!rec || !rec.freq) return '';
+    if (rec.until) return 'custom'; // an end date makes it a custom schedule
     const n = Number(rec.interval) || 1;
     for (const [k, p] of Object.entries(RECURRENCE_PRESETS)) {
         if (p.freq === rec.freq && (p.interval || 1) === n) return k;
@@ -37,7 +38,10 @@ export function describeRecurrence(rec) {
     const key = recurrencePresetKey(rec);
     if (key === '') return '';
     if (key !== 'custom') return RECURRENCE_PRESETS[key].label;
-    return `Every ${rec.interval} ${rec.freq === 'daily' ? 'days' : rec.freq === 'weekly' ? 'weeks' : rec.freq === 'monthly' ? 'months' : rec.freq === 'yearly' ? 'years' : rec.freq}`;
+    const n = Number(rec.interval) || 1;
+    const units = { daily: 'day', weekdays: 'weekday', weekly: 'week', monthly: 'month', yearly: 'year' };
+    const unit = units[rec.freq] || rec.freq;
+    return `Every ${n === 1 ? '' : n + ' '}${unit}${n === 1 ? '' : 's'}${rec.until ? ` until ${String(rec.until).slice(0, 10)}` : ''}`;
 }
 
 const pad = (n) => String(n).padStart(2, '0');

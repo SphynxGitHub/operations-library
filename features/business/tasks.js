@@ -2647,10 +2647,23 @@ OL.renderInContextTaskModal = function(client, task) {
                         </div>`}
                         <div>
                             <strong class="muted">Repeats:</strong>
-                            <select class="modal-input tiny" style="width:auto; display:inline-block; padding:2px 6px;" onchange="OL.setTaskRecurrence('${client?.id}', '${task.id}', this.value)">
+                            <select class="modal-input tiny" style="width:auto; display:inline-block; padding:2px 6px;" onchange="OL.onTaskRecurrenceSelect('${client?.id}', '${task.id}', this.value)">
                                 ${Object.entries(OL.RECURRENCE_PRESETS || {}).map(([k, p]) => `<option value="${k}" ${OL.recurrencePresetKey(task.recurrence) === k ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
-                                ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<option value="custom" selected>${esc(OL.describeRecurrence(task.recurrence))}</option>` : ''}
+                                ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<option value="custom" selected>${esc(OL.describeRecurrence(task.recurrence))}</option>` : '<option value="custom">Custom...</option>'}
                             </select>
+                            ${OL.recurrencePresetKey(task.recurrence) === 'custom' ? `<a href="#" class="tiny" style="margin-left:6px;" onclick="event.preventDefault(); OL.toggleCustomRecurrence('${task.id}')">Edit</a>` : ''}
+                            <div id="rec-custom-${task.id}" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--line); border-radius:6px;">
+                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                    <span class="tiny muted">Every</span>
+                                    <input type="number" min="1" max="365" step="1" id="rec-n-${task.id}" class="modal-input tiny" style="width:64px;" value="${Number(task.recurrence?.interval) || 1}">
+                                    <select id="rec-f-${task.id}" class="modal-input tiny" style="width:auto;">
+                                        ${[['daily', 'day(s)'], ['weekdays', 'weekday(s)'], ['weekly', 'week(s)'], ['monthly', 'month(s)'], ['yearly', 'year(s)']].map(([v, l]) => `<option value="${v}" ${(task.recurrence?.freq || 'weekly') === v ? 'selected' : ''}>${l}</option>`).join('')}
+                                    </select>
+                                    <span class="tiny muted">Ends</span>
+                                    <input type="date" id="rec-u-${task.id}" class="modal-input tiny" style="width:auto;" value="${esc(String(task.recurrence?.until || '').slice(0, 10))}" title="Optional. Leave blank to repeat until you stop it.">
+                                    <button type="button" class="btn tiny primary" onclick="OL.applyCustomRecurrence('${client?.id}', '${task.id}')">Apply</button>
+                                </div>
+                            </div>
                             ${task.recurrence?.freq ? `<div class="tiny muted" style="margin-top:3px;">Next one is created when this is closed${task.dueDate ? `, due ${esc(OL.formatDayKey(OL.nextRecurrenceDueDate(OL.localDayKey(task.dueDate), task.recurrence, OL.localDateStr())))}` : ''}.</div>` : ''}
                         </div>
                         ${task.autoRolls?.length ? (() => { const r = task.autoRolls[task.autoRolls.length - 1]; return `<div class="tiny muted" style="grid-column:1 / -1;">Moved automatically from ${esc(String(r.from || '').slice(0, 10))} to ${esc(String(r.to || '').slice(0, 10))}: that day reached the daily limit.</div>`; })() : ''}
@@ -2866,7 +2879,7 @@ OL._findCommentHost = function(clientOrId, id) {
 };
 
 OL.toggleCommentClientVisible = function(clientId, hostId, commentId, checked) {
-    updateAndSync(() => {
+    await updateAndSync(() => {
         const host = OL._findCommentHost(clientId, hostId);
         const comment = host?.comments?.find(c => c.id === commentId);
         if (comment) { comment.clientVisible = !!checked; if (!checked) delete comment.isClientFacing; }
@@ -4267,6 +4280,36 @@ OL.setTaskParent = function(clientId, taskId, type, id) {
     }, clientId);
 
     OL.reRenderPreservingFocus(() => OL.renderTaskParentPickerStep());
+};
+
+OL.toggleCustomRecurrence = function(taskId) {
+    const el = document.getElementById(`rec-custom-${taskId}`);
+    if (!el) throw new Error('Custom repeat editor not found on this task.');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+OL.onTaskRecurrenceSelect = function(clientId, taskId, key) {
+    if (key === 'custom') { OL.toggleCustomRecurrence(taskId); return; }
+    OL.setTaskRecurrence(clientId, taskId, key);
+};
+
+OL.applyCustomRecurrence = async function(clientId, taskId) {
+    const n = Number(document.getElementById(`rec-n-${taskId}`)?.value);
+    const freq = document.getElementById(`rec-f-${taskId}`)?.value;
+    const until = document.getElementById(`rec-u-${taskId}`)?.value || '';
+    if (!Number.isInteger(n) || n < 1 || n > 365) { alert('Enter a whole number from 1 to 365.'); throw new Error('Custom repeat: interval must be a whole number from 1 to 365.'); }
+    if (!['daily', 'weekdays', 'weekly', 'monthly', 'yearly'].includes(freq)) { alert('Pick how often it repeats.'); throw new Error(`Custom repeat: unknown frequency "${freq}".`); }
+    if (until && until < OL.localDateStr()) { alert('The end date is already past.'); throw new Error('Custom repeat: end date is in the past.'); }
+    let found = false;
+    updateAndSync(() => {
+        const task = state.clients?.[clientId]?.projectData?.clientTasks?.find(t => t.id === taskId);
+        if (!task) return;
+        found = true;
+        task.recurrence = { freq, interval: n, ...(until ? { until } : {}) };
+        delete task.recurrenceNextId; // re-arm if it was set on an already-closed task
+    }, clientId);
+    if (!found) throw new Error('Custom repeat: task not found, nothing was saved.');
+    OL.openTaskInContext(clientId, taskId);
 };
 
 OL.setTaskRecurrence = function(clientId, taskId, presetKey) {
