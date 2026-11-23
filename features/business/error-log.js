@@ -315,7 +315,9 @@ OL.setErrorLogFilter = function(key, value) {
     OL.errorLogState[key] = value;
     if (key === 'groupBy') { OL._rerenderErrorLog(); return; } // pure client-side reorganization, no reload needed
     OL.errorLogState.pageSize = 50;
-    OL.loadErrorLog().then(() => OL._rerenderErrorLog()).catch(e => { console.error(e); OL._rerenderErrorLog(); });
+    const p = OL.loadErrorLog();          // sets loading=true synchronously
+    OL._rerenderErrorLog();               // show "Loading..." immediately instead of a stale list
+    p.then(() => OL._rerenderErrorLog()).catch(e => { console.error(e); OL._rerenderErrorLog(); });
 };
 
 // Typing in the search box: wait for a short pause, reload, redraw, then put the cursor back. The whole page shell is
