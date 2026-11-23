@@ -3819,8 +3819,61 @@ OL._shrinkImageFile = function(file, maxWidth) {
 
 // Stored HTML if present, otherwise the old plain text converted.
 OL.richHtmlFor = function(html, text) {
-    return html ? OL.sanitizeCommentHtml(html) : OL.plainTextToHtml(text);
+    return OL.linkifyHtml(html ? OL.sanitizeCommentHtml(html) : OL.plainTextToHtml(text));
 };
+
+// Turns bare http(s):// addresses in text into real links. Works on DOM text nodes (never on the raw HTML string)
+// and skips anything already inside a link.
+OL.linkifyHtml = function(html) {
+    if (!html) return html;
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const re = /https?:\/\/[^\s<>"']+/gi;
+    const walk = (node) => {
+        Array.from(node.childNodes).forEach(child => {
+            if (child.nodeType === 1) {
+                if (child.tagName !== 'A') walk(child);
+                return;
+            }
+            if (child.nodeType !== 3 || !/https?:\/\//i.test(child.nodeValue)) return;
+            const text = child.nodeValue;
+            const frag = document.createDocumentFragment();
+            let last = 0, m;
+            re.lastIndex = 0;
+            while ((m = re.exec(text))) {
+                let url = m[0];
+                const trail = url.match(/[.,;:!?)\]]+$/);
+                if (trail) url = url.slice(0, -trail[0].length);
+                if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+                const a = document.createElement('a');
+                a.href = url;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.textContent = url;
+                frag.appendChild(a);
+                last = m.index + url.length;
+                re.lastIndex = last;
+            }
+            if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+            node.replaceChild(frag, child);
+        });
+    };
+    walk(container);
+    return container.innerHTML;
+};
+
+// Links inside an editable field only place the cursor on click, so open them ourselves.
+if (!window._olRichLinkClick) {
+    window._olRichLinkClick = true;
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('.ol-richtext-body a[href]');
+        if (!a) return;
+        const href = a.getAttribute('href') || '';
+        if (!/^(https?:|mailto:)/i.test(href)) return;
+        e.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
+    });
+}
 
 // Wraps every "@Name" match with a highlighted span, operating on actual
 // DOM text nodes (not a regex over the raw HTML string) so it can't
@@ -4229,7 +4282,7 @@ OL.updateTaskTitle = function(clientId, taskId, newTitle) {
 };
 
 OL.updateTaskDescriptionRich = function(clientId, taskId, rawHtml) {
-    const html = OL.sanitizeCommentHtml(rawHtml || '');
+    const html = OL.linkifyHtml(OL.sanitizeCommentHtml(rawHtml || ''));
     const text = OL.htmlToPlainText(html);
     const task = state.clients?.[clientId]?.projectData?.clientTasks?.find(t => String(t.id) === String(taskId) || String(t.key) === String(taskId));
     if (!task || ((task.descriptionHtml || '') === html && (task.description || '') === text)) return;
