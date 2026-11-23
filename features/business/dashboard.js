@@ -340,7 +340,7 @@ OL.renderDailyDashboard = function() {
 
     if (typeof OL.dashSetStats === 'function') OL.dashSetStats([
         { label: 'Active Clients', value: clients.length, color: 'var(--accent)' },
-        { label: 'Active Requests', value: requestItems.length, color: '#64c6a2' },
+        { label: 'Active Requests', value: requestItems.length, color: '#64c6a2', key: 'open_requests' },
         { label: 'Open Action Items', value: openTasks.length, color: '#38bdf8' },
         { label: 'Due Today / Overdue', value: dueTodayOrOverdue, color: '#ef4444' }
     ]);

@@ -155,6 +155,15 @@ function bodyFor(key) {
     const today = todayStr();
     const base = { clients, closedNames: closedNames(), today };
     if (key === 'availability') return availabilityBody();
+    if (key === 'open_requests') {
+        if (typeof OL.getDashboardRequestItems !== 'function') throw new Error('Open requests module: OL.getDashboardRequestItems is not available.');
+        const list = OL.getDashboardRequestItems().slice().sort((x, y) => (x.dueDate || '9999').localeCompare(y.dueDate || '9999') || String(x.clientName).localeCompare(String(y.clientName)));
+        const tone = (w) => (w === 'in_testing' ? '#38bdf8' : w === 'pending_sphynx_action' ? '#64c6a2' : '#f59e0b');
+        const type = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
+        return { count: list.length, extra: '', body: list.map((r) => row(r.title, r.clientId,
+            [r.clientName, type(r.requestType), `Round ${r.round}`, r.assignee || 'Unassigned', r.stepsTotal ? `${r.stepsDone}/${r.stepsTotal} steps` : ''].filter(Boolean).join(' · '),
+            chip(r.status, tone(r.workStatus)))).join('') || empty('No open requests.') };
+    }
     if (key === 'pending_review') {
         if (!reviewData) return { count: '', body: empty('Loading...'), extra: '' };
         const byId = Object.fromEntries(clients.map((c) => [c.id, c]));
@@ -234,10 +243,14 @@ let openKey = '';
 let stats = [];
 export function dashSetStats(list) { stats = Array.isArray(list) ? list : []; }
 function statTile(st) {
-    return `<div style="width:128px;height:112px;flex:none;padding:10px 10px 8px;border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;background:var(--panel);border:1px solid var(--line);">
-        <span style="height:16px;"></span>
+    const open = !!st.key && openKey === st.key;
+    const inner = `<span style="display:flex;align-items:center;justify-content:flex-end;height:16px;">${st.key ? `<i data-lucide="${open ? 'chevron-up' : 'chevron-down'}" style="width:13px;height:13px;opacity:.6;"></i>` : ''}</span>
         <span style="font-size:30px;font-weight:700;line-height:1;color:${st.color || 'inherit'};">${esc(String(st.value))}</span>
-        <span style="font-size:11px;line-height:1.2;opacity:.8;">${esc(st.label)}</span></div>`;
+        <span style="font-size:11px;line-height:1.2;opacity:.8;">${esc(st.label)}</span>`;
+    const base = `width:128px;height:112px;flex:none;padding:10px 10px 8px;border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;background:var(--panel);border:1px solid ${open ? 'var(--accent)' : 'var(--line)'};${open ? 'box-shadow:0 0 0 1px var(--accent);' : ''}`;
+    return st.key
+        ? `<button type="button" onclick="OL.dashTile('${esc(st.key)}')" title="${esc(st.label)}" aria-expanded="${open}" style="${base}cursor:pointer;text-align:left;color:inherit;font:inherit;">${inner}</button>`
+        : `<div style="${base}">${inner}</div>`;
 }
 export function dashTile(key) { openKey = openKey === key ? '' : key; paint(); }
 
@@ -258,10 +271,13 @@ function tile(m, b) {
 export function dashboardModulesHtml() {
     const on = enabled();
     const list = MODULES.filter((m) => on.includes(m.key));
-    if (openKey && !list.some((m) => m.key === openKey)) openKey = '';
+    if (openKey && !list.some((m) => m.key === openKey) && !stats.some((st) => st.key === openKey)) openKey = '';
     const avail = list.find((m) => m.key === 'availability');
     const others = list.filter((m) => m.key !== 'availability').map((m) => ({ m, b: bodyFor(m.key) }));
-    const openOne = others.find((x) => x.m.key === openKey);
+    // A headline number can open its own list too (Active Requests); it is not one of the switchable modules.
+    const statOpenDef = { key: 'open_requests', label: 'Active requests', icon: 'git-pull-request' };
+    const statOpen = stats.find((st) => st.key && st.key === openKey) ? statOpenDef : null;
+    const openOne = statOpen ? { m: statOpen, b: bodyFor('open_requests') } : others.find((x) => x.m.key === openKey);
     const availHtml = avail ? (() => { const b = bodyFor('availability'); return `<div style="margin-bottom:14px;">${card(avail, b.count, b.body, b.extra)}</div>`; })() : '';
     const tiles = (others.length || stats.length) ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:${openOne ? '12px' : '25px'};">${stats.map(statTile).join('')}${others.map((x) => tile(x.m, x.b)).join('')}</div>` : '';
     const opened = openOne ? `<div style="margin-bottom:25px;">${card(openOne.m, openOne.b.count, openOne.b.body, `<button class="btn tiny soft" style="margin-left:auto;" onclick="OL.dashTile('${esc(openOne.m.key)}')">Close</button>`)}</div>` : '';
