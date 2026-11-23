@@ -21,6 +21,52 @@ const MAX_WEEK_OFFSET = 8, MAX_MONTH_OFFSET = 1;   // the dashboard's calendar e
 let planPeriods = null;                             // { rows, at }: every maintenance_plan_period row, once loaded
 let appUpdates = null;                              // { items, updatedAt, actions, actionsError, showHandled } from app-updates/digest.json, or { error }
 const updKey = (i) => `${i.app}|${i.date}|${String(i.summary || '').slice(0, 80)}`;   // same key the star button uses
+// ---- app updates: connection suggestions ------------------------------------------------------------------------
+// Names that are also everyday words; matching them in free text would give false suggestions, so they are skipped.
+const AMBIGUOUS_APP_NAMES = new Set(['kit', 'wave', 'box', 'monday', 'allo', 'quo', 'keeper', 'wix', 'wealth', 'notion', 'levitate', 'fathom', 'granola', 'canva', 'loom', 'slack']);
+// Other ways an update may name an app on the list.
+const APP_ALIASES = {
+    'Google Workspace': ['Google Docs', 'Google Sheets', 'Google Slides', 'Google Drive', 'Google Calendar', 'Gmail', 'Google Forms'],
+    'Office 365': ['Microsoft 365', 'Outlook', 'Microsoft Outlook', 'Microsoft Excel', 'Microsoft Word'],
+    'Microsoft Teams': ['MS Teams'],
+    'Fireflies.ai': ['Fireflies'],
+    'Hazel (Altruist AI platform for advisors)': ['Hazel'],
+    'SSG (custodian)': ['SSG'],
+    'Zoom Phone': [],
+};
+const APP_NAME_CLEAN = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
+const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// One entry per app the dashboard knows: { name, re }. Built from the watchlist plus the Master Library apps.
+function buildAppMatchers(watchNames) {
+    const byName = new Map();
+    const add = (raw) => {
+        const name = APP_NAME_CLEAN(raw);
+        if (name.length < 3 || byName.has(name.toLowerCase())) return;
+        const terms = [name, ...(APP_ALIASES[raw] || APP_ALIASES[name] || [])].filter((t) => !AMBIGUOUS_APP_NAMES.has(t.toLowerCase()) || t !== name);
+        if (!terms.length) return;
+        byName.set(name.toLowerCase(), { name, re: new RegExp(`(^|[^A-Za-z0-9])(${terms.sort((a, b) => b.length - a.length).map(escRe).join('|')})(?![A-Za-z0-9])`, 'i') });
+    };
+    (watchNames || []).forEach(add);
+    (state.master?.apps || []).forEach((a) => a && a.name && add(a.name));
+    return [...byName.values()];
+}
+
+// For one update: the other apps its text names, and a possible connection between its app and each of them.
+function connectionSuggestions(item, matchers) {
+    const self = APP_NAME_CLEAN(item.app).toLowerCase();
+    const text = String(item.summary || '');
+    const mentionsLink = /integrat|connect|sync|\bAPI\b|webhook|native|import|export/i.test(text);
+    const out = [];
+    matchers.forEach((m) => {
+        if (m.name.toLowerCase() === self || self.includes(m.name.toLowerCase()) || m.name.toLowerCase().includes(self)) return;
+        if (!m.re.test(text)) return;
+        const viaZapier = !/zapier/i.test(item.app + ' ' + m.name);
+        out.push({ a: APP_NAME_CLEAN(item.app), b: m.name, how: mentionsLink ? 'update mentions an integration' : viaZapier ? 'possible via Zapier' : 'possible direct connection' });
+    });
+    return out;
+}
+
 let reviewData = null;                              // { reviews, itemsByReview, reviewedTaskIds, at } once loaded
 
 const todayStr = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -156,19 +202,26 @@ function bodyFor(key) {
         const stamp = appUpdates.updatedAt ? `<span class="tiny muted" style="margin-left:auto;">Last scan ${esc(String(appUpdates.updatedAt).slice(0, 10))}</span>` : '';
         const kindColor = { pricing: '#f5b942', feature: '#2dd4bf', release: '#60a5fa', other: '#94a3b8' };
         const btn = (label, icon, fn, idx, title) => `<button type="button" class="btn tiny soft" title="${esc(title)}" onclick="event.stopPropagation();OL.${fn}(${idx})" style="display:inline-flex;gap:4px;align-items:center;"><i data-lucide="${icon}" style="width:11px;height:11px;"></i>${label}</button>`;
+        const matchers = buildAppMatchers(appUpdates.watchNames);
         const body = items.map((i) => {
             const idx = all.indexOf(i), a = acts[updKey(i)];
             const actions = !staff ? '' : a
                 ? `<span class="tiny muted">${a.action === 'intel' ? 'In Intel Library' : 'Dismissed'}${a.acted_by ? ` by ${esc(a.acted_by)}` : ''}</span> ${btn('Restore', 'rotate-ccw', 'dashUpdateRestore', idx, 'Put this back in the feed')}`
                 : `${btn('Add to intel', 'lightbulb', 'dashUpdateToIntel', idx, 'Save this to the Intel Library')} ${btn('Dismiss', 'x', 'dashUpdateDismiss', idx, 'Hide this update')}`;
+            const conns = connectionSuggestions(i, matchers);
+            const connHtml = !conns.length ? '' : `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;"><span class="tiny muted">Possible connections:</span>${conns.slice(0, 6).map((c, k) => staff
+                ? `<button type="button" class="btn tiny soft" title="${esc(c.how)}. Save to the Intel Library." onclick="event.stopPropagation();OL.dashUpdateConnectionToIntel(${idx},${k})" style="display:inline-flex;gap:4px;align-items:center;"><i data-lucide="link-2" style="width:11px;height:11px;"></i>${esc(c.a)} &harr; ${esc(c.b)}</button>`
+                : `<span class="tiny" title="${esc(c.how)}">${esc(c.a)} &harr; ${esc(c.b)}</span>`).join('')}${conns.length > 6 ? `<span class="tiny muted">+${conns.length - 6} more</span>` : ''}</div>`;
             return `<div style="padding:7px 0;border-bottom:1px solid var(--line);${a ? 'opacity:.6;' : ''}">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:13px;">${esc(i.app || '')}</b>${chip(i.kind || 'other', kindColor[i.kind] || kindColor.other)}<span class="tiny muted">${esc(i.date || '')}</span><span style="margin-left:auto;">${OL.starButton ? OL.starButton({ type: 'app_update', key: updKey(i), title: `${i.app}: ${i.summary}`, details: i.summary, sourceUrl: i.sourceUrl, apps: [i.app] }) : ''}</span></div>
             <div style="font-size:13px;overflow-wrap:anywhere;">${esc(i.summary || '')}</div>
+            ${connHtml}
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">${i.sourceUrl ? `<a class="tiny" href="${esc(i.sourceUrl)}" target="_blank" rel="noopener">Source</a><span class="tiny muted"> · checked ${esc(i.checkedAt || '')}</span>` : ''}<span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center;">${actions}</span></div></div>`;
         }).join('');
         const note = appUpdates.actionsError ? `<div class="tiny" style="color:#f59e0b;padding:4px 0;">Dismiss and Add to intel are not saving yet: ${esc(appUpdates.actionsError)} (run migration 2026_11k_app_update_actions.sql in Supabase).</div>` : '';
+        const wnote = appUpdates.watchlistError ? `<div class="tiny" style="color:#f59e0b;padding:4px 0;">Connection suggestions are using Master Library apps only: ${esc(appUpdates.watchlistError)}.</div>` : '';
         const toggle = handled.length ? `<div style="padding:6px 0;"><a class="tiny" href="#" onclick="event.preventDefault();OL.dashUpdateToggleHandled()">${appUpdates.showHandled ? 'Hide' : 'Show'} ${handled.length} handled</a></div>` : '';
-        return { count: all.length - handled.length, extra: stamp, body: note + (body || empty(all.length && !items.length ? 'Everything has been dismissed or added to intel.' : appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.')) + toggle };
+        return { count: all.length - handled.length, extra: stamp, body: note + wnote + (body || empty(all.length && !items.length ? 'Everything has been dismissed or added to intel.' : appUpdates.updatedAt ? 'No changes found in the last scan.' : 'No scan has run yet.')) + toggle };
     }
     return { count: '', body: '', extra: '' };
 }
@@ -238,6 +291,14 @@ async function loadAppUpdates() {
         const items = d.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 80);
         const prev = appUpdates && !appUpdates.error ? appUpdates : {};
         appUpdates = { items, updatedAt: d.updatedAt || null, at: Date.now(), actions: prev.actions || {}, actionsError: '', showHandled: !!prev.showHandled };
+        appUpdates.watchlistError = '';
+        try {
+            const wr = await fetch(`app-updates/watchlist.json?t=${Date.now()}`, { cache: 'no-store' });
+            if (!wr.ok) throw new Error(`watchlist.json could not be loaded (${wr.status})`);
+            const w = await wr.json();
+            if (!w || !Array.isArray(w.apps)) throw new Error('watchlist.json is not in the expected format');
+            appUpdates.watchNames = w.apps.map((x) => x.name).filter(Boolean);
+        } catch (e) { appUpdates.watchlistError = e?.message || String(e); appUpdates.watchNames = []; }
         try {
             const a = await db.from('app_update_actions').select('*').limit(5000);
             if (a.error) throw a.error;
@@ -355,6 +416,21 @@ OL.dashUpdateToIntel = (idx) => {
         details: [i.summary, i.sourceUrl ? `Source: ${i.sourceUrl}` : '', i.date ? `Date: ${i.date}` : ''].filter(Boolean).join('\n\n'),
         apps: name ? [{ id: match ? match.id : null, name: match ? match.name : name }] : [],
         source_type: 'manual', source_id: `appupdate:${updKey(i)}`,
+    });
+};
+OL.dashUpdateConnectionToIntel = (idx, k) => {
+    const i = appUpdates?.items?.[idx];
+    if (!i) return;
+    if (typeof OL.openIntelModal !== 'function') { alert('The Intel Library is not loaded. Reload the page and try again.'); return; }
+    const c = connectionSuggestions(i, buildAppMatchers(appUpdates.watchNames))[k];
+    if (!c) return;
+    const find = (n) => (state.master?.apps || []).find((a) => a && APP_NAME_CLEAN(a.name).toLowerCase() === n.toLowerCase());
+    const ref = (n) => { const m = find(n); return { id: m ? m.id : null, name: m ? m.name : n }; };
+    OL.openIntelModal(null, {
+        kind: 'note', title: `Connection: ${c.a} and ${c.b}`,
+        details: [`Possible connection (${c.how}).`, `From the ${i.app} update: ${i.summary}`, i.sourceUrl ? `Source: ${i.sourceUrl}` : ''].filter(Boolean).join('\n\n'),
+        apps: [ref(c.a), ref(c.b)],
+        source_type: 'manual', source_id: `appconn:${updKey(i)}:${c.b}`,
     });
 };
 // Called by the Intel Library after a new entry is saved: if it came from an app update, mark that update as added.
