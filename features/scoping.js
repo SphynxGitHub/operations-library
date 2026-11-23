@@ -1448,7 +1448,7 @@ export function renderGrandTotals(lineItems, baseRate) {
 
 export function renderDiscountInput(level, id, value, type) {
   return `
-    <div class="discount-control">
+    <div class="discount-control" data-discount="${level}:${id}">
       <input type="number" class="tiny-input"
         value="${Number(value) || 0}"
         oninput="OL.updateDiscount('${level}', '${id}', 'value', this.value)">
@@ -1601,6 +1601,17 @@ export function updateDiscount(level, id, field, value) {
   }
 
   OL.persist();
+
+  // The modal is not re-rendered, so redraw the $/% control that changed or the toggle looks stuck until reload.
+  if (field === "type") {
+    let curVal = 0;
+    if (level === "item") curVal = sheet.lineItems.find((i) => i.id === id)?.discountValue || 0;
+    if (level === "round") curVal = sheet.roundDiscounts?.[String(id)]?.value || 0;
+    if (level === "total") curVal = client.projectData.totalDiscountValue || 0;
+    const ctl = Array.from(document.querySelectorAll("[data-discount]"))
+      .find((el) => el.dataset.discount === `${level}:${id}`);
+    if (ctl) ctl.outerHTML = renderDiscountInput(level, id, curVal, value);
+  }
 
   OL.refreshDiscountManagerUI();
   renderScopingSheet();

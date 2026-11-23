@@ -573,7 +573,7 @@ body:has(.sidebar.collapsed) #mainContent { margin-left: 65px; }
     background: rgba(255,255,255,0.05); border: 1px solid var(--line);
     border-radius: 4px; padding: 2px; width: fit-content;
 }
-.discount-control .tiny-input { width: 60px !important; height: 24px; background: transparent !important; border: none !important; color: white !important; font-family: monospace; font-size: 12px; text-align: center; outline: none; }
+.discount-control .tiny-input { width: 60px !important; height: 24px; background: transparent !important; border: none !important; color: var(--text-main, #fff) !important; font-family: monospace; font-size: 12px; text-align: center; outline: none; }
 .discount-control .toggle-group { display: flex; border-left: 1px solid var(--line); padding-left: 2px; }
 .discount-control .toggle-btn { background: transparent; border: none; color: var(--text-muted); font-size: 10px; padding: 2px 6px; cursor: pointer; transition: all 0.2s; }
 .discount-control .toggle-btn.active { background: var(--accent); color: white; border-radius: 2px; }
