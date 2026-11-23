@@ -1140,6 +1140,9 @@ OL.handleTaskCompletionCascade = function(client, task, previousStatus) {
     // asked whether to complete it too (see ERROR → TASK in features/business/error-log.js).
     if (task.errorId && typeof OL.onErrorTaskClosed === 'function') OL.onErrorTaskClosed(client.id, task);
 
+    // A task set aside for a courtesy carryover: reloading the hours closes that carryover once all its tasks are done.
+    if (task.hoursGrantId && typeof OL.loadMaintenanceData === 'function') OL.loadMaintenanceData(client.id).catch((e) => console.error('Could not refresh the hours after closing a set-aside task:', e));
+
     // Maintenance clients: if that finished a request's steps, ask whether it needs a test (features/testing.js).
     if (typeof OL.onImplementationTaskClosed === 'function') OL.onImplementationTaskClosed(client.id, task);
 

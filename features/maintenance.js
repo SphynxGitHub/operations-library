@@ -61,6 +61,8 @@ export async function loadMaintenanceData(clientId, { meetings = true } = {}) {
         if (g.error) throw g.error;
         slot.periods = p.data || []; slot.grants = g.data || []; slot.error = '';
         slot.loadedAt = Date.now();
+        // A courtesy carryover with tasks set aside for it closes once all of those tasks are done.
+        try { await autoCloseSetAsideGrants(clientId, slot); } catch (e) { slot.autoCloseError = e.message || String(e); console.error('Could not auto-close a set-aside carryover:', e); }
         // Reminders as the active plan period nears its end (2 months and 2 weeks out). One per period per date.
         try { if (typeof OL.syncPeriodReminders === 'function') OL.syncPeriodReminders(clientId, slot.periods); } catch (e) { console.warn('Period reminders failed:', e); }
         runHoursAlerts(clientId, slot);
@@ -70,6 +72,31 @@ export async function loadMaintenanceData(clientId, { meetings = true } = {}) {
         slot.loaded = true; slot.loading = false;
     }
     return slot;
+}
+
+// A courtesy carryover that has tasks set aside for it is held for them (see ledgerFor). When every one of those tasks is
+// done, the carryover closes: its status becomes expired and the hours not used are written off, so it no longer shows
+// as hours available. Time already logged stays charged to it. Staff only, and only once the meeting time is known (the
+// unused hours are worked out from everything logged). Throws if the save fails.
+async function autoCloseSetAsideGrants(clientId, slot) {
+    if (window.IS_GUEST || !canManage() || !Array.isArray(slot.events)) return;
+    const client = state.clients?.[clientId];
+    if (!client || client._metaOnly || !client.projectData) return;
+    const tasks = client.projectData.clientTasks || [];
+    const closed = new Set(closedNames());
+    const due = (slot.grants || []).filter((g) => g.source === 'courtesy_carryover' && g.status === 'active').filter((g) => {
+        const set = tasks.filter((t) => t && String(t.hoursGrantId || '') === String(g.id));
+        return set.length > 0 && set.every((t) => closed.has(String(t.status)));
+    });
+    if (!due.length) return;
+    syncGrantLabel(client);
+    const ledger = ledgerFor(client, slot);
+    for (const g of due) {
+        const unused = Math.max(0, Math.round((Number(g.hours_granted || 0) - usedHoursOf(ledger, g)) * 100) / 100);
+        const { error } = await db.from('hours_grant').update({ status: 'expired', hours_expired: unused }).eq('id', g.id);
+        if (error) throw new Error(`Could not close the courtesy carryover ${g.id}: ${error.message}`);
+        g.status = 'expired'; g.hours_expired = unused;
+    }
 }
 
 // 80 / 90 / 95 / 100% reminders for maintenance and prepaid coaching blocks (see planHoursAlerts in
