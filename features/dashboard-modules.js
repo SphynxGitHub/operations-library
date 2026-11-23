@@ -22,8 +22,7 @@ let planPeriods = null;                             // { rows, at }: every maint
 let appUpdates = null;                              // { items, updatedAt, actions, actionsError, showHandled } from app-updates/digest.json, or { error }
 const updKey = (i) => `${i.app}|${i.date}|${String(i.summary || '').slice(0, 80)}`;   // same key the star button uses
 // ---- app updates: connection suggestions ------------------------------------------------------------------------
-// Names that are also everyday words; matching them in free text would give false suggestions, so they are skipped.
-const AMBIGUOUS_APP_NAMES = new Set(['kit', 'wave', 'box', 'monday', 'allo', 'quo', 'keeper', 'wix', 'wealth', 'notion', 'levitate', 'fathom', 'granola', 'canva', 'loom', 'slack']);
+// Names that are also everyday words. They are still scanned, but only on an exact-case match ("Box", not "box").
 // Other ways an update may name an app on the list.
 const APP_ALIASES = {
     'Google Workspace': ['Google Docs', 'Google Sheets', 'Google Slides', 'Google Drive', 'Google Calendar', 'Gmail', 'Google Forms'],
@@ -34,6 +33,7 @@ const APP_ALIASES = {
     'SSG (custodian)': ['SSG'],
     'Zoom Phone': [],
 };
+const AMBIGUOUS_APP_NAMES = new Set(['kit', 'wave', 'box', 'monday', 'allo', 'quo', 'keeper', 'wix', 'wealth', 'notion', 'levitate', 'fathom', 'granola', 'canva', 'loom', 'slack']);
 const APP_NAME_CLEAN = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
 const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -43,9 +43,11 @@ function buildAppMatchers(watchNames) {
     const add = (raw) => {
         const name = APP_NAME_CLEAN(raw);
         if (name.length < 3 || byName.has(name.toLowerCase())) return;
-        const terms = [name, ...(APP_ALIASES[raw] || APP_ALIASES[name] || [])].filter((t) => !AMBIGUOUS_APP_NAMES.has(t.toLowerCase()) || t !== name);
-        if (!terms.length) return;
-        byName.set(name.toLowerCase(), { name, re: new RegExp(`(^|[^A-Za-z0-9])(${terms.sort((a, b) => b.length - a.length).map(escRe).join('|')})(?![A-Za-z0-9])`, 'i') });
+        const terms = [name, ...(APP_ALIASES[raw] || APP_ALIASES[name] || [])];
+        const mk = (list, flags) => list.length ? new RegExp(`(^|[^A-Za-z0-9])(${list.sort((a, b) => b.length - a.length).map(escRe).join('|')})(?![A-Za-z0-9])`, flags) : null;
+        const loose = mk(terms.filter((t) => !AMBIGUOUS_APP_NAMES.has(t.toLowerCase())), 'i');
+        const exact = mk(terms.filter((t) => AMBIGUOUS_APP_NAMES.has(t.toLowerCase())), '');
+        byName.set(name.toLowerCase(), { name, test: (text) => !!((loose && loose.test(text)) || (exact && exact.test(text))) });
     };
     (watchNames || []).forEach(add);
     (state.master?.apps || []).forEach((a) => a && a.name && add(a.name));
@@ -60,7 +62,7 @@ function connectionSuggestions(item, matchers) {
     const out = [];
     matchers.forEach((m) => {
         if (m.name.toLowerCase() === self || self.includes(m.name.toLowerCase()) || m.name.toLowerCase().includes(self)) return;
-        if (!m.re.test(text)) return;
+        if (!m.test(text)) return;
         const viaZapier = !/zapier/i.test(item.app + ' ' + m.name);
         out.push({ a: APP_NAME_CLEAN(item.app), b: m.name, how: mentionsLink ? 'update mentions an integration' : viaZapier ? 'possible via Zapier' : 'possible direct connection' });
     });
