@@ -5813,11 +5813,8 @@ export function fvSearch(query) {
   const q   = (query || '').toLowerCase().trim();
   const nav = document.getElementById('fv-search-nav');
 
-  if (OL._fv.layout === 'flowchart') {
-    document.querySelectorAll('.fv-card').forEach(el => el.classList.remove('search-match','search-active','dimmed'));
-  } else {
-    document.querySelectorAll('.fv-list-item').forEach(el => el.classList.remove('search-match','dimmed'));
-  }
+  // Clear every view's highlight classes: the Steps map, the Flowchart cards and the List rows.
+  document.querySelectorAll('.fv-card, .fv-step-card, .fv-list-item').forEach(el => el.classList.remove('search-match','search-active','dimmed'));
 
   if (!q) {
     OL._fv.searchMatches = []; OL._fv.searchIdx = -1;
@@ -5846,8 +5843,9 @@ export function fvSearch(query) {
         }
       });
     });
-    document.querySelectorAll('.fv-list-item').forEach(el => {
-      const hit = matches.some(m => m.id === el.dataset.stepId);
+    // Steps map cards and List rows both carry data-step-id (and data-res-id), so one pass covers either view.
+    document.querySelectorAll('.fv-step-card, .fv-list-item').forEach(el => {
+      const hit = matches.some(m => String(m.id) === String(el.dataset.stepId) && (!el.dataset.resId || String(m.resId) === String(el.dataset.resId)));
       el.classList.toggle('search-match', hit);
       el.classList.toggle('dimmed', !hit);
     });
@@ -5877,16 +5875,34 @@ export function fvActivateMatch() {
   const match = OL._fv.searchMatches[OL._fv.searchIdx];
   if (!match) return;
 
-  const sel = OL._fv.layout === 'flowchart'
-    ? document.getElementById(`fv-card-${match.id}`)
-    : document.getElementById(`fv-list-step-${match.id}`);
-
-  document.querySelectorAll('.fv-card.search-active, .fv-list-item.search-active')
+  document.querySelectorAll('.fv-card.search-active, .fv-step-card.search-active, .fv-list-item.search-active')
     .forEach(el => el.classList.remove('search-active'));
+
+  let sel = null;
+  if (OL._fv.layout === 'flowchart') {
+    sel = document.getElementById(`fv-card-${match.id}`);
+  } else {
+    // Steps map and List view: find the card/row by its step id (and resource), since DOM ids carry extra workflow/copy suffixes.
+    const esc = (v) => (window.CSS && CSS.escape) ? CSS.escape(String(v)) : String(v).replace(/"/g, '\\"');
+    sel = document.querySelector(`.fv-step-card[data-step-id="${esc(match.id)}"][data-res-id="${esc(match.resId)}"]`)
+       || document.querySelector(`.fv-list-item[data-step-id="${esc(match.id)}"][data-res-id="${esc(match.resId)}"]`)
+       || document.querySelector(`.fv-step-card[data-step-id="${esc(match.id)}"], .fv-list-item[data-step-id="${esc(match.id)}"]`);
+  }
 
   if (sel) {
     sel.classList.add('search-active');
-    sel.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    const wrap = document.getElementById('fv-canvas-wrap');
+    if (OL._fv.layout === 'steps' && wrap && sel.classList.contains('fv-step-card')) {
+      // Cards are absolutely placed on a zoomed canvas: centre the card in the visible area at the current zoom.
+      const z = (OL._fv && OL._fv.zoom) || 1;
+      const cx = ((parseFloat(sel.style.left) || 0) + sel.offsetWidth / 2) * z;
+      const cy = ((parseFloat(sel.style.top) || 0) + sel.offsetHeight / 2) * z;
+      wrap.scrollTo({ left: Math.max(0, cx - wrap.clientWidth / 2), top: Math.max(0, cy - wrap.clientHeight / 2), behavior: 'smooth' });
+    } else {
+      sel.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+  } else {
+    throw new Error(`Flow map search: could not find the step "${match.id}" on screen. It may be hidden by a stage or workflow filter.`);
   }
   const count = document.getElementById('fv-match-count');
   if (count) count.textContent = `${OL._fv.searchIdx + 1}/${OL._fv.searchMatches.length}`;

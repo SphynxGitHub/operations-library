@@ -1699,8 +1699,8 @@ body.is-visualizer #inspector-panel #inspector-content { width: 100%; min-width:
 .fv-step-card.is-dragging { opacity: 0.85; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 100; cursor: grabbing; }
 .fv-step-card.is-pinned { border-style: solid; }
 .fv-step-card.dimmed { opacity: 0.2; }
-.fv-step-card.search-match { border-color: #f5b800; }
-.fv-step-card.search-active { border-color: #f5b800; box-shadow: 0 4px 20px rgba(245,184,0,0.3); }
+.fv-step-card.search-match { border-color: #f5b800; box-shadow: 0 0 0 2px rgba(245,184,0,0.35); }
+.fv-step-card.search-active { border-color: #f5b800; box-shadow: 0 0 0 4px rgba(245,184,0,0.6), 0 4px 24px rgba(245,184,0,0.45); z-index: 50; }
 .fv-step-card-accent { height: 3px; width: 100%; border-radius: 10px 10px 0 0; }
 .fv-step-card-body { padding: 9px 11px 11px; cursor: pointer; }
 .fv-step-card-body:hover { background: rgba(0,0,0,0.01); }
