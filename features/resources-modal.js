@@ -1078,10 +1078,16 @@ export function openResourceModal(targetId, draftObj = null) {
             </button>
         </div>` : '';
 
+    // Tabs: the standard and email views group their sections into Overview / Steps and data / Collateral / Activity.
+    if (!state.v2) state.v2 = {};
+    const resTabNow = (String(state.v2.resTabFor || '') === String(res.id) && state.v2.resTab) || 'overview';
+    const paneOpen = (n) => `<div data-res-pane="${n}" style="${resTabNow === n ? '' : 'display:none;'}">`;
+
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
     if (resType === "email" || resType === "email template") {
          bodyContent = `
+                ${paneOpen('overview')}
                 ${appMappingHtml}
         
                 <!-- DESCRIPTION - half height -->
@@ -1094,7 +1100,8 @@ export function openResourceModal(targetId, draftObj = null) {
                               onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'description', v);">${esc(res.description || '')}</textarea>
                 </div>
 
-        
+                </div>
+                ${paneOpen('steps')}
                 <!-- EMAIL COMPOSITION -->
                 <div class="card-section" style="margin-bottom:16px;background:rgba(255,255,255,0.02);padding:15px;border-radius:8px;border:1px solid var(--line);">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
@@ -1318,8 +1325,9 @@ export function openResourceModal(targetId, draftObj = null) {
                 </div>
                 ${dataTagsHtml}
                 ${formLogicHtml}
-                ${collateralHtml}
                 ${pathsHtml}
+                </div>
+                ${paneOpen('collateral')}${collateralHtml}</div>
             `;
     }
     else if (isHierarchy) {
@@ -1431,6 +1439,7 @@ export function openResourceModal(targetId, draftObj = null) {
     else {
         // --- MODE D: STANDARD FULL RESOURCE VIEW ---
        bodyContent = `
+            ${paneOpen('overview')}
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
@@ -1474,7 +1483,10 @@ export function openResourceModal(targetId, draftObj = null) {
                           data-original="${esc(res.description || '')}"
                               onblur="const v=this.value; if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'description', v);">${esc(res.description || '')}</textarea>
             </div>
-        
+            ${attachmentsHtml}
+            </div>
+
+            ${paneOpen('steps')}
             ${dataTagsHtml}
             ${formLogicHtml}
 
@@ -1496,15 +1508,68 @@ export function openResourceModal(targetId, draftObj = null) {
                     <div id="sop-step-list">${renderSopStepList(res)}</div>
                 </div>
             ` : ''}
-        
+            ${pathsHtml}
+            </div>
+
+            ${paneOpen('collateral')}
             ${collateralHtml}
             ${containerHtml}
-        
-            ${pathsHtml}
+            </div>
         `;
       }
       // --- 🧱 FINAL RENDER ---
     
+    // Activity pane = the old sidebar content, without its column chrome
+    const tabbed = bodyContent.includes('data-res-pane=');
+    const attachTail = (!attachmentsHtml || bodyContent.includes(attachmentsHtml)) ? '' : `${paneOpen('overview')}${attachmentsHtml}</div>`;
+    const rel = (iso) => { const t = Date.parse(iso || ''); if (Number.isNaN(t)) return ''; const d = Math.floor((Date.now() - t) / 86400000); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 30 ? `${d}d ago` : d < 365 ? `${Math.floor(d / 30)}mo ago` : `${Math.floor(d / 365)}y ago`; };
+    const ri = (typeof OL.resourceInfo === 'function') ? OL.resourceInfo(res) : null;
+    const sumCard = (label, value, warn) => `<div style="flex:1 1 130px;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${label}</div>
+        <div style="font-size:13px;font-weight:600;${warn ? 'color:#d97706;' : ''}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${value}</div></div>`;
+    const summaryStripHtml = (tabbed && ri) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        ${sumCard('On the map', ri.placed ? esc(ri.workflows[0] || ri.stage || 'Placed') : 'Not placed', !ri.placed)}
+        ${sumCard('Used by', ri.usedBy ? `${ri.usedBy} step${ri.usedBy === 1 ? '' : 's'}` : 'Nothing yet')}
+        ${sumCard('Steps', String((res.steps || []).length))}
+        ${sumCard('Last edited', esc([rel(res.updatedAt), res.updatedBy].filter(Boolean).join(' \u00b7 ') || 'Unknown'))}
+    </div>` : '';
+    const asideHtml = `
+            <!-- Sidebar: the same comment box tasks use (rich text, @mentions, edit/delete, "Client can view"), plus edit history -->
+            <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;">
+                ${(typeof OL.toFilePull === 'function' && !OL.isClientViewer?.() && !window.IS_GUEST) ? `<button class="btn tiny soft" style="margin:8px 10px 0;" onclick="OL.toFilePull('${esc(getActiveClient()?.id || '')}', '${esc(String(res.id))}')" title="Open the To File queue for this project and file open items into this resource"><i data-lucide="folder-input" style="width:12px;height:12px;vertical-align:-2px;"></i> Pull from queue</button>` : ''}
+                <div style="display:flex;border-bottom:1px solid var(--line);">
+                    <div onclick="state.v2.resTab='activity';state.v2.resTabFor='${res.id}';state.v2.activeCommentTab='comments';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${(activeTab!=='history' && activeTab!=='keys') ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        COMMENTS
+                    </div>
+                    <div onclick="state.v2.resTab='activity';state.v2.resTabFor='${res.id}';state.v2.activeCommentTab='history';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${activeTab==='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        EDIT HISTORY
+                    </div>
+                    <div onclick="state.v2.resTab='activity';state.v2.resTabFor='${res.id}';state.v2.activeCommentTab='keys';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${activeTab==='keys' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        KEY CHANGES
+                    </div>
+                </div>
+
+                <div style="flex:1;overflow-y:auto;padding:14px;min-width:0;">
+                    ${activeTab === 'history' ? OL.renderEditHistory(res) : activeTab === 'keys' ? (typeof OL.resourceKeyChangesHtml === 'function' ? OL.resourceKeyChangesHtml(res) : '') : `
+                        <div id="task-comments-sidebar-${res.id}" style="min-width:0;">
+                            ${OL._findCommentHost && typeof OL.renderTaskCommentsSidebarHTML === 'function' ? OL.renderTaskCommentsSidebarHTML(getActiveClient(), res) : ''}
+                        </div>
+                        ${isGuest ? '' : `
+                        <div style="margin-top:14px;">
+                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;"><i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails</label>
+                            <div id="resource-notes-email-rows"></div>
+                        </div>`}
+                    `}
+                </div>
+            </aside>`;
+    const asideTabbed = asideHtml.replace('flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;', 'flex:1;display:flex;flex-direction:column;min-width:0;');
+
     const html = `
         <div class="modal-head" style="padding:14px 20px;border-bottom:0.5px solid var(--line);
                                 background:var(--panel-dark);
@@ -1548,15 +1613,6 @@ export function openResourceModal(targetId, draftObj = null) {
             <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
                 ${originPill} ${typePill}
                 <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;"></div>
-                <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
-                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                               display:flex;align-items:center;gap:4px;
-                               border:1px solid ${res.isArchived ? '#ef4444' : 'var(--panel-border)'};
-                               background:${res.isArchived ? 'rgba(239,68,68,0.08)' : 'var(--panel-soft)'};
-                               color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                    <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:11px;height:11px;"></i>
-                    ${res.isArchived ? 'Unarchive' : 'Archive'}
-                </button>
                 ${!isVaultMode ? `
                 <button onclick="OL.setResourceBuildState('${res.id}', '${res.isShell ? 'built' : 'planned'}')"
                         title="${res.isShell ? 'Planned: not built yet. Click to mark it built.' : 'Built. Click to mark it planned again.'}"
@@ -1568,6 +1624,26 @@ export function openResourceModal(targetId, draftObj = null) {
                     <i data-lucide="${res.isShell ? 'hammer' : 'check-circle'}" style="width:11px;height:11px;"></i>
                     ${res.isShell ? 'Planned' : 'Built'}
                 </button>` : ''}
+                ${canPromote ? `
+                    <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                                   background:#fbbf24;color:#000;border:none;display:flex;align-items:center;gap:4px;"
+                            onclick="OL.pushToMaster('${res.id}')">
+                        <i data-lucide="star" style="width:11px;height:11px;"></i> Promote
+                    </button>` : ''}
+                <details class="res-more" style="position:relative;">
+                    <summary class="btn tiny soft" style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:4px;" title="More actions" aria-label="More actions">
+                        <i data-lucide="more-horizontal" style="width:14px;height:14px;"></i>
+                    </summary>
+                    <div style="position:absolute;right:0;top:34px;z-index:30;min-width:170px;display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-dark);box-shadow:0 8px 24px rgba(0,0,0,0.25);">
+                <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
+                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                               display:flex;align-items:center;gap:4px;
+                               border:1px solid ${res.isArchived ? '#ef4444' : 'var(--panel-border)'};
+                               background:${res.isArchived ? 'rgba(239,68,68,0.08)' : 'var(--panel-soft)'};
+                               color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
+                    <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:11px;height:11px;"></i>
+                    ${res.isArchived ? 'Unarchive' : 'Archive'}
+                </button>
                 <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openResourceModal('${res.id}');"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
                                display:flex;align-items:center;gap:4px;
@@ -1587,12 +1663,8 @@ export function openResourceModal(targetId, draftObj = null) {
                         <i data-lucide="${showPricing ? 'banknote-x' : 'banknote'}" style="width:11px;height:11px;"></i>
                         ${showPricing ? 'Hide pricing' : 'Show pricing'}
                     </button>` : ''}
-                ${canPromote ? `
-                    <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                                   background:#fbbf24;color:#000;border:none;display:flex;align-items:center;gap:4px;"
-                            onclick="OL.pushToMaster('${res.id}')">
-                        <i data-lucide="star" style="width:11px;height:11px;"></i> Promote
-                    </button>` : ''}
+                    </div>
+                </details>
             </div>
         </div>
         
@@ -1609,48 +1681,29 @@ export function openResourceModal(targetId, draftObj = null) {
             </div>
         ` : ''}
     
+        ${tabbed ? `
+        <div style="padding:0 20px;border-bottom:1px solid var(--line);display:flex;gap:20px;overflow-x:auto;">
+            ${[['overview','Overview'],['steps','Steps and data'],['collateral','Collateral'],['activity','Activity']].map(([k, label]) => `
+                <div data-res-tab="${k}" onclick="OL.resTab('${esc(res.id)}','${k}')"
+                     style="padding:10px 2px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${resTabNow === k ? 'var(--accent)' : 'transparent'};color:${resTabNow === k ? 'var(--accent)' : 'var(--text-muted)'};font-weight:${resTabNow === k ? '600' : '400'};">${label}</div>`).join('')}
+        </div>
+        <div style="height:68vh;overflow-y:auto;padding:16px 20px;">
+            ${summaryStripHtml}
+            ${bodyContent}
+            ${attachTail}
+            ${paneOpen('activity')}
+                <div style="display:flex;max-width:820px;min-height:46vh;">${asideTabbed}</div>
+            </div>
+        </div>` : `
         <div style="display:flex;height:72vh;overflow:hidden;">
             <!-- Main body -->
             <div style="flex:1.6;overflow-y:auto;padding:16px 20px; height: 100%;">
                 ${bodyContent}
                 ${attachmentsHtml}
             </div>
-    
-            <!-- Sidebar: the same comment box tasks use (rich text, @mentions, edit/delete, "Client can view"), plus edit history -->
-            <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;">
-                ${(typeof OL.toFilePull === 'function' && !OL.isClientViewer?.() && !window.IS_GUEST) ? `<button class="btn tiny soft" style="margin:8px 10px 0;" onclick="OL.toFilePull('${esc(getActiveClient()?.id || '')}', '${esc(String(res.id))}')" title="Open the To File queue for this project and file open items into this resource"><i data-lucide="folder-input" style="width:12px;height:12px;vertical-align:-2px;"></i> Pull from queue</button>` : ''}
-                <div style="display:flex;border-bottom:1px solid var(--line);">
-                    <div onclick="state.v2.activeCommentTab='comments';OL.openResourceModal('${res.id}')"
-                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                cursor:pointer;${(activeTab!=='history' && activeTab!=='keys') ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
-                        COMMENTS
-                    </div>
-                    <div onclick="state.v2.activeCommentTab='history';OL.openResourceModal('${res.id}')"
-                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                cursor:pointer;${activeTab==='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
-                        EDIT HISTORY
-                    </div>
-                    <div onclick="state.v2.activeCommentTab='keys';OL.openResourceModal('${res.id}')"
-                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
-                                cursor:pointer;${activeTab==='keys' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
-                        KEY CHANGES
-                    </div>
-                </div>
 
-                <div style="flex:1;overflow-y:auto;padding:14px;min-width:0;">
-                    ${activeTab === 'history' ? OL.renderEditHistory(res) : activeTab === 'keys' ? (typeof OL.resourceKeyChangesHtml === 'function' ? OL.resourceKeyChangesHtml(res) : '') : `
-                        <div id="task-comments-sidebar-${res.id}" style="min-width:0;">
-                            ${OL._findCommentHost && typeof OL.renderTaskCommentsSidebarHTML === 'function' ? OL.renderTaskCommentsSidebarHTML(getActiveClient(), res) : ''}
-                        </div>
-                        ${isGuest ? '' : `
-                        <div style="margin-top:14px;">
-                            <label class="bold tiny uppercase muted" style="display:block; margin-bottom:6px;"><i data-lucide="mail" style="width:12px;height:12px;vertical-align:sub;"></i> Linked Emails</label>
-                            <div id="resource-notes-email-rows"></div>
-                        </div>`}
-                    `}
-                </div>
-            </aside>
-        </div>
+            ${asideHtml}
+        </div>`}
 
         ${OL._renderResourceCustomFieldsSection(res, typeDef)}
     `;
@@ -2007,6 +2060,16 @@ export function _geSaveEmailBody(resId, value) {
     if (tagsBtn) tagsBtn.style.display = 'none';
     if (doneBtn) doneBtn.style.display = 'none';
     if (resTagsBtn) resTagsBtn.style.display = 'none';
+};
+
+OL.resTab = function(resId, name) {
+    if (!state.v2) state.v2 = {};
+    state.v2.resTab = name; state.v2.resTabFor = String(resId);
+    document.querySelectorAll('[data-res-pane]').forEach(el => { el.style.display = el.getAttribute('data-res-pane') === name ? '' : 'none'; });
+    document.querySelectorAll('[data-res-tab]').forEach(el => {
+        const on = el.getAttribute('data-res-tab') === name;
+        el.style.borderBottomColor = on ? 'var(--accent)' : 'transparent'; el.style.color = on ? 'var(--accent)' : 'var(--text-muted)'; el.style.fontWeight = on ? '600' : '400';
+    });
 };
 
 export function promptEditLink(resId) {
