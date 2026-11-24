@@ -69,103 +69,67 @@ OL.renderResourceStatusPill = function(res) {
 export function renderResourceCard(res, opts = {}) {
     if (!res) return "";
     const compact = !!opts.compact;
-    
-    // 1. Resolve Live Scoping Data
+
     const scopeData = OL.getScopingDataForResource(res.id);
     const isMaster = String(res.id || "").startsWith("res-vlt-") || !!res.masterRefId;
     const isActive = state.focusedResourceId === res.id;
-
-    // 2. Map Status to Colors
-    const statusColors = { 
-        'Do Now': '#38bdf8',    // Cyan
-        'Done': '#22c55e',      // Green
-        'Do Later': '#fbbf24',  // Amber
-        "Don't Do": '#ef4444',  // Red
-        'Default': 'var(--color-scoping)' 
-    };
-    
+    const statusColors = { 'Do Now': '#38bdf8', 'Done': '#22c55e', 'Do Later': '#fbbf24', "Don't Do": '#ef4444', 'Default': 'var(--color-scoping)' };
     const statusColor = scopeData ? (statusColors[scopeData.status] || statusColors.Default) : 'transparent';
-
-    // 3. Family Numbering
     const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
-
-    const tagStyle = isMaster 
-        ? "background: var(--accent); color: #000;" 
-        : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
+    const info = typeof OL.resourceInfo === 'function' ? OL.resourceInfo(res) : { flags: [], workflows: [], stage: '', steps: (res.steps || []).length, usedBy: 0, initials: '', editor: '', placed: true, ref: false };
+    const unplaced = !info.placed && !info.ref && res.type !== 'Workflow';
+    const sub = [res.type || 'General', res.appName].filter(Boolean).map(esc).join(' \u00b7 ');
+    const stat = [
+        info.steps ? `<span title="Steps">${OL.getLucideSVG('list-ordered', 12, 'currentColor')} ${info.steps} step${info.steps === 1 ? '' : 's'}</span>` : '',
+        info.usedBy ? `<span title="Steps that link to this">${OL.getLucideSVG('link', 12, 'currentColor')} ${info.usedBy} use${info.usedBy === 1 ? 's' : ''} it</span>` : ''
+    ].filter(Boolean).join('');
 
     return `
-        <div class="card is-clickable ${compact ? 'small' : ''} ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
+        <div class="card is-clickable res-hoverable ${compact ? 'small' : ''} ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}"
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-            
-            <!-- Header: Text-wrapping Title & Actions -->
-            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''}${unplaced ? 'border-style:dashed !important;' : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;">
+
+            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                 ${opts.selectable ? `<input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="margin-top:2px; flex-shrink:0;"
                        onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">` : ''}
-                <div class="card-title" style="flex:1; font-weight:600; font-size: 12px; line-height: 1.35; word-break: break-word; white-space: normal;">
-                    ${esc(res.name || "Unnamed")}
+                ${typeof OL.resourceTypeTile === 'function' ? OL.resourceTypeTile(res, 30) : ''}
+                <div style="flex:1; min-width:0;">
+                    <div class="card-title" style="font-weight:600; font-size: 13px; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${sub}${isMaster ? ' \u00b7 Master' : ''}</div>
                 </div>
-                
-                <!-- Action Controls -->
-                <div class="card-actions" style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+                <div class="card-actions res-hover-acts" style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                     ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
                         <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client" style="position:static; padding:2px;">
-                            <i data-lucide="send" style="width:11px;height:11px;"></i>
-                        </button>
-                    ` : ''}
+                            <i data-lucide="send" style="width:12px;height:12px;"></i>
+                        </button>` : ''}
                     <button class="card-delete-btn" onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}');" title="Duplicate (with all its steps)" style="position:static; padding:2px;">
-                        <i data-lucide="copy" style="width:11px;height:11px;"></i>
+                        <i data-lucide="copy" style="width:12px;height:12px;"></i>
                     </button>
-                    <button class="card-delete-btn" 
+                    <button class="card-delete-btn"
                             onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                             title="${res.isArchived ? 'Unarchive' : 'Archive'}"
                             style="position:static; padding:2px; color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                        <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:11px;height:11px;"></i>
+                        <i data-lucide="${res.isArchived ? 'archive-restore' : 'archive'}" style="width:12px;height:12px;"></i>
                     </button>
-                    ${res.isLocked ? '' : `<button class="card-delete-btn" style="position:static; padding:2px;" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
+                    ${res.isLocked ? '' : `<button class="card-delete-btn" style="position:static; padding:2px;" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">\u00d7</button>`}
                 </div>
             </div>
 
-            <!-- Middle: Wrapping Tags & Badges -->
-            <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top: 2px;">
+            <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
                 ${numberingHtml}
-                ${OL.renderResourceStatusPill(res)}
-                ${typeof OL.resourceTagsHtml === 'function' ? OL.resourceTagsHtml(res) : ''}
-                ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(res, { showUnknown: false, withName: true }) : ''}
-                <span class="vault-tag" style="${tagStyle} padding: 1px 5px; font-size: 7.5px; border-radius: 3px; font-weight: bold;">
-                    ${isMaster ? 'MASTER' : 'LOCAL'}
-                </span>
-                ${res.isArchived ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Archived</span>` : ''}
+                ${typeof OL.resourcePillsHtml === 'function' ? OL.resourcePillsHtml(res, info) : ''}
+                ${res.isArchived ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Archived</span>` : ''}
+                ${scopeData ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${esc(scopeData.status || 'Pending')}${scopeData.responsibleParty ? ` \u00b7 ${esc(scopeData.responsibleParty)}` : ''}</span>` : ''}
             </div>
 
-            <!-- Footer: Base Meta & Scoping Info -->
-            <div class="card-body" style="margin-top: auto; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05);">
-                <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:6px;">
-                    <div>
-                        <div class="tiny accent bold uppercase" style="font-size: 7.5px; letter-spacing: 0.5px; opacity: 0.8;">
-                            ${esc(res.archetype || "Base")}
-                        </div>
-                        <div class="tiny muted" style="font-size:9.5px; opacity:0.6; display:flex; align-items:center; gap:3px;">
-                            ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 10, 'currentColor')}
-                            ${esc(res.type || 'General')}
-                        </div>
-                    </div>
-
-                    ${scopeData ? `
-                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
-                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid${statusColor}44; font-size:7.5px; font-weight:bold; padding: 1px 4px;">
-                            ${(scopeData.status || "PENDING").toUpperCase()}
-                        </div>
-                        <div class="tiny muted bold" style="font-size: 7.5px; opacity: 0.5; display:flex; align-items:center; gap:2px;">
-                            <i data-lucide="user" style="width:8px; height:8px;"></i>
-                            ${esc(scopeData.responsibleParty || 'TBD')}
-                        </div>
-                    </div>
-                ` : `
-                    <div class="tiny muted italic" style="font-size: 7.5px; opacity: 0.3;">Not Scoped</div>
-                `}
-                </div>
+            <div class="card-body" style="margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); display:flex; align-items:center; gap:12px; font-size:11px; color:var(--text-muted);">
+                ${stat}
+                ${typeof OL.resourceStatusDot === 'function' ? OL.resourceStatusDot(res) : OL.renderResourceStatusPill(res)}
+                <span style="margin-left:auto; display:inline-flex; align-items:center; gap:8px;">
+                    ${unplaced ? `<button class="btn tiny soft" onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')" title="Open to choose a process stage">Place on map</button>` : ''}
+                    ${info.initials ? `<span title="Last edited by ${esc(info.editor)}" style="width:22px;height:22px;border-radius:50%;background:var(--panel-border);color:var(--text-dim);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;">${esc(info.initials)}</span>` : ''}
+                </span>
             </div>
         </div>
     `;

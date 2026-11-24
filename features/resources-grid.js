@@ -301,8 +301,8 @@ function libQuickFacts(source, client) {
     const live = source.filter(r => r && !r.isArchived);
     const wfIds = new Set();
     (pd.workflows || []).forEach(w => (w.resourceIds || []).forEach(id => wfIds.add(String(id))));
-    const used = new Set();
-    const add = (id) => { if (id !== undefined && id !== null && id !== '') used.add(String(id)); };
+    const used = new Set(); const usedN = {};
+    const add = (id) => { if (id !== undefined && id !== null && id !== '') { used.add(String(id)); usedN[String(id)] = (usedN[String(id)] || 0) + 1; } };
     live.forEach(r => {
         (r.callouts || []).forEach(c => add(c && c.libId));
         (r.emailAttachments || []).forEach(a => add(a && a.libId));
@@ -331,7 +331,86 @@ function libQuickFacts(source, client) {
         if (!(r.steps || []).length) sets.noSteps.add(id);
         if (r.source || r.originalZapId || r.externalId) sets.synced.add(id);
     });
-    return { sets };
+    const stages = pd.stages || [];
+    const info = new Map();
+    const wfOf = {};
+    (pd.workflows || []).forEach(w => (w.resourceIds || []).forEach(id => { (wfOf[String(id)] = wfOf[String(id)] || []).push(w.name); }));
+    live.forEach(r => {
+        const id = String(r.id); const st = r.stageId ? stages.find(x => String(x.id) === String(r.stageId)) : null;
+        info.set(id, { placed: onMap(r), stage: st ? st.name : '', workflows: wfOf[id] || [], usedBy: usedN[id] || 0,
+            sameName: names[`${r.type}|${libNorm(r.name)}`] || 1, steps: (r.steps || []).length });
+    });
+    return { sets, info };
+}
+
+const relTime = (ms) => {
+    if (!ms) return '';
+    const d = Math.floor((Date.now() - ms) / 86400000);
+    if (d <= 0) return 'Updated today'; if (d === 1) return 'Updated yesterday'; if (d < 30) return `Updated ${d}d ago`;
+    if (d < 365) return `Updated ${Math.floor(d / 30)}mo ago`; return `Updated ${Math.floor(d / 365)}y ago`;
+};
+const initialsOf = (n) => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join('');
+
+// One lookup of everything a row or card shows about a resource; built once per paint (cleared next tick).
+OL.resourceInfo = function(res) {
+    if (!OL._resInfoCache) {
+        const client = getActiveClient();
+        const isVault = window.location.hash.includes('vault');
+        const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+        OL._resInfoCache = libQuickFacts(source, isVault ? null : client);
+        setTimeout(() => { OL._resInfoCache = null; }, 0);
+    }
+    const base = OL._resInfoCache.info.get(String(res.id)) || { placed: true, stage: '', workflows: [], usedBy: 0, sameName: 1, steps: (res.steps || []).length };
+    const ref = typeof OL.isReferenceResource === 'function' ? OL.isReferenceResource(res) : false;
+    const flags = [];
+    if (!ref && res.type !== 'Workflow') {
+        if (!base.placed) flags.push({ icon: 'map-pin-off', text: 'Not on map', tone: 'warn' });
+        if (base.sameName > 1) flags.push({ icon: 'copy', text: `Same name x${base.sameName}`, tone: 'warn' });
+        if (!base.placed && !base.usedBy) flags.push({ icon: 'unlink', text: 'Nothing uses it', tone: 'bad' });
+    }
+    return { ...base, flags, ref, updatedText: relTime(updatedMs(res)), initials: initialsOf(res.updatedBy), editor: res.updatedBy || '' };
+};
+
+const TYPE_TONE = (type) => {
+    const t = String(type || '').toLowerCase();
+    if (/zap/.test(t)) return '#f59e0b';
+    if (/form|questionnaire/.test(t)) return 'var(--accent)';
+    if (/event|schedul|calendar/.test(t)) return '#22c55e';
+    if (/sheet|spreadsheet/.test(t)) return '#14b8a6';
+    if (/folder|document|doc/.test(t)) return '#a78bfa';
+    return 'var(--text-muted)';
+};
+OL.resourceTypeTile = function(res, size = 30) {
+    const c = TYPE_TONE(res.type);
+    return `<span style="width:${size}px;height:${size}px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:${c};background:color-mix(in srgb, ${c} 14%, transparent);">${OL.getLucideSVG ? OL.getLucideSVG(OL.getRegistryIcon(res.type), Math.round(size * 0.55), 'currentColor') : ''}</span>`;
+};
+const rpill = (inner, tone) => {
+    const c = tone === 'warn' ? '#d97706' : tone === 'bad' ? '#ef4444' : 'var(--text-muted)';
+    const bd = tone === 'warn' ? '#d9770655' : tone === 'bad' ? '#ef444455' : 'var(--line)';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid ${bd};color:${c};white-space:nowrap;line-height:1.4;">${inner}</span>`;
+};
+const rIcon = (n, s = 11) => `<i data-lucide="${n}" style="width:${s}px;height:${s}px;"></i>`;
+OL.resourcePillsHtml = function(res, info) {
+    const out = [];
+    (info.workflows || []).slice(0, 1).forEach(w => out.push(rpill(`${rIcon('route')}${esc(w)}`)));
+    if (info.stage) out.push(rpill(esc(info.stage)));
+    if (res.folder) out.push(rpill(`${rIcon('folder')}${esc(res.subGroup ? `${res.folder} / ${res.subGroup}` : res.folder)}`));
+    info.flags.forEach(f => out.push(rpill(`${rIcon(f.icon)}${f.text}`, f.tone)));
+    return out.join('');
+};
+OL.resourceStatusDot = function(res) {
+    if (typeof OL.isReferenceResource === 'function' && OL.isReferenceResource(res)) return '';
+    const pill = typeof OL.renderResourceStatusPill === 'function' ? OL.renderResourceStatusPill(res) : '';
+    const m = /color:\s*([^;]+);/.exec(pill); const label = />([^<]+)<\/span>\s*$/.exec(pill);
+    if (!label) return pill;
+    const c = m ? m[1].trim() : 'var(--accent)';
+    return `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);white-space:nowrap;cursor:pointer;" title="Click to change status"
+        onclick="event.stopPropagation(); OL.openEditResourceStatusDropdown(event, '${esc(res.id)}')"><span style="width:7px;height:7px;border-radius:50%;background:${c};"></span>${label[1]}</span>`;
+};
+if (!document.getElementById('res-row-style')) {
+    const st = document.createElement('style'); st.id = 'res-row-style';
+    st.textContent = '.res-hover-acts{opacity:0;transition:opacity .15s}.res-hoverable:hover .res-hover-acts,.res-hoverable:focus-within .res-hover-acts{opacity:1}';
+    document.head.appendChild(st);
 }
 
 const LIB_CONTROLS = [
@@ -916,36 +995,44 @@ export function _renderResourceListRow(res) {
     const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
     const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
     const isArchived = res.isArchived || res.archived || false;
+    const info = OL.resourceInfo(res);
+    const sub = [res.appName, res.type && !res.appName ? res.type : '', info.steps ? `${info.steps} step${info.steps === 1 ? '' : 's'}` : '', info.usedBy ? `Used by ${info.usedBy} step${info.usedBy === 1 ? '' : 's'}` : '', info.updatedText].filter(Boolean).map(esc).join(' \u00b7 ');
 
     return `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+        <div class="res-hoverable" style="display:flex;align-items:center;gap:12px;padding:10px 14px;
                     background:var(--panel-soft);border:1px solid var(--panel-border);
                     border-left:3px solid ${statusColor};
-                    border-radius:8px;cursor:pointer;transition:border-color 0.2s;
+                    border-radius:10px;cursor:pointer;transition:border-color 0.2s;
                     opacity:${isArchived ? '0.5' : '1'};"
              onclick="OL.selectResourceCard('${res.id}')"
              onmouseover="this.style.borderColor='var(--accent)'"
              onmouseout="this.style.borderColor='var(--panel-border)'">
             <input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="flex-shrink:0;"
                    onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">
-            <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
-            <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
-            ${OL.resourceTagsHtml(res)}
-            ${isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:var(--text-dim);border:1px solid #6b7280;font-size:8px;">Archived</span>` : ''}
-            <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
-            ${OL.renderResourceStatusPill(res)}
-            ${typeof OL.updatedPillHtml === 'function' ? OL.updatedPillHtml(res, { withName: true }) : ''}
-            ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
-            <button class="card-action-btn" style="position:static;background:none;border:none;cursor:pointer;padding:4px;color:var(--text-muted);" 
-                    title="${isArchived ? 'Unarchive' : 'Archive'}"
-                    onclick="event.stopPropagation();OL.toggleArchiveResource('${res.id}')">
-                <i data-lucide="${isArchived ? 'archive-restore' : 'archive'}" style="width:12px;height:12px;"></i>
-            </button>
-            ${!res.isLocked ? `
-                <button class="card-delete-btn" style="position:static;" 
-                        onclick="event.stopPropagation();OL.universalDelete('${res.id}','resources')">
-                    <i data-lucide="x" style="width:12px;height:12px;"></i>
-                </button>` : ''}
+            ${OL.resourceTypeTile(res, 30)}
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:13px;line-height:1.3;word-break:break-word;">${esc(res.name)}</div>
+                ${sub ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sub}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:46%;">
+                ${OL.resourcePillsHtml(res, info)}
+                ${isArchived ? rpill('Archived') : ''}
+                ${scopeData ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${esc(scopeData.status)}</span>` : ''}
+            </div>
+            ${OL.resourceStatusDot(res)}
+            ${info.initials ? `<span title="Last edited by ${esc(info.editor)}" style="width:24px;height:24px;border-radius:50%;background:var(--panel-border);color:var(--text-dim);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${esc(info.initials)}</span>` : ''}
+            <span class="res-hover-acts" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;">
+                <button class="card-action-btn" style="position:static;background:none;border:none;cursor:pointer;padding:4px;color:var(--text-muted);"
+                        title="${isArchived ? 'Unarchive' : 'Archive'}"
+                        onclick="event.stopPropagation();OL.toggleArchiveResource('${res.id}')">
+                    <i data-lucide="${isArchived ? 'archive-restore' : 'archive'}" style="width:13px;height:13px;"></i>
+                </button>
+                ${!res.isLocked ? `
+                    <button class="card-delete-btn" style="position:static;"
+                            onclick="event.stopPropagation();OL.universalDelete('${res.id}','resources')">
+                        <i data-lucide="x" style="width:13px;height:13px;"></i>
+                    </button>` : ''}
+            </span>
         </div>
     `;
 };
