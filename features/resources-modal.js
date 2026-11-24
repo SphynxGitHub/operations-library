@@ -95,7 +95,7 @@ export function renderResourceCard(res, opts = {}) {
                        onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">` : ''}
                 <div style="flex:1; min-width:0;">
                     ${typeof OL.resourceTypeTile === 'function' ? `<span style="float:left; margin:0 10px 2px 0;">${OL.resourceTypeTile(res, 30)}</span>` : ''}
-                    <div class="card-title" style="font-weight:600; font-size: 13px; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
+                    <div class="card-title" style="font-family:inherit !important; font-weight:600 !important; font-size:13px !important; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${sub}${isMaster ? ' \u00b7 Master' : ''}</div>
                     <div style="clear:both;"></div>
                 </div>
