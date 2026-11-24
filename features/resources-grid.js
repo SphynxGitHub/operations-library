@@ -173,6 +173,7 @@ function _renderResourceManagerImpl() {
                 <div style="display:flex; gap:12px; flex-wrap:wrap;">
                     ${sel('lib-group-by', 'Group by', RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceGroupBy(this.value)')}
                     ${sel('lib-subgroup-by', 'Then by', RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSubGroupBy(this.value)')}
+                    ${sel('lib-versions', 'Same-name versions', `<option value="stack" ${state.libStack === false ? '' : 'selected'}>Stack into one</option><option value="each" ${state.libStack === false ? 'selected' : ''}>Show each</option>`, `state.libStack = this.value !== 'each'; OL.syncResourceLibraryFilters();`)}
                     ${sel('lib-sort', 'Sort', RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSort(this.value)')}
                 </div>
             </div>
@@ -331,6 +332,26 @@ function libQuickFacts(source, client) {
         if (!(r.steps || []).length) sets.noSteps.add(id);
         if (r.source || r.originalZapId || r.externalId) sets.synced.add(id);
     });
+    // Same type + name = versions of one thing (one per team member). Labelled from the booking link when every copy has one.
+    const byId = {}; live.forEach(r => { byId[String(r.id)] = r; });
+    const slugOf = (r) => {
+        // a booking form or email belongs to one event type, so the person comes from that event's link first
+        const m = /^cal-(?:form-|confirm-|reminder-)?([0-9a-f-]{36})$/.exec(String(r.id)); const ev = m && byId[`cal-${m[1]}`];
+        const url = (ev && ev.externalUrl) || r.externalUrl;
+        try { return url ? (new URL(url).pathname.split('/')[1] || '').toLowerCase() : ''; } catch (e) { return ''; }
+    };
+    const groupsByKey = {};
+    live.forEach(r => { const k = `${r.type}|${libNorm(r.name)}`; if (names[k] > 1) (groupsByKey[k] = groupsByKey[k] || []).push(r); });
+    const versionOf = {};
+    Object.entries(groupsByKey).forEach(([k, members]) => {
+        const slugs = members.map(slugOf);
+        if (slugs.some(x => !x) || new Set(slugs).size !== slugs.length) return;
+        const toks = slugs.map(x => x.split('-').filter(Boolean));
+        const count = {}; toks.forEach(t => new Set(t).forEach(w => { count[w] = (count[w] || 0) + 1; }));
+        const labels = toks.map(t => t.find(w => count[w] === 1 && w.length > 1));
+        if (labels.some(x => !x)) return;
+        members.forEach((m, i) => { versionOf[String(m.id)] = { key: k, label: labels[i].charAt(0).toUpperCase() + labels[i].slice(1) }; });
+    });
     const stages = pd.stages || [];
     const info = new Map();
     const wfOf = {};
@@ -338,7 +359,8 @@ function libQuickFacts(source, client) {
     live.forEach(r => {
         const id = String(r.id); const st = r.stageId ? stages.find(x => String(x.id) === String(r.stageId)) : null;
         info.set(id, { placed: onMap(r), stage: st ? st.name : '', workflows: wfOf[id] || [], usedBy: usedN[id] || 0,
-            sameName: names[`${r.type}|${libNorm(r.name)}`] || 1, steps: (r.steps || []).length });
+            sameName: names[`${r.type}|${libNorm(r.name)}`] || 1, steps: (r.steps || []).length,
+            versionKey: (versionOf[id] || {}).key || '', versionLabel: (versionOf[id] || {}).label || '' });
     });
     return { sets, info };
 }
@@ -365,7 +387,8 @@ OL.resourceInfo = function(res) {
     const flags = [];
     if (!ref && res.type !== 'Workflow') {
         if (!base.placed) flags.push({ icon: 'map-pin-off', text: 'Not on map', tone: 'warn' });
-        if (base.sameName > 1) flags.push({ icon: 'copy', text: `Same name x${base.sameName}`, tone: 'warn' });
+        if (base.versionLabel) flags.push({ icon: 'user', text: base.versionLabel, tone: '' });
+        else if (base.sameName > 1) flags.push({ icon: 'copy', text: `Same name x${base.sameName}`, tone: 'warn' });
         if (!base.placed && !base.usedBy) flags.push({ icon: 'unlink', text: 'Nothing uses it', tone: 'bad' });
     }
     return { ...base, flags, ref, updatedText: relTime(updatedMs(res)), initials: initialsOf(res.updatedBy), editor: res.updatedBy || '' };
@@ -397,6 +420,26 @@ OL.resourcePillsHtml = function(res, info) {
     if (res.folder) out.push(rpill(`${rIcon('folder')}${esc(res.subGroup ? `${res.folder} / ${res.subGroup}` : res.folder)}`));
     info.flags.forEach(f => out.push(rpill(`${rIcon(f.icon)}${f.text}`, f.tone)));
     return out.join('');
+};
+// Same-name versions (one per team member) show as one row or card with a chip per version; nothing is hidden or merged.
+OL.collapseVersions = function(list) {
+    if (state.libStack === false || !list.length) return list.map(res => ({ res, members: null }));
+    OL.resourceInfo(list[0]);
+    const infoOf = (r) => OL._resInfoCache && OL._resInfoCache.info.get(String(r.id));
+    const seen = new Set(); const out = [];
+    list.forEach(res => {
+        const k = (infoOf(res) || {}).versionKey;
+        if (!k) { out.push({ res, members: null }); return; }
+        if (seen.has(k)) return; seen.add(k);
+        const members = list.filter(r => (infoOf(r) || {}).versionKey === k);
+        out.push(members.length > 1 ? { res: members[0], members } : { res, members: null });
+    });
+    return out;
+};
+OL.versionChipsHtml = function(members) {
+    if (!members || members.length < 2) return '';
+    const chips = members.map(m => `<button type="button" class="btn tiny soft" style="border-radius:20px;padding:1px 10px;font-size:11px;" onclick="event.stopPropagation();OL.selectResourceCard('${esc(m.id)}')" title="Open ${esc(OL.resourceInfo(m).versionLabel)}'s version">${esc(OL.resourceInfo(m).versionLabel)}</button>`).join('');
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text-muted);">${members.length} versions</span>${chips}</div>`;
 };
 OL.resourceStatusDot = function(res) {
     if (typeof OL.isReferenceResource === 'function' && OL.isReferenceResource(res)) return '';
@@ -954,10 +997,10 @@ function _renderResourceGroupsImpl(container, items) {
                             : buildResourceGroups(g.items, sub);
                         const cards = (list) => listMode ? `
                             <div style="display:flex;flex-direction:column;gap:2px;">
-                                ${list.map(res => OL._renderResourceListRow(res)).join('')}
+                                ${OL.collapseVersions(list).map(({ res, members }) => OL._renderResourceListRow(res, members)).join('')}
                             </div>` : `
                             <div class="cards-grid">
-                                ${list.map(r => renderResourceCard(r, { selectable: true })).join('')}
+                                ${OL.collapseVersions(list).map(({ res, members }) => renderResourceCard(res, { selectable: true, members })).join('')}
                             </div>`;
                         // a lone unlabelled part (nothing to split by) is drawn as before
                         if (parts.length === 1 && !parts[0].label) return cards(parts[0].items);
@@ -990,7 +1033,7 @@ function _renderResourceGroupsImpl(container, items) {
     OL.refreshBulkResourceBar();
 };
 
-export function _renderResourceListRow(res) {
+export function _renderResourceListRow(res, members) {
     const scopeData = OL.getScopingDataForResource(res.id);
     const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
     const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
@@ -1008,14 +1051,15 @@ export function _renderResourceListRow(res) {
              onmouseover="this.style.borderColor='var(--accent)'"
              onmouseout="this.style.borderColor='var(--panel-border)'">
             <input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="flex-shrink:0;"
-                   onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">
+                   onclick="event.stopPropagation()" onchange="${members ? `OL.toggleResourceGroupSelect('${esc(members.map(m => m.id).join(','))}', this.checked)` : `OL.toggleResourceSelect('${esc(res.id)}', this.checked)`}" title="${members ? 'Select all versions' : 'Select for bulk update'}">
             ${OL.resourceTypeTile(res, 30)}
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:600;font-size:13px;line-height:1.3;word-break:break-word;">${esc(res.name)}</div>
                 ${sub ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sub}</div>` : ''}
+                ${OL.versionChipsHtml(members)}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:46%;">
-                ${OL.resourcePillsHtml(res, info)}
+                ${OL.resourcePillsHtml(res, members ? { ...info, flags: info.flags.filter(f => f.icon !== 'user') } : info)}
                 ${isArchived ? rpill('Archived') : ''}
                 ${scopeData ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${esc(scopeData.status)}</span>` : ''}
             </div>

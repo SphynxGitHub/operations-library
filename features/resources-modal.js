@@ -92,7 +92,7 @@ export function renderResourceCard(res, opts = {}) {
 
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                 ${opts.selectable ? `<input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="margin-top:2px; flex-shrink:0;"
-                       onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">` : ''}
+                       onclick="event.stopPropagation()" onchange="${opts.members ? `OL.toggleResourceGroupSelect('${esc(opts.members.map(m => m.id).join(','))}', this.checked)` : `OL.toggleResourceSelect('${esc(res.id)}', this.checked)`}" title="${opts.members ? 'Select all versions' : 'Select for bulk update'}">` : ''}
                 <div style="flex:1; min-width:0;">
                     ${typeof OL.resourceTypeTile === 'function' ? `<span style="float:left; margin:0 10px 2px 0;">${OL.resourceTypeTile(res, 30)}</span>` : ''}
                     <div class="card-title" style="font-family:inherit !important; font-weight:600 !important; font-size:13px !important; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
@@ -119,11 +119,12 @@ export function renderResourceCard(res, opts = {}) {
 
             <div class="card-badges" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
                 ${numberingHtml}
-                ${typeof OL.resourcePillsHtml === 'function' ? OL.resourcePillsHtml(res, info) : ''}
+                ${typeof OL.resourcePillsHtml === 'function' ? OL.resourcePillsHtml(res, opts.members ? { ...info, flags: (info.flags || []).filter(f => f.icon !== 'user') } : info) : ''}
                 ${res.isArchived ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Archived</span>` : ''}
                 ${scopeData ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${esc(scopeData.status || 'Pending')}${scopeData.responsibleParty ? ` \u00b7 ${esc(scopeData.responsibleParty)}` : ''}</span>` : ''}
             </div>
 
+            ${typeof OL.versionChipsHtml === 'function' ? OL.versionChipsHtml(opts.members) : ''}
             <div class="card-body" style="margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; font-size:11px; color:var(--text-muted);">
                 ${stat}
                 ${typeof OL.resourceStatusDot === 'function' ? OL.resourceStatusDot(res) : OL.renderResourceStatusPill(res)}
