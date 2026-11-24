@@ -856,8 +856,24 @@ function fvContentRight() {
   return right;
 }
 
+// "Fit window" finds how many columns fit by drawing the whole map, then drawing it again with one column fewer until it fits. On a big
+// project that is several full draws every time the map is opened or edited. The column count it settles on is kept per project and
+// window width, so the next draw starts there and normally needs one pass. If the map still runs past the edge, the search carries on
+// downward as before. A kept count is not searched again until the window width, zoom or layout shape changes, or the page is reloaded.
+const fvFitKey = () => `${getActiveClient()?.id || ''}|${Math.round(window.innerWidth / 40)}|${OL._fv?.zoom || 1}|${String(OL._fv?.flowShape)}`;
+// Kept in this browser (localStorage) so the first draw after a reload is one pass too. A cache that cannot be read or saved only costs the extra passes.
+const FV_FIT_LS = 'fv_fit_cols_v1';
+function fvFitStore() {
+    if (!OL._fv._fitCache) { try { OL._fv._fitCache = JSON.parse(localStorage.getItem(FV_FIT_LS) || '{}') || {}; } catch (e) { OL._fv._fitCache = {}; } }
+    return new Proxy(OL._fv._fitCache, { set(t, k, v) { t[k] = v; try { localStorage.setItem(FV_FIT_LS, JSON.stringify(t)); } catch (e) { /* storage full or blocked: keep it in memory */ } return true; } });
+}
+
 export function renderVisualizer() {
   if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
+  if (OL._fv && !OL._fv._fitRetry && OL._fv.layout === 'steps' && !OL._fv._colsOverride) {
+    const kept = fvFitStore()[fvFitKey()];
+    if (kept && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
+  }
   if (OL._fv) OL._fv._fitRetry = false;
   const wasOpen = OL._fv._lastInspectorResId;
   const mainArea = document.getElementById('mainContent');
@@ -1161,6 +1177,7 @@ export function renderVisualizer() {
     const prev = OL._fv._fitPrevNeed;
     if (prev !== undefined && need >= prev - 1) {
       OL._fv._fitCapCols = cols + 1; OL._fv._fitDone = true; OL._fv._fitRetry = true; OL._fv._fitPrevNeed = undefined;
+      fvFitStore()[fvFitKey()] = { cols: cols + 1 };
       return OL.renderVisualizer();
     }
     if (need > have + 2 && Number.isFinite(cols) && cols > 1) {
@@ -1172,6 +1189,7 @@ export function renderVisualizer() {
       return OL.renderVisualizer();
     }
     OL._fv._fitPrevNeed = undefined;
+    if (Number.isFinite(cols) && cols > 0) fvFitStore()[fvFitKey()] = { cols };       // it fits: keep this count for the next draw
   }
 
   // Populate workbench if open
