@@ -1438,9 +1438,22 @@ export function openResourceModal(targetId, draftObj = null) {
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="link" style="width:14px;height:14px;"></i> ${isZap ? 'Zapier Link' : 'External Link'}
                 </label>
-                <input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalUrl || '')}"
+                ${/^https?:\/\//i.test(String(res.externalUrl || '').trim()) ? (() => {
+                    const u = String(res.externalUrl).trim();
+                    let host = u; try { const x = new URL(u); host = x.hostname.replace(/^www\./, '') + (x.pathname && x.pathname !== '/' ? x.pathname : ''); } catch (e) { /* show the raw link */ }
+                    return `<div style="display:flex; gap:8px; align-items:center;">
+                        <a href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="${esc(u)}" class="btn soft"
+                           style="flex:1; min-width:0; display:flex; align-items:center; gap:8px; text-decoration:none; justify-content:flex-start;">
+                            <i data-lucide="external-link" style="width:14px;height:14px;flex-shrink:0;"></i>
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(host)}</span>
+                        </a>
+                        <button type="button" class="btn tiny soft" title="Edit or clear the link" onclick="OL.promptEditLink('${res.id}')" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="pencil" style="width:12px;height:12px;"></i> Edit
+                        </button>
+                    </div>`;
+                })() : `<input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalUrl || '')}"
                        data-original="${esc(res.externalUrl || '')}"
-                       onblur="const v=this.value.trim(); if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'externalUrl', v);">
+                       onblur="const v=this.value.trim(); if(v !== this.dataset.original) OL.handleResourceSave('${res.id}', 'externalUrl', v);">`}
             </div>
 
            <div class="card-section" style="margin-top:20px;">
