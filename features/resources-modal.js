@@ -80,15 +80,15 @@ export function renderResourceCard(res, opts = {}) {
     const unplaced = !info.placed && !info.ref && res.type !== 'Workflow';
     const sub = [res.type || 'General', res.appName].filter(Boolean).map(esc).join(' \u00b7 ');
     const stat = [
-        info.steps ? `<span title="Steps">${OL.getLucideSVG('list-ordered', 12, 'currentColor')} ${info.steps} step${info.steps === 1 ? '' : 's'}</span>` : '',
-        info.usedBy ? `<span title="Steps that link to this">${OL.getLucideSVG('link', 12, 'currentColor')} ${info.usedBy} use${info.usedBy === 1 ? 's' : ''} it</span>` : ''
+        info.steps ? `<span title="Steps" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;"><i data-lucide="list-ordered" style="width:12px;height:12px;"></i>${info.steps} step${info.steps === 1 ? '' : 's'}</span>` : '',
+        info.usedBy ? `<span title="Steps that link to this" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;"><i data-lucide="link" style="width:12px;height:12px;"></i>Used by ${info.usedBy}</span>` : ''
     ].filter(Boolean).join('');
 
     return `
         <div class="card is-clickable res-hoverable ${compact ? 'small' : ''} ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}"
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''}${unplaced ? 'border-style:dashed !important;' : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''}${unplaced ? 'border-style:dashed !important;' : ''} opacity:${res.isArchived ? '0.5' : '1'}; padding: 12px; position:relative; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;">
 
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                 ${opts.selectable ? `<input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="margin-top:2px; flex-shrink:0;"
@@ -98,7 +98,7 @@ export function renderResourceCard(res, opts = {}) {
                     <div class="card-title" style="font-weight:600; font-size: 13px; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${sub}${isMaster ? ' \u00b7 Master' : ''}</div>
                 </div>
-                <div class="card-actions res-hover-acts" style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+                <div class="card-actions res-hover-acts" style="display:flex; align-items:center; gap:3px; position:absolute; top:6px; right:6px; padding:2px 4px; border-radius:8px; background:var(--panel-soft); border:1px solid var(--line); z-index:2;">
                     ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
                         <button class="card-delete-btn" onclick="event.stopPropagation(); OL.openPushLocalItemToClientModal('resource', '${res.id}')" title="Push to a client" style="position:static; padding:2px;">
                             <i data-lucide="send" style="width:12px;height:12px;"></i>
@@ -123,11 +123,11 @@ export function renderResourceCard(res, opts = {}) {
                 ${scopeData ? `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${esc(scopeData.status || 'Pending')}${scopeData.responsibleParty ? ` \u00b7 ${esc(scopeData.responsibleParty)}` : ''}</span>` : ''}
             </div>
 
-            <div class="card-body" style="margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); display:flex; align-items:center; gap:12px; font-size:11px; color:var(--text-muted);">
+            <div class="card-body" style="margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; font-size:11px; color:var(--text-muted);">
                 ${stat}
                 ${typeof OL.resourceStatusDot === 'function' ? OL.resourceStatusDot(res) : OL.renderResourceStatusPill(res)}
                 <span style="margin-left:auto; display:inline-flex; align-items:center; gap:8px;">
-                    ${unplaced ? `<button class="btn tiny soft" onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')" title="Open to choose a process stage">Place on map</button>` : ''}
+                    ${unplaced ? `<button class="btn tiny soft" style="white-space:nowrap;" onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')" title="Open to choose a process stage">Place on map</button>` : ''}
                     ${info.initials ? `<span title="Last edited by ${esc(info.editor)}" style="width:22px;height:22px;border-radius:50%;background:var(--panel-border);color:var(--text-dim);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;">${esc(info.initials)}</span>` : ''}
                 </span>
             </div>
