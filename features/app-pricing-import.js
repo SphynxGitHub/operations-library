@@ -59,7 +59,7 @@ function renderReview() {
     el.innerHTML = `
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
             <span class="tiny muted">${pending.filter((r) => r.selected).length} selected</span>
-            <button type="button" onclick="OL.pricingImportApply()" style="margin-left:auto; background:#3DD9C5; color:#1B2D3F; border:0; border-radius:8px; padding:8px 16px; font-weight:700; cursor:pointer; display:inline-block;">Apply selected</button>
+            <button type="button" onclick="OL.pricingImportApply()" style="margin-left:12px; background:#3DD9C5; color:#1B2D3F; border:0; border-radius:8px; padding:8px 16px; font-weight:700; cursor:pointer; display:inline-block;">Apply selected</button>
         </div>
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead><tr style="text-align:left;" class="tiny muted"><th style="width:28px;"></th><th>App</th><th>Current tiers</th><th>Proposed tiers</th><th>Source</th></tr></thead>
@@ -74,7 +74,7 @@ function renderReview() {
         </table>
         <div style="display:flex; gap:8px; align-items:center; margin-top:12px;">
             <span class="tiny muted">${pending.filter((r) => r.selected).length} selected. Ticked apps have their tiers replaced; unticked apps are left alone.</span>
-            <button type="button" onclick="OL.pricingImportApply()" style="margin-left:auto; background:#3DD9C5; color:#1B2D3F; border:0; border-radius:8px; padding:8px 16px; font-weight:700; cursor:pointer; display:inline-block;">Apply selected</button>
+            <button type="button" onclick="OL.pricingImportApply()" style="margin-left:12px; background:#3DD9C5; color:#1B2D3F; border:0; border-radius:8px; padding:8px 16px; font-weight:700; cursor:pointer; display:inline-block;">Apply selected</button>
         </div>`;
 }
 
