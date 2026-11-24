@@ -113,10 +113,18 @@ function _renderResourceManagerImpl() {
             </div>
         </div>
 
-        <div class="card" style="padding: 20px; margin: 20px 0;">
-            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
-
-                <div style="display: flex; gap: 8px; flex: 2 1 320px; min-width: 260px; align-items:center;">
+        ${(() => {
+            const sel = (id, label, body, onchange = 'OL.syncResourceLibraryFilters()') => `
+                <div style="display:flex; flex-direction:column; gap:4px; min-width:150px; flex:1 1 150px;">
+                    <span class="tiny muted">${label}</span>
+                    <select id="${id}" class="modal-input tiny" style="width:100%;" onchange="${onchange}">${body}</select>
+                </div>`;
+            const quick = (key, label) => `<button type="button" id="lib-q-${key}" class="btn tiny soft" data-quick="${key}" onclick="OL.libToggleQuick('${key}')" style="border-radius:20px; ${(state.libQuick || {})[key] ? 'background:var(--panel-soft); border:1px solid var(--accent); color:var(--accent);' : ''}">${label} <span class="muted" data-quick-count="${key}"></span></button>`;
+            const open = state.libPanel || '';
+            return `
+        <div class="card" style="padding: 14px 16px; margin: 20px 0;">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <div style="display:flex; gap:8px; flex:1 1 320px; min-width:240px; align-items:center;">
                     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
                     <input type="text" id="lib-filter-input"
                            class="modal-input tiny" style="flex:1; width:100%;"
@@ -124,104 +132,57 @@ function _renderResourceManagerImpl() {
                            value="${esc(state.libSearch || '')}"
                            oninput="const v=this.value; OL.reRenderPreservingFocus(() => { state.libSearch = v; OL.syncResourceLibraryFilters(); });">
                 </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="tag" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Type:</span>
-                    <select id="lib-filter-type" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">All Types</option>
-                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="grid-2x2" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">App:</span>
-                    <select id="lib-filter-app" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">All Apps</option>
-                        ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="user-check" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Owner:</span>
-                    <select id="lib-filter-assignee" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">All Owners</option>
-                        ${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="dollar-sign" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Scoping:</span>
-                    <select id="lib-filter-scoped" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">All Scoping</option>
-                        <option value="scoped">Scoped ($)</option>
-                        <option value="unscoped">Unscoped</option>
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="users" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Party:</span>
-                    <select id="lib-filter-party" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">All Parties</option>
-                        <option value="Sphynx">Sphynx</option>
-                        <option value="Client">Client</option>
-                        <option value="Joint">Joint</option>
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="workflow" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Logic:</span>
-                    <select id="lib-filter-logic" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">Any Logic</option>
-                        <option value="has">With λ Logic</option>
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="clock" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Updated:</span>
-                    <select id="lib-filter-updated" class="modal-input tiny" style="width: auto;" onchange="OL.syncResourceLibraryFilters()">
-                        <option value="">Any time</option>
-                        <option value="1">Today</option>
-                        <option value="7">Last 7 days</option>
-                        <option value="30">Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                        <option value="older90">Older than 90 days</option>
-                        <option value="none">No edit date yet</option>
-                    </select>
-                    <input type="date" id="lib-filter-updated-since" class="modal-input tiny" style="width:auto;" title="Only resources updated on or after this date" onchange="OL.syncResourceLibraryFilters()">
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="arrow-down-up" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Sort:</span>
-                    <select id="lib-sort" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceSort(this.value)">
-                        ${RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <i data-lucide="layers" style="width:14px;height:14px;color:var(--muted);"></i>
-                    <span class="tiny muted bold uppercase">Group by:</span>
-                    <select id="lib-group-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceGroupBy(this.value)">
-                        ${RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
-                    </select>
-                    <span class="tiny muted bold uppercase">Then by:</span>
-                    <select id="lib-subgroup-by" class="modal-input tiny" style="width: auto;" onchange="OL.setResourceSubGroupBy(this.value)">
-                        ${RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join('')}
-                    </select>
-                </div>
-
-                <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
-                    <i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear
+                <button type="button" class="btn soft" id="lib-filters-btn" onclick="OL.libTogglePanel('filters')" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="sliders-horizontal" style="width:14px;height:14px;"></i> Filters <span id="lib-filter-badge" class="pill tiny" style="display:none;"></span>
+                </button>
+                <button type="button" class="btn soft" id="lib-view-btn" onclick="OL.libTogglePanel('view')" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="layers" style="width:14px;height:14px;"></i> View <i data-lucide="chevron-down" style="width:12px;height:12px;"></i>
                 </button>
             </div>
-        </div>
+
+            <div id="lib-filters-panel" style="display:${open === 'filters' ? 'block' : 'none'}; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+                <div class="tiny muted bold uppercase" style="margin-bottom:6px;">Needs attention</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+                    ${quick('notOnMap', 'Not on map')}${quick('needsReview', 'Needs review')}${quick('sameName', 'Same name')}${quick('orphan', 'Nothing uses it')}${quick('noSteps', 'No steps')}${quick('synced', 'Synced from app')}
+                </div>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                    ${sel('lib-filter-type', 'Type', `<option value="">All Types</option>${types.map(t => `<option value="${t}">${t}</option>`).join('')}`)}
+                    ${sel('lib-filter-app', 'App', `<option value="">All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}`)}
+                    ${sel('lib-filter-assignee', 'Owner', `<option value="">All Owners</option>${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}`)}
+                    ${sel('lib-filter-updated', 'Updated', `<option value="">Any time</option><option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="older90">Older than 90 days</option><option value="none">No edit date yet</option>`)}
+                </div>
+                <details style="margin-bottom:10px;">
+                    <summary class="tiny muted" style="cursor:pointer;">More: scoping, party, logic, updated since</summary>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
+                        ${sel('lib-filter-scoped', 'Scoping', `<option value="">All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option>`)}
+                        ${sel('lib-filter-party', 'Party', `<option value="">All Parties</option><option value="Sphynx">Sphynx</option><option value="Client">Client</option><option value="Joint">Joint</option>`)}
+                        ${sel('lib-filter-logic', 'Logic', `<option value="">Any Logic</option><option value="has">With λ Logic</option>`)}
+                        <div style="display:flex; flex-direction:column; gap:4px; min-width:150px; flex:1 1 150px;">
+                            <span class="tiny muted">Updated since</span>
+                            <input type="date" id="lib-filter-updated-since" class="modal-input tiny" style="width:100%;" title="Only resources updated on or after this date" onchange="OL.syncResourceLibraryFilters()">
+                        </div>
+                    </div>
+                </details>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;"><i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear all</button>
+                    <button type="button" class="btn tiny primary" onclick="OL.libTogglePanel('')">Done</button>
+                </div>
+            </div>
+
+            <div id="lib-view-panel" style="display:${open === 'view' ? 'block' : 'none'}; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    ${sel('lib-group-by', 'Group by', RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceGroupBy(this.value)')}
+                    ${sel('lib-subgroup-by', 'Then by', RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSubGroupBy(this.value)')}
+                    ${sel('lib-sort', 'Sort', RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSort(this.value)')}
+                </div>
+            </div>
+
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:10px; min-height:22px;">
+                <div id="lib-active-chips" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;"></div>
+                <span id="lib-count" class="tiny muted" style="margin-left:auto;"></span>
+            </div>
+        </div>`;
+        })()}
 
         <div id="resource-library-results"></div>
     `;
@@ -275,8 +236,11 @@ function _syncResourceLibraryFiltersImpl() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
+    const quickOn = state.libQuick || {};
+    const facts = libQuickFacts(source, client);
     const filtered = source.filter(res => {
          if (!state.showArchivedResources && res.isArchived) return false;
+        for (const k of Object.keys(quickOn)) { if (quickOn[k] && !(facts.sets[k] && facts.sets[k].has(String(res.id)))) return false; }
         //if (res.type === 'Workflow') return false;
 
         const matchesQuery = !query || res.name.toLowerCase().includes(query) || (res.description || "").toLowerCase().includes(query);
@@ -327,7 +291,92 @@ function _syncResourceLibraryFiltersImpl() {
     }
 
     OL.renderResourceGroups(container, filtered);
+    paintLibraryChips(filtered.length, source.filter(r => state.showArchivedResources || !r.isArchived).length, facts);
 };
+
+// ── QUICK "NEEDS ATTENTION" FILTERS + ACTIVE CHIPS ───────────────────────────────────────────────────────────────
+const libNorm = (v) => String(v || '').replace(/\[discovered\]/i, '').trim().toLowerCase().replace(/\s+/g, ' ');
+function libQuickFacts(source, client) {
+    const pd = (client && client.projectData) || {};
+    const live = source.filter(r => r && !r.isArchived);
+    const wfIds = new Set();
+    (pd.workflows || []).forEach(w => (w.resourceIds || []).forEach(id => wfIds.add(String(id))));
+    const used = new Set();
+    const add = (id) => { if (id !== undefined && id !== null && id !== '') used.add(String(id)); };
+    live.forEach(r => {
+        (r.callouts || []).forEach(c => add(c && c.libId));
+        (r.emailAttachments || []).forEach(a => add(a && a.libId));
+        (r.dependencies || []).forEach(d => d && (d.type === 'resource' || !d.type) && add(d.id));
+        (r.steps || []).forEach(st => {
+            if (!st) return;
+            (st.links || []).forEach(l => add(l && l.id));
+            (st.callouts || []).forEach(c => add(c && c.libId));
+            (Array.isArray(st.jumps) ? st.jumps : []).forEach(j => add(j && j.resId));
+            add(st.refResId);
+        });
+    });
+    const names = {};
+    live.forEach(r => { const k = `${r.type}|${libNorm(r.name)}`; names[k] = (names[k] || 0) + 1; });
+    let review = new Set();
+    try { review = new Set((OL.rmReviewItems ? OL.rmReviewItems() : []).map(i => String(i.res.id))); } catch (e) { /* review list unavailable */ }
+    const onMap = (r) => !!(r.stageId || wfIds.has(String(r.id)) || (typeof OL.getPlacements === 'function' && OL.getPlacements(r).length));
+    const sets = { notOnMap: new Set(), needsReview: new Set(), sameName: new Set(), orphan: new Set(), noSteps: new Set(), synced: new Set() };
+    live.forEach(r => {
+        const id = String(r.id);
+        const placed = onMap(r);
+        if (r.type !== 'Workflow' && !placed) sets.notOnMap.add(id);
+        if (review.has(id)) sets.needsReview.add(id);
+        if (names[`${r.type}|${libNorm(r.name)}`] > 1) sets.sameName.add(id);
+        if (r.type !== 'Workflow' && !placed && !used.has(id)) sets.orphan.add(id);
+        if (!(r.steps || []).length) sets.noSteps.add(id);
+        if (r.source || r.originalZapId || r.externalId) sets.synced.add(id);
+    });
+    return { sets };
+}
+
+const LIB_CONTROLS = [
+    ['lib-filter-type', 'Type'], ['lib-filter-app', 'App'], ['lib-filter-assignee', 'Owner'], ['lib-filter-updated', 'Updated'],
+    ['lib-filter-scoped', 'Scoping'], ['lib-filter-party', 'Party'], ['lib-filter-logic', 'Logic'], ['lib-filter-updated-since', 'Since']
+];
+const LIB_QUICK_LABELS = { notOnMap: 'Not on map', needsReview: 'Needs review', sameName: 'Same name', orphan: 'Nothing uses it', noSteps: 'No steps', synced: 'Synced from app' };
+
+function paintLibraryChips(shown, total, facts) {
+    const chips = [];
+    const chip = (label, onclick) => `<span class="pill tiny" style="display:inline-flex;align-items:center;gap:5px;background:var(--panel-soft);border:1px solid var(--accent);color:var(--accent);">${esc(label)} <a href="javascript:void(0)" onclick="${onclick}" aria-label="Remove filter" style="display:inline-flex;color:inherit;"><i data-lucide="x" style="width:11px;height:11px;"></i></a></span>`;
+    let n = 0;
+    LIB_CONTROLS.forEach(([id, name]) => {
+        const el = document.getElementById(id);
+        if (!el || !el.value) return;
+        const text = el.tagName === 'SELECT' ? (el.selectedOptions[0] ? el.selectedOptions[0].text : el.value) : el.value;
+        chips.push(chip(`${name}: ${text}`, `OL.libClearFilter('${id}')`)); n++;
+    });
+    Object.keys(state.libQuick || {}).forEach(k => { if (state.libQuick[k]) { chips.push(chip(LIB_QUICK_LABELS[k] || k, `OL.libToggleQuick('${k}')`)); n++; } });
+    const box = document.getElementById('lib-active-chips'); if (box) box.innerHTML = chips.join('');
+    const badge = document.getElementById('lib-filter-badge'); if (badge) { badge.textContent = String(n); badge.style.display = n ? 'inline-block' : 'none'; }
+    const count = document.getElementById('lib-count'); if (count) count.textContent = shown === total ? `${total} resources` : `${shown} of ${total}`;
+    Object.keys(LIB_QUICK_LABELS).forEach(k => { const c = document.querySelector(`[data-quick-count="${k}"]`); if (c) c.textContent = facts.sets[k] ? String(facts.sets[k].size) : ''; });
+    if (window.lucide) window.lucide.createIcons();
+}
+
+export function libTogglePanel(name) {
+    state.libPanel = state.libPanel === name ? '' : (name || '');
+    const f = document.getElementById('lib-filters-panel'), v = document.getElementById('lib-view-panel');
+    if (f) f.style.display = state.libPanel === 'filters' ? 'block' : 'none';
+    if (v) v.style.display = state.libPanel === 'view' ? 'block' : 'none';
+}
+export function libToggleQuick(key) {
+    state.libQuick = state.libQuick || {};
+    state.libQuick[key] = !state.libQuick[key];
+    const b = document.getElementById(`lib-q-${key}`);
+    if (b) b.style.cssText = `border-radius:20px; ${state.libQuick[key] ? 'background:var(--panel-soft); border:1px solid var(--accent); color:var(--accent);' : ''}`;
+    OL.syncResourceLibraryFilters();
+}
+export function libClearFilter(id) {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`Filter control ${id} not found`);
+    if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+    OL.syncResourceLibraryFilters();
+}
 
 
 // Sub-groups inside a folder: items without one come first (unlabelled), then each sub-group A-Z.
@@ -903,6 +952,8 @@ export function _renderResourceListRow(res) {
 
 export function clearResourceFilters() {
     state.libSearch = "";
+    state.libQuick = {};
+    document.querySelectorAll('[data-quick]').forEach(b => { b.style.cssText = 'border-radius:20px;'; });
     state.libTypeFilter = "";
     // Reset every filter control in the toolbar back to "All" — not just
     // search/type/app/data-tag. Previously assignee/scoped/party/logic were
@@ -1819,7 +1870,7 @@ export async function bulkMarkUnscopedResourcesDone(clientIds) {
 window.OL = window.OL || {};
 Object.assign(window.OL, {
     syncResourceLibraryFilters, renderResourceGroups, _renderResourceListRow,
-    clearResourceFilters, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSubGroupBy, setResourceSubGroupBy, getResourceSort, setResourceSort, rememberResourceGroup, setAllResourceGroups,
+    clearResourceFilters, libTogglePanel, libToggleQuick, libClearFilter, universalCreate, promptBulkReclassify, getResourceGroupBy, setResourceGroupBy, getResourceSubGroupBy, setResourceSubGroupBy, getResourceSort, setResourceSort, rememberResourceGroup, setAllResourceGroups,
     openResourceTypeManager, _openIconPicker, renderHierarchySelectors,
     toggleInlineStepEditor, filterInlineAppSearch, filterInlineAssignmentSearch,
     updateAppMetadataInline, addInlineAssignee, removeInlineAssignee,
