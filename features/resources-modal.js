@@ -93,10 +93,11 @@ export function renderResourceCard(res, opts = {}) {
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                 ${opts.selectable ? `<input type="checkbox" data-res-sel="${esc(res.id)}" ${OL.bulkResourceSelection?.[res.id] ? 'checked' : ''} style="margin-top:2px; flex-shrink:0;"
                        onclick="event.stopPropagation()" onchange="OL.toggleResourceSelect('${esc(res.id)}', this.checked)" title="Select for bulk update">` : ''}
-                ${typeof OL.resourceTypeTile === 'function' ? OL.resourceTypeTile(res, 30) : ''}
                 <div style="flex:1; min-width:0;">
+                    ${typeof OL.resourceTypeTile === 'function' ? `<span style="float:left; margin:0 10px 2px 0;">${OL.resourceTypeTile(res, 30)}</span>` : ''}
                     <div class="card-title" style="font-weight:600; font-size: 13px; line-height: 1.35; word-break: break-word; white-space: normal;">${esc(res.name || "Unnamed")}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${sub}${isMaster ? ' \u00b7 Master' : ''}</div>
+                    <div style="clear:both;"></div>
                 </div>
                 <div class="card-actions res-hover-acts" style="display:flex; align-items:center; gap:3px; position:absolute; top:6px; right:6px; padding:2px 4px; border-radius:8px; background:var(--panel-soft); border:1px solid var(--line); z-index:2;">
                     ${(!isMaster && getActiveClient()?.meta?.status === 'Partner') ? `
