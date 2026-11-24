@@ -1097,14 +1097,9 @@
           "name": "Credential Protection (per user) (annual billing)",
           "price": 4,
           "notes": "monthly price not shown; annual-billing rate"
-        },
-        {
-          "name": "Enterprise",
-          "price": null,
-          "notes": "Custom, volume-optimized pricing; contact sales"
         }
       ],
-      "note": "Business plans from user-supplied screenshot (page itself shows placeholders when fetched). Personal plans not recorded."
+      "note": "Business plans from user-supplied screenshot (page itself shows placeholders when fetched). Personal plans not recorded.; Enterprise: custom quote, no public price"
     },
     {
       "id": "master-app-1788305047770",
@@ -1542,14 +1537,9 @@
           "name": "Elite (per user, annual billing)",
           "price": 48,
           "notes": "Monthly price not shown; annual-billing rate"
-        },
-        {
-          "name": "Ultimate",
-          "price": 0,
-          "notes": "Custom quote only; price 0 is placeholder, not free"
         }
       ],
-      "note": ""
+      "note": "Ultimate: custom quote, no public price"
     },
     {
       "id": "master-app-1788305271985",
@@ -2822,14 +2812,9 @@
           "name": "Business Premium seat (per user)",
           "price": 125,
           "notes": "Billed monthly; $100/month if billed annually"
-        },
-        {
-          "name": "Enterprise",
-          "price": null,
-          "notes": "Custom pricing; contact sales"
         }
       ],
-      "note": "Business & Enterprise tab from user-supplied screenshot. Individual plans (Go, Plus, Pro) not recorded: amounts did not render when fetched."
+      "note": "Business & Enterprise tab from user-supplied screenshot. Individual plans (Go, Plus, Pro) not recorded: amounts did not render when fetched.; Enterprise: custom quote, no public price"
     },
     {
       "id": "master-app-1795130769864",
