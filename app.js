@@ -23,6 +23,7 @@ import * as OLAnalysis from './features/analysis.js';
 import * as OLFlowCore from './features/flow-visualizer/core.js';
 import * as OLFlowCallouts from './features/flow-visualizer/callouts.js';
 import * as OLFlowReferences from './features/flow-visualizer/references.js';
+import * as OLFlowTrace from './features/flow-visualizer/trace.js';
 import * as OLFlowStepSchedule from './features/flow-visualizer/step-schedule.js';
 import * as OLFlowPaths from './features/flow-visualizer/paths.js';
 import * as OLFlowStepItems from './features/flow-visualizer/step-items.js';

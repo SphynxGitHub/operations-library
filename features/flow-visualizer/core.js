@@ -949,6 +949,10 @@ export function renderVisualizer() {
             </button>
         </div>
 
+        <button id="fv-questions-btn" class="fv-toggle-btn ${OL._fv._traceOpen ? 'on' : ''}" onclick="OL.fvTraceToggle()" title="What happens when something occurs, where a form or sheet is used, where data goes">
+          <i data-lucide="compass" style="width:12px;height:12px;"></i> Questions
+        </button>
+
         <button class="fv-toggle-btn" onclick="OL.openStageManager()" title="Add, re-arrange, rename and delete stages and workflows">
           <i data-lucide="layers" style="width:12px;height:12px;"></i> Stages &amp; workflows
         </button>
@@ -1211,6 +1215,7 @@ export function renderVisualizer() {
 
   fvWatchScroll();
   fvRestoreScroll();
+  if (OL._fv._traceOpen && typeof OL.fvTraceRender === 'function') OL.fvTraceRender();      // the Questions panel survives a redraw of the map
 };
 
 export function _fvTogglePrintMenu() {
