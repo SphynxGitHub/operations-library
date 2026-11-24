@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-23T15:51:38Z",
+  "updatedAt": "2026-11-24T10:23:38Z",
   "items": [
     {
       "app": "Google Workspace",
@@ -248,6 +248,14 @@
       "summary": "Wealth.com's November update embeds Ester in Schwab Advisor Center (no Wealth.com license needed), extends its connector to ChatGPT, adds team report templates, QCD modeling for Tax Planning licensees, ten more custodial connections via BridgeFT from the week of Nov 23, and mobile notary ordering at $295 (trust/will) or $175 (single document). Exact post date not shown.",
       "sourceUrl": "https://www.wealth.com/resources/articles/november-2026-wealth-com-updates",
       "checkedAt": "2026-11-23"
+    },
+    {
+      "app": "Copilot",
+      "kind": "feature",
+      "date": "2026-11-17",
+      "summary": "Microsoft 365 Copilot release notes add custom engine agents that can run from an agent pane in Outlook to sort or summarize email, plus a Copilot Studio agent node that lets a workflow step reason over data and call tools in one step.",
+      "sourceUrl": "https://learn.microsoft.com/microsoft-365/copilot/release-notes",
+      "checkedAt": "2026-11-24"
     }
   ]
 }
