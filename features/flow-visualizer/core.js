@@ -897,6 +897,22 @@ export function renderVisualizer() {
         searchMatches: [], searchIdx: -1,
         _searchQuery: '',
     };
+
+  // A big project is drawn one stage at a time (drawing every card at once took many seconds and locked the page). The choice is
+  // remembered per project: "All stages & workflows" in the filter turns it off.
+  if (OL._fv && !OL._fv._defaultFilterDone && client) {
+    OL._fv._defaultFilterDone = true;
+    let saved = null; try { saved = localStorage.getItem(`fv_stage_filter_${client.id}`); } catch (e) { /* not remembered */ }
+    if (saved !== null) { if (saved && !OL._fv.stageFilter) OL._fv.stageFilter = saved; }
+    else if (!OL._fv.stageFilter) {
+      const wfs = data.workflows || [];
+      const placedCards = wfs.reduce((n, w) => n + (w.resourceIds || []).length, 0);
+      if (placedCards > 150) {
+        const first = stages.find(st => wfs.some(w => String(w.stageId) === String(st.id) && (w.resourceIds || []).length));
+        if (first) OL._fv.stageFilter = `stage-${first.id}`;
+      }
+    }
+  }
     
   // Run DAG layout for flowchart view only — steps view does its own positioning
   if (OL._fv.layout !== 'steps') {
@@ -986,7 +1002,7 @@ export function renderVisualizer() {
 
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
-                onchange="OL._fv.stageFilter = this.value; OL.renderVisualizer();">
+                onchange="OL._fv.stageFilter = this.value; try{localStorage.setItem('fv_stage_filter_${client ? esc(client.id) : ''}', this.value)}catch(e){} OL.renderVisualizer();">
           <option value="">All stages & workflows</option>
           ${stages.map(s => {
             const stageWorkflows = (OL.getWorkflows() || []).filter(w => w.stageId === s.id);
@@ -2417,12 +2433,18 @@ export function _fvRenderSteps(resources) {
   if (!OL._fv.expandedGroups) OL._fv.expandedGroups = new Set();
 
   const stageFilter = OL._fv.stageFilter || '';
+  // The filter is a stage id, the drop-down's "stage-<id>", or a workflow id (from the side panel). Work out which stage it names,
+  // and the one workflow when it names a workflow.
+  const _rawF = String(stageFilter);
+  const _fStage = !_rawF ? '' : (stages.find(st => String(st.id) === _rawF) || stages.find(st => `stage-${st.id}` === _rawF) || {}).id
+    || ((wfAll.find(w => String(w.id) === _rawF) || {}).stageId) || '';
+  const _fWf = _rawF && wfAll.some(w => String(w.id) === _rawF) ? _rawF : '';
 
   // ── Stage → Workflow → Resources (unassigned resources not shown) ────────────
   const stageGroups = [];
   stages.forEach(stage => {
-    if (stageFilter && String(stage.id) !== String(stageFilter)) return;
-    const stageWfs = wfAll.filter(w => String(w.stageId) === String(stage.id));
+    if (stageFilter && String(stage.id) !== String(_fStage)) return;
+    const stageWfs = wfAll.filter(w => String(w.stageId) === String(stage.id) && (!_fWf || String(w.id) === _fWf));
     const wfGroups = [];
     stageWfs.forEach(wf => {
       // In the all-stages view a shared (global) resource is drawn once, in its first home; every other workflow gets a jump chip
