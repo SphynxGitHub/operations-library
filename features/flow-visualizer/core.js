@@ -2924,7 +2924,7 @@ export function _fvRenderSteps(resources) {
         });
         if (sharedHere.length > shown.length) { const more = document.createElement('span'); more.className = 'tiny muted'; more.textContent = `+${sharedHere.length - shown.length} more shared`; more.title = sharedHere.slice(3).map(r => r.name).join('\n'); wfLblEl.appendChild(more); }
       }
-      if (!PRINTING && ((OL.getCurrentProjectData() || {}).workflows || []).some(w => String(w.id) === String(workflow.id))) {
+      if (!PRINTING && OL.fvShowResNames() && ((OL.getCurrentProjectData() || {}).workflows || []).some(w => String(w.id) === String(workflow.id))) {
         const mk = (label, title, fn, danger) => {
           const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; if (label === 'trash') bt.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>'; else bt.textContent = label;
           bt.style.cssText = `padding:1px 6px;font-size:10px;line-height:14px;border-radius:5px;cursor:pointer;background:var(--panel-soft);border:0.5px solid var(--panel-border);color:${danger ? '#ef4444' : 'var(--text-dim)'};`;
