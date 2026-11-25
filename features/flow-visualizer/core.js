@@ -2490,6 +2490,15 @@ function fvRenderOverview(canvas, svg, resources) {
 }
 // Resource names above each column on the Steps map: hidden unless turned on (remembered)
 export const fvShortRule = shortRule;
+// A gentle S-curve between two points (leaves and arrives along `axis`), plus points sampled along it so a tag can sit on the curve.
+function fvSCurve(x1, y1, x2, y2, axis) {
+  const v = axis === 'v', mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const c1 = v ? [x1, my] : [mx, y1], c2 = v ? [x2, my] : [mx, y2];
+  const pts = [];
+  for (let i = 0; i <= 16; i++) { const t = i / 16, u = 1 - t; pts.push([u*u*u*x1 + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*x2, u*u*u*y1 + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*y2]); }
+  return { d: `M ${x1} ${y1} C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${x2} ${y2}`, pts };
+}
+
 export function fvShowResNames() { try { return localStorage.getItem('fv_show_res_names') === '1'; } catch (e) { return false; } }
 export function fvToggleResNames() { try { localStorage.setItem('fv_show_res_names', fvShowResNames() ? '0' : '1'); } catch (e) { /* not remembered */ } OL.renderVisualizer(); }
 export function fvOpenStage(value) {
@@ -3908,9 +3917,8 @@ export function _fvDrawStepConnections(resources) {
             const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 2);
             if (tmid - fmid > 24 && !hit(sx + 4, fmid, gx, fmid) && !hit(gx, fmid, gx, tmid) && !hit(gx, tmid, ex - 4, tmid)) {
               const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
-              draftRoute = { points: pts, kind: 'side' };
-              const R = Math.min(22, (gx - sx) / 2, (tmid - fmid) / 2, (ex - gx) / 2);
-              d = `M ${sx} ${fmid} L ${gx - R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx + R} ${tmid} L ${ex} ${tmid}`;
+              const sc = fvSCurve(sx, fmid, ex, tmid, 'h'); d = sc.d;
+              draftRoute = { points: sc.pts, kind: 'side' };
             }
           }
         }
@@ -3925,9 +3933,8 @@ export function _fvDrawStepConnections(resources) {
             const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 2);
             if (tmid - fmid > 24 && !hit(gx, fmid, sx - 4, fmid) && !hit(gx, fmid, gx, tmid) && !hit(ex + 4, tmid, gx, tmid)) {
               const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
-              draftRoute = { points: pts, kind: 'side' };
-              const R = Math.min(22, (sx - gx) / 2, (tmid - fmid) / 2, (gx - ex) / 2);
-              d = `M ${sx} ${fmid} L ${gx + R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx - R} ${tmid} L ${ex} ${tmid}`;
+              const sc = fvSCurve(sx, fmid, ex, tmid, 'h'); d = sc.d;
+              draftRoute = { points: sc.pts, kind: 'side' };
             }
           }
         }
@@ -3937,11 +3944,8 @@ export function _fvDrawStepConnections(resources) {
           const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
           const by = Math.min(sy + 16 + _busRank.get(String(tStepId)) * 13, ey - 14);
           if (by > sy + 6 && Math.abs(tx - fx) >= 24) {
-            const pts = [[fx, sy], [fx, by], [tx, by], [tx, ey]];
-            draftRoute = { points: pts, kind: 'bus' };
-            const R = 22; const sgx = Math.sign(tx - fx);
-            const r1 = Math.min(R, Math.abs(tx - fx) / 2, (by - sy) / 2), r2 = Math.min(R, Math.abs(tx - fx) / 2, (ey - by) / 2);
-            d = `M ${fx} ${sy} L ${fx} ${by - r1} Q ${fx} ${by} ${fx + sgx * r1} ${by} L ${tx - sgx * r2} ${by} Q ${tx} ${by} ${tx} ${by + r2} L ${tx} ${ey}`;
+            const sc = fvSCurve(fx, sy, tx, ey, 'v'); d = sc.d;
+            draftRoute = { points: sc.pts, kind: 'bus' };
           }
         }
 
@@ -3952,8 +3956,9 @@ export function _fvDrawStepConnections(resources) {
           const bx = fRect.left - cRect.left + fRect.width / 2;
           if (tmid - sy > 40 && tl - bx > 30 && !hitsCard(bx - 1, sy + 3, 2, tmid - sy - 3, 0) && !hitsCard(bx, tmid - 1, tl - bx - 4, 2, 0)) {
             const R = 22;
-            d = `M ${bx} ${sy} L ${bx} ${tmid - R} Q ${bx} ${tmid} ${bx + R} ${tmid} L ${tl} ${tmid}`;
-            draftRoute = { kind: 'under', points: [[bx, sy], [bx, tmid], [tl, tmid]] };
+            const sc = { d: `M ${bx} ${sy} C ${bx} ${tmid}, ${bx} ${tmid}, ${tl} ${tmid}`, pts: [] };
+            for (let q = 0; q <= 16; q++) { const t = q / 16, u = 1 - t; sc.pts.push([u*u*u*bx + 3*u*u*t*bx + 3*u*t*t*bx + t*t*t*tl, u*u*u*sy + 3*u*u*t*tmid + 3*u*t*t*tmid + t*t*t*tmid]); }
+            d = sc.d; draftRoute = { kind: 'under', points: sc.pts };
           }
         }
 
