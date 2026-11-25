@@ -3761,7 +3761,11 @@ export function _fvDrawStepConnections(resources) {
             if (Math.abs(dx0) < 40) return;
             list.push({ tid: String(tid), dx: dx0 });
           });
-          [1, -1].forEach((sg) => list.filter((x) => Math.sign(x.dx) === sg).sort((a, b) => Math.abs(b.dx) - Math.abs(a.dx)).forEach((x, i) => _busRank.set(x.tid, i)));
+          [1, -1].forEach((sg) => list.filter((x) => Math.sign(x.dx) === sg).sort((a, b) => Math.abs(b.dx) - Math.abs(a.dx)).forEach((x, i) => {
+            _busRank.set(x.tid, i);
+            // the bar a forked step's lines run along is kept clear of the condition tags, so no tag sits on another path's line
+            if (fe0 && fe0.dataset.forked) { const by0 = fr.bottom + 16 + i * 13; labelBoxes.push({ left: Math.min(fxc, fxc + x.dx), right: Math.max(fxc, fxc + x.dx), top: by0 - 3, bottom: by0 + 3 }); }
+          }));
         }
       }
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
