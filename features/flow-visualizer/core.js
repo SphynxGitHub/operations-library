@@ -3846,6 +3846,24 @@ export function _fvDrawStepConnections(resources) {
           }
         }
 
+        // A line to another process that lies straight below (the cards of this column in between): out of the bottom, down the gutter
+        // beside the column and into the top of the target, instead of straight through the cards in between.
+        if (!draftRoute && isCrossResource && isVert && dy > 0) {
+          const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
+          if (ey - sy > 40 && hitsCard(Math.min(fx, tx) - 1, sy + 3, Math.abs(tx - fx) + 2, ey - sy - 6, 0)) {
+            const R = 10;
+            const tryGutter = (gx) => {
+              const sg = Math.sign(gx - fx) || 1, sg2 = Math.sign(tx - gx) || 1;
+              const a = sy + 14, b = ey - 14;
+              if (b <= a + 2) return null;
+              if (hitsCard(Math.min(fx, gx), a - 1, Math.abs(gx - fx), 2, 0) || hitsCard(gx - 1, a, 2, b - a, 0) || hitsCard(Math.min(gx, tx), b - 1, Math.abs(tx - gx), 2, 0)) return null;
+              return { pts: [[fx, sy], [fx, a], [gx, a], [gx, b], [tx, b], [tx, ey]], d: `M ${fx} ${sy} L ${fx} ${a - R} Q ${fx} ${a} ${fx + sg * R} ${a} L ${gx - sg * R} ${a} Q ${gx} ${a} ${gx} ${a + R} L ${gx} ${b - R} Q ${gx} ${b} ${gx + sg2 * R} ${b} L ${tx - sg2 * R} ${b} Q ${tx} ${b} ${tx} ${b + R} L ${tx} ${ey}` };
+            };
+            const dd = tryGutter(Math.min(fRect.left, tRect.left) - cRect.left - 16) || tryGutter(Math.max(fRect.right, tRect.right) - cRect.left + 16);
+            if (dd) { d = dd.d; draftRoute = { kind: 'gutter', points: dd.pts }; }
+          }
+        }
+
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
         const isBackLoop = !!(draftRoute && draftRoute.kind === 'loop-back');   // a link back up to an earlier step: amber and dashed
         const isLoop     = outRule.type === 'loop' || isBackLoop;
