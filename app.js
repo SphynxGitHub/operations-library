@@ -224,40 +224,33 @@ window.addEventListener('resize', () => {
 
 // ================= UTILITY CONTROLS ================= //
 
-// 🌓 Hardened Theme Switcher for app.js
+// 🌓 Theme switcher: dark -> light -> accessible (high contrast) -> dark
+OL.THEMES = ['dark', 'light', 'accessible'];
+OL.applyTheme = function(theme) {
+    if (!OL.THEMES.includes(theme)) theme = 'dark';
+    document.body.classList.toggle('light-mode', theme === 'light');
+    document.body.classList.toggle('theme-accessible', theme === 'accessible');
+    // accessible is built on the dark variables, so the root attribute says "dark" for any code that only knows dark/light
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-ol-theme', theme);
+};
+OL.getTheme = function() {
+    const t = localStorage.getItem('theme') || 'dark';
+    return OL.THEMES.includes(t) ? t : 'dark';
+};
+OL.setTheme = function(theme) {
+    if (!OL.THEMES.includes(theme)) throw new Error(`Unknown theme: ${theme}`);
+    OL.applyTheme(theme);
+    localStorage.setItem('theme', theme);
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+};
 OL.toggleTheme = function() {
-    const isLight = document.body.classList.contains('light-mode') || 
-                    document.documentElement.getAttribute('data-theme') === 'light';
-    const nextTheme = isLight ? 'dark' : 'light';
-    
-    if (nextTheme === 'light') {
-        document.body.classList.add('light-mode');
-        document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-        document.body.classList.remove('light-mode');
-        document.documentElement.setAttribute('data-theme', 'dark');
-    }
-    
-    localStorage.setItem('theme', nextTheme);
-    console.log(`🌓 Theme toggled to: ${nextTheme}`);
-    
-    // Re-render layout shell to refresh theme button labels
-    if (typeof window.buildLayout === 'function') {
-        window.buildLayout();
-    }
+    const next = OL.THEMES[(OL.THEMES.indexOf(OL.getTheme()) + 1) % OL.THEMES.length];
+    OL.setTheme(next);
 };
 
 // Auto-initialize theme on boot
-(function initSavedTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    if (savedTheme === 'light') {
-        document.body.classList.add('light-mode');
-        document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-        document.body.classList.remove('light-mode');
-        document.documentElement.setAttribute('data-theme', 'dark');
-    }
-})();
+OL.applyTheme(OL.getTheme());
 
 // 📥 Export JSON Backup
 OL.exportDatabaseBackup = function() {
@@ -407,7 +400,7 @@ document.addEventListener("click", function(e) {
 OL.renderSystemUtilityBar = function() {
     return `
         <div class="system-utility-bar" style="display:flex; align-items:center; gap:8px;">
-            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
+            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Switch theme: Dark, Light, Accessible" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
             </button>
             <button class="btn tiny soft" onclick="OL.exportDatabaseBackup()" title="Export JSON Backup" style="display:inline-flex; align-items:center; gap:4px;">
@@ -471,7 +464,7 @@ OL.importDatabaseBackup = function() {
 OL.renderSystemUtilityBar = function() {
     return `
         <div class="system-utility-bar" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Toggle Light/Dark Theme" style="display:inline-flex; align-items:center; gap:4px;">
+            <button class="btn tiny soft" onclick="OL.toggleTheme()" title="Switch theme: Dark, Light, Accessible" style="display:inline-flex; align-items:center; gap:4px;">
                 <i data-lucide="sun-moon" style="width:13px;height:13px;"></i> Theme
             </button>
             ${isStaffSession() ? `

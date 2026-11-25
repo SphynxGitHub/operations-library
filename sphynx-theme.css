@@ -781,3 +781,51 @@ body:not(.light-mode) .sidebar {
    ============================================================ */
 :root { --accent-rgb: 61, 217, 197; }
 body:not(.light-mode) { --accent-rgb: 61, 217, 197; }
+
+
+/* ============================================================
+   ACCESSIBLE THEME (high contrast, low glare, large focus rings)
+   Built on the dark variables; body.theme-accessible, no .light-mode.
+   Contrast: text on background is about 19:1, muted text about 12:1,
+   borders about 4:1 so panel edges are visible.
+   ============================================================ */
+body.theme-accessible:not(.light-mode) {
+  --bg:           #0a0a0a;
+  --panel:        #141414;
+  --panel-dark:   #000000;
+  --panel-soft:   #1c1c1c;
+  --panel-border: #8c8c8c;
+  --line:         rgba(255, 255, 255, 0.45);
+  --dot-color:    rgba(255, 255, 255, 0.25);
+  --accent:       #ffd60a;
+  --accent-rgb:   255, 214, 10;
+  --accent-glow:  rgba(255, 214, 10, 0.25);
+  --vault-gold:   #ffd60a;
+  --danger:       #ff8a80;
+  --success:      #69f0ae;
+  --warn:         #ffd60a;
+  --text-main:    #ffffff;
+  --text-dim:     #e8e8e8;
+  --text-muted:   #cfcfcf;
+  --text:         #ffffff;
+  --tray-item-bg:    rgba(255, 255, 255, 0.08);
+  --tray-item-hover: rgba(255, 255, 255, 0.16);
+  --bg-main: #0a0a0a; --bg-panel: #141414; --bg-card: #1c1c1c; --bg-card-hover: #2a2a2a; --border: #8c8c8c;
+  --font-main: 'Atkinson Hyperlegible', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif;
+  color-scheme: dark;
+}
+body.theme-accessible { font-size: 16px; line-height: 1.55; letter-spacing: .01em; }
+body.theme-accessible .tiny, body.theme-accessible .muted, body.theme-accessible small { font-size: 13px !important; }
+body.theme-accessible .modal-section-label { font-size: 13px !important; color: var(--accent) !important; }
+body.theme-accessible .modal-input, body.theme-accessible .modal-select, body.theme-accessible .modal-textarea,
+body.theme-accessible input, body.theme-accessible select, body.theme-accessible textarea {
+  font-size: 15px !important; border: 2px solid var(--panel-border) !important; color: #fff !important; background: #000 !important; }
+body.theme-accessible .card-section, body.theme-accessible .res-card, body.theme-accessible .card { border-width: 2px !important; }
+body.theme-accessible a { color: #8ecbff; text-decoration: underline; text-underline-offset: 3px; }
+body.theme-accessible .btn, body.theme-accessible button { border-width: 2px; }
+body.theme-accessible .pill, body.theme-accessible .modal-head .res-chip { font-size: 13px !important; border-width: 2px !important; border-color: var(--panel-border) !important; color: #fff !important; }
+body.theme-accessible .modal-head .res-chip-warn { color: var(--accent) !important; border-color: var(--accent) !important; }
+body.theme-accessible *:focus-visible { outline: 3px solid var(--accent) !important; outline-offset: 2px !important; }
+body.theme-accessible ::placeholder { color: #bdbdbd !important; opacity: 1; font-style: normal !important; }
+body.theme-accessible .ol-email-body { background: #000 !important; color: #fff !important; }
