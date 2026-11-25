@@ -13,7 +13,7 @@
 import { esc } from '../core/data.js';
 
 const OL = window.OL || (window.OL = {});
-const HOOK_URL = /hooks\.zapier\.com\/hooks\/catch\/\d+\/(\w+)/;
+const HOOK_URL = /hooks\.zapier\.com\/hooks\/catch\/\d+\/(\w+)/g;
 
 // Every address the export's non-trigger steps post to: { address: [ { zapId, stepId, zapName, stepTitle } ] }
 export function collectWebhookPosts(zaps) {
@@ -23,10 +23,11 @@ export function collectWebhookPosts(zaps) {
             if (s.role === 'trigger') continue;
             const seen = new Set();
             for (const m of s.mappings || []) {
-                const hit = String(m && m.value != null ? m.value : '').match(HOOK_URL);
-                if (!hit || seen.has(hit[1])) continue;
-                seen.add(hit[1]);
-                (out[hit[1]] = out[hit[1]] || []).push({ zapId: String(z.zapId), stepId: String(s.stepId), zapName: String(z.zapName || ''), stepTitle: String(s.title || s.action || '') });
+                for (const hit of String(m && m.value != null ? m.value : '').matchAll(HOOK_URL)) {
+                    if (seen.has(hit[1])) continue;
+                    seen.add(hit[1]);
+                    (out[hit[1]] = out[hit[1]] || []).push({ zapId: String(z.zapId), stepId: String(s.stepId), zapName: String(z.zapName || ''), stepTitle: String(s.title || s.action || '') });
+                }
             }
         }
     }
