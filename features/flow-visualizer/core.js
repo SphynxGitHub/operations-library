@@ -738,7 +738,7 @@ export function _fvAutoLinkSteps(resources) {
 // ── SHARED STATE ─────────────────────────────────────────
 // The Swimlanes tab is hidden: the flow map opens on Steps, and a "flowchart" choice saved by an earlier session
 // (or a link that asks for it) opens on Steps too. The Swimlanes drawing code is still here for the Board export.
-const fvStartLayout = () => { const v = sessionStorage.getItem('fv_layout'); return v === 'list' || v === 'steps' ? v : 'steps'; };
+const fvStartLayout = () => { const v = sessionStorage.getItem('fv_layout'); return v === 'list' || v === 'steps' || v === 'timeline' || v === 'swimlanes' ? v : 'steps'; };
 if (!OL._fv) OL._fv = {
     layout: fvStartLayout(),
     zoom: 1,
@@ -773,7 +773,7 @@ if (!OL._fv._resizeBound) {
     window.addEventListener('resize', () => {
         clearTimeout(_fvResizeTimer);
        _fvResizeTimer = setTimeout(() => {
-            if (OL._fv.layout !== 'steps' || OL._fv.flowShape === 'wide' || OL._fv.flowShape === 'tall' || OL._fv._colsOverride) return;
+            if (!['steps','timeline','swimlanes'].includes(OL._fv.layout) || OL._fv.flowShape === 'wide' || OL._fv.flowShape === 'tall' || OL._fv._colsOverride) return;
             if (!document.getElementById('fv-content')) return;
             const wrap = document.getElementById('fv-canvas-wrap');
             const w = fvLayoutWidth();
@@ -898,7 +898,7 @@ export function renderVisualizer() {
         _searchQuery: '',
     };
 
-  if (OL._fv && OL._fv.layout !== 'steps' && OL._fv.stageFilter === '__overview') OL._fv.stageFilter = '';
+  if (OL._fv && !['steps','timeline','swimlanes'].includes(OL._fv.layout) && OL._fv.stageFilter === '__overview') OL._fv.stageFilter = '';
   // A big project opens on the stage overview (drawing every card at once took many seconds and locked the page). The choice is
   // remembered per project: "All stages & workflows" in the filter turns it off.
   if (OL._fv && !OL._fv._defaultFilterDone && client) {
@@ -915,7 +915,7 @@ export function renderVisualizer() {
   }
     
   // Run DAG layout for flowchart view only — steps view does its own positioning
-  if (OL._fv.layout !== 'steps') {
+  if (!['steps','timeline','swimlanes'].includes(OL._fv.layout)) {
     OL._fvNormalizeStepCoords();
     OL._fvComputeLayout(resources, OL._fv.stageFilter);
   }
@@ -998,6 +998,24 @@ export function renderVisualizer() {
                 <i data-lucide="list" style="width: 13px; height: 13px;"></i>
                 <span>List</span>
             </button> 
+            <button class="fv-layout-btn ${OL._fv.layout === 'timeline' ? 'active' : ''}" 
+                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer;
+                           background: ${OL._fv.layout === 'timeline' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
+                           color: ${OL._fv.layout === 'timeline' ? 'var(--accent)' : 'var(--text-muted)'};"
+                    onclick="OL._fv.layout = 'timeline'; sessionStorage.setItem('fv_layout', 'timeline'); OL.renderVisualizer();"
+                    title="Timeline view">
+                <i data-lucide="calendar-range" style="width: 13px; height: 13px;"></i>
+                <span>Timeline</span>
+            </button>
+            <button class="fv-layout-btn ${OL._fv.layout === 'swimlanes' ? 'active' : ''}" 
+                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer;
+                           background: ${OL._fv.layout === 'swimlanes' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
+                           color: ${OL._fv.layout === 'swimlanes' ? 'var(--accent)' : 'var(--text-muted)'};"
+                    onclick="OL._fv.layout = 'swimlanes'; sessionStorage.setItem('fv_layout', 'swimlanes'); OL.renderVisualizer();"
+                    title="Swimlanes view">
+                <i data-lucide="rows-3" style="width: 13px; height: 13px;"></i>
+                <span>Swimlanes</span>
+            </button>
         </div>
 
         <!-- Stage filter -->
@@ -1151,7 +1169,7 @@ export function renderVisualizer() {
         </div>
 
         <!-- Lane rail (flowchart + list only) -->
-        ${OL._fv.layout !== 'steps' ? `
+        ${!['steps','timeline','swimlanes'].includes(OL._fv.layout) ? `
           <div id="fv-lane-rail"></div>
         ` : ''}
 
@@ -1185,6 +1203,10 @@ export function renderVisualizer() {
   // Render content based on layout
   if (OL._fv.layout === 'flowchart') {
     OL._fvRenderFlowchart(stages, resources);
+  } else if (OL._fv.layout === 'timeline') {
+    OL.fvRenderTimeline(resources);
+  } else if (OL._fv.layout === 'swimlanes') {
+    OL.fvRenderSwimlanes(resources);
   } else if (OL._fv.layout === 'steps') {
     OL._fvRenderSteps(resources);
   } else {
@@ -1221,7 +1243,7 @@ export function renderVisualizer() {
 
   // Setup interactions
   OL._fvSetupZoom();
-  if (OL._fv.layout !== 'steps') {
+  if (!['steps','timeline','swimlanes'].includes(OL._fv.layout)) {
     OL._fvSyncRailHeights();
     OL._fvSetupRailScroll();
   }
@@ -2416,6 +2438,7 @@ function fvFirstHome(res, workflows) {
 // The zoomed-out start page: one tile per stage with its workflows and how much is in each. Click a workflow (or the stage name)
 // to open just that part of the map. Nothing is drawn per card here, so it opens at once however big the project is.
 function fvRenderOverview(canvas, svg, resources) {
+  OL._fvRenderOverview = fvRenderOverview;
   const data = OL.getCurrentProjectData();
   const stages = data.stages || []; const wfs = (OL.getWorkflows() || []);
   const byId = new Map((resources || []).map(r => [String(r.id), r]));
@@ -7938,6 +7961,15 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
             </div>
 
             <div class="inspector-body">
+                <div class="inspector-section">
+                    <label class="section-label"><i data-lucide="flag" style="width:11px;height:11px;"></i> MILESTONE</label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+                        <input type="checkbox" ${step.milestone ? 'checked' : ''} onchange="OL.updateAtomicStep('${resId}','${step.id}','milestone',this.checked)">
+                        Mark this step as a milestone (shown on the Timeline)
+                    </label>
+                    <input type="text" class="inspector-name-input" style="margin-top:6px;" value="${esc(step.milestoneName || '')}" placeholder="Milestone name (optional, defaults to the step name)"
+                           onblur="OL.updateAtomicStep('${resId}','${step.id}','milestoneName',this.value)">
+                </div>
                 <div class="inspector-section">
                     <label class="section-label">
                         <i data-lucide="users" style="width:11px;height:11px;"></i> ASSIGNEES (WHO?)
