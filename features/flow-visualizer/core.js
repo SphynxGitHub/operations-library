@@ -3859,7 +3859,9 @@ export function _fvDrawStepConnections(resources) {
               if (hitsCard(Math.min(fx, gx), a - 1, Math.abs(gx - fx), 2, 0) || hitsCard(gx - 1, a, 2, b - a, 0) || hitsCard(Math.min(gx, tx), b - 1, Math.abs(tx - gx), 2, 0)) return null;
               return { pts: [[fx, sy], [fx, a], [gx, a], [gx, b], [tx, b], [tx, ey]], d: `M ${fx} ${sy} L ${fx} ${a - R} Q ${fx} ${a} ${fx + sg * R} ${a} L ${gx - sg * R} ${a} Q ${gx} ${a} ${gx} ${a + R} L ${gx} ${b - R} Q ${gx} ${b} ${gx + sg2 * R} ${b} L ${tx - sg2 * R} ${b} Q ${tx} ${b} ${tx} ${b + R} L ${tx} ${ey}` };
             };
-            const dd = tryGutter(Math.min(fRect.left, tRect.left) - cRect.left - 16) || tryGutter(Math.max(fRect.right, tRect.right) - cRect.left + 16);
+            const leftX = Math.min(fRect.left, tRect.left) - cRect.left - 16, rightX = Math.max(fRect.right, tRect.right) - cRect.left + 16;
+            // the right side first: a tag sits across its line, and on the left it ran off the edge of the map
+            const dd = tryGutter(rightX) || (leftX > 170 ? tryGutter(leftX) : null);
             if (dd) { d = dd.d; draftRoute = { kind: 'gutter', points: dd.pts }; }
           }
         }
