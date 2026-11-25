@@ -1323,11 +1323,9 @@ export function openResourceModal(targetId, draftObj = null) {
                         ✓ Done Editing
                     </button>
                 </div>
-                ${dataTagsHtml}
                 ${formLogicHtml}
-                ${pathsHtml}
                 </div>
-                ${paneOpen('collateral')}${collateralHtml}</div>
+                ${paneOpen('collateral')}${dataTagsHtml}${pathsHtml}${collateralHtml}</div>
             `;
     }
     else if (isHierarchy) {
@@ -1487,7 +1485,6 @@ export function openResourceModal(targetId, draftObj = null) {
             </div>
 
             ${paneOpen('steps')}
-            ${dataTagsHtml}
             ${formLogicHtml}
 
             ${stepSummaryHtml}
@@ -1508,10 +1505,11 @@ export function openResourceModal(targetId, draftObj = null) {
                     <div id="sop-step-list">${renderSopStepList(res)}</div>
                 </div>
             ` : ''}
-            ${pathsHtml}
             </div>
 
             ${paneOpen('collateral')}
+            ${dataTagsHtml}
+            ${pathsHtml}
             ${collateralHtml}
             ${containerHtml}
             </div>
