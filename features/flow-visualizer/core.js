@@ -588,7 +588,21 @@ function fvOrderColumns(wfRes) {
 // Computes per-step layout info for a single resource.
 // Main-path steps (not branch targets): colOffset=0, sequential rows.
 // Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
+// A map section is a copy of its Zap that shows only some steps, but the layout is worked out for the whole Zap, so the section kept the
+// columns it had there (far to the right, with empty columns between). Pull it back: the first shown column becomes column 0 and gaps
+// between shown columns shrink to one column.
 export function _fvLayoutResource(res, opts) {
+    const lay = _fvLayoutResourceRaw(res, opts);
+    if (!res || !res._secStart || !lay) return lay;
+    const hidden = new Set((res.steps || []).filter((st) => st.hideOnMap).map((st) => String(st.id)));
+    const vals = [...new Set(Object.entries(lay).filter(([id]) => !hidden.has(id)).map(([, l]) => Number(l.colOffset) || 0))].sort((m, n) => m - n);
+    if (!vals.length) return lay;
+    const to = new Map(); vals.forEach((v, i) => to.set(v, i === 0 ? 0 : to.get(vals[i - 1]) + Math.min(1, v - vals[i - 1])));
+    const out = {};
+    Object.entries(lay).forEach(([id, l]) => { out[id] = Object.assign({}, l, { colOffset: hidden.has(id) ? 0 : (to.get(Number(l.colOffset) || 0) || 0) }); });
+    return out;
+}
+function _fvLayoutResourceRaw(res, opts) {
     // Imported Zaps lay their paths out as side-by-side lanes (see features/zap-layout.js)
     if (isLaneResource(res)) return layoutLanes(res, { maxCols: OL._fv._laneCols, collapse: opts && opts.collapse });
     // Processes made in Frame-out: the Yes and No paths run down their own columns beside the main line
