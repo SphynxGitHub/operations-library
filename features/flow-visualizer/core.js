@@ -2666,10 +2666,11 @@ export function _fvRenderSteps(resources) {
           const rows = []; let cur = []; let used = 0;
           g.resources.forEach(r => {
             const lay = OL._fvLayoutResource(r);
-            const w = 1 + Math.ceil(Math.max(0, ...Object.values(lay).map(l => l.colOffset)));
+            const _side = (r.steps || []).some((st) => typeof OL.fvJumpCardsOf === 'function' && OL.fvJumpCardsOf(st, r).length) ? Math.ceil((SIDE_W + SIDE_GAP) / (CARD_W + COL_GAP)) : 0;   // a process whose steps have small jump cards beside them is wider than its columns
+            const w = 1 + _side + Math.ceil(Math.max(0, ...Object.values(lay).map(l => l.colOffset)));
             // a Zap that a step in this row starts (a webhook hand-off) stays in the row, beside the Zap that starts it, so it reads as the
             // next step of that flow rather than being sent to a row of its own below
-            const _calledHere = cur.some((c) => (c.steps || []).some((st) => ((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(r.id) + '-'))));
+            const _calledHere = cur.some((c) => String(c.id) !== String(r.id) && (c.steps || []).some((st) => ((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(r.id) + '-'))));
             if (cur.length && used + w > maxCols && !_calledHere) { rows.push(cur); cur = []; used = 0; }
             cur.push(r); used += w;
           });
