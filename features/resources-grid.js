@@ -337,7 +337,7 @@ function libQuickFacts(source, client) {
     const byId = {}; live.forEach(r => { byId[String(r.id)] = r; });
     const slugOf = (r) => {
         // a booking form or email belongs to one event type, so the person comes from that event's link first
-        const m = /^cal-(?:form-|confirm-|reminder-)?([0-9a-f-]{36})$/.exec(String(r.id)); const ev = m && byId[`cal-${m[1]}`];
+        const m = /^cal-(?:form-|confirm-|reminder-)?([A-Za-z0-9-]+)$/.exec(String(r.id)); const ev = m && byId[`cal-${m[1]}`];
         const url = (ev && ev.externalUrl) || r.externalUrl;
         try { return url ? (new URL(url).pathname.split('/')[1] || '').toLowerCase() : ''; } catch (e) { return ''; }
     };
@@ -440,7 +440,7 @@ OL.setLibToggle = function(key, value) {
     try { const t = JSON.parse(localStorage.getItem(LIB_TOGGLE_KEY) || '{}') || {}; t[key] = value; localStorage.setItem(LIB_TOGGLE_KEY, JSON.stringify(t)); } catch (e) { /* not remembered, still applies now */ }
     OL.syncResourceLibraryFilters();
 };
-const TUCK_RE = /^cal-(form|confirm|reminder)-([0-9a-f-]{36})$/;
+const TUCK_RE = /^cal-(form|confirm|reminder)-([A-Za-z0-9-]+)$/;
 // the card a booking form / notification email belongs to: a Calendly event, a Jotform form (jf-jfemail-<form id>-<key>), or a Mailchimp/MailerLite automation (mc-email-/ml-email-<automation id>-<email id>)
 const tuckParent = (id) => { id = String(id); const c = TUCK_RE.exec(id); if (c) return `cal-${c[2]}`; const j = /^jf-jfemail-(\d+)-[^-]+$/.exec(id); if (j) return `jf-${j[1]}`; const m = /^(mc|ml)-email-([A-Za-z0-9]+)-[A-Za-z0-9]+$/.exec(id); return m ? `${m[1]}-${m[2]}` : ''; };
 OL._tuckedParts = {};
