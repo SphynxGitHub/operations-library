@@ -1122,6 +1122,7 @@ export function openResourceModal(targetId, draftObj = null) {
                 ${paneOpen('overview')}
                 ${appMappingHtml}
                 ${typeof OL.versionsSectionHtml === 'function' ? OL.versionsSectionHtml(res) : ''}
+            ${typeof OL.usedBySectionHtml === 'function' ? OL.usedBySectionHtml(res) : ''}
         
                 <!-- DESCRIPTION - half height -->
                 <div class="card-section" style="margin-bottom:16px;">
@@ -1474,6 +1475,7 @@ export function openResourceModal(targetId, draftObj = null) {
             ${scopeAndRoundHtml}
             ${appMappingHtml}
             ${typeof OL.versionsSectionHtml === 'function' ? OL.versionsSectionHtml(res) : ''}
+            ${typeof OL.usedBySectionHtml === 'function' ? OL.usedBySectionHtml(res) : ''}
 
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
