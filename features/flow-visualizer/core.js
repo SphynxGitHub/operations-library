@@ -20,6 +20,7 @@
 // OL.isSavingStep, OL.state.v2.viewDepth. These still work exactly as
 // before — they just remain plain assignments onto the global OL object.
 
+import { shortRule } from './rule-short.js';
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
 import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
 import { layoutDraft, routeDraftLink, edgesOf } from '../../core/frameout.js';
@@ -2488,33 +2489,7 @@ function fvRenderOverview(canvas, svg, resources) {
   if (window.lucide) lucide.createIcons();
 }
 // Resource names above each column on the Steps map: hidden unless turned on (remembered)
-// A filter that only asks whether a step found something reads as one word: "Find Household by Name" id exists -> Found
-export function fvShortRule(rule) {
-  const t = String(rule || '').trim();
-  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
-  const nm = t.match(/^NOT\s*\((.+)\)$/i);
-  if (nm && /\sAND\s/.test(nm[1]) && !/\sOR\s/.test(nm[1])) {
-    const parts = nm[1].split(/\s+AND\s+/).map((x) => x.trim());
-    const one = (x, first) => {
-      const e = x.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+)$/i);
-      if (e) return `${cap(e[1].trim())} ${first ? '!=' : '='} ${e[2].trim()}`;
-      const k = x.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+contains\s+(.+)$/i);
-      if (k) return /^advisor$/i.test(k[1].trim()) && k[2].trim() === ',' ? '= Joint Call' : `${cap(k[1].trim())} contains ${k[2].trim()}`;
-      return null;
-    };
-    const out = parts.map((x, i) => one(x, i === 0));
-    if (out.every(Boolean)) return out.map((x, i) => (i ? `And ${x}` : x)).join(' ');
-  }
-  let c = t.match(/^NOT\s*\(\s*["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+?)\)?$/i) || t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is not(?: exactly)?\s+(.+)$/i);
-  if (c) return `${cap(c[1].trim())} != ${c[2].trim()}`;
-  c = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+)$/i);
-  if (c) return `${cap(c[1].trim())} = ${c[2].trim()}`;
-  const m = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+(does not exist|exists)\.?$/i);
-  if (!m) return t;
-  const field = m[1].trim(), has = /^exists$/i.test(m[2]);
-  if (/^id$/i.test(field)) return has ? 'Found' : 'Not found';
-  return `${field} ${has ? 'found' : 'not found'}`;
-}
+export const fvShortRule = shortRule;
 export function fvShowResNames() { try { return localStorage.getItem('fv_show_res_names') === '1'; } catch (e) { return false; } }
 export function fvToggleResNames() { try { localStorage.setItem('fv_show_res_names', fvShowResNames() ? '0' : '1'); } catch (e) { /* not remembered */ } OL.renderVisualizer(); }
 export function fvOpenStage(value) {
