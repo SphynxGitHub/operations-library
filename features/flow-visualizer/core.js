@@ -2608,7 +2608,10 @@ export function _fvRenderSteps(resources) {
           g.resources.forEach(r => {
             const lay = OL._fvLayoutResource(r);
             const w = 1 + Math.ceil(Math.max(0, ...Object.values(lay).map(l => l.colOffset)));
-            if (cur.length && used + w > maxCols) { rows.push(cur); cur = []; used = 0; }
+            // a Zap that a step in this row starts (a webhook hand-off) stays in the row, beside the Zap that starts it, so it reads as the
+            // next step of that flow rather than being sent to a row of its own below
+            const _calledHere = cur.some((c) => (c.steps || []).some((st) => ((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(r.id) + '-'))));
+            if (cur.length && used + w > maxCols && !_calledHere) { rows.push(cur); cur = []; used = 0; }
             cur.push(r); used += w;
           });
           if (cur.length) rows.push(cur);
