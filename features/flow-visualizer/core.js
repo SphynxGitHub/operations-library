@@ -2492,11 +2492,15 @@ function fvRenderOverview(canvas, svg, resources) {
 export const fvShortRule = shortRule;
 // A gentle S-curve between two points (leaves and arrives along `axis`), plus points sampled along it so a tag can sit on the curve.
 function fvSCurve(x1, y1, x2, y2, axis) {
-  const v = axis === 'v', mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-  const c1 = v ? [x1, my] : [mx, y1], c2 = v ? [x2, my] : [mx, y2];
+  const v = axis === 'v';
+  const stub = Math.min(18, Math.abs(v ? y2 - y1 : x2 - x1) * 0.25);   // a straight run into the target so the arrowhead sits flat
+  const ex = v ? x2 : x2 - Math.sign(x2 - x1) * stub, ey = v ? y2 - Math.sign(y2 - y1) * stub : y2;
+  const mx = (x1 + ex) / 2, my = (y1 + ey) / 2;
+  const c1 = v ? [x1, my] : [mx, y1], c2 = v ? [ex, my] : [mx, ey];
   const pts = [];
-  for (let i = 0; i <= 16; i++) { const t = i / 16, u = 1 - t; pts.push([u*u*u*x1 + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*x2, u*u*u*y1 + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*y2]); }
-  return { d: `M ${x1} ${y1} C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${x2} ${y2}`, pts };
+  for (let i = 0; i <= 16; i++) { const t = i / 16, u = 1 - t; pts.push([u*u*u*x1 + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*ex, u*u*u*y1 + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*ey]); }
+  pts.push([x2, y2]);
+  return { d: `M ${x1} ${y1} C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${ex} ${ey} L ${x2} ${y2}`, pts };
 }
 
 export function fvShowResNames() { try { return localStorage.getItem('fv_show_res_names') === '1'; } catch (e) { return false; } }
@@ -3956,7 +3960,7 @@ export function _fvDrawStepConnections(resources) {
           const bx = fRect.left - cRect.left + fRect.width / 2;
           if (tmid - sy > 40 && tl - bx > 30 && !hitsCard(bx - 1, sy + 3, 2, tmid - sy - 3, 0) && !hitsCard(bx, tmid - 1, tl - bx - 4, 2, 0)) {
             const R = 22;
-            const sc = { d: `M ${bx} ${sy} C ${bx} ${tmid}, ${bx} ${tmid}, ${tl} ${tmid}`, pts: [] };
+            const sc = { d: `M ${bx} ${sy} C ${bx} ${tmid}, ${bx} ${tmid}, ${tl - 18} ${tmid} L ${tl} ${tmid}`, pts: [] };
             for (let q = 0; q <= 16; q++) { const t = q / 16, u = 1 - t; sc.pts.push([u*u*u*bx + 3*u*u*t*bx + 3*u*t*t*bx + t*t*t*tl, u*u*u*sy + 3*u*u*t*tmid + 3*u*t*t*tmid + t*t*t*tmid]); }
             d = sc.d; draftRoute = { kind: 'under', points: sc.pts };
           }
