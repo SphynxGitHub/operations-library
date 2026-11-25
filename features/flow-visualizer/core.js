@@ -3492,6 +3492,40 @@ export function _fvRenderSteps(resources) {
     OL._fv._jumpArrows = jumpArrows;
     OL._fv._jumpReturns = jumpReturns; OL._fv._jumpChains = jumpChains; OL._fv._hideLines = hideLines;
 
+    // A Zap started by a hand-off sits beside the one that starts it. The steps down to the hand-off then stand centred over the two, and
+    // the rest of the starting Zap stays to the left, so the two flows read as a fork instead of one far off to the side.
+    try {
+      const _moved = new Set();
+      stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ resMeta, wfBgEl }) => {
+        const _wfTop = wfBgEl ? (parseFloat(wfBgEl.style.top) || 0) : 0;
+        (resMeta || []).forEach(({ res: T, colX: xT }) => {
+          (resMeta || []).forEach(({ res: C }) => {
+            if (C === T) return;
+            let lowest = null;
+            (C.steps || []).forEach((st) => {
+              if (!((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(T.id) + '-'))) return;
+              let el = canvas.querySelector(`[id="fv-step-${fvDomKey(C)}-${st.id}"]`);
+              if (el && el.dataset.consolCardId) el = document.getElementById(el.dataset.consolCardId) || el;
+              if (!el) return;
+              const top = parseFloat(el.style.top) || 0;
+              if (!lowest || top > lowest.top) lowest = { el, top };
+            });
+            if (!lowest) return;
+            const L0 = parseFloat(lowest.el.style.left) || 0;
+            if (xT - L0 < CARD_W / 2) return;
+            const shift = Math.round((xT - L0) / 2);
+            canvas.querySelectorAll('.fv-step-card, [id^="fv-consol-"]').forEach((el) => {
+              if (_moved.has(el) || Math.abs((parseFloat(el.style.left) || 0) - L0) > 2) return;
+              const _t = parseFloat(el.style.top) || 0;
+              if (_t > lowest.top + 2 || _t < _wfTop) return;
+              el.style.left = ((parseFloat(el.style.left) || 0) + shift) + 'px';
+              _moved.add(el);
+            });
+          });
+        });
+      }));
+    } catch (e) { console.warn('Fork centring skipped:', e); }
+
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
     const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + (el.classList.contains('fv-jump-card') ? (parseFloat(el.style.height) || 0) : hOf(el)) + 60), 600);
