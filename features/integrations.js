@@ -1175,13 +1175,30 @@ export async function importMailerLite(client, opts = {}) {
     const data = await importFrom('mailerlite', client.id, creds.id);
     const automations = data.data || [];
 
-    const items = automations.map((auto) => ({
-        externalId: auto.id, name: auto.name, type: 'Email Campaign', archetype: 'Multi-Level',
-        steps: [
-            { id: `ml-${auto.id}-s0`, name: "Trigger: " + (auto.trigger_type || "Subscriber Joins"), appName: "MailerLite" },
-            { id: `ml-${auto.id}-s1`, name: "Automation Flow", appName: "MailerLite" },
-        ],
-    }));
+    const items = [];
+    automations.forEach((auto) => {
+        const active = auto.enabled !== false;
+        const steps = Array.isArray(auto.steps) ? auto.steps : [];
+        const mails = steps.filter((st) => st && st.type === 'email');
+        items.push({
+            externalId: auto.id, name: auto.name, type: 'Email Campaign', archetype: 'Multi-Level', serviceActive: active,
+            steps: [
+                { id: `ml-${auto.id}-s0`, name: "Trigger: " + (auto.trigger_type || "Subscriber Joins"), appName: "MailerLite" },
+                { id: `ml-${auto.id}-s1`, name: "Automation Flow", appName: "MailerLite" },
+            ],
+        });
+        // each email step is also its own Email card, archived with the automation when it is off
+        mails.forEach((st, i) => {
+            const eid = String(st.email_id || st.id || i).replace(/[^A-Za-z0-9]/g, '');
+            const subject = st.subject || (st.email && st.email.subject) || '';
+            items.push({
+                externalId: `email-${auto.id}-${eid}`, name: `${auto.name}: ${st.name || subject || `Email ${i + 1}`}`, type: 'Email', archetype: 'Base', serviceActive: active,
+                description: '', keepSteps: true,
+                defaults: { emailFrom: 'app', emailToType: 'Lead/Client', appName: 'MailerLite', emailSubject: subject },
+                steps: [{ id: `ml-email-${auto.id}-${eid}-s0`, name: 'MailerLite sends email', appName: 'MailerLite' }],
+            });
+        });
+    });
     return commitPull(client, 'mailerlite', items);
 };
 
@@ -1208,7 +1225,8 @@ export async function importMailchimp(client, opts = {}) {
     const data = await importFrom('mailchimp', client.id, creds.id);
     const automations = data.automations || [];
 
-    const items = automations.map((a) => {
+    const items = [];
+    automations.forEach((a) => {
         const trig = a.trigger_settings || {};
         const status = String(a.status || '');
         const active = status === 'sending';
@@ -1224,12 +1242,24 @@ export async function importMailchimp(client, opts = {}) {
             steps.push({ id: `mc-${a.id}-s1`, name: 'Automation Flow', appName: 'Mailchimp', description: a.emailsError ? 'The emails in this automation could not be read from Mailchimp.' : '' });
         }
         const list = a.recipients && a.recipients.list_name;
-        return {
-            externalId: a.id, name: (a.settings && a.settings.title) || trig.workflow_title || `Automation ${a.id}`,
+        const autoName = (a.settings && a.settings.title) || trig.workflow_title || `Automation ${a.id}`;
+        items.push({
+            externalId: a.id, name: autoName,
             type: 'Email Campaign', archetype: 'Multi-Level', serviceActive: active,
             description: `Mailchimp automation (${active ? 'active' : status === 'paused' ? 'paused' : 'not sending'})${list ? `, audience: ${list}` : ''}${a.start_time ? `, started ${String(a.start_time).slice(0, 10)}` : ''}.`,
             steps,
-        };
+        });
+        // each email in the automation is also its own Email card (like a Calendly confirmation email), archived with the automation when it is off
+        emails.forEach((e, i) => {
+            const eid = String(e.id || i).replace(/[^A-Za-z0-9]/g, '');
+            const subject = (e.settings && (e.settings.subject_line || e.settings.title)) || `Email ${i + 1}`;
+            items.push({
+                externalId: `email-${a.id}-${eid}`, name: `${autoName}: ${subject}`, type: 'Email', archetype: 'Base', serviceActive: active,
+                description: mcDelay(e.delay), keepSteps: true,
+                defaults: { emailFrom: 'app', emailToType: 'Lead/Client', appName: 'Mailchimp', emailSubject: (e.settings && e.settings.subject_line) || '' },
+                steps: [{ id: `mc-email-${a.id}-${eid}-s0`, name: 'Mailchimp sends email', appName: 'Mailchimp', description: mcDelay(e.delay) }],
+            });
+        });
     });
     const out = await commitPull(client, 'mailchimp', items);
     if (data.truncated && out && typeof out === 'object') out.note = 'Only the first 500 automations were read.';

@@ -441,8 +441,8 @@ OL.setLibToggle = function(key, value) {
     OL.syncResourceLibraryFilters();
 };
 const TUCK_RE = /^cal-(form|confirm|reminder)-([0-9a-f-]{36})$/;
-// the card a booking form / notification email belongs to: a Calendly event, or a Jotform form (jf-jfemail-<form id>-<key>)
-const tuckParent = (id) => { id = String(id); const c = TUCK_RE.exec(id); if (c) return `cal-${c[2]}`; const j = /^jf-jfemail-(\d+)-[^-]+$/.exec(id); return j ? `jf-${j[1]}` : ''; };
+// the card a booking form / notification email belongs to: a Calendly event, a Jotform form (jf-jfemail-<form id>-<key>), or a Mailchimp/MailerLite automation (mc-email-/ml-email-<automation id>-<email id>)
+const tuckParent = (id) => { id = String(id); const c = TUCK_RE.exec(id); if (c) return `cal-${c[2]}`; const j = /^jf-jfemail-(\d+)-[^-]+$/.exec(id); if (j) return `jf-${j[1]}`; const m = /^(mc|ml)-email-([A-Za-z0-9]+)-[A-Za-z0-9]+$/.exec(id); return m ? `${m[1]}-${m[2]}` : ''; };
 OL._tuckedParts = {};
 OL.tuckParts = function(list) {
     OL._tuckedParts = {};
