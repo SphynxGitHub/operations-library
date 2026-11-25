@@ -21,18 +21,24 @@ export function collectWebhookPosts(zaps) {
     for (const z of zaps || []) {
         for (const s of z.steps || []) {
             if (s.role === 'trigger') continue;
+            // Only a Webhooks "POST" step starts another Zap, and only through its URL field. A hook address sitting in a Code step or in
+            // a data field handed on to another Zap (postWebhook, ...) is text, not a call.
+            if (!isPost(s)) continue;
+            const maps = s.mappings || [];
+            const urlMaps = maps.filter((m) => /^url$/i.test(String(m && m.field || '')));
             const seen = new Set();
-            for (const m of s.mappings || []) {
+            for (const m of urlMaps.length ? urlMaps : maps) {
                 for (const hit of String(m && m.value != null ? m.value : '').matchAll(HOOK_URL)) {
                     if (seen.has(hit[1])) continue;
                     seen.add(hit[1]);
-                    (out[hit[1]] = out[hit[1]] || []).push({ zapId: String(z.zapId), stepId: String(s.stepId), zapName: String(z.zapName || ''), stepTitle: String(s.title || s.action || '') });
+                    (out[hit[1]] = out[hit[1]] || []).push({ zapId: String(z.zapId), stepId: String(s.stepId), zapName: String(z.zapName || ''), stepTitle: String(s.title || s.action || ''), field: String(m && m.field || '') });
                 }
             }
         }
     }
     return out;
 }
+const isPost = (s) => String(s.action || (s.zap && s.zap.action) || '').toLowerCase() === 'post' && /webhook/i.test(String(s.app || (s.zap && s.zap.app) || ''));
 
 const data = () => OL.getCurrentProjectData();
 const resources = () => (data().resources || data().localResources || []).filter((r) => r && !r.isDeleted);
@@ -65,7 +71,17 @@ let view = 'addresses';       // 'addresses' (one row per address) or 'zaps' (on
 // Posting steps whose address the export does not carry (the step posts to a hook but the URL is not in its mappings) get a row of their own,
 // keyed step-<id>, so the Zap they start can still be chosen here. Steps already listed under a real address are left out.
 function allPosts() {
-    const posts = Object.assign({}, data().webhookPosts || {});
+    const posts = {};
+    const stored = data().webhookPosts || {};
+    Object.keys(stored).forEach((k) => {
+        const keep = stored[k].filter((c) => {
+            const st = stepOfZap(cardOfZap(c.zapId), c.stepId);
+            if (st && st.zap && !isPost(st)) return false;                 // a Code step or other step that merely contains the address
+            if (c.field && !/^url$/i.test(c.field)) return false;           // a data field carrying the address onward
+            return true;
+        });
+        if (keep.length) posts[k] = keep;
+    });
     const known = new Set(); Object.values(posts).forEach((v) => v.forEach((c) => known.add(`${c.zapId}:${c.stepId}`)));
     resources().filter((r) => r.type === 'Zap' && r.originalZapId).forEach((r) => (r.steps || []).forEach((s) => {
         const z = s.zap; if (!z || z.role === 'trigger' || z.action !== 'post' || !/webhook/i.test(String(z.app || ''))) return;
