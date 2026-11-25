@@ -863,3 +863,9 @@ body.theme-accessible .muted, body.theme-accessible .tiny.muted, body.theme-acce
 body.theme-accessible .card-section, body.theme-accessible .res-card, body.theme-accessible .card { border-color: var(--panel-border) !important; }
 /* colour is never the only signal: text cues for over-budget and status text (colour-blind safe palette: orange / teal / pale yellow) */
 body.theme-accessible [style*="#ef4444"], body.theme-accessible [style*="rgb(239, 68, 68)"] { color: var(--danger) !important; text-decoration: underline wavy; text-underline-offset: 3px; }
+
+/* status is never colour alone: show the status name next to the dot */
+body.theme-accessible [data-status] { background: transparent !important; width: auto !important; height: auto !important;
+  display: inline-flex !important; align-items: center; gap: 6px; color: var(--text-main); font-size: 12px; white-space: nowrap; }
+body.theme-accessible [data-status]::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--st, currentColor); border: 2px solid var(--text-main); box-sizing: border-box; flex-shrink: 0; }
+body.theme-accessible [data-status]::after { content: attr(data-status); }

@@ -1400,8 +1400,8 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
             ` : ''}
             <!-- Status Dot -->
             <div onclick="event.stopPropagation();" style="display:flex; align-items:center;">
-                <span title="Status: ${esc(t.status || 'Pending')}" 
-                      style="width:10px; height:10px; border-radius:50%; background-color:${dotColor}; display:inline-block; cursor:pointer;"
+                <span title="Status: ${esc(t.status || 'Pending')}" data-status="${esc(t.status || 'Pending')}"
+                      style="--st:${dotColor}; width:10px; height:10px; border-radius:50%; background-color:${dotColor}; display:inline-block; cursor:pointer;"
                       onclick="OL.openEditTaskStatusQuickDropdown(event, '${t.clientId}', '${t.id}')">
                 </span>
             </div>
@@ -1478,7 +1478,7 @@ OL.renderTaskRowHTML = function(t, todayStr, enableBulkSelect = true) {
                     const over = used > est + 1e-9;
                     const own = Number.isFinite(parseFloat(t.estimatedHours));
                     return `<div class="tiny monospace" title="${own ? 'Estimated' : 'Default estimate (no estimate set on this task)'}: ${est}h · Used: ${used.toFixed(2)}h" style="width:${OL.EST_COL_W}px; flex:none; margin-right:${OL.EST_GAP}px; text-align:right; font-size:11px; color:${over ? '#ef4444' : 'var(--muted)'}; white-space:nowrap;">
-                        ${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
+                        ${over ? '<span aria-label="over estimate" title="Over estimate">&#9650;</span> ' : ''}${used.toFixed(2)}h / ${est}h est${own ? '' : '*'}
                     </div>`;
                 })()}
                 <!-- Controls: tight and right-aligned inside a fixed-width box, so the estimate column stays put -->
