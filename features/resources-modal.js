@@ -1550,7 +1550,10 @@ export function openResourceModal(targetId, draftObj = null) {
       // --- 🧱 FINAL RENDER ---
     
     // Activity pane = the old sidebar content, without its column chrome
-    const tabbed = bodyContent.includes('data-res-pane=');
+    // Hierarchy, Compliance and Naming views get the same shell (Overview + Activity) as everything else
+    if (!bodyContent.includes('data-res-pane=')) bodyContent = `${paneOpen('overview')}${bodyContent}</div>`;
+    const tabbed = true;
+    const hasRefsPane = bodyContent.includes('data-res-pane="collateral"');
     const attachTail = (!attachmentsHtml || bodyContent.includes(attachmentsHtml)) ? '' : `${paneOpen('overview')}${attachmentsHtml}</div>`;
     const rel = (iso) => { const t = Date.parse(iso || ''); if (Number.isNaN(t)) return ''; const d = Math.floor((Date.now() - t) / 86400000); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 30 ? `${d}d ago` : d < 365 ? `${Math.floor(d / 30)}mo ago` : `${Math.floor(d / 365)}y ago`; };
     const ri = (typeof OL.resourceInfo === 'function') ? OL.resourceInfo(res) : null;
@@ -1704,7 +1707,7 @@ export function openResourceModal(targetId, draftObj = null) {
     
         ${tabbed ? `
         <div style="padding:0 20px;border-bottom:1px solid var(--line);display:flex;gap:20px;overflow-x:auto;">
-            ${[['overview','Overview'],['collateral','References'],['activity','Activity']].map(([k, label]) => `
+            ${[['overview','Overview'],...(hasRefsPane ? [['collateral','References']] : []),['activity','Activity']].map(([k, label]) => `
                 <div data-res-tab="${k}" onclick="OL.resTab('${esc(res.id)}','${k}')"
                      style="padding:10px 2px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${resTabNow === k ? 'var(--accent)' : 'transparent'};color:${resTabNow === k ? 'var(--accent)' : 'var(--text-muted)'};font-weight:${resTabNow === k ? '600' : '400'};">${label}</div>`).join('')}
         </div>
