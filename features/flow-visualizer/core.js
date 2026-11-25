@@ -3480,6 +3480,11 @@ export function _fvRenderSteps(resources) {
     const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + (el.classList.contains('fv-jump-card') ? (parseFloat(el.style.height) || 0) : hOf(el)) + 60), 600);
     canvas.style.width  = (maxX + PAD_X) + 'px';
     canvas.style.height = maxY + 'px';
+    {   // a narrow map (a single column) sits in the middle of the window instead of hard against the left edge
+      const wrapW = (document.getElementById('fv-canvas-wrap') || {}).clientWidth || 0;
+      const host = document.getElementById('fv-canvas');
+      if (host) host.style.marginLeft = Math.max(0, Math.round((wrapW - (maxX + PAD_X) * (OL._fv.zoom || 1)) / 2)) + 'px';
+    }
 
     OL._fvDrawStepConnections(allActiveResources);
   });
