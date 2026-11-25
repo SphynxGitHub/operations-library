@@ -73,7 +73,7 @@ function addresses() {
 
 // The posting step and the catch hook it starts are one hand-off. On the flow map the posting step is hidden (it stays in the resource view)
 // and the step before it gets the line straight to the catch hook; the posting step's own next steps are reached from that step too.
-function hideMerged(card, step, to, key) {
+function hideMerged(card, step, to, key, target, trig) {
     const steps = card.steps || []; const idx = steps.indexOf(step); if (idx < 1) return;
     const me = `${card.id}-${step.id}`;
     const explicit = (s) => ((s.logic && s.logic.out) || []).filter((l) => l.targetId);
@@ -81,14 +81,20 @@ function hideMerged(card, step, to, key) {
     if (!preds.length) return;
     const after = explicit(step).filter((l) => !l._hookdir);
     const onward = after.length ? after.map((l) => ({ id: String(l.targetId), l })) : (steps[idx + 1] && !step.noAutoNext ? [{ id: `${card.id}-${steps[idx + 1].id}`, l: {} }] : []);
+    // the catch hook step on the receiving Zap is hidden too, so the line goes to the step after it (when it has one)
+    const tsteps = (target && target.steps) || []; const ti = tsteps.indexOf(trig);
+    const texp = trig && trig.logic && Array.isArray(trig.logic.out) ? trig.logic.out.filter((l) => l.targetId && !l._hookdir) : [];
+    const into = texp.length ? texp.map((l) => String(l.targetId)) : (ti > -1 && tsteps[ti + 1] && !trig.noAutoNext ? [`${target.id}-${tsteps[ti + 1].id}`] : []);
+    const dests = into.length ? into : [to];
     preds.forEach((p) => {
         p.logic = p.logic || { in: [], out: [] }; p.logic.out = p.logic.out || [];
         const add = (t, extra) => { if (!p.logic.out.some((l) => String(l.targetId) === String(t))) p.logic.out.push(Object.assign({ type: 'next', types: ['next'], targetId: t, rule: '', loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key }, extra || {})); };
-        add(to, { rule: `Starts “${clean((resources().find((r) => String(to).startsWith(String(r.id) + '-')) || {}).name)}” (catch hook)` });
+        dests.forEach((t) => add(t, { rule: `Starts “${clean(target && target.name)}” (catch hook)` }));
         onward.forEach((o) => add(o.id, { rule: o.l.rule || '' }));
         delete p.noAutoNext;
     });
     step.hideOnMap = true; step._hookHidden = true;
+    if (into.length && trig) { trig.hideOnMap = true; trig._hookHidden = true; }
 }
 
 // Put a line on every posting step to the trigger of the Zap its address starts. Lines made here carry _hookdir and are rebuilt each time.
@@ -110,7 +116,7 @@ export function applyWebhookLinks() {
                 delete step.noAutoNext;
                 added++;
             }
-            hideMerged(card, step, to, key);
+            hideMerged(card, step, to, key, target, trig);
         });
     });
     return added;
