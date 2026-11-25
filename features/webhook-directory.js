@@ -25,7 +25,7 @@ export function collectWebhookPosts(zaps) {
             // a data field handed on to another Zap (postWebhook, ...) is text, not a call.
             if (!isPost(s)) continue;
             const maps = s.mappings || [];
-            const urlMaps = maps.filter((m) => /^url$/i.test(String(m && m.field || '')));
+            const urlMaps = maps.filter((m) => HOOK_FIELD.test(String(m && m.field || '')));
             const seen = new Set();
             for (const m of urlMaps.length ? urlMaps : maps) {
                 for (const hit of String(m && m.value != null ? m.value : '').matchAll(HOOK_URL)) {
@@ -38,6 +38,8 @@ export function collectWebhookPosts(zaps) {
     }
     return out;
 }
+// the URL field of a POST step, or a field named for the hook it hands on (postWebhook, webhookUrl...)
+const HOOK_FIELD = /^url$|webhook/i;
 const isPost = (s) => String(s.action || (s.zap && s.zap.action) || '').toLowerCase() === 'post' && /webhook/i.test(String(s.app || (s.zap && s.zap.app) || ''));
 
 const data = () => OL.getCurrentProjectData();
@@ -77,7 +79,7 @@ function allPosts() {
         const keep = stored[k].filter((c) => {
             const st = stepOfZap(cardOfZap(c.zapId), c.stepId);
             if (st && st.zap && !isPost(st)) return false;                 // a Code step or other step that merely contains the address
-            if (c.field && !/^url$/i.test(c.field)) return false;           // a data field carrying the address onward
+            if (c.field && !HOOK_FIELD.test(c.field)) return false;         // a data field that is not about a webhook
             return true;
         });
         if (keep.length) posts[k] = keep;
