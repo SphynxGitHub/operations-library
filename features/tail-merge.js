@@ -36,14 +36,16 @@ export function mergeRepeatedTails(resources) {
             for (let a = 0; a < b; a++) {
                 const sa = steps[a]; if (taken.has(String(sa.id))) continue;
                 const ca = chain(sa);
-                if (ca.length !== cb.length || !ends(ca) || ca.some((x, i) => sig(x) !== sig(cb[i]) || cb.includes(x))) continue;
+                if (!ends(ca) || ca.some((x) => cb.includes(x))) continue;
+                let P = 0; while (P < ca.length && P < cb.length && sig(ca[P]) === sig(cb[P])) P++;
+                if (P < TAIL_MIN) continue;
                 const preds = steps.filter((p) => !cb.includes(p) && outsOf(p).some((l) => String(l.targetId) === `${pre}${sb.id}`));
                 if (!preds.length) break;
-                preds.forEach((p) => {
-                    const old = outsOf(p).find((l) => String(l.targetId) === `${pre}${sb.id}`);
-                    p.logic.out.push({ type: (old && old.type) || 'next', types: (old && old.types) || ['next'], targetId: `${pre}${sa.id}`, rule: (old && old.rule) || '', loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _tm: 1 });
-                });
-                cb.forEach((x) => { taken.add(String(x.id)); if (!x.hideOnMap) { x.hideOnMap = true; x._tmHidden = true; } });
+                const mk = (p, to, old) => p.logic.out.push({ type: (old && old.type) || 'next', types: (old && old.types) || ['next'], targetId: `${pre}${to}`, rule: (old && old.rule) || '', loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _tm: 1 });
+                preds.forEach((p) => mk(p, sa.id, outsOf(p).find((l) => String(l.targetId) === `${pre}${sb.id}`)));
+                // where the copies part ways (a different last step), that step stays and hangs off the last shared step
+                if (P < cb.length) { const last = ca[P - 1], joint = cb[P - 1]; mk(last, cb[P].id, outsOf(joint).find((l) => String(l.targetId) === `${pre}${cb[P].id}`)); }
+                cb.slice(0, P).forEach((x) => { taken.add(String(x.id)); if (!x.hideOnMap) { x.hideOnMap = true; x._tmHidden = true; } });
                 merged++;
                 break;
             }
