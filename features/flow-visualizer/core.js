@@ -2488,6 +2488,15 @@ function fvRenderOverview(canvas, svg, resources) {
   if (window.lucide) lucide.createIcons();
 }
 // Resource names above each column on the Steps map: hidden unless turned on (remembered)
+// A filter that only asks whether a step found something reads as one word: "Find Household by Name" id exists -> Found
+export function fvShortRule(rule) {
+  const t = String(rule || '').trim();
+  const m = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+(does not exist|exists)\.?$/i);
+  if (!m) return t;
+  const field = m[1].trim(), has = /^exists$/i.test(m[2]);
+  if (/^id$/i.test(field)) return has ? 'Found' : 'Not found';
+  return `${field} ${has ? 'found' : 'not found'}`;
+}
 export function fvShowResNames() { try { return localStorage.getItem('fv_show_res_names') === '1'; } catch (e) { return false; } }
 export function fvToggleResNames() { try { localStorage.setItem('fv_show_res_names', fvShowResNames() ? '0' : '1'); } catch (e) { /* not remembered */ } OL.renderVisualizer(); }
 export function fvOpenStage(value) {
@@ -4029,7 +4038,8 @@ export function _fvDrawStepConnections(resources) {
 
         if (marks.length) {
           const size = 14, gap = 3, w = marks.length * size + (marks.length - 1) * gap + 10;
-          const ruleFull = hasRule ? String(outRule.rule).trim() : '';
+          const ruleOrig = hasRule ? String(outRule.rule).trim() : '';
+          const ruleFull = fvShortRule(ruleOrig);
           // A loop that goes up the left margin has no room beside it for a label, so its label stands up along the line,
           // reading from the bottom to the top; the words are cut to the length of that run (hover for all of them)
           const rp = draftRoute && draftRoute.kind === 'loop-back' ? draftRoute.points : null;
@@ -4127,7 +4137,7 @@ export function _fvDrawStepConnections(resources) {
           // The condition itself, in words beside the icon (like Yes / No on a decision), cut short on the map;
           // hovering the pill or the icon shows all of it.
           if (ruleShown) {
-            const full = ruleFull, shown = ruleShown;
+            const full = ruleOrig, shown = ruleShown;
             const lw = ruleW, lx = bx + w + 4, ly = my;
             const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             cg.style.cursor = 'help';
