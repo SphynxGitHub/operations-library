@@ -74,6 +74,21 @@ export function collapseGroups(res, names) {
 // opts.maxCols  the most columns that fit the window (default: no limit). Lanes that would not fit wrap onto a new band
 //               below instead of running off the side, so a narrow window gives a taller, narrower diagram.
 export function layoutLanes(res, opts = {}) {
+  // Steps hidden on the map (a posting step and its catch hook) take no place: lay the Zap out without them and their links
+  const _hide = (res.steps || []).filter((st) => st && st.hideOnMap);
+  if (_hide.length && !(typeof window !== 'undefined' && window.OL && window.OL._fv && window.OL._fv.showHiddenSteps)) {
+    const hid = new Set(_hide.map((st) => String(st.id)));
+    const vis = (res.steps || []).filter((st) => !hid.has(String(st.id))).map((st) => {
+      const c = Object.create(st);
+      Object.defineProperty(c, 'logic', { value: Object.assign({}, st.logic, { out: ((st.logic && st.logic.out) || []).filter((l) => { if (!l || !l.targetId) return true; const t = stepIdOf(res, l.targetId); return t === null || !hid.has(String(t)); }) }), enumerable: true });
+      return c;
+    });
+    const v = Object.create(res);
+    Object.defineProperty(v, 'steps', { value: vis, enumerable: true });
+    const lay = layoutLanes(v, opts);
+    hid.forEach((id) => { lay[id] = { colOffset: 0, row: 0, parentId: null, laneMode: true }; });
+    return lay;
+  }
   // Steps that share a group name are drawn as ONE combined card (the Steps view). The lanes are laid out as if each group were a
   // single step, standing where its first member stands, so the lanes keep their own columns side by side instead of being
   // pulled apart and stacked one after another around the cards. A member's position is its card's position.
