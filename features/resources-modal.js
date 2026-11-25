@@ -13,6 +13,31 @@ import { evaluateCondition, renderFieldInput } from '../core/field-schema.js';
 import { renderDependencyRow } from './scoping.js';
 import { RESOURCE_STATUSES, RESOURCE_STATUS_COLORS, normalizeResourceStatus } from '../core/resource-status.js';
 
+if (!document.getElementById('res-modal-style')) {
+    const st = document.createElement('style'); st.id = 'res-modal-style';
+    st.textContent = `
+    [data-res-pane] .card-section, [data-res-pane] .res-card {
+        display:block !important; background:var(--panel-soft) !important; border:1px solid var(--line) !important;
+        border-radius:10px !important; padding:16px 18px !important; margin:0 0 14px 0 !important; }
+    [data-res-pane] .res-card.res-card-row { display:flex !important; align-items:center; justify-content:space-between; gap:12px; padding:12px 18px !important; }
+    [data-res-pane] .modal-section-label {
+        display:flex !important; align-items:center; gap:7px; margin:0 0 12px 0 !important; padding:0 !important;
+        font-size:11px !important; font-weight:700 !important; letter-spacing:.07em !important; text-transform:uppercase;
+        color:var(--text-muted) !important; }
+    [data-res-pane] .res-card-row .modal-section-label { margin:0 !important; }
+    [data-res-pane] .modal-section-label i, [data-res-pane] .modal-section-label svg { width:14px !important; height:14px !important; color:var(--text-muted) !important; }
+    [data-res-pane] .modal-input, [data-res-pane] .modal-select, [data-res-pane] .modal-textarea, [data-res-pane] select {
+        background:var(--bg) !important; border:1px solid var(--panel-border) !important; border-radius:8px !important;
+        font-size:13px !important; padding:8px 12px !important; text-align:left !important; box-sizing:border-box; }
+    [data-res-pane] select.modal-input, [data-res-pane] select.modal-select, [data-res-pane] .res-card select { height:36px; }
+    [data-res-pane] .modal-input:focus, [data-res-pane] .modal-select:focus, [data-res-pane] .modal-textarea:focus { border-color:var(--accent) !important; }
+    [data-res-pane] .ol-email-body { background:var(--bg) !important; border:1px solid var(--panel-border) !important; border-radius:8px !important; padding:14px 16px !important; }
+    [data-res-pane] .btn.tiny { height:30px; padding:0 12px; border-radius:8px; font-size:12px; }
+    [data-res-pane] label.tiny.muted { font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px !important; }
+    `;
+    document.head.appendChild(st);
+}
+
 // A resource's own status: Pending, In Process, Built or In Review (core/resource-status.js). Pending when it is
 // created; In Process / Built / In Review follow its requests and tasks automatically, and can also be set by hand.
 // This is separate from the request's own Do Now / Do Later / Don't Do / Done and from task statuses.
@@ -516,9 +541,8 @@ export function openResourceModal(targetId, draftObj = null) {
     
       // 🎯 NEW: AUTO-MAPPING SECTION
       const appMappingHtml = `
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:10px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:16px;">
-            <label class="modal-section-label" style="margin:0;display:flex;align-items:center;gap:6px;">
+        <div class="res-card res-card-row">
+            <label class="modal-section-label">
                 <i data-lucide="smartphone" style="width:12px;height:12px;"></i> PRIMARY APPLICATION
                 ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;margin-left:6px;">CUSTOM OVERRIDE</span>' : ''}
             </label>
@@ -1103,12 +1127,12 @@ export function openResourceModal(targetId, draftObj = null) {
                 </div>
                 ${paneOpen('steps')}
                 <!-- EMAIL COMPOSITION -->
-                <div class="card-section" style="margin-bottom:16px;background:rgba(255,255,255,0.02);padding:15px;border-radius:8px;border:1px solid var(--line);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                        <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;color:var(--accent);margin:0;">
+                <div class="card-section">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <label class="modal-section-label" style="margin:0 !important;">
                             <i data-lucide="mail" style="width:14px;height:14px;"></i> EMAIL COMPOSITION
                         </label>
-                        <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">
+                        <button class="btn tiny soft" onclick="OL.previewEmailTemplate('${res.id}')">
                             <i data-lucide="eye" style="width:12px;height:12px;margin-right:4px;"></i> Preview
                         </button>
                     </div>
