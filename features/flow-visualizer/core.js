@@ -3524,6 +3524,36 @@ export function _fvRenderSteps(resources) {
           });
         });
       }));
+      // The same where a step splits into paths that run in columns of their own: the steps down to the split stand centred over the paths,
+      // and the lines leave from underneath it.
+      stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ resMeta, wfBgEl }) => {
+        const _wfTop = wfBgEl ? (parseFloat(wfBgEl.style.top) || 0) : 0;
+        (resMeta || []).forEach(({ res: C }) => {
+          const key = fvDomKey(C);
+          let best = null;
+          (C.steps || []).forEach((st) => {
+            const el = canvas.querySelector(`[id="fv-step-${key}-${st.id}"]`); if (!el || el.dataset.consolCardId) return;
+            const sl = parseFloat(el.style.left) || 0, stp = parseFloat(el.style.top) || 0;
+            let far = 0;
+            ((st.logic && st.logic.out) || []).forEach((l) => {
+              if (!l || !l.targetId || l._hookdir) return;
+              const k = OL._refSplitIdx(String(l.targetId)); if (k === -1 || String(l.targetId).substring(0, k) !== String(C.id)) return;
+              const te = canvas.querySelector(`[id="fv-step-${key}-${String(l.targetId).substring(k + 1)}"]`); if (!te) return;
+              if ((parseFloat(te.style.top) || 0) > stp && (parseFloat(te.style.left) || 0) - sl > CARD_W / 2) far = Math.max(far, (parseFloat(te.style.left) || 0) - sl);
+            });
+            if (far && (!best || stp < best.top)) best = { el, top: stp, L0: sl, far };
+          });
+          if (!best || _moved.has(best.el)) return;
+          const shift = Math.round(Math.min(best.far / 2, 200));
+          canvas.querySelectorAll('.fv-step-card, [id^="fv-consol-"]').forEach((el) => {
+            if (_moved.has(el) || Math.abs((parseFloat(el.style.left) || 0) - best.L0) > 2) return;
+            const t = parseFloat(el.style.top) || 0;
+            if (t > best.top + 2 || t < _wfTop) return;
+            el.style.left = ((parseFloat(el.style.left) || 0) + shift) + 'px'; _moved.add(el);
+            if (el === best.el) el.dataset.forked = '1';
+          });
+        });
+      }));
     } catch (e) { console.warn('Fork centring skipped:', e); }
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
@@ -3857,7 +3887,7 @@ export function _fvDrawStepConnections(resources) {
 
         // A step beside-and-below (the next path across): out of the card's right edge, down the gap beside the target, and into the
         // target's left side, when nothing is in the way. Otherwise the run-across line below.
-        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.right - cRect.left, ex = tRect.left - cRect.left;
           if (ex - sx >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
@@ -3874,7 +3904,7 @@ export function _fvDrawStepConnections(resources) {
 
         // The same for a step beside-and-below on the left: out of the card's left edge, down the gap beside the target, into the
         // target's right side. (Two paths that join the same steps then each arrive at a side of their own, not on one line.)
-        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.left - cRect.left, ex = tRect.right - cRect.left;
           if (sx - ex >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
