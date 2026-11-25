@@ -173,8 +173,8 @@ function _renderResourceManagerImpl() {
                 <div style="display:flex; gap:12px; flex-wrap:wrap;">
                     ${sel('lib-group-by', 'Group by', RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceGroupBy(this.value)')}
                     ${sel('lib-subgroup-by', 'Then by', RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSubGroupBy(this.value)')}
-                    ${sel('lib-versions', 'Same-name versions', `<option value="stack" ${state.libStack === false ? '' : 'selected'}>Stack into one</option><option value="each" ${state.libStack === false ? 'selected' : ''}>Show each</option>`, `state.libStack = this.value !== 'each'; OL.syncResourceLibraryFilters();`)}
-                    ${sel('lib-tuck', 'Calendly forms and emails', `<option value="own" ${state.libTuck ? '' : 'selected'}>Own cards</option><option value="tuck" ${state.libTuck ? 'selected' : ''}>Inside their event</option>`, `state.libTuck = this.value === 'tuck'; OL.syncResourceLibraryFilters();`)}
+                    ${sel('lib-versions', 'Same-name versions', `<option value="stack" ${state.libStack === false ? '' : 'selected'}>Stack into one</option><option value="each" ${state.libStack === false ? 'selected' : ''}>Show each</option>`, `OL.setLibToggle('libStack', this.value !== 'each');`)}
+                    ${sel('lib-tuck', 'Calendly forms and emails', `<option value="own" ${state.libTuck ? '' : 'selected'}>Own cards</option><option value="tuck" ${state.libTuck ? 'selected' : ''}>Inside their event</option>`, `OL.setLibToggle('libTuck', this.value === 'tuck');`)}
                     ${sel('lib-sort', 'Sort', RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSort(this.value)')}
                 </div>
             </div>
@@ -432,6 +432,14 @@ OL.resourcePillsHtml = function(res, info) {
 };
 // Same-name versions (one per team member) show as one row or card with a chip per version; nothing is hidden or merged.
 // Option: a Calendly event's booking form and two emails sit inside the event's card instead of being listed on their own.
+// Remembered across refreshes (per browser): stacking same-name versions and tucking Calendly forms/emails into events.
+const LIB_TOGGLE_KEY = 'ol-library-toggles';
+(() => { try { const t = JSON.parse(localStorage.getItem(LIB_TOGGLE_KEY) || '{}') || {}; ['libStack', 'libTuck'].forEach(k => { if (typeof t[k] === 'boolean') state[k] = t[k]; }); } catch (e) { /* storage blocked: defaults */ } })();
+OL.setLibToggle = function(key, value) {
+    state[key] = value;
+    try { const t = JSON.parse(localStorage.getItem(LIB_TOGGLE_KEY) || '{}') || {}; t[key] = value; localStorage.setItem(LIB_TOGGLE_KEY, JSON.stringify(t)); } catch (e) { /* not remembered, still applies now */ }
+    OL.syncResourceLibraryFilters();
+};
 const TUCK_RE = /^cal-(form|confirm|reminder)-([0-9a-f-]{36})$/;
 OL._tuckedParts = {};
 OL.tuckParts = function(list) {
