@@ -3153,7 +3153,7 @@ export function _fvRenderSteps(resources) {
       });
 
       const estWfH = WF_PAD + WF_HDR + RES_HDR + estY - colY0 + WF_PAD;
-      wfMetaList.push({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth });
+      wfMetaList.push({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth, wfCont: !!workflow._isCont });
       wfY += estWfH + WF_GAP;
     });
 
@@ -3259,18 +3259,23 @@ export function _fvRenderSteps(resources) {
       let wfY = curStageY + ZONE_PAD + (stage ? ZONE_HDR : 0);
       let stageBottom = wfY;
 
-      wfMetaList.forEach(({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth }) => {
+      wfMetaList.forEach(({ wfBgEl, wfLblEl, resMeta, seqMeta, wfContentTop, colY0, wfWidth, wfCont }) => {
         const layoutOf = new Map((resMeta || []).map(rm => [rm.res, rm.layout]));
         const wfTop     = wfY;
         // Room under the headings = the tallest heading in THIS workflow as drawn (its title lines, notes / collateral chips, "used in" chip)
         // plus a little air, instead of the allowance made for the tallest heading anywhere on the map.
-        const _hdrTall = Math.max(0, ...(resMeta || []).map(({ hdrEl }) => (hdrEl && hdrEl.offsetHeight) || 0));
-        const resHdrUsed = _hdrTall > 0 ? Math.min(RES_HDR, 2 + _hdrTall + 14) : RES_HDR;
-        const actualColY = wfTop + WF_PAD + WF_HDR + resHdrUsed;
+        // With the column names hidden the heading band shrinks to what is really in it (a continued row has no label at all), so the
+        // rows are not held apart by room for names that are not shown.
+        const _quiet = !OL.fvShowResNames() && !PRINTING;
+        const _hdrOwn = (hdrEl) => { let h = 0; Array.from(hdrEl.children).forEach((c) => { if (c.classList.contains('fv-col-ctl') || c.style.display === 'none') return; h += c.offsetHeight; }); return h; };
+        const _hdrTall = Math.max(0, ...(resMeta || []).map(({ hdrEl }) => (hdrEl && (_quiet ? _hdrOwn(hdrEl) : hdrEl.offsetHeight)) || 0));
+        const wfHdr = _quiet && wfCont ? 0 : WF_HDR;
+        const resHdrUsed = _quiet ? (_hdrTall > 0 ? Math.min(RES_HDR, 2 + _hdrTall + 14) : 10) : (_hdrTall > 0 ? Math.min(RES_HDR, 2 + _hdrTall + 14) : RES_HDR);
+        const actualColY = wfTop + WF_PAD + wfHdr + resHdrUsed;
 
         if (wfLblEl) wfLblEl.style.top = (wfTop + 9) + 'px';
         if (wfBgEl)  wfBgEl.style.top  = wfTop + 'px';
-        resMeta.forEach(({ hdrEl }) => { hdrEl.style.top = (wfTop + WF_PAD + WF_HDR + 2) + 'px'; });
+        resMeta.forEach(({ hdrEl }) => { hdrEl.style.top = (wfTop + WF_PAD + wfHdr + 2) + 'px'; });
 
         let y = actualColY;
         let wfBottom = actualColY;
@@ -3427,7 +3432,7 @@ export function _fvRenderSteps(resources) {
           for (let i = 1; i < xs.length; i++) {
             const dv = document.createElement('div');
             dv.className = 'fv-res-divider';
-            dv.style.cssText = `position:absolute;left:${xs[i] - COL_GAP / 2}px;top:${wfTop + WF_PAD + WF_HDR}px;width:0;height:${Math.max(0, wfBottom - (wfTop + WF_PAD + WF_HDR) + WF_PAD)}px;border-left:1px dashed var(--line);opacity:0.7;pointer-events:none;z-index:1;`;
+            dv.style.cssText = `position:absolute;left:${xs[i] - COL_GAP / 2}px;top:${wfTop + WF_PAD + (wfCont ? 0 : WF_HDR)}px;width:0;height:${Math.max(0, wfBottom - (wfTop + WF_PAD + (wfCont ? 0 : WF_HDR)) + WF_PAD)}px;border-left:1px dashed var(--line);opacity:0.7;pointer-events:none;z-index:1;`;
             wfBgEl.parentNode.appendChild(dv);
           }
         }
