@@ -62,8 +62,21 @@ const likelyZaps = (callers, zaps) => zaps.map((r) => ({ r, sc: Math.max(0, ...c
 let draft = {};
 let view = 'addresses';       // 'addresses' (one row per address) or 'zaps' (one row per webhook-triggered Zap)            // address -> card id, edited on screen and kept on Save
 
+// Posting steps whose address the export does not carry (the step posts to a hook but the URL is not in its mappings) get a row of their own,
+// keyed step-<id>, so the Zap they start can still be chosen here. Steps already listed under a real address are left out.
+function allPosts() {
+    const posts = Object.assign({}, data().webhookPosts || {});
+    const known = new Set(); Object.values(posts).forEach((v) => v.forEach((c) => known.add(`${c.zapId}:${c.stepId}`)));
+    resources().filter((r) => r.type === 'Zap' && r.originalZapId).forEach((r) => (r.steps || []).forEach((s) => {
+        const z = s.zap; if (!z || z.role === 'trigger' || z.action !== 'post' || !/webhook/i.test(String(z.app || ''))) return;
+        if (known.has(`${r.originalZapId}:${z.stepId}`)) return;
+        posts[`step-${z.stepId}`] = [{ zapId: String(r.originalZapId), stepId: String(z.stepId), zapName: String(r.name || ''), stepTitle: String(s.name || z.summary || '') }];
+    }));
+    return posts;
+}
+
 function addresses() {
-    const posts = data().webhookPosts || {};
+    const posts = allPosts();
     return Object.keys(posts).map((key) => ({
         key,
         callers: posts[key].map((c) => { const card = cardOfZap(c.zapId); return Object.assign({}, c, { card, step: stepOfZap(card, c.stepId) }); }),
@@ -102,7 +115,7 @@ export function applyWebhookLinks() {
     const d = data(); const map = d.webhookMap || {}; let added = 0;
     resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s.logic && Array.isArray(s.logic.out)) s.logic.out = s.logic.out.filter((l) => !l._hookdir); }));
     resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s._hookHidden) { delete s.hideOnMap; delete s._hookHidden; } }));
-    const posts = d.webhookPosts || {};
+    const posts = allPosts();
     Object.keys(map).forEach((key) => {
         const target = resources().find((r) => String(r.id) === String(map[key])); const trig = triggerOf(target);
         if (!target || !trig) return;
@@ -193,7 +206,7 @@ export function openWebhookDirectory(keep) {
         const names = a.callers.slice(0, 4).map((x) => `${esc(clean(x.zapName))}: ${esc(x.stepTitle)}${x.step ? '' : ' (not in this project)'}`).join('<br>');
         const more = a.callers.length > 4 ? `<br>and ${a.callers.length - 4} more` : '';
         return `<div data-whd-row="${esc(a.key)}" style="display:grid;grid-template-columns:110px 300px minmax(0,1fr);gap:14px;padding:10px 14px;border-top:1px solid var(--line, rgba(127,127,127,.25));align-items:start;${draft[a.key] ? '' : 'background:var(--bg-warning);'}">
-            <span style="font-family:monospace;font-size:13px;">…/${esc(a.key)}/</span>
+            <span style="font-family:monospace;font-size:13px;">${a.key.startsWith('step-') ? 'no address in export' : `…/${esc(a.key)}/`}</span>
             <div style="min-width:0;"><select class="modal-input" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;" onchange="OL.webhookSet('${esc(a.key)}', this.value)">${opts(a.key)}</select>${draft[a.key] ? '' : (() => { const l = likelyZaps(a.callers, recv.hook.concat(recv.hookOff)); return l.length ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted);">Likely: ${l.map((r) => `<a href="#" onclick="OL.webhookPick('${esc(a.key)}','${esc(r.id)}');return false;">${esc(clean(r.name))}</a>`).join(' or ')}</div>` : ''; })()}</div>
             <div style="font-size:13px;line-height:1.5;">${a.callers.length} step${a.callers.length === 1 ? '' : 's'}<br><span style="color:var(--text-muted);">${names}${more}</span></div>
         </div>`;
