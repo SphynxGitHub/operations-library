@@ -1683,7 +1683,7 @@ export function openResourceModal(targetId, draftObj = null) {
     
         ${tabbed ? `
         <div style="padding:0 20px;border-bottom:1px solid var(--line);display:flex;gap:20px;overflow-x:auto;">
-            ${[['overview','Overview'],['collateral','Collateral'],['activity','Activity']].map(([k, label]) => `
+            ${[['overview','Overview'],['collateral','References'],['activity','Activity']].map(([k, label]) => `
                 <div data-res-tab="${k}" onclick="OL.resTab('${esc(res.id)}','${k}')"
                      style="padding:10px 2px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${resTabNow === k ? 'var(--accent)' : 'transparent'};color:${resTabNow === k ? 'var(--accent)' : 'var(--text-muted)'};font-weight:${resTabNow === k ? '600' : '400'};">${label}</div>`).join('')}
         </div>
