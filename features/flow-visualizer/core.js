@@ -2494,8 +2494,8 @@ export function _fvRenderSteps(resources) {
   const data      = OL.getCurrentProjectData();
   const stages    = data.stages || [];
   const wfAll     = OL.getWorkflows() || [];
-  const STEP_GAP  = 14;
-  const LANE_GAP  = 48;   // imported Zaps: room between stacked cards for the arrow and the branch / filter label pill that sits on it
+  const STEP_GAP  = 28;
+  const LANE_GAP  = 60;   // imported Zaps: room between stacked cards for the arrow and the branch / filter label pill that sits on it
   const DRAFT_GAP = 56;   // processes made in Frame-out get more room between cards, so the arrows and the Yes / No words fit
   // gapFor is only used for lane (imported Zap / Frame-out) stacking; classic columns keep STEP_GAP
   const gapFor    = (res) => (res && res.isDraft && res.source === 'frameout' ? DRAFT_GAP : LANE_GAP);
@@ -2542,8 +2542,8 @@ export function _fvRenderSteps(resources) {
 
   OL._fvAutoLinkSteps(resources);
 
-  const CARD_W    = 180;
-  const COL_GAP   = 52;
+  const CARD_W    = 164;
+  const COL_GAP   = 76;
   const SIDE_W    = 150;  // a step's jumps are drawn as small cards beside it (width) ...
   const SIDE_GAP  = 30;   // ... with room for the arrow between the step and them
   const ZONE_PAD  = 20;
