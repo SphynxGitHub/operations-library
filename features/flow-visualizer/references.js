@@ -127,6 +127,11 @@ export function setJump(resId, stepId, jumpId, field, value) {
     j.stepId = ok ? String(value) : '';
   } else if (field === 'label') {
     j.label = String(value || '').trim().slice(0, 120);
+  } else if (field === 'continue') {
+    j.continues = value === true || value === 'true' || value === '1';
+    if (!j.continues) j.continueStepId = '';
+  } else if (field === 'continueStep') {
+    j.continueStepId = value && stepOf(resById(resId), value) && String(value) !== String(stepId) ? String(value) : '';
   }
   syncLegacy(step); redrawAfterRefEdit(resId, stepId);
 }
@@ -156,7 +161,7 @@ export function jumpCardsOf(step, res) {
   return jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => {
     const t = resById(j.resId);
     const tStep = t && j.stepId ? stepOf(t, j.stepId) : null;
-    return { id: j.id, resId: String(j.resId), label: j.label || '', name: t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed', missing: !t };
+    return { id: j.id, resId: String(j.resId), continues: !!j.continues, continueStepId: j.continueStepId || '', label: j.label || '', name: t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed', missing: !t };
   });
 }
 // One side card. `when` is the trigger text (the collateral's own name is left out when a tag on the card already shows it).
@@ -230,6 +235,8 @@ export function jumpEditor(resId, step) {
         <button type="button" class="btn tiny soft" onclick="OL.fvRemoveJump('${r}','${s}','${esc(j.id)}')">Remove</button></div>
       ${refPicker(resId, { refResId: j.resId }, h('res'))}
       ${landing ? `<div class="tiny muted" style="margin:8px 0 3px;">Land on</div>${landing}` : ''}
+      <label style="display:flex;align-items:center;gap:6px;margin:8px 0 3px;font-size:12px;cursor:pointer;"><input type="checkbox" ${j.continues ? 'checked' : ''} onchange="OL.fvSetJump('${r}','${s}','${esc(j.id)}','continue', this.checked)"> Continue original flow after this</label>
+      ${j.continues ? `<select class="fvi-select fo-field" onchange="${h('continueStep')}"><option value="">Next step (default)</option>${(resById(resId)?.steps || []).filter((x) => x && !x.isArchived && String(x.id) !== String(step.id)).map((x, i) => `<option value="${esc(x.id)}" ${String(j.continueStepId) === String(x.id) ? 'selected' : ''}>${i + 1}. ${esc(x.name || 'Unnamed step')}</option>`).join('')}</select>` : ''}
       <div class="tiny muted" style="margin:8px 0 3px;">What triggers it (optional)</div>
       <input type="text" class="fvi-select fo-field" maxlength="120" value="${esc(j.label || '')}" placeholder="e.g. Clicks the link and books a call" onchange="${h('label')}">
     </div>`;

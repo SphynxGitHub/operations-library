@@ -3419,7 +3419,7 @@ export function _fvRenderSteps(resources) {
     });
 
     // place the side cards now that every card has its final position, and remember the arrows to them
-    const jumpArrows = []; const jumpReturns = [];
+    const jumpArrows = []; const jumpReturns = []; const hideLines = new Set();
     sideInfo.forEach((info, el) => {
       const cl = parseFloat(el.style.left) || 0, ct = parseFloat(el.style.top) || 0;
       const sl = cl + CARD_W + SIDE_GAP;
@@ -3428,20 +3428,22 @@ export function _fvRenderSteps(resources) {
         canvas.insertAdjacentHTML('beforeend', OL.fvJumpCardHtml(info.step, info.res, it.c, it.when, { left: sl, top, w: SIDE_W, h: it.h }));
         if (it.chip) it.chip.classList.add('fv-co-linked');
         jumpArrows.push({ x1: cl + CARD_W, y1: ct + it.anchorY, x2: sl, y2: top + it.h / 2 });
-        // a jump out to ANOTHER process also draws a line from its callout to the step that comes next in this flow ("continue here")
-        if (String(it.c.resId) !== String(info.res.id) && !it.c.missing) {
+        // "Continue original flow": the callout draws the line on to the next step, and the step's own direct line to it is not drawn
+        if (it.c.continues && !it.c.missing) {
           const sts = info.res.steps || []; const at = sts.findIndex((x) => String(x.id) === String(info.step.id));
-          const outs = ((info.step.logic && info.step.logic.out) || []).filter((l) => l && l.targetId);
-          let nextId = '';
-          for (const l of outs) { const k = OL._refSplitIdx(l.targetId); if (k > 0 && String(l.targetId).slice(0, k) === String(info.res.id)) { nextId = String(l.targetId).slice(k + 1); break; } }
-          if (!nextId && at >= 0 && sts[at + 1]) nextId = String(sts[at + 1].id);
+          let nextId = it.c.continueStepId ? String(it.c.continueStepId) : '';
+          if (!nextId) {
+            const outs = ((info.step.logic && info.step.logic.out) || []).filter((l) => l && l.targetId);
+            for (const l of outs) { const k = OL._refSplitIdx(l.targetId); if (k > 0 && String(l.targetId).slice(0, k) === String(info.res.id)) { nextId = String(l.targetId).slice(k + 1); break; } }
+            if (!nextId && at >= 0 && sts[at + 1]) nextId = String(sts[at + 1].id);
+          }
           const nEl = nextId ? canvas.querySelector(`[id="fv-step-${fvDomKey(info.res)}-${nextId}"]`) : null;
-          if (nEl && nEl !== el) jumpReturns.push({ x1: sl + SIDE_W / 2, y1: top + it.h, nEl });
+          if (nEl && nEl !== el) { jumpReturns.push({ x1: sl + SIDE_W / 2, y1: top + it.h, nEl }); hideLines.add(`${info.res.id}|${info.step.id}|${nextId}`); }
         }
       });
     });
     OL._fv._jumpArrows = jumpArrows;
-    OL._fv._jumpReturns = jumpReturns;
+    OL._fv._jumpReturns = jumpReturns; OL._fv._hideLines = hideLines;
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
@@ -3630,6 +3632,7 @@ export function _fvDrawStepConnections(resources) {
         if (lastH === -1) return;
         const tResId  = outRule.targetId.substring(0, lastH);
         const tStepId = outRule.targetId.substring(lastH + 1);
+        if (OL._fv._hideLines && OL._fv._hideLines.has(`${sourceRes.id}|${sourceStep.id}|${tStepId}`) && String(tResId) === String(sourceRes.id)) return;   // a callout continues the flow instead
 
         let _toKey = String(tResId);
         if (String(tResId) === String(sourceRes.id)) _toKey = _myKey;
