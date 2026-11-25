@@ -2542,7 +2542,7 @@ export function _fvRenderSteps(resources) {
 
   OL._fvAutoLinkSteps(resources);
 
-  const CARD_W    = 164;
+  const CARD_W    = 180;
   const COL_GAP   = 76;
   const SIDE_W    = 150;  // a step's jumps are drawn as small cards beside it (width) ...
   const SIDE_GAP  = 30;   // ... with room for the arrow between the step and them
@@ -3538,7 +3538,7 @@ export function _fvDrawStepConnections(resources) {
     let r = rectCache.get(el);
     if (!r) {
       const left = parseFloat(el.style.left) || 0, top = parseFloat(el.style.top) || 0;
-      const width = parseFloat(el.style.width) || (el.classList.contains('fv-step-card') ? 164 : 0);
+      const width = parseFloat(el.style.width) || (el.classList.contains('fv-step-card') ? 180 : 0);
       let height = _fvStepHeights.get(el);
       if (height === undefined) height = parseFloat(el.style.height) || el.offsetHeight;
       r = { left, top, width, height, right: left + width, bottom: top + height };
