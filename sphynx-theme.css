@@ -849,3 +849,6 @@ body.theme-accessible [style*="font-size:11px"], body.theme-accessible [style*="
 body.theme-accessible [style*="font-size:12px"], body.theme-accessible [style*="font-size: 12px"] { font-size: 14px !important; }
 body.theme-accessible [style*="font-size:13px"], body.theme-accessible [style*="font-size: 13px"] { font-size: 15px !important; }
 body.theme-accessible .card-title, body.theme-accessible h1, body.theme-accessible h2, body.theme-accessible h3 { font-weight: 500 !important; }
+/* one typeface everywhere (theme, display and hard-coded fonts included) */
+body.theme-accessible, body.theme-accessible *:not(code):not(pre):not(kbd):not(svg):not(svg *) {
+  font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif !important; }
