@@ -128,6 +128,36 @@ function hideMerged(card, step, to, key, target, trig) {
     if (into.length && trig) { trig.hideOnMap = true; trig._hookHidden = true; }
 }
 
+// Put the Zaps of every auto-made workflow in the order they run: a Zap that another one starts, or posts to when it is done, comes after
+// that Zap. Only moves a card when it sits ahead of one that hands off to it; otherwise the order stays as it was. Workflows a person
+// made by hand are left alone.
+const AUTO = 'Grouped automatically by the Zap import';
+function orderWorkflows() {
+    const d = data(); const cards = new Map(resources().filter((r) => r.type === 'Zap').map((r) => [String(r.id), r]));
+    const edges = [];
+    cards.forEach((c) => (c.steps || []).forEach((st) => ((st.logic && st.logic.out) || []).forEach((l) => {
+        if (!l || !l._hookdir || !l.targetId) return;
+        const t = String(l.targetId); const i = t.lastIndexOf('-'); const to = t.slice(0, i);
+        if (cards.has(to) && to !== String(c.id)) edges.push([String(c.id), to]);
+    })));
+    let moved = 0;
+    (d.workflows || []).filter((w) => w && (w.zapAuto === true || String(w.description || '').includes(AUTO)) && Array.isArray(w.resourceIds)).forEach((w) => {
+        const ids = w.resourceIds.map(String); const set = new Set(ids);
+        const e = edges.filter(([a, b]) => set.has(a) && set.has(b));
+        if (!e.length) return;
+        const indeg = new Map(ids.map((x) => [x, 0])); e.forEach(([, b]) => indeg.set(b, indeg.get(b) + 1));
+        const out = []; const left = ids.slice();
+        while (left.length) {
+            let k = left.findIndex((x) => indeg.get(x) === 0);    // the earliest in the current order that nothing still has to come before
+            if (k < 0) k = 0;                                      // a loop between Zaps: keep the current order for what is left
+            const x = left.splice(k, 1)[0]; out.push(x);
+            e.forEach(([a, b]) => { if (a === x) indeg.set(b, indeg.get(b) - 1); });
+        }
+        if (out.some((x, i) => x !== ids[i])) { moved++; w.resourceIds = out; }
+    });
+    return moved;
+}
+
 // Put a line on every posting step to the trigger of the Zap its address starts. Lines made here carry _hookdir and are rebuilt each time.
 export function applyWebhookLinks() {
     const d = data(); const map = d.webhookMap || {}; let added = 0;
@@ -171,6 +201,7 @@ export function applyWebhookLinks() {
             });
         });
     });
+    try { orderWorkflows(); } catch (e) { console.warn('Ordering Zaps by hand-off failed:', e); }
     return added;
 }
 
