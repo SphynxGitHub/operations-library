@@ -3397,6 +3397,41 @@ export function _fvRenderSteps(resources) {
               });
             });
 
+            // Time rows: steps that start at the same moment sit in the same row across the columns (a Calendly email and the Zap it triggers,
+            // or the paths that leave a "parallel paths" step). A card's row is its place in its own process, shifted down until it is
+            // below the step that leads to it in another process.
+            if (OL._fv.timeRows !== false && !PRINTING) {
+              const allC = []; byRes.forEach((cs) => cs.forEach((c) => allC.push(c)));
+              const baseOf = new Map(), off = new Map();
+              byRes.forEach((cs, res) => {
+                const lay = layoutOf.get(res); off.set(res, 0);
+                cs.forEach((c, i) => { const lr = isLaneLayout(lay) ? (lay[String(c.step.id)] || {}).row : undefined; baseOf.set(c, Number.isFinite(lr) ? lr : i); });
+              });
+              const depthOf = (c) => baseOf.get(c) + (off.get(c.res) || 0);
+              for (let pass = 0; pass < 12; pass++) {
+                let changed = false;
+                allC.forEach((sc) => {
+                  (sc.step.logic?.out || []).forEach((link) => {
+                    if (!link.targetId || link._implicit) return;
+                    const tc = cardByKey.get(String(link.targetId));
+                    if (!tc || tc.res === sc.res) return;
+                    const need = depthOf(sc) + 1 - baseOf.get(tc);
+                    if (need > (off.get(tc.res) || 0) && need < 60) { off.set(tc.res, need); changed = true; }
+                  });
+                });
+                if (!changed) break;
+              }
+              const byDepth = new Map();
+              allC.forEach((c) => { const d = depthOf(c); if (!byDepth.has(d)) byDepth.set(d, []); byDepth.get(d).push(c); });
+              const ds = [...byDepth.keys()].sort((m, n) => m - n);
+              let ty = y; const topOfDepth = new Map(); let prevD = null;
+              ds.forEach((d) => {
+                if (prevD !== null) { const ph = Math.max(...byDepth.get(prevD).map((c) => hOf(c.el))); ty += ph + 38; }
+                topOfDepth.set(d, ty); prevD = d;
+              });
+              allC.forEach((c) => { const f = topOfDepth.get(depthOf(c)); if (f !== undefined && f > (minY.get(c.el) || 0)) minY.set(c.el, f); });
+            }
+
             // Pass 3: position each column, honouring minY constraints as steps are stacked
             let maxBottom = y;
             const classicRuns = [];
