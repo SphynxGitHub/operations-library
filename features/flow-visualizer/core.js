@@ -898,7 +898,8 @@ export function renderVisualizer() {
         _searchQuery: '',
     };
 
-  // A big project is drawn one stage at a time (drawing every card at once took many seconds and locked the page). The choice is
+  if (OL._fv && OL._fv.layout !== 'steps' && OL._fv.stageFilter === '__overview') OL._fv.stageFilter = '';
+  // A big project opens on the stage overview (drawing every card at once took many seconds and locked the page). The choice is
   // remembered per project: "All stages & workflows" in the filter turns it off.
   if (OL._fv && !OL._fv._defaultFilterDone && client) {
     OL._fv._defaultFilterDone = true;
@@ -908,8 +909,7 @@ export function renderVisualizer() {
       const wfs = data.workflows || [];
       const placedCards = wfs.reduce((n, w) => n + (w.resourceIds || []).length, 0);
       if (placedCards > 150) {
-        const first = stages.find(st => wfs.some(w => String(w.stageId) === String(st.id) && (w.resourceIds || []).length));
-        if (first) OL._fv.stageFilter = `stage-${first.id}`;
+        if (OL._fv.layout === 'steps') OL._fv.stageFilter = '__overview';
       }
     }
   }
@@ -1003,7 +1003,8 @@ export function renderVisualizer() {
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; try{localStorage.setItem('fv_stage_filter_${client ? esc(client.id) : ''}', this.value)}catch(e){} OL.renderVisualizer();">
-          <option value="">All stages & workflows</option>
+          <option value="__overview" ${OL._fv.stageFilter === '__overview' ? 'selected' : ''}>Stage overview</option>
+          <option value="" ${!OL._fv.stageFilter ? 'selected' : ''}>All stages & workflows</option>
           ${stages.map(s => {
             const stageWorkflows = (OL.getWorkflows() || []).filter(w => w.stageId === s.id);
             const stageSelected  = OL._fv.stageFilter === `stage-${s.id}`;
@@ -2412,6 +2413,51 @@ function fvFirstHome(res, workflows) {
   const home = workflows.find(w => (w.resourceIds || []).map(String).includes(String(res.id)));
   return home ? String(home.id) : '';
 }
+// The zoomed-out start page: one tile per stage with its workflows and how much is in each. Click a workflow (or the stage name)
+// to open just that part of the map. Nothing is drawn per card here, so it opens at once however big the project is.
+function fvRenderOverview(canvas, svg, resources) {
+  const data = OL.getCurrentProjectData();
+  const stages = data.stages || []; const wfs = (OL.getWorkflows() || []);
+  const byId = new Map((resources || []).map(r => [String(r.id), r]));
+  const TYPE_ORDER = ['Zap', 'Event', 'Form', 'Email', 'Spreadsheet', 'Workflow'];
+  const counts = (wf) => {
+    const c = {}; let n = 0;
+    (wf.resourceIds || []).forEach(id => { const r = byId.get(String(id)); if (!r || !(r.steps || []).length) return; n++; c[r.type] = (c[r.type] || 0) + 1; });
+    return { n, c };
+  };
+  const chips = (c) => TYPE_ORDER.filter(t => c[t]).map(t => `<span style="font-size:11px;color:var(--text-muted);">${c[t]} ${esc(t)}${c[t] === 1 ? '' : 's'}</span>`).join('<span style="color:var(--line);">·</span>');
+  const tiles = stages.map(stage => {
+    const sw = wfs.filter(w => String(w.stageId) === String(stage.id));
+    const total = sw.reduce((a, w) => a + counts(w).n, 0);
+    const rows = sw.map(wf => { const k = counts(wf); return `
+      <button type="button" onclick="OL.fvOpenStage('${esc(wf.id)}')" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:6px;width:100%;"><span style="font-weight:600;font-size:13px;flex:1;">${esc(wf.name)}</span><span class="pill tiny soft">${k.n}</span></span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${chips(k.c) || '<span style="font-size:11px;color:var(--text-muted);">Empty</span>'}</span>
+      </button>`; }).join('');
+    return `
+      <div style="flex:0 0 300px;display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-card, transparent);">
+        <button type="button" onclick="OL.fvOpenStage('stage-${esc(stage.id)}')" style="display:flex;align-items:center;gap:8px;background:transparent;border:0;color:inherit;cursor:pointer;padding:0;text-align:left;">
+          <i data-lucide="layers" style="width:16px;height:16px;color:var(--accent);"></i>
+          <span style="font-weight:700;font-size:14px;flex:1;">${esc(stage.name)}</span>
+          <span class="pill tiny soft">${total}</span>
+          <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--text-muted);"></i>
+        </button>
+        ${rows || '<div style="font-size:12px;color:var(--text-muted);">No workflows yet.</div>'}
+      </div>`;
+  }).join('');
+  svg.innerHTML = ''; svg.style.width = '0px'; svg.style.height = '0px';
+  canvas.style.width = 'auto'; canvas.style.height = 'auto';
+  canvas.innerHTML = `<div style="padding:24px;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:12px;color:var(--text-muted);">Click a stage or a workflow to open it. Pick "All stages &amp; workflows" in the filter to draw everything at once.</div>
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">${tiles || '<div style="color:var(--text-muted);">No stages yet.</div>'}</div>
+    </div>`;
+  if (window.lucide) lucide.createIcons();
+}
+export function fvOpenStage(value) {
+  OL._fv.stageFilter = value || '';
+  try { const c = getActiveClient(); if (c) localStorage.setItem(`fv_stage_filter_${c.id}`, OL._fv.stageFilter); } catch (e) { /* not remembered */ }
+  OL.renderVisualizer();
+}
 export function _fvRenderSteps(resources) {
   const canvas    = document.getElementById('fv-content');
   const svg       = document.getElementById('fv-svg-layer');
@@ -2426,13 +2472,14 @@ export function _fvRenderSteps(resources) {
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
+  if (OL._fv.stageFilter === '__overview' && !OL._fv._printing) { fvRenderOverview(canvas, svg, resources); return; }
   // Everything is built off-page and added in one step just before measuring.
   const frag = document.createDocumentFragment();
 
   // Persist which consolidated cards are open across re-renders
   if (!OL._fv.expandedGroups) OL._fv.expandedGroups = new Set();
 
-  const stageFilter = OL._fv.stageFilter || '';
+  const stageFilter = OL._fv.stageFilter === '__overview' ? '' : (OL._fv.stageFilter || '');
   // The filter is a stage id, the drop-down's "stage-<id>", or a workflow id (from the side panel). Work out which stage it names,
   // and the one workflow when it names a workflow.
   const _rawF = String(stageFilter);
@@ -10013,7 +10060,7 @@ Object.assign(window.OL, {
     getAllStepOptions, addStepLogic, updateStepLogic, removeStepLogic,
     updateStepTarget, syncLogicPorts, updateStepLink, createMirrorLink,
     clearMirrorLink, getCardConnectionPoint, drawConnections, drawLogicIcon,
-    zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement, _refSplitIdx
+    fvOpenStage, zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement, _refSplitIdx
 });
 // Called bare from app.js's router — bridge onto window directly.
 window.renderVisualizer = renderVisualizer;
