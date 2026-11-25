@@ -887,9 +887,8 @@ export function renderVisualizer() {
   const data      = OL.getCurrentProjectData();
   const stages    = data.stages || [];
   if (typeof OL.fvWrapCardBuilder === 'function') OL.fvWrapCardBuilder();
-  const allMapResources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
-  // with a person picked in the switcher, only that person's version of each same-name group is drawn
-  const resources = typeof OL.fvVisibleResources === 'function' ? OL.fvVisibleResources(allMapResources) : allMapResources;
+  const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+  if (typeof OL.fvBuildVersionLabels === 'function') OL.fvBuildVersionLabels(resources);   // person tags on version cards
 
   if (!OL._fv) OL._fv = {
         layout: fvStartLayout(), zoom: 1,
@@ -924,8 +923,6 @@ export function renderVisualizer() {
                 title="${OL._fv.railCollapsed ? 'Expand panel' : 'Collapse panel'}">
             <i data-lucide="${OL._fv.railCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>
         </button>
-
-        ${typeof OL.fvPersonSwitcherHtml === 'function' ? OL.fvPersonSwitcherHtml(allMapResources) : ''}
 
         <div class="fv-search-wrap">
           <i data-lucide="search" style="width:13px;height:13px;color:var(--text-muted);flex-shrink:0;"></i>

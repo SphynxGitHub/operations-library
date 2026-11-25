@@ -32,61 +32,31 @@ OL.versionGroups = function (list) {
     return map;
 };
 
-const personKey = () => `ol-fv-person-${(getActiveClient() || {}).id || ''}`;
-OL.fvPerson = () => { try { return localStorage.getItem(personKey()) || ''; } catch (e) { return ''; } };
-OL.fvSetPerson = function (p) {
-    try { localStorage.setItem(personKey(), p || ''); } catch (e) { /* the pick just won't be remembered */ }
-    if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
-};
-OL.fvPeople = (groups) => [...new Set([...groups.values()].flatMap((g) => g.labels).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-
-// the resources the map should draw
-OL.fvVisibleResources = function (resources) {
-    const person = norm(OL.fvPerson());
-    OL._fvHiddenVersionCount = 0;
-    if (!person) return resources;
-    const groups = OL.versionGroups(resources);
-    if (!groups.size) return resources;
-    const hidden = new Set(); const done = new Set();
-    groups.forEach((g) => {
-        if (done.has(g.key)) return; done.add(g.key);
-        const keep = g.members.find((m) => norm(groups.get(String(m.id)).label) === person);
-        if (!keep) return;                                   // nobody's version for this person: show them all
-        g.members.forEach((m) => { if (m !== keep) hidden.add(String(m.id)); });
+// One pass per map render: id -> person label, for every resource that is a version of another.
+// (Built once so drawing the map stays fast; the cards just look their label up.)
+OL.fvBuildVersionLabels = function (resources) {
+    const labels = new Map();
+    (resources || []).forEach((r) => {
+        if (!live(r)) return;
+        let label = r.versionGroup ? (r.versionLabel || '') : '';
+        if (!r.versionGroup && typeof OL.resourceInfo === 'function') { const i = OL.resourceInfo(r); if (i && i.versionKey) label = i.versionLabel || ''; else return; }
+        else if (!r.versionGroup) return;
+        labels.set(String(r.id), label || 'Version');
     });
-    OL._fvHiddenVersionCount = hidden.size;
-    return hidden.size ? resources.filter((r) => !hidden.has(String(r.id))) : resources;
+    OL._fvVersionLabels = labels;
+    return labels;
 };
 
-OL.fvPersonSwitcherHtml = function (resources) {
-    const groups = OL.versionGroups(resources);
-    const people = OL.fvPeople(groups);
-    if (!people.length) return '';
-    const cur = OL.fvPerson();
-    const hid = OL._fvHiddenVersionCount || 0;
-    return `<div style="display:inline-flex;align-items:center;gap:6px;" title="Same-name resources are versions for different people. Pick a person to show only their version.">
-        <i data-lucide="users" style="width:13px;height:13px;color:var(--text-muted);"></i>
-        <select class="modal-input tiny" style="height:28px;padding:0 8px;min-width:130px;" onchange="OL.fvSetPerson(this.value)" aria-label="Show versions for">
-            <option value="">All people</option>
-            ${people.map((p) => `<option value="${esc(p)}" ${norm(p) === norm(cur) ? 'selected' : ''}>${esc(p)}</option>`).join('')}
-        </select>
-        ${cur && hid ? `<span class="tiny muted" style="white-space:nowrap;">${hid} other version${hid === 1 ? '' : 's'} hidden</span>` : ''}
-    </div>`;
-};
-
-// a small "Kyle · 1 of 3" tag on each version card on the map
+// the person tag on each version card on the map, same idea as the Resources tab
 OL.fvWrapCardBuilder = function () {
     if (OL._fvBuildCardRaw || typeof OL._fvBuildCard !== 'function') return;
     OL._fvBuildCardRaw = OL._fvBuildCard;
     OL._fvBuildCard = function (res, ...rest) {
         const html = OL._fvBuildCardRaw(res, ...rest);
-        try {
-            if (!res || OL._fvGroupsCache == null) { OL._fvGroupsCache = OL.versionGroups(); setTimeout(() => { OL._fvGroupsCache = null; }, 0); }
-            const g = OL._fvGroupsCache.get(String(res.id));
-            if (!g) return html;
-            const tag = `<span class="fv-card-source" title="One of ${g.members.length} versions of this resource">${esc(g.label || 'Version')} · ${g.members.indexOf(res) + 1} of ${g.members.length}</span>`;
-            return html.replace('<span class="fv-card-step-num">', `${tag}<span class="fv-card-step-num">`);
-        } catch (e) { console.error('Version tag failed', e); return html; }
+        const label = OL._fvVersionLabels && res ? OL._fvVersionLabels.get(String(res.id)) : '';
+        if (!label) return html;
+        const tag = `<span class="fv-card-source fv-card-person" title="This is ${esc(label)}'s version of this resource"><i data-lucide="user" style="width:9px;height:9px;"></i> ${esc(label)}</span>`;
+        return html.replace('<span class="fv-card-step-num">', `${tag}<span class="fv-card-step-num">`);
     };
 };
 
