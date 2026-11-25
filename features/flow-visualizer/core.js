@@ -2851,7 +2851,7 @@ export function _fvRenderSteps(resources) {
     const wfMetaList = [];
 
     wfGroups.forEach(({ workflow, resources: wfRes, shared: sharedHere }) => {
-      const { sequence, laneGroupSet } = buildMergedFlow(wfRes);
+      const { sequence, laneGroupSet, consolidatedGroups: _cgs } = buildMergedFlow(wfRes);
 
       // Compute x positions for each resource
       const resLayouts = new Map();
@@ -2885,6 +2885,15 @@ export function _fvRenderSteps(resources) {
       wfRes.forEach(r => {
         const rLayout = OL._fvLayoutResource(r, { collapse: laneGroupSet.get(r) });
         resLayouts.set(r, rLayout);
+        // a process whose every card is hidden or drawn inside a combined card takes no column of its own: it shares its neighbour's
+        const _inCg = new Set(Object.values(_cgs || {}).flat().map(m => `${m.res.id}-${m.step.id}`));
+        const _empty = (r.steps || []).length > 0 && (r.steps || []).every(st => (st.hideOnMap && !OL._fv.showHiddenSteps) || _inCg.has(`${r.id}-${st.id}`));
+        if (_empty && cumX > PAD_X) {
+          const prevR = wfRes[wfRes.indexOf(r) - 1];
+          resBaseX.set(r, prevR && resBaseX.has(prevR) ? resBaseX.get(prevR) : cumX);
+          resGap.set(r, COL_GAP);
+          return;
+        }
         resBaseX.set(r, cumX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
         const g = gapFor(r, rLayout) + sideOfRes(r);
