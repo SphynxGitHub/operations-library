@@ -2612,7 +2612,7 @@ export function _fvRenderSteps(resources) {
           });
           if (cur.length) rows.push(cur);
           if (!rows.length) return [g];
-          return rows.map((rs, i) => ({ workflow: i === 0 ? g.workflow : { ...g.workflow, name: `${g.workflow.name} (cont.)` }, resources: rs, shared: i === 0 ? (g.shared || []) : [] }));
+          return rows.map((rs, i) => ({ workflow: i === 0 ? g.workflow : { ...g.workflow, name: `${g.workflow.name} (cont.)`, _isCont: true }, resources: rs, shared: i === 0 ? (g.shared || []) : [] }));
         });
       });
     }
@@ -2910,6 +2910,7 @@ export function _fvRenderSteps(resources) {
       wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;display:flex;align-items:center;gap:6px;z-index:5;`;
       wfLblEl.addEventListener('mousedown', (e) => e.stopPropagation());
       wfLblEl.appendChild(wfName);
+      if (workflow._isCont && !OL.fvShowResNames()) wfName.style.display = 'none';
       if ((sharedHere || []).length) {
         const homeName = (r) => { const h = (OL.getWorkflows() || []).find(w => String(w.id) === fvFirstHome(r, OL.getWorkflows() || [])); return h ? h.name : 'its first workflow'; };
         const shown = sharedHere.slice(0, 3);
@@ -3419,6 +3420,16 @@ export function _fvRenderSteps(resources) {
 
         const actualWfH = wfBottom - wfTop + WF_PAD * 2;
         if (wfBgEl) wfBgEl.style.height = actualWfH + 'px';
+        if (wfBgEl && wfBgEl.parentNode && !OL.fvShowResNames()) {
+          // column names are hidden: draw a thin divider between neighbouring resources so the columns still read as separate
+          const xs = (resMeta || []).map(m => m.colX).sort((a, b) => a - b);
+          for (let i = 1; i < xs.length; i++) {
+            const dv = document.createElement('div');
+            dv.className = 'fv-res-divider';
+            dv.style.cssText = `position:absolute;left:${xs[i] - COL_GAP / 2}px;top:${wfTop + WF_PAD + WF_HDR}px;width:0;height:${Math.max(0, wfBottom - (wfTop + WF_PAD + WF_HDR) + WF_PAD)}px;border-left:1px dashed var(--line);opacity:0.7;pointer-events:none;z-index:1;`;
+            wfBgEl.parentNode.appendChild(dv);
+          }
+        }
         stageBottom = Math.max(stageBottom, wfBottom + WF_PAD * 2);
         wfY = wfTop + actualWfH + WF_GAP;
       });
