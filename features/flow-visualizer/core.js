@@ -22,7 +22,7 @@
 
 import { shortRule } from './rule-short.js';
 import { state, esc, val, uid, getActiveClient, persist } from '../../core/data.js';
-import { isLaneResource, layoutLanes, isLaneLayout, stackColumns } from '../zap-layout.js';
+import { isLaneResource, layoutLanes, isLaneLayout, stackColumns, mapSectionParts } from '../zap-layout.js';
 import { layoutDraft, routeDraftLink, edgesOf } from '../../core/frameout.js';
 const isDraftLayoutResource = (res) => !!(res && res.isDraft && res.source === 'frameout' && (res.steps || []).length);
 import { chooseCols, printFlowDiagram as _printFlowDiagram } from '../flow-print.js?v=20261107e';
@@ -2441,6 +2441,25 @@ function fvInstanceOf(res, wfId) {
   }), enumerable: true, writable: true });
   return inst;
 }
+// MAP SECTIONS: a Zap whose steps carry section names is drawn as one column group per section, each a light copy of the real Zap that
+// shows only that section's steps (the others are hidden in the copy). The Zap itself is untouched. A section can be shown in another
+// workflow (res.sectionWf[firstStepId] = workflow id). Copies share the real id, so selecting, editing and the step panel work as usual.
+function fvSectionInstance(res, part, k) {
+  const inst = Object.create(res);
+  Object.defineProperty(inst, '_inst', { value: `sec${k}`, enumerable: true });
+  Object.defineProperty(inst, '_secStart', { value: String(part.startId), enumerable: true });
+  Object.defineProperty(inst, 'name', { value: part.marked ? `${res.name} — ${part.name}` : res.name, enumerable: true, writable: true });
+  Object.defineProperty(inst, 'steps', { value: (res.steps || []).map((st) => {
+    const c = Object.create(st);
+    if (!part.ids.has(String(st.id)) && !st.hideOnMap) Object.defineProperty(c, 'hideOnMap', { value: true, enumerable: true, writable: true, configurable: true });
+    Object.defineProperty(c, 'mapSection', { value: undefined, enumerable: true, writable: true, configurable: true });   // the copy is already one section: no stacking inside it
+    return c;
+  }), enumerable: true, writable: true });
+  return inst;
+}
+// the workflow a section is shown in: the one chosen for it, else the workflow that holds the Zap
+const fvSectionHome = (res, part, homeWf) => { const w = (res.sectionWf || {})[String(part.startId)]; return w ? String(w) : String(homeWf); };
+
 const fvDomKey = (res) => (res && res._inst ? `${res.id}~${res._inst}` : String(res.id));
 // The workflow a multi-placement resource is drawn in on the steps map: its first placement, else the first workflow that holds it.
 function fvFirstHome(res, workflows) {
@@ -2559,13 +2578,27 @@ export function _fvRenderSteps(resources) {
           (cr.steps || []).forEach(st => OL.fvJumpsOf(st).forEach(j => { if (j && j.resId && String(j.resId) !== String(cr.id) && inWf.has(String(j.resId))) calledIds.add(String(j.resId)); })); });
       }
       const shared = [];
-      const wfRes = (wf.resourceIds || [])
+      const _secOf = (r) => (r && r.type === 'Zap' && !r._inst) ? mapSectionParts(r) : [];
+      const _homeOf = (r) => { const w = wfAll.find(x => (x.resourceIds || []).map(String).includes(String(r.id))); return w ? String(w.id) : ''; };
+      const wfRes0 = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
         // A resource placed in several workflows is drawn in each of them (see fvInstanceOf).
         .filter(r => r && (r.steps || []).length > 0)
         .filter(r => !calledIds.has(String(r.id)))
         .filter(r => { if (collapseShared && r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) { shared.push(r); return false; } return true; })
         .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
+      // a Zap with map sections stands here as the sections that belong in this workflow; sections chosen for this workflow from a Zap that lives elsewhere join the end
+      const wfRes = [];
+      wfRes0.forEach(r => {
+        const parts = _secOf(r);
+        if (!parts.length) { wfRes.push(r); return; }
+        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, wf.id) === String(wf.id)) wfRes.push(fvSectionInstance(r, pt, k)); });
+      });
+      resources.forEach(r => {
+        const parts = _secOf(r); if (!parts.length) return;
+        const home = _homeOf(r); if (!home || home === String(wf.id)) return;
+        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, home) === String(wf.id) && (r.sectionWf || {})[String(pt.startId)]) wfRes.push(fvSectionInstance(r, pt, k)); });
+      });
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
       if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered, shared }); }
     });
@@ -3808,6 +3841,10 @@ export function _fvDrawStepConnections(resources) {
           if (_myCopies.length > 1 && _myCopies.some(c => tw.has(copyWf(c))) && !tw.has(copyWf(sourceRes))) return;   // another copy of this resource leads there
           const tc2 = (copiesOf.get(String(tResId)) || []).find(c => copyWf(c) === copyWf(sourceRes));
           if (tc2) _toKey = fvDomKey(tc2);
+        }
+        if (!elById.has(`fv-step-${_toKey}-${tStepId}`)) {      // the step is in another section of that Zap: find the copy that shows it
+          const hit = (copiesOf.get(String(tResId)) || []).find(c => elById.has(`fv-step-${fvDomKey(c)}-${tStepId}`));
+          if (hit) _toKey = fvDomKey(hit);
         }
         // All-stages view draws a shared resource once; the chip in each other workflow stands for its lines there.
         if (!(OL._fv && OL._fv.stageFilter) && !(OL._fv && OL._fv._printing) && String(tResId) !== String(sourceRes.id)) {
@@ -8218,9 +8255,18 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                 </div>
                 ${(res.type === 'Zap') ? `<div class="inspector-section">
                     <label class="section-label"><i data-lucide="split" style="width:11px;height:11px;"></i> MAP SECTION</label>
-                    <div class="tiny muted" style="margin-bottom:6px;">Start a new section of this Zap here. The map shows it as its own flow under a title; the Zap itself is unchanged. Leave blank for no section.</div>
+                    <div class="tiny muted" style="margin-bottom:6px;">Start a new section of this Zap here. The map draws each section as its own flow, and a section can be shown in another workflow or stage. The Zap itself keeps all its steps. Leave blank for no section.</div>
                     <input type="text" class="inspector-name-input" value="${esc(step.mapSection || '')}" placeholder="Section name, e.g. Find household"
                            onblur="OL.updateAtomicStep('${resId}','${step.id}','mapSection',this.value.trim())">
+                    ${step.mapSection ? (() => {
+                        const _st = OL.getCurrentProjectData().stages || [];
+                        const _wfs = OL.getWorkflows() || [];
+                        const _cur = (res.sectionWf || {})[String(step.id)] || '';
+                        return `<label class="section-label" style="margin-top:8px;">SHOW THIS SECTION IN</label>
+                        <select class="modal-input tiny" onchange="OL.fvSetSectionWorkflow('${resId}','${step.id}',this.value)">
+                            <option value="">With the rest of this Zap</option>
+                            ${_wfs.map(w => { const sg = _st.find(x => String(x.id) === String(w.stageId)); return `<option value="${esc(String(w.id))}" ${String(w.id) === String(_cur) ? 'selected' : ''}>${esc((sg ? sg.name + ' › ' : '') + (w.name || 'Workflow'))}</option>`; }).join('')}
+                        </select>`; })() : ''}
                     <button class="btn tiny" style="margin-top:6px;" onclick="OL.fvSuggestSections('${resId}')">Suggest sections for this Zap</button>
                 </div>` : ''}
                 <div class="inspector-section">
@@ -8532,6 +8578,21 @@ export function fvSuggestSections(resId) {
   if (!confirm(`Start a new map section at these ${named.length} steps (each named after its step)?\n\n${list}\n\nThe Zap itself is not changed. You can rename or clear any of them on the step.`)) return;
   OL.updateAndSync(() => { named.forEach((st) => { if (!st.mapSection) st.mapSection = String(st.name || '').trim(); }); });
   refreshFlowMap(resId, named[0].id);
+}
+
+// Choose the workflow (and so the stage) a map section is shown in. Only the map changes: the Zap and its steps stay as they are.
+export function fvSetSectionWorkflow(resId, stepId, wfId) {
+  const data = OL.getCurrentProjectData();
+  const res = (data.resources || data.localResources || []).find((r) => String(r.id) === String(resId));
+  if (!res) throw new Error('Zap not found for the section');
+  OL.updateAndSync(() => {
+    const live = (OL.getCurrentProjectData().resources || OL.getCurrentProjectData().localResources || []).find((r) => String(r.id) === String(resId));
+    if (!live) throw new Error('Zap not found for the section');
+    live.sectionWf = Object.assign({}, live.sectionWf || {});
+    if (wfId) live.sectionWf[String(stepId)] = String(wfId); else delete live.sectionWf[String(stepId)];
+    if (!Object.keys(live.sectionWf).length) delete live.sectionWf;
+  });
+  refreshFlowMap(resId, stepId);
 }
 
 export function updateAtomicStep(resId, stepId, field, value) {
@@ -10359,7 +10420,7 @@ Object.assign(window.OL, {
     updateQuickAddPreview, showSlashMenu, insertCommand, handleQuickAddKeys,
     updateStepPreview, showSubMenu, selectMultiLink, selectTargetResource,
     selectMultiAssignee, exitSubMenu, completeSubMenuValue, selectMenuOption,
-    commitQuickStep, updateStepName, deleteStep, toggleSteps, fvSuggestSections,
+    commitQuickStep, updateStepName, deleteStep, toggleSteps, fvSuggestSections, fvSetSectionWorkflow,
     splitCardAtStep, highlightFamily, toggleScopingStatus, getAppByFunction,
     getResourceIcon, openInspector, _buildInspectorContent, executeStepMove,
     _fvToggleLogicType, _fvOpenTargetPicker, renderStepResources, updateAtomicStep,

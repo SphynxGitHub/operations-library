@@ -66,6 +66,40 @@ export function collapseGroups(res, names) {
   return { virtual: { id: res.id, zapMeta: res.zapMeta, originalZapId: res.originalZapId, steps: out }, anchorOf };
 }
 
+// Which steps belong to which MAP SECTION of a Zap. A step with step.mapSection (a name) starts a section; it takes everything that follows
+// it until the next marked step. What is left over (the steps before the first mark) is the opening section. Returns [] when the Zap has no marks,
+// else [{ name, startId, marked, ids: Set, members: [step] }] in order (the opening section first).
+export function mapSectionParts(res) {
+  const all = (res && res.steps) || [];
+  const isMark = (st) => st && typeof st.mapSection === 'string' && st.mapSection.trim();
+  if (!all.some(isMark)) return [];
+  const ids = all.map((st) => String(st.id)); const byId0 = new Map(all.map((st) => [String(st.id), st]));
+  const succ = (st, i) => {
+    const outs = ((st.logic && st.logic.out) || []).map((l) => (l && l.targetId ? stepIdOf(res, l.targetId) : null)).filter((t) => t !== null && byId0.has(t) && t !== String(st.id));
+    if (outs.length) return outs;
+    return !st.noAutoNext && all[i + 1] ? [String(all[i + 1].id)] : [];
+  };
+  const idx0 = new Map(ids.map((x, i) => [x, i]));
+  const starts = [ids[0]].concat(all.filter((st) => isMark(st) && String(st.id) !== ids[0]).map((st) => String(st.id)));
+  const startSet = new Set(starts); const owner = new Map();
+  starts.forEach((sid, k) => {
+    const q = [sid];
+    while (q.length) {
+      const x = q.shift();
+      if (owner.has(x)) continue;
+      if (x !== sid && startSet.has(x)) continue;
+      owner.set(x, k);
+      succ(byId0.get(x), idx0.get(x)).forEach((y) => q.push(y));
+    }
+  });
+  ids.forEach((x) => { if (!owner.has(x)) owner.set(x, 0); });
+  return starts.map((sid, k) => {
+    const members = all.filter((st) => owner.get(String(st.id)) === k);
+    const st0 = byId0.get(sid);
+    return { name: isMark(st0) ? st0.mapSection.trim() : '', startId: sid, marked: !!isMark(st0), ids: new Set(members.map((st) => String(st.id))), members };
+  }).filter((p) => p.members.length);
+}
+
 // Returns { [stepId]: { colOffset, row, parentId, laneMode: true, after? } }.
 //   colOffset  which column (0 = the main column, 1 = the next one to the right ...)
 //   row        a grid row (steps in one lane are on consecutive rows; sibling lanes start on the SAME row)
