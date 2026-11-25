@@ -120,15 +120,40 @@ export async function runImport(service: Service, key: string, opts: { baseUrl?:
       // A user ID entered with the key skips the /users/me call, which needs the "users" scope.
       const given = String(opts.calendlyUser ?? "").trim().split("/").pop() || "";
       let uri: string | undefined;
+      let org: string | undefined;
       if (given) {
         if (!/^[A-Za-z0-9_-]{8,64}$/.test(given)) throw new BadRequest("The Calendly user ID should be the ID from the user's address (api.calendly.com/users/<id>).");
         uri = `https://api.calendly.com/users/${given}`;
       } else {
         const me = await getJson(f, "https://api.calendly.com/users/me", { Authorization: `Bearer ${key}` }, key);
         uri = me?.resource?.uri;
+        org = me?.resource?.current_organization;
       }
       if (!uri) throw new UpstreamError(502, "Calendly did not return a user.");
-      return await getJson(f, `https://api.calendly.com/event_types?user=${encodeURIComponent(uri)}`, { Authorization: `Bearer ${key}` }, key);
+      const auth = { Authorization: `Bearer ${key}` };
+      // Follow Calendly's pagination until every page is read; a missing page must fail loudly, never look like a full pull.
+      const pageAll = async (first: string) => {
+        const all: any[] = [];
+        let next: string | null = first;
+        for (let i = 0; next && i < 50; i++) {
+          const page = await getJson(f, next, auth, key);
+          if (!Array.isArray(page?.collection)) throw new UpstreamError(502, "Calendly returned an unexpected event types response.");
+          all.push(...page.collection);
+          next = page?.pagination?.next_page || null;
+        }
+        if (next) throw new UpstreamError(502, "Calendly has more than 5,000 event types; the import stopped before reading them all.");
+        return all;
+      };
+      // With a specific user ID the import stays scoped to that user. Otherwise it pulls the whole organization
+      // (every member and team), which needs a key from an admin or owner.
+      if (given) {
+        return { collection: await pageAll(`https://api.calendly.com/event_types?user=${encodeURIComponent(uri)}&count=100`) };
+      }
+      if (!org) throw new UpstreamError(502, "Calendly did not return an organization for this key.");
+      const all = await pageAll(`https://api.calendly.com/event_types?organization=${encodeURIComponent(org)}&count=100`);
+      // Same event can appear once per host; keep one row per event type URI.
+      const seen = new Set<string>();
+      return { collection: all.filter((e) => e?.uri && !seen.has(e.uri) && seen.add(e.uri)) };
     }
     case "activecampaign": {
       const base = cleanActiveCampaignBase(opts.baseUrl);
