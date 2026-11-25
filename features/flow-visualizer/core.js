@@ -3884,7 +3884,7 @@ export function _fvDrawStepConnections(resources) {
             /^(yes|no)$/i.test((outRule.rule || '').trim()),
             (gutterRegs.get(String(sourceRes.id)) || (gutterRegs.set(String(sourceRes.id), []), gutterRegs.get(String(sourceRes.id)))));
           if (draftRoute) {
-            const R = 12, pts = draftRoute.points;
+            const R = 22, pts = draftRoute.points;
             d = `M ${pts[0][0]} ${pts[0][1]}`;
             for (let i = 1; i < pts.length; i++) {
               const [px, py] = pts[i - 1], [cx, cy] = pts[i];
@@ -3909,7 +3909,7 @@ export function _fvDrawStepConnections(resources) {
             if (tmid - fmid > 24 && !hit(sx + 4, fmid, gx, fmid) && !hit(gx, fmid, gx, tmid) && !hit(gx, tmid, ex - 4, tmid)) {
               const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
               draftRoute = { points: pts, kind: 'side' };
-              const R = Math.min(10, (gx - sx) / 2, (tmid - fmid) / 2, (ex - gx) / 2);
+              const R = Math.min(22, (gx - sx) / 2, (tmid - fmid) / 2, (ex - gx) / 2);
               d = `M ${sx} ${fmid} L ${gx - R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx + R} ${tmid} L ${ex} ${tmid}`;
             }
           }
@@ -3926,7 +3926,7 @@ export function _fvDrawStepConnections(resources) {
             if (tmid - fmid > 24 && !hit(gx, fmid, sx - 4, fmid) && !hit(gx, fmid, gx, tmid) && !hit(ex + 4, tmid, gx, tmid)) {
               const pts = [[sx, fmid], [gx, fmid], [gx, tmid], [ex, tmid]];
               draftRoute = { points: pts, kind: 'side' };
-              const R = Math.min(10, (sx - gx) / 2, (tmid - fmid) / 2, (gx - ex) / 2);
+              const R = Math.min(22, (sx - gx) / 2, (tmid - fmid) / 2, (gx - ex) / 2);
               d = `M ${sx} ${fmid} L ${gx + R} ${fmid} Q ${gx} ${fmid} ${gx} ${fmid + R} L ${gx} ${tmid - R} Q ${gx} ${tmid} ${gx - R} ${tmid} L ${ex} ${tmid}`;
             }
           }
@@ -3939,7 +3939,7 @@ export function _fvDrawStepConnections(resources) {
           if (by > sy + 6 && Math.abs(tx - fx) >= 24) {
             const pts = [[fx, sy], [fx, by], [tx, by], [tx, ey]];
             draftRoute = { points: pts, kind: 'bus' };
-            const R = 10; const sgx = Math.sign(tx - fx);
+            const R = 22; const sgx = Math.sign(tx - fx);
             const r1 = Math.min(R, Math.abs(tx - fx) / 2, (by - sy) / 2), r2 = Math.min(R, Math.abs(tx - fx) / 2, (ey - by) / 2);
             d = `M ${fx} ${sy} L ${fx} ${by - r1} Q ${fx} ${by} ${fx + sgx * r1} ${by} L ${tx - sgx * r2} ${by} Q ${tx} ${by} ${tx} ${by + r2} L ${tx} ${ey}`;
           }
@@ -3951,7 +3951,7 @@ export function _fvDrawStepConnections(resources) {
           const sy = fRect.bottom - cRect.top, tl = tRect.left - cRect.left, tmid = tRect.top - cRect.top + Math.min(tRect.height / 2, 40);
           const bx = fRect.left - cRect.left + fRect.width / 2;
           if (tmid - sy > 40 && tl - bx > 30 && !hitsCard(bx - 1, sy + 3, 2, tmid - sy - 3, 0) && !hitsCard(bx, tmid - 1, tl - bx - 4, 2, 0)) {
-            const R = 12;
+            const R = 22;
             d = `M ${bx} ${sy} L ${bx} ${tmid - R} Q ${bx} ${tmid} ${bx + R} ${tmid} L ${tl} ${tmid}`;
             draftRoute = { kind: 'under', points: [[bx, sy], [bx, tmid], [tl, tmid]] };
           }
@@ -3962,7 +3962,7 @@ export function _fvDrawStepConnections(resources) {
         if (!draftRoute && isCrossResource && isVert && dy > 0) {
           const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
           if (ey - sy > 40 && hitsCard(Math.min(fx, tx) - 1, sy + 3, Math.abs(tx - fx) + 2, ey - sy - 6, 0)) {
-            const R = 10;
+            const R = 22;
             const tryGutter = (gx) => {
               const sg = Math.sign(gx - fx) || 1, sg2 = Math.sign(tx - gx) || 1;
               const a = sy + 14, b = ey - 14;
