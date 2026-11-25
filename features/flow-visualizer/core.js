@@ -2527,11 +2527,20 @@ export function _fvRenderSteps(resources) {
       // In the all-stages view a shared (global) resource is drawn once, in its first home; every other workflow gets a jump chip
       // in its heading instead of another full copy. Filter to a stage or workflow and the copies come back (see fvInstanceOf).
       const collapseShared = !stageFilter && !(OL._fv && OL._fv._printing);
+      // A process another process of this workflow calls out to ("See NEW Find or Create Contact...") is drawn in full only when this
+      // one workflow is open; on a stage or All stages it is just the teal callout beside the step that calls it.
+      const calledIds = new Set();
+      if (!_fWf && !(OL._fv && OL._fv._printing) && typeof OL.fvJumpsOf === 'function') {
+        const inWf = new Set((wf.resourceIds || []).map(String));
+        (wf.resourceIds || []).forEach(id => { const cr = resources.find(r => String(r.id) === String(id)); if (!cr) return;
+          (cr.steps || []).forEach(st => OL.fvJumpsOf(st).forEach(j => { if (j && j.resId && String(j.resId) !== String(cr.id) && inWf.has(String(j.resId))) calledIds.add(String(j.resId)); })); });
+      }
       const shared = [];
       const wfRes = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
         // A resource placed in several workflows is drawn in each of them (see fvInstanceOf).
         .filter(r => r && (r.steps || []).length > 0)
+        .filter(r => !calledIds.has(String(r.id)))
         .filter(r => { if (collapseShared && r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) { shared.push(r); return false; } return true; })
         .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
@@ -3169,11 +3178,17 @@ export function _fvRenderSteps(resources) {
     // The ways out of each step are small cards beside it, joined by an arrow from the tag they belong to (the tag whose name is in the
     // jump's text, e.g. "Form completed: <form>"). Worked out here, before the cards are stacked, so a step with several of them
     // gets the room under it for the stack.
+    OL._fv._inlineJumps = [];
     const sideInfo = new Map();      // card element -> { res, step, items: [{ c, when, relY, h, anchorY, chip }], extra }
     const sideExtra = new Map();
     const _norm = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
     stageMeta.forEach(({ wfMetaList }) => wfMetaList.forEach(({ seqMeta }) => (seqMeta || []).forEach((item) => (item.sectionCards || []).forEach((sc) => {
-      const cards = typeof OL.fvJumpCardsOf === 'function' ? OL.fvJumpCardsOf(sc.step, sc.res) : [];
+      let cards = typeof OL.fvJumpCardsOf === 'function' ? OL.fvJumpCardsOf(sc.step, sc.res) : [];
+      // One workflow open: a process called from here that is drawn in this workflow shows its steps, so no callout; a line goes to it instead
+      if (_fWf && cards.length) {
+        const drawn = new Set(allActiveResources.map(r => String(r.id)));
+        cards = cards.filter(c => { if (!c.missing && String(c.resId) !== String(sc.res.id) && drawn.has(String(c.resId))) { (OL._fv._inlineJumps = OL._fv._inlineJumps || []).push({ res: sc.res, step: sc.step, c }); return false; } return true; });
+      }
       if (!cards.length) return;
       const cardH = hOfRaw(sc.el);
       const cr = sc.el.getBoundingClientRect();
@@ -3419,12 +3434,15 @@ export function _fvRenderSteps(resources) {
     });
 
     // place the side cards now that every card has its final position, and remember the arrows to them
-    const jumpArrows = []; const jumpReturns = []; const hideLines = new Set();
+    const jumpArrows = []; const jumpReturns = []; const jumpChains = []; const hideLines = new Set();
     sideInfo.forEach((info, el) => {
       const cl = parseFloat(el.style.left) || 0, ct = parseFloat(el.style.top) || 0;
       const sl = cl + CARD_W + SIDE_GAP;
+      let prevCallout = null;
       info.items.forEach((it) => {
         const top = Math.round(ct + it.relY);
+        if (prevCallout) jumpChains.push({ x: sl + SIDE_W / 2, y1: prevCallout, y2: top });   // callout to callout, in the order they are listed
+        prevCallout = top + it.h;
         canvas.insertAdjacentHTML('beforeend', OL.fvJumpCardHtml(info.step, info.res, it.c, it.when, { left: sl, top, w: SIDE_W, h: it.h }));
         if (it.chip) it.chip.classList.add('fv-co-linked');
         jumpArrows.push({ x1: cl + CARD_W, y1: ct + it.anchorY, x2: sl, y2: top + it.h / 2 });
@@ -3443,7 +3461,7 @@ export function _fvRenderSteps(resources) {
       });
     });
     OL._fv._jumpArrows = jumpArrows;
-    OL._fv._jumpReturns = jumpReturns; OL._fv._hideLines = hideLines;
+    OL._fv._jumpReturns = jumpReturns; OL._fv._jumpChains = jumpChains; OL._fv._hideLines = hideLines;
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
@@ -3535,6 +3553,25 @@ export function _fvDrawStepConnections(resources) {
       p.setAttribute('marker-end', 'url(#fv-arr)');
       p.style.pointerEvents = 'none';
       g0.appendChild(p);
+    });
+  }
+
+  // callout to callout (a step with several), and, with one workflow open, a line from the calling step to the process it calls
+  {
+    const g2 = document.getElementById('fv-lines'); const ns2 = 'http://www.w3.org/2000/svg';
+    const add = (d, dashed) => { const p = document.createElementNS(ns2, 'path'); p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#3dd9c5'); p.setAttribute('stroke-width', '1.6'); if (dashed) p.setAttribute('stroke-dasharray', '5 4'); p.setAttribute('stroke-linejoin', 'round'); p.setAttribute('marker-end', 'url(#fv-arr)'); p.style.pointerEvents = 'none'; g2.appendChild(p); };
+    (OL._fv._jumpChains || []).forEach((a) => add(`M${a.x} ${a.y1} V${a.y2}`, true));
+    (OL._fv._inlineJumps || []).forEach((ij) => {
+      const fEl = canvas.querySelector(`[id="fv-step-${fvDomKey(ij.res)}-${ij.step.id}"]`);
+      const tRes = (OL.getCurrentProjectData().resources || []).find((r) => String(r.id) === String(ij.c.resId));
+      const tStepId = ij.c.stepId || (tRes && (tRes.steps || [])[0] && tRes.steps[0].id);
+      const tEl = tStepId ? (canvas.querySelector(`[id="fv-step-${ij.c.resId}-${tStepId}"]`) || canvas.querySelector(`[id^="fv-step-${ij.c.resId}~"][id$="-${tStepId}"]`)) : null;
+      if (!fEl || !tEl) return;
+      const fl = parseFloat(fEl.style.left) || 0, ft = parseFloat(fEl.style.top) || 0, fw = fEl.offsetWidth || 180, fh = fEl.offsetHeight || 80;
+      const tl = parseFloat(tEl.style.left) || 0, tt = parseFloat(tEl.style.top) || 0, tw = tEl.offsetWidth || 180, th = tEl.offsetHeight || 80;
+      if (tl >= fl + fw + 8) { const x1 = fl + fw, y1 = ft + fh / 2, x2 = tl, y2 = tt + th / 2, mx = Math.round(x1 + (x2 - x1) / 2); add(`M${x1} ${y1} H${mx} V${y2} H${x2}`, false); }
+      else if (tl + tw <= fl - 8) { const x1 = fl, y1 = ft + fh / 2, x2 = tl + tw, y2 = tt + th / 2, mx = Math.round(x2 + (x1 - x2) / 2); add(`M${x1} ${y1} H${mx} V${y2} H${x2}`, false); }
+      else { const x1 = fl + fw / 2, y1 = ft + fh, x2 = tl + tw / 2, y2 = tt; const my = Math.round(y1 + Math.max(10, (y2 - y1) / 2)); add(`M${x1} ${y1} V${my} H${x2} V${y2}`, false); }
     });
   }
 

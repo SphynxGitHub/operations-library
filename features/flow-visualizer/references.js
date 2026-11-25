@@ -161,7 +161,7 @@ export function jumpCardsOf(step, res) {
   return jumpsOf(step).filter((j) => !isDangling(res.id, j)).map((j) => {
     const t = resById(j.resId);
     const tStep = t && j.stepId ? stepOf(t, j.stepId) : null;
-    return { id: j.id, resId: String(j.resId), continues: !!j.continues, continueStepId: j.continueStepId || '', label: j.label || '', name: t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed', missing: !t };
+    return { id: j.id, resId: String(j.resId), stepId: j.stepId ? String(j.stepId) : '', continues: !!j.continues, continueStepId: j.continueStepId || '', label: j.label || '', name: t ? (tStep ? (tStep.name || 'a step') : t.name) : 'a process that was removed', missing: !t };
   });
 }
 // One side card. `when` is the trigger text (the collateral's own name is left out when a tag on the card already shows it).
