@@ -4121,7 +4121,7 @@ export function _fvDrawStepConnections(resources) {
           if (hasLoop) tipParts.push(`repeats${outRule.loopLimit ? ' (' + outRule.loopLimit + ')' : ''}`);
 
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          g.style.cursor = 'help';
+          g.style.cursor = 'help'; g.style.pointerEvents = 'all';
           const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           bg.setAttribute('x', mx - w / 2); bg.setAttribute('y', my - 10); bg.setAttribute('width', w); bg.setAttribute('height', 20); bg.setAttribute('rx', 10);
           bg.style.fill = 'var(--panel)'; bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
@@ -4145,7 +4145,7 @@ export function _fvDrawStepConnections(resources) {
             const full = ruleOrig, shown = ruleShown;
             const lw = ruleW, lx = bx + w + 4, ly = my;
             const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            cg.style.cursor = 'help';
+            cg.style.cursor = 'help'; cg.style.pointerEvents = 'all';   // the line layer ignores the mouse, so the tag has to ask for it or the hover text never shows
             const cp = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             cp.setAttribute('x', lx); cp.setAttribute('y', ly - ruleH / 2); cp.setAttribute('width', lw); cp.setAttribute('height', ruleH); cp.setAttribute('rx', Math.min(8, ruleH / 2));
             cp.style.fill = 'var(--panel)'; cp.setAttribute('stroke', color); cp.setAttribute('stroke-width', '1');
