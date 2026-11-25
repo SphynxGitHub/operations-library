@@ -39,6 +39,10 @@ jobs:
           path: '_site'
           if-no-files-found: error
 
+      # The uploaded artifact is sometimes not visible to the deploy step for a few seconds, which failed the deploy at random
+      - name: Wait for the artifact to be available
+        run: sleep 20
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
