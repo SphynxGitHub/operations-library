@@ -794,29 +794,29 @@ body.theme-accessible:not(.light-mode) {
   --panel:        #1e242c;
   --panel-dark:   #161b21;
   --panel-soft:   #262d37;
-  --panel-border: #8190a5;
+  --panel-border: #a9b4c4;
   --line:         rgba(220, 228, 240, 0.32);
   --dot-color:    rgba(220, 228, 240, 0.08);
-  --accent:       #9fcbec;
+  --accent: #a8d4f2;
   --accent-rgb:   143, 184, 216;
   --accent-glow:  rgba(143, 184, 216, 0.14);
-  --vault-gold:   #e0c88c;
-  --danger:       #f0a8a2;
-  --success:      #8fd1a6;
-  --warn:         #e0c88c;
-  --text-main:    #f2f4f7;
-  --text-dim:     #dde2ea;
-  --text-muted:   #bfc8d4;
-  --text:         #f2f4f7;
+  --vault-gold: #fff3a0;
+  --danger: #ff7f3f;
+  --success: #5ed9c0;
+  --warn: #fff3a0;
+  --text-main: #fafafa;
+  --text-dim: #ececec;
+  --text-muted: #d6d9de;
+  --text: #fafafa;
   --tray-item-bg:    rgba(255, 255, 255, 0.04);
   --tray-item-hover: rgba(255, 255, 255, 0.09);
-  --bg-main: #1b2027; --bg-panel: #232a33; --bg-card: #2a323d; --bg-card-hover: #303845; --border: #8190a5;
+  --bg-main: #1b2027; --bg-panel: #232a33; --bg-card: #2a323d; --bg-card-hover: #303845; --border: #a9b4c4;
   --font-main: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, -apple-system, sans-serif;
   --font-display: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif;
   --shadow-sm: none; --shadow-md: none; --shadow-lg: 0 6px 20px rgba(0,0,0,.25); --shadow-brand: none;
-  --a11y-on-accent: #0f1720;
-  --a11y-focus: #b7d4ea;
-  --a11y-placeholder: #a3adba;
+  --a11y-on-accent: #0b1118;
+  --a11y-focus: #ffffff;
+  --a11y-placeholder: #c2c7ce;
   color-scheme: dark;
 }
 body.theme-accessible { font-size: 15px; line-height: 1.55; letter-spacing: .025em; word-spacing: .08em; background: var(--bg); color: var(--text-main); }
@@ -827,9 +827,9 @@ body.theme-accessible input, body.theme-accessible select, body.theme-accessible
   font-size: 14px !important; color: var(--text-main) !important; background: var(--bg) !important; }
 body.theme-accessible .pill, body.theme-accessible .modal-head .res-chip { font-size: 12px !important; color: var(--text-dim) !important; }
 body.theme-accessible .modal-head .res-chip-warn { color: var(--vault-gold) !important; border-color: var(--vault-gold) !important; background: transparent !important; }
-body.theme-accessible a { color: #a9cbe6; }
+body.theme-accessible a { color: #b5dbf7; }
 body.theme-accessible .btn.primary, body.theme-accessible .btn.accent { background: var(--accent) !important; color: var(--a11y-on-accent) !important; border-color: var(--accent) !important; }
-body.theme-accessible *:focus-visible { outline: 2px solid var(--a11y-focus) !important; outline-offset: 2px !important; }
+body.theme-accessible *:focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 2px !important; }
 body.theme-accessible ::placeholder { color: var(--a11y-placeholder) !important; opacity: 1; font-style: normal !important; }
 body.theme-accessible .ol-email-body { background: var(--bg) !important; color: var(--text-main) !important; }
 /* no motion, pulsing or glow: common migraine triggers */
@@ -837,7 +837,7 @@ body.theme-accessible *, body.theme-accessible *::before, body.theme-accessible 
   animation: none !important; transition: none !important; text-shadow: none !important; }
 /* tone down saturated fills and heavy weights that are hard-coded elsewhere */
 body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
-body.theme-accessible [class*="avatar"], body.theme-accessible [class*="badge"] { filter: saturate(.7) brightness(.95); }
+body.theme-accessible [class*="avatar"], body.theme-accessible [class*="badge"] { filter: none; }
 body.theme-accessible, body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
 body.theme-accessible label, body.theme-accessible th { font-weight: 400 !important; }
 body.theme-accessible h1, body.theme-accessible h2, body.theme-accessible h3, body.theme-accessible .card-title,
@@ -856,3 +856,10 @@ body.theme-accessible .card-title, body.theme-accessible h1, body.theme-accessib
 /* one typeface everywhere (theme, display and hard-coded fonts included) */
 body.theme-accessible, body.theme-accessible *:not(code):not(pre):not(kbd):not(svg):not(svg *) {
   font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif !important; }
+
+/* stronger, readable chrome: pills, borders, muted text */
+body.theme-accessible .pill, body.theme-accessible .btn, body.theme-accessible .modal-head .res-chip { color: var(--text-main) !important; border-color: var(--panel-border) !important; }
+body.theme-accessible .muted, body.theme-accessible .tiny.muted, body.theme-accessible .text-muted { color: var(--text-muted) !important; }
+body.theme-accessible .card-section, body.theme-accessible .res-card, body.theme-accessible .card { border-color: var(--panel-border) !important; }
+/* colour is never the only signal: text cues for over-budget and status text (colour-blind safe palette: orange / teal / pale yellow) */
+body.theme-accessible [style*="#ef4444"], body.theme-accessible [style*="rgb(239, 68, 68)"] { color: var(--danger) !important; text-decoration: underline wavy; text-underline-offset: 3px; }
