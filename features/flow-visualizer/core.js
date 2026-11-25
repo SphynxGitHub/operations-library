@@ -3419,7 +3419,7 @@ export function _fvRenderSteps(resources) {
     });
 
     // place the side cards now that every card has its final position, and remember the arrows to them
-    const jumpArrows = [];
+    const jumpArrows = []; const jumpReturns = [];
     sideInfo.forEach((info, el) => {
       const cl = parseFloat(el.style.left) || 0, ct = parseFloat(el.style.top) || 0;
       const sl = cl + CARD_W + SIDE_GAP;
@@ -3428,9 +3428,20 @@ export function _fvRenderSteps(resources) {
         canvas.insertAdjacentHTML('beforeend', OL.fvJumpCardHtml(info.step, info.res, it.c, it.when, { left: sl, top, w: SIDE_W, h: it.h }));
         if (it.chip) it.chip.classList.add('fv-co-linked');
         jumpArrows.push({ x1: cl + CARD_W, y1: ct + it.anchorY, x2: sl, y2: top + it.h / 2 });
+        // a jump out to ANOTHER process also draws a line from its callout to the step that comes next in this flow ("continue here")
+        if (String(it.c.resId) !== String(info.res.id) && !it.c.missing) {
+          const sts = info.res.steps || []; const at = sts.findIndex((x) => String(x.id) === String(info.step.id));
+          const outs = ((info.step.logic && info.step.logic.out) || []).filter((l) => l && l.targetId);
+          let nextId = '';
+          for (const l of outs) { const k = OL._refSplitIdx(l.targetId); if (k > 0 && String(l.targetId).slice(0, k) === String(info.res.id)) { nextId = String(l.targetId).slice(k + 1); break; } }
+          if (!nextId && at >= 0 && sts[at + 1]) nextId = String(sts[at + 1].id);
+          const nEl = nextId ? canvas.querySelector(`[id="fv-step-${fvDomKey(info.res)}-${nextId}"]`) : null;
+          if (nEl && nEl !== el) jumpReturns.push({ x1: sl + SIDE_W / 2, y1: top + it.h, nEl });
+        }
       });
     });
     OL._fv._jumpArrows = jumpArrows;
+    OL._fv._jumpReturns = jumpReturns;
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
@@ -3522,6 +3533,22 @@ export function _fvDrawStepConnections(resources) {
       p.setAttribute('marker-end', 'url(#fv-arr)');
       p.style.pointerEvents = 'none';
       g0.appendChild(p);
+    });
+  }
+
+  // the "continue here" line from a callout (jump to another process) down to the next step in this flow
+  {
+    const g1 = document.getElementById('fv-lines');
+    const ns1 = 'http://www.w3.org/2000/svg';
+    (OL._fv._jumpReturns || []).forEach((a) => {
+      const nl = parseFloat(a.nEl.style.left) || 0, nt = parseFloat(a.nEl.style.top) || 0, nh = a.nEl.offsetHeight || 80;
+      const x2 = nl + (a.nEl.offsetWidth || 180), y2 = nt + nh / 2;
+      const p = document.createElementNS(ns1, 'path');
+      p.setAttribute('d', y2 > a.y1 ? `M${a.x1} ${a.y1} V${y2} H${x2}` : `M${a.x1} ${a.y1} V${a.y1 + 14} H${x2 + 14} V${y2} H${x2}`);
+      p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#3dd9c5'); p.setAttribute('stroke-width', '1.6'); p.setAttribute('stroke-dasharray', '5 4'); p.setAttribute('stroke-linejoin', 'round');
+      p.setAttribute('marker-end', 'url(#fv-arr)');
+      p.style.pointerEvents = 'none';
+      g1.appendChild(p);
     });
   }
 
