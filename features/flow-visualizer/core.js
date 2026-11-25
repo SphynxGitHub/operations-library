@@ -1018,6 +1018,12 @@ export function renderVisualizer() {
             </button>
         </div>
 
+        <button class="fv-layout-btn" title="Show or hide the resource names above each column"
+                style="display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);font-size:11px;font-weight:600;font-family:inherit;border-radius:8px;cursor:pointer;background:transparent;color:${OL.fvShowResNames() ? 'var(--accent)' : 'var(--text-muted)'};"
+                onclick="OL.fvToggleResNames()">
+            <i data-lucide="${OL.fvShowResNames() ? 'eye' : 'eye-off'}" style="width:13px;height:13px;"></i><span>Column names</span>
+        </button>
+
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; try{localStorage.setItem('fv_stage_filter_${client ? esc(client.id) : ''}', this.value)}catch(e){} OL.renderVisualizer();">
@@ -2474,6 +2480,9 @@ function fvRenderOverview(canvas, svg, resources) {
     </div>`;
   if (window.lucide) lucide.createIcons();
 }
+// Resource names above each column on the Steps map: hidden unless turned on (remembered)
+export function fvShowResNames() { try { return localStorage.getItem('fv_show_res_names') === '1'; } catch (e) { return false; } }
+export function fvToggleResNames() { try { localStorage.setItem('fv_show_res_names', fvShowResNames() ? '0' : '1'); } catch (e) { /* not remembered */ } OL.renderVisualizer(); }
 export function fvOpenStage(value) {
   OL._fv.stageFilter = value || '';
   try { const c = getActiveClient(); if (c) localStorage.setItem(`fv_stage_filter_${c.id}`, OL._fv.stageFilter); } catch (e) { /* not remembered */ }
@@ -2936,9 +2945,9 @@ export function _fvRenderSteps(resources) {
           width:${headW}px;z-index:6;`;
         hdrEl.innerHTML = `
           <div style="display:flex;align-items:flex-start;gap:5px;flex-wrap:wrap;">
-            <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;margin-top:3px;"></div>
+            <div style="${OL.fvShowResNames() ? '' : 'display:none;'}width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;margin-top:3px;"></div>
             <span title="${esc(res.name)} (double-click to rename)" class="fv-rename-target" data-fv-rename="resource" data-id="${esc(res.id)}"
-                  style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
+                  style="${OL.fvShowResNames() ? '' : 'display:none;'}font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                          letter-spacing:0.06em;white-space:normal;overflow-wrap:anywhere;line-height:1.25;
                          max-width:${headW - 20}px;">${esc(res.name)}</span>${(() => {
               if (!res.isGlobal) return '';
@@ -10090,7 +10099,7 @@ Object.assign(window.OL, {
     getAllStepOptions, addStepLogic, updateStepLogic, removeStepLogic,
     updateStepTarget, syncLogicPorts, updateStepLink, createMirrorLink,
     clearMirrorLink, getCardConnectionPoint, drawConnections, drawLogicIcon,
-    fvOpenStage, zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement, _refSplitIdx
+    fvOpenStage, fvShowResNames, fvToggleResNames, zoom, refreshFamilyNaming, duplicateResourceV2, toggleWorkbenchTray, setResourcePlacement, _refSplitIdx
 });
 // Called bare from app.js's router — bridge onto window directly.
 window.renderVisualizer = renderVisualizer;
