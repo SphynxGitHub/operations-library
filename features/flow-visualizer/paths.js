@@ -210,6 +210,8 @@ function setWait(resId, stepId, key, v, u) {
     p.ref.delayValue = n ? String(n) : ''; p.ref.delayUnit = UNITS.includes(u) ? u : (p.wait.u || 'days');
   });
 }
+const setContinue = (resId, stepId, key, on) => edit(resId, stepId, key, (p) => { if (p.src === 'jump') { p.ref.continues = on === true || on === 'true'; if (!p.ref.continues) p.ref.continueStepId = ''; } });
+const setContinueStep = (resId, stepId, key, v) => edit(resId, stepId, key, (p) => { if (p.src === 'jump') p.ref.continueStepId = v ? String(v) : ''; });
 const setLimit = (resId, stepId, key, v) => edit(resId, stepId, key, (p) => { if (p.src === 'out') p.ref.loopLimit = String(v || '').trim(); });
 
 // the destination: a step of this process stays a line (logic.out), another process is a row (jump); crossing over converts the path
@@ -412,12 +414,14 @@ function pathRow(resId, step, p, n) {
     <input type="number" min="0" class="modal-input tiny fvp-num" placeholder="0" value="${esc(String(p.wait.v || ''))}" onchange="OL.fvPathWait('${r}','${s}','${k}', this.value, document.getElementById('${id('u')}').value)">
     <select id="${id('u')}" class="modal-input tiny fvp-unit" onchange="OL.fvPathWait('${r}','${s}','${k}', this.previousElementSibling.value, this.value)">${UNITS.map((u) => `<option value="${u}" ${String(p.wait.u || 'days') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>`;
   const loopBox = p.loop ? `<div class="fvp-wait"><span class="fvp-lab">limit</span><input type="text" class="modal-input tiny" maxlength="40" placeholder="e.g. 3 times, or blank for no limit" value="${esc(p.limit)}" onchange="OL.fvPathLimit('${r}','${s}','${k}', this.value)"></div>` : '';
+  const contOpts = (res0) => ((res0 && res0.steps) || []).filter((x) => x && !x.isArchived && String(x.id) !== String(step.id)).map((x, i) => `<option value="${esc(x.id)}" ${String(p.ref.continueStepId || '') === String(x.id) ? 'selected' : ''}>${i + 1}. ${esc(x.name || 'Unnamed step')}</option>`).join('');
+  const contBox = p.src === 'jump' ? `<div class="fvp-line"><span class="fvp-lab"></span><div class="fvp-ctl"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" ${p.ref.continues ? 'checked' : ''} onchange="OL.fvPathContinue('${r}','${s}','${k}', this.checked)"> Continue original flow after this</label>${p.ref.continues ? `<select class="modal-input tiny" onchange="OL.fvPathContinueStep('${r}','${s}','${k}', this.value)"><option value="">Next step (default)</option>${contOpts(resById(resId))}</select>` : ''}</div></div>` : '';
   const kindChip = p.loop ? `${icon('repeat', 11)} repeats` : (p.src === 'jump' ? `${icon('corner-up-right', 11)} row on the card` : (p.destRes && String(p.destRes) === String(resId) ? `${icon('git-commit-horizontal', 11)} line on the map` : ''));
   return `<div class="fvp-row">
     <div class="fvp-head"><span class="fvp-n">Path ${n}</span>${kindChip ? `<span class="fvp-kind">${kindChip}</span>` : ''}<button type="button" class="fvp-x" title="Remove this path" onclick="OL.fvPathRemove('${r}','${s}','${k}')">${icon('x', 12)}</button></div>
     <div class="fvp-line"><span class="fvp-lab">when</span><div class="fvp-ctl">${trigMenu}${extra}</div></div>
     <div class="fvp-line"><span class="fvp-lab fvp-arrowlab">${icon('arrow-right', 13)}</span><div class="fvp-ctl">${destMenu(resId, step, p, id('d'))}</div></div>
-    ${wait}${loopBox}
+    ${wait}${contBox}${loopBox}
   </div>`;
 }
 
@@ -529,7 +533,7 @@ Object.assign(window.OL = window.OL || {}, {
   fvGroupEditor: groupEditor, fvGroupSet: setGroup, fvGroupRename: renameGroup,
   fvPathsEditor: pathsEditor, fvPathSummary: pathSummary,
   fvPathAdd: addPath, fvPathRemove: removePath, fvPathTrigger: setTrigger, fvPathAsset: setAsset, fvPathSegment: setSegment,
-  fvPathCustom: setCustom, fvPathAnswerField: setAnswerField, fvPathAnswerValue: setAnswerValue, fvPathWait: setWait, fvPathLimit: setLimit, fvPathDest: setDest, fvPathNewSegment: newSegmentFor,
+  fvPathCustom: setCustom, fvPathAnswerField: setAnswerField, fvPathAnswerValue: setAnswerValue, fvPathWait: setWait, fvPathLimit: setLimit, fvPathContinue: setContinue, fvPathContinueStep: setContinueStep, fvPathDest: setDest, fvPathNewSegment: newSegmentFor,
   fvpToggle: toggleMenu, fvpFilter: filterMenu,
   fvSegmentsManage: segmentsModal, fvSegCreate: segCreate, fvSegRename: segRename, fvSegDelete: segDelete, fvSegDescribe: segDescribe,
   fvSegmentsOf: segList, fvSegmentUsage: segUsage,
