@@ -3953,6 +3953,19 @@ export function _fvDrawStepConnections(resources) {
           }
         }
 
+        // A line back UP to another flow (a "then posts to" callback): out of the card's right side, up the right-hand margin past every card,
+        // and into the target's right side, rather than a straight diagonal across the map.
+        if (!draftRoute && isCrossResource && !isSelfLink && dy < -60 && /^Then posts to/i.test(outRule.rule || '')) {
+          let maxR = 0; elById.forEach((el) => { const r = rectOf(el); if (r.right > maxR) maxR = r.right; });
+          const sx = fRect.right - cRect.left, sy = fRect.top - cRect.top + fRect.height / 2;
+          const ex = tRect.right - cRect.left, ey = tRect.top - cRect.top + Math.min(tRect.height / 2, 40);
+          const gx = Math.max(maxR - cRect.left, sx, ex) + 36 + (_busRank.size ? 0 : 0);
+          const pts = [[sx, sy], [gx, sy], [gx, ey], [ex, ey]];
+          const R = Math.min(22, (gx - sx) / 2, (sy - ey) / 2, (gx - ex) / 2);
+          d = `M ${sx} ${sy} L ${gx - R} ${sy} Q ${gx} ${sy} ${gx} ${sy - R} L ${gx} ${ey + R} Q ${gx} ${ey} ${gx - R} ${ey} L ${ex} ${ey}`;
+          draftRoute = { kind: 'margin', points: pts };
+        }
+
         // A line to a process that starts lower down and to the right (a hand-off to the next flow): out of the bottom of the card, down,
         // and across into the side of the target, so it starts underneath instead of cutting out through the side.
         if (!draftRoute && isCrossResource && dx > 0 && !isSelfLink) {
