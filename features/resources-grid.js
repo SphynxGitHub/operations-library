@@ -174,7 +174,7 @@ function _renderResourceManagerImpl() {
                     ${sel('lib-group-by', 'Group by', RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceGroupBy(this.value)')}
                     ${sel('lib-subgroup-by', 'Then by', RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSubGroupBy(this.value)')}
                     ${sel('lib-versions', 'Same-name versions', `<option value="stack" ${state.libStack === false ? '' : 'selected'}>Stack into one</option><option value="each" ${state.libStack === false ? 'selected' : ''}>Show each</option>`, `OL.setLibToggle('libStack', this.value !== 'each');`)}
-                    ${sel('lib-tuck', 'Calendly forms and emails', `<option value="own" ${state.libTuck ? '' : 'selected'}>Own cards</option><option value="tuck" ${state.libTuck ? 'selected' : ''}>Inside their event</option>`, `OL.setLibToggle('libTuck', this.value === 'tuck');`)}
+                    ${sel('lib-tuck', 'Form and booking emails', `<option value="own" ${state.libTuck ? '' : 'selected'}>Own cards</option><option value="tuck" ${state.libTuck ? 'selected' : ''}>Inside their event</option>`, `OL.setLibToggle('libTuck', this.value === 'tuck');`)}
                     ${sel('lib-sort', 'Sort', RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSort(this.value)')}
                 </div>
             </div>
@@ -441,24 +441,27 @@ OL.setLibToggle = function(key, value) {
     OL.syncResourceLibraryFilters();
 };
 const TUCK_RE = /^cal-(form|confirm|reminder)-([0-9a-f-]{36})$/;
+// the card a booking form / notification email belongs to: a Calendly event, or a Jotform form (jf-jfemail-<form id>-<key>)
+const tuckParent = (id) => { id = String(id); const c = TUCK_RE.exec(id); if (c) return `cal-${c[2]}`; const j = /^jf-jfemail-(\d+)-[^-]+$/.exec(id); return j ? `jf-${j[1]}` : ''; };
 OL._tuckedParts = {};
 OL.tuckParts = function(list) {
     OL._tuckedParts = {};
     if (!state.libTuck) return list;
-    // the event and its form/emails usually sit in different groups (grouped by type, say), so look at the whole project
+    // the parent and its parts usually sit in different groups (grouped by type, say), so look at the whole project
     const all = (OL.getCurrentProjectData() || {}).resources || [];
-    const events = new Set(all.filter(r => r && /^cal-[0-9a-f-]{36}$/.test(String(r.id)) && (state.showArchivedResources || !r.isArchived)).map(r => String(r.id)));
+    const show = (r) => state.showArchivedResources || !r.isArchived;
+    const parents = new Set(all.filter(r => r && show(r)).map(r => String(r.id)));
     all.forEach(r => {
-        const m = r && TUCK_RE.exec(String(r.id));
-        if (m && events.has(`cal-${m[2]}`) && (state.showArchivedResources || !r.isArchived)) (OL._tuckedParts[`cal-${m[2]}`] = OL._tuckedParts[`cal-${m[2]}`] || []).push(r);
+        const par = r && tuckParent(r.id);
+        if (par && parents.has(par) && show(r)) (OL._tuckedParts[par] = OL._tuckedParts[par] || []).push(r);
     });
-    return list.filter(r => { const m = TUCK_RE.exec(String(r.id)); return !(m && OL._tuckedParts[`cal-${m[2]}`]); });
+    return list.filter(r => { const par = tuckParent(r.id); return !(par && OL._tuckedParts[par]); });
 };
 OL.tuckedPartsHtml = function(res, members) {
     if (!state.libTuck) return '';
     const ev = (members && members[0]) || res; const parts = OL._tuckedParts[String(ev.id)];
     if (!parts || !parts.length) return '';
-    const word = (r) => (/^cal-form-/.test(r.id) ? 'Booking form' : /^cal-confirm-/.test(r.id) ? 'Confirmation email' : 'Reminder email');
+    const word = (r) => (/^cal-form-/.test(r.id) ? 'Booking form' : /^cal-confirm-/.test(r.id) ? 'Confirmation email' : /^cal-reminder-/.test(r.id) ? 'Reminder email' : (r.name || 'Email'));
     const chips = parts.map(r => `<button type="button" class="btn tiny soft" style="border-radius:20px;padding:1px 10px;font-size:11px;" onclick="event.stopPropagation();OL.selectResourceCard('${esc(r.id)}')">${word(r)}</button>`).join('');
     return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text-muted);">Inside${members && members.length > 1 ? ' (first version)' : ''}</span>${chips}</div>`;
 };
