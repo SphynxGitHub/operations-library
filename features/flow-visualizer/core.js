@@ -3902,6 +3902,18 @@ export function _fvDrawStepConnections(resources) {
           }
         }
 
+        // A line to a process that starts lower down and to the right (a hand-off to the next flow): out of the bottom of the card, down,
+        // and across into the side of the target, so it starts underneath instead of cutting out through the side.
+        if (!draftRoute && isCrossResource && dx > 0 && !isSelfLink) {
+          const sy = fRect.bottom - cRect.top, tl = tRect.left - cRect.left, tmid = tRect.top - cRect.top + Math.min(tRect.height / 2, 40);
+          const bx = fRect.left - cRect.left + fRect.width / 2;
+          if (tmid - sy > 40 && tl - bx > 30 && !hitsCard(bx - 1, sy + 3, 2, tmid - sy - 3, 0) && !hitsCard(bx, tmid - 1, tl - bx - 4, 2, 0)) {
+            const R = 12;
+            d = `M ${bx} ${sy} L ${bx} ${tmid - R} Q ${bx} ${tmid} ${bx + R} ${tmid} L ${tl} ${tmid}`;
+            draftRoute = { kind: 'under', points: [[bx, sy], [bx, tmid], [tl, tmid]] };
+          }
+        }
+
         // A line to another process that lies straight below (the cards of this column in between): out of the bottom, down the gutter
         // beside the column and into the top of the target, instead of straight through the cards in between.
         if (!draftRoute && isCrossResource && isVert && dy > 0) {
