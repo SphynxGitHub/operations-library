@@ -2491,6 +2491,11 @@ function fvRenderOverview(canvas, svg, resources) {
 // A filter that only asks whether a step found something reads as one word: "Find Household by Name" id exists -> Found
 export function fvShortRule(rule) {
   const t = String(rule || '').trim();
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  let c = t.match(/^NOT\s*\(\s*["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+?)\)?$/i) || t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is not(?: exactly)?\s+(.+)$/i);
+  if (c) return `${cap(c[1].trim())} != ${c[2].trim()}`;
+  c = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+)$/i);
+  if (c) return `${cap(c[1].trim())} = ${c[2].trim()}`;
   const m = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+(does not exist|exists)\.?$/i);
   if (!m) return t;
   const field = m[1].trim(), has = /^exists$/i.test(m[2]);
