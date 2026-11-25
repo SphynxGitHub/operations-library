@@ -1025,6 +1025,12 @@ export function renderVisualizer() {
             <i data-lucide="${OL.fvShowResNames() ? 'eye' : 'eye-off'}" style="width:13px;height:13px;"></i><span>Column names</span>
         </button>
 
+        <button class="fv-layout-btn" title="Draw the copies of the same steps that follow each fallback (search by name, then email, then phone) once"
+                style="display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);font-size:11px;font-weight:600;font-family:inherit;border-radius:8px;cursor:pointer;background:transparent;color:${OL.fvMergeTailsOn && OL.fvMergeTailsOn() ? 'var(--accent)' : 'var(--text-muted)'};"
+                onclick="OL.fvToggleMergeTails()">
+            <i data-lucide="merge" style="width:13px;height:13px;"></i><span>Merge repeats</span>
+        </button>
+
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; try{localStorage.setItem('fv_stage_filter_${client ? esc(client.id) : ''}', this.value)}catch(e){} OL.renderVisualizer();">
@@ -2490,6 +2496,7 @@ export function fvOpenStage(value) {
   OL.renderVisualizer();
 }
 export function _fvRenderSteps(resources) {
+  try { if (typeof OL.fvMergeTails === 'function') OL.fvMergeTails(resources); } catch (e) { console.warn('Repeated-tail merge skipped:', e); }
   const canvas    = document.getElementById('fv-content');
   const svg       = document.getElementById('fv-svg-layer');
   const data      = OL.getCurrentProjectData();
