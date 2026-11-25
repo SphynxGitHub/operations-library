@@ -70,10 +70,32 @@ function addresses() {
     })).sort((a, b) => b.callers.length - a.callers.length || a.key.localeCompare(b.key));
 }
 
+
+// The posting step and the catch hook it starts are one hand-off. On the flow map the posting step is hidden (it stays in the resource view)
+// and the step before it gets the line straight to the catch hook; the posting step's own next steps are reached from that step too.
+function hideMerged(card, step, to, key) {
+    const steps = card.steps || []; const idx = steps.indexOf(step); if (idx < 1) return;
+    const me = `${card.id}-${step.id}`;
+    const explicit = (s) => ((s.logic && s.logic.out) || []).filter((l) => l.targetId);
+    const preds = steps.filter((p, i) => p !== step && (explicit(p).some((l) => String(l.targetId) === me) || (i === idx - 1 && !explicit(p).length && !p.noAutoNext)));
+    if (!preds.length) return;
+    const after = explicit(step).filter((l) => !l._hookdir);
+    const onward = after.length ? after.map((l) => ({ id: String(l.targetId), l })) : (steps[idx + 1] && !step.noAutoNext ? [{ id: `${card.id}-${steps[idx + 1].id}`, l: {} }] : []);
+    preds.forEach((p) => {
+        p.logic = p.logic || { in: [], out: [] }; p.logic.out = p.logic.out || [];
+        const add = (t, extra) => { if (!p.logic.out.some((l) => String(l.targetId) === String(t))) p.logic.out.push(Object.assign({ type: 'next', types: ['next'], targetId: t, rule: '', loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key }, extra || {})); };
+        add(to, { rule: `Starts “${clean((resources().find((r) => String(to).startsWith(String(r.id) + '-')) || {}).name)}” (catch hook)` });
+        onward.forEach((o) => add(o.id, { rule: o.l.rule || '' }));
+        delete p.noAutoNext;
+    });
+    step.hideOnMap = true; step._hookHidden = true;
+}
+
 // Put a line on every posting step to the trigger of the Zap its address starts. Lines made here carry _hookdir and are rebuilt each time.
 export function applyWebhookLinks() {
     const d = data(); const map = d.webhookMap || {}; let added = 0;
     resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s.logic && Array.isArray(s.logic.out)) s.logic.out = s.logic.out.filter((l) => !l._hookdir); }));
+    resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s._hookHidden) { delete s.hideOnMap; delete s._hookHidden; } }));
     const posts = d.webhookPosts || {};
     Object.keys(map).forEach((key) => {
         const target = resources().find((r) => String(r.id) === String(map[key])); const trig = triggerOf(target);
@@ -83,10 +105,12 @@ export function applyWebhookLinks() {
             if (!step || String(card.id) === String(target.id)) return;
             const to = `${target.id}-${trig.id}`;
             step.logic = step.logic || { in: [], out: [] }; step.logic.out = step.logic.out || [];
-            if (step.logic.out.some((l) => String(l.targetId) === to)) return;
-            step.logic.out.push({ type: 'next', types: ['next'], targetId: to, rule: `Starts “${clean(target.name)}” (catch hook)`, loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key });
-            delete step.noAutoNext;
-            added++;
+            if (!step.logic.out.some((l) => String(l.targetId) === to)) {
+                step.logic.out.push({ type: 'next', types: ['next'], targetId: to, rule: `Starts “${clean(target.name)}” (catch hook)`, loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key });
+                delete step.noAutoNext;
+                added++;
+            }
+            hideMerged(card, step, to, key);
         });
     });
     return added;

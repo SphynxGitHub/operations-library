@@ -2662,7 +2662,7 @@ export function _fvRenderSteps(resources) {
       members.forEach(m => laneSkip.add(`${m.res.id}-${m.step.id}`));
       delete consolidatedGroups[g];
     });
-    const isSkipped = (res, st) => laneSkip.has(`${res.id}-${st.id}`);
+    const isSkipped = (res, st) => laneSkip.has(`${res.id}-${st.id}`) || (st.hideOnMap && !OL._fv.showHiddenSteps);
     const consolidatedIds = new Set(
       Object.values(consolidatedGroups).flat().map(m => String(m.step.id))
     );
