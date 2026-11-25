@@ -2597,7 +2597,11 @@ export function _fvRenderSteps(resources) {
       resources.forEach(r => {
         const parts = _secOf(r); if (!parts.length) return;
         const home = _homeOf(r); if (!home || home === String(wf.id)) return;
-        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, home) === String(wf.id) && (r.sectionWf || {})[String(pt.startId)]) wfRes.push(fvSectionInstance(r, pt, k)); });
+        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, home) === String(wf.id) && (r.sectionWf || {})[String(pt.startId)]) {
+          const inst = fvSectionInstance(r, pt, k); const hw = wfAll.find(x => String(x.id) === home);
+          if (hw) inst.name = `${inst.name} (from ${hw.name || 'another workflow'})`;     // so a section moved here says where it came from
+          wfRes.push(inst);
+        } });
       });
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
       if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered, shared }); }
@@ -8258,6 +8262,17 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     <div class="tiny muted" style="margin-bottom:6px;">Start a new section of this Zap here. The map draws each section as its own flow, and a section can be shown in another workflow or stage. The Zap itself keeps all its steps. Leave blank for no section.</div>
                     <input type="text" class="inspector-name-input" value="${esc(step.mapSection || '')}" placeholder="Section name, e.g. Find household"
                            onblur="OL.updateAtomicStep('${resId}','${step.id}','mapSection',this.value.trim())">
+                    ${(() => {
+                        const _parts = mapSectionParts(res); if (_parts.length < 2) return '';
+                        const _wf = OL.getWorkflows() || []; const _sg = OL.getCurrentProjectData().stages || [];
+                        const _where = (w) => { const x = _wf.find(q => String(q.id) === String(w)); const g = x && _sg.find(q => String(q.id) === String(x.stageId)); return x ? ((g ? g.name + ' › ' : '') + (x.name || 'Workflow')) : 'with the rest of this Zap'; };
+                        return `<div class="tiny" style="margin:8px 0 2px;font-weight:700;">Sections of this Zap and where each is shown</div>` + _parts.map((pt, i) => {
+                            const here = String(pt.startId) === String(step.id);
+                            const w = (res.sectionWf || {})[String(pt.startId)] || '';
+                            return `<div class="tiny" style="padding:2px 0;${here ? 'color:var(--accent);font-weight:700;' : ''}">${i + 1}. ${esc(pt.marked ? pt.name : 'Opening section')} <span class="muted">— ${esc(w ? _where(w) : 'with the rest of this Zap')}</span></div>`;
+                        }).join('');
+                    })()}
+                    ${step.mapSection ? `<button class="btn tiny" style="margin-top:6px;" onclick="OL.updateAtomicStep('${resId}','${step.id}','mapSection','')">Merge back into the section before it</button>` : ''}
                     ${step.mapSection ? (() => {
                         const _st = OL.getCurrentProjectData().stages || [];
                         const _wfs = OL.getWorkflows() || [];
@@ -8572,9 +8587,15 @@ export function fvSuggestSections(resId) {
     if (!isSearch) return;
     ((st.logic && st.logic.out) || []).forEach((l) => { const t = l && l.targetId && byId.get(String(l.targetId)); if (t && t !== steps[0] && !picks.includes(t)) picks.push(t); });
   });
+  // the paths that leave a "parallel paths" step (or any step with three or more ways out) are separate stages too
+  steps.forEach((st) => {
+    const outs = ((st.logic && st.logic.out) || []).map((l) => l && l.targetId && byId.get(String(l.targetId))).filter(Boolean);
+    const par = /parallel/i.test(String((st.zap && st.zap.action) || '') + ' ' + String(st.name || ''));
+    if (par || outs.length >= 3) outs.forEach((t) => { if (t !== steps[0] && !picks.includes(t)) picks.push(t); });
+  });
   const named = picks.filter((st) => !st.hideOnMap);
   if (!named.length) { alert('No split points found: this Zap has no search step with paths leaving it. Set a section name on a step by hand instead.'); return; }
-  const list = named.map((st) => `  • ${st.name}`).join('\n');
+  const list = named.map((st) => `  • ${st.mapSection ? st.name + '  (already a section)' : st.name}`).join('\n');
   if (!confirm(`Start a new map section at these ${named.length} steps (each named after its step)?\n\n${list}\n\nThe Zap itself is not changed. You can rename or clear any of them on the step.`)) return;
   OL.updateAndSync(() => { named.forEach((st) => { if (!st.mapSection) st.mapSection = String(st.name || '').trim(); }); });
   refreshFlowMap(resId, named[0].id);
@@ -8629,7 +8650,7 @@ export function updateAtomicStep(resId, stepId, field, value) {
         if (window.location.hash.includes('visualizer')) refreshFlowMap(resId, stepId);
     }
     else if (field === 'mapSection') {
-        if (!value) delete step.mapSection;
+        if (!value) { delete step.mapSection; if (targetRes.sectionWf) { delete targetRes.sectionWf[String(stepId)]; if (!Object.keys(targetRes.sectionWf).length) delete targetRes.sectionWf; } }
         OL.persist();
         if (window.location.hash.includes('visualizer') || window.location.hash.includes('flow')) refreshFlowMap(resId, stepId);
         else OL._fvRefreshInspector(resId, stepId);
