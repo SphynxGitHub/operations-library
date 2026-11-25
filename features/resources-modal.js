@@ -1080,8 +1080,8 @@ export function openResourceModal(targetId, draftObj = null) {
 
     // Tabs: the standard and email views group their sections into Overview / Steps and data / Collateral / Activity.
     if (!state.v2) state.v2 = {};
-    const resTabNow = (String(state.v2.resTabFor || '') === String(res.id) && state.v2.resTab) || 'overview';
-    const paneOpen = (n) => `<div data-res-pane="${n}" style="${resTabNow === n ? '' : 'display:none;'}">`;
+    const resTabNow = (() => { const t = (String(state.v2.resTabFor || '') === String(res.id) && state.v2.resTab) || 'overview'; return t === 'steps' ? 'overview' : t; })();
+    const paneOpen = (n) => { if (n === 'steps') n = 'overview'; return `<div data-res-pane="${n}" style="${resTabNow === n ? '' : 'display:none;'}">`; };
 
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
@@ -1683,7 +1683,7 @@ export function openResourceModal(targetId, draftObj = null) {
     
         ${tabbed ? `
         <div style="padding:0 20px;border-bottom:1px solid var(--line);display:flex;gap:20px;overflow-x:auto;">
-            ${[['overview','Overview'],['steps','Steps and data'],['collateral','Collateral'],['activity','Activity']].map(([k, label]) => `
+            ${[['overview','Overview'],['collateral','Collateral'],['activity','Activity']].map(([k, label]) => `
                 <div data-res-tab="${k}" onclick="OL.resTab('${esc(res.id)}','${k}')"
                      style="padding:10px 2px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${resTabNow === k ? 'var(--accent)' : 'transparent'};color:${resTabNow === k ? 'var(--accent)' : 'var(--text-muted)'};font-weight:${resTabNow === k ? '600' : '400'};">${label}</div>`).join('')}
         </div>
