@@ -3865,6 +3865,24 @@ export function _fvDrawStepConnections(resources) {
 
         if (!fromEl || !toEl) return;
 
+        // a path that goes to another section of the same Zap: a short stub and a "continues in" tag instead of a line across the map
+        if (String(tResId) === String(sourceRes.id) && _toKey !== _myKey) {
+          const fr = rectOf(fromEl), tr = rectOf(toEl);
+          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 380) {
+            const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
+            const label = 'continues in ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
+            const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
+            const x = fr.left - cRect.left + fr.width / 2 + ((_busRank.get(tStepId) || 0) * 14), y0 = fr.bottom - cRect.top;
+            const pth = document.createElementNS(ns3, 'path');
+            pth.setAttribute('d', `M${x} ${y0} V${y0 + 22}`); pth.setAttribute('fill', 'none'); pth.setAttribute('stroke', '#3dd9c5');
+            pth.setAttribute('stroke-width', '1.6'); pth.setAttribute('stroke-dasharray', '4 3'); pth.style.pointerEvents = 'none'; g3.appendChild(pth);
+            const tx3 = document.createElementNS(ns3, 'text');
+            tx3.setAttribute('x', x + 5); tx3.setAttribute('y', y0 + 18); tx3.setAttribute('font-size', '10'); tx3.setAttribute('fill', '#0f9d8c');
+            tx3.style.pointerEvents = 'none'; tx3.textContent = label; g3.appendChild(tx3);
+            return;
+          }
+        }
+
         const fRect = rectOf(fromEl);
         // a step that is part of a combined card is reached at the real card (its stand-in is a dot at the card's top centre, which
         // made a line from the side end at the top)
