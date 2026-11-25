@@ -790,24 +790,24 @@ body:not(.light-mode) { --accent-rgb: 61, 217, 197; }
    Built on the dark variables; body.theme-accessible, no .light-mode.
    ============================================================ */
 body.theme-accessible:not(.light-mode) {
-  --bg:           #1b2027;
-  --panel:        #232a33;
+  --bg:           #15191f;
+  --panel:        #1e242c;
   --panel-dark:   #161b21;
-  --panel-soft:   #2a323d;
-  --panel-border: #566274;
-  --line:         rgba(220, 228, 240, 0.22);
+  --panel-soft:   #262d37;
+  --panel-border: #6f7d91;
+  --line:         rgba(220, 228, 240, 0.32);
   --dot-color:    rgba(220, 228, 240, 0.08);
-  --accent:       #8fb8d8;
+  --accent:       #9fcbec;
   --accent-rgb:   143, 184, 216;
   --accent-glow:  rgba(143, 184, 216, 0.14);
   --vault-gold:   #d9c28a;
   --danger:       #e69a94;
   --success:      #8cc9a2;
   --warn:         #d9c28a;
-  --text-main:    #e4e8ee;
-  --text-dim:     #c5ccd6;
-  --text-muted:   #a9b2bf;
-  --text:         #e4e8ee;
+  --text-main:    #f2f4f7;
+  --text-dim:     #dde2ea;
+  --text-muted:   #bfc8d4;
+  --text:         #f2f4f7;
   --tray-item-bg:    rgba(255, 255, 255, 0.04);
   --tray-item-hover: rgba(255, 255, 255, 0.09);
   --bg-main: #1b2027; --bg-panel: #232a33; --bg-card: #2a323d; --bg-card-hover: #323b47; --border: #566274;
@@ -816,7 +816,7 @@ body.theme-accessible:not(.light-mode) {
   --shadow-sm: none; --shadow-md: none; --shadow-lg: 0 6px 20px rgba(0,0,0,.25); --shadow-brand: none;
   color-scheme: dark;
 }
-body.theme-accessible { font-size: 15px; line-height: 1.55; letter-spacing: .01em; background: var(--bg); color: var(--text-main); }
+body.theme-accessible { font-size: 15px; line-height: 1.55; letter-spacing: .025em; word-spacing: .08em; background: var(--bg); color: var(--text-main); }
 body.theme-accessible .tiny, body.theme-accessible .muted, body.theme-accessible small { font-size: 13px !important; }
 body.theme-accessible .modal-section-label { font-size: 12px !important; color: var(--text-dim) !important; }
 body.theme-accessible .modal-input, body.theme-accessible .modal-select, body.theme-accessible .modal-textarea,
@@ -833,10 +833,19 @@ body.theme-accessible *, body.theme-accessible *::before, body.theme-accessible 
   animation: none !important; transition: none !important; text-shadow: none !important; }
 /* tone down saturated fills and heavy weights that are hard-coded elsewhere */
 body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
-body.theme-accessible [class*="avatar"], body.theme-accessible [class*="badge"] { filter: saturate(.55) brightness(.9); }
+body.theme-accessible [class*="avatar"], body.theme-accessible [class*="badge"] { filter: saturate(.7) brightness(.95); }
 body.theme-accessible, body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
 body.theme-accessible label, body.theme-accessible th { font-weight: 400 !important; }
 body.theme-accessible h1, body.theme-accessible h2, body.theme-accessible h3, body.theme-accessible .card-title,
 body.theme-accessible b, body.theme-accessible strong, body.theme-accessible .bold { font-weight: 600 !important; }
 body.theme-accessible .btn.primary, body.theme-accessible .btn.accent { font-weight: 500 !important; }
 body.theme-accessible input[type="date"], body.theme-accessible input { font-variant-numeric: normal; font-feature-settings: "zero" 0, "tnum" 0; }
+
+/* readability: open up letter spacing and raise the tiny hard-coded inline sizes */
+body.theme-accessible * { letter-spacing: .025em; }
+body.theme-accessible [style*="font-size:9px"], body.theme-accessible [style*="font-size: 9px"],
+body.theme-accessible [style*="font-size:10px"], body.theme-accessible [style*="font-size: 10px"] { font-size: 12px !important; }
+body.theme-accessible [style*="font-size:11px"], body.theme-accessible [style*="font-size: 11px"] { font-size: 13px !important; }
+body.theme-accessible [style*="font-size:12px"], body.theme-accessible [style*="font-size: 12px"] { font-size: 14px !important; }
+body.theme-accessible [style*="font-size:13px"], body.theme-accessible [style*="font-size: 13px"] { font-size: 15px !important; }
+body.theme-accessible .card-title, body.theme-accessible h1, body.theme-accessible h2, body.theme-accessible h3 { font-weight: 500 !important; }
