@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-25T10:23:28Z",
+  "updatedAt": "2026-11-25T14:32:07Z",
   "items": [
     {
       "app": "Google Workspace",
@@ -256,6 +256,22 @@
       "summary": "Microsoft 365 Copilot release notes add custom engine agents that can run from an agent pane in Outlook to sort or summarize email, plus a Copilot Studio agent node that lets a workflow step reason over data and call tools in one step.",
       "sourceUrl": "https://learn.microsoft.com/microsoft-365/copilot/release-notes",
       "checkedAt": "2026-11-24"
+    },
+    {
+      "app": "Claude",
+      "kind": "feature",
+      "date": "2026-11-24",
+      "summary": "Claude now has one Plugins page that replaces the separate Skills, Connectors and Plugins tabs, with a 'Your plugins' section, filters and Verified/Community labels. It is live on Free through Ultra plans, starts rolling out to Team on November 30 and to Enterprise in the coming weeks; Team/Enterprise admins with Skills turned off must turn them on to keep plugins working in Claude Desktop.",
+      "sourceUrl": "https://support.claude.com/en/articles/17740565-manage-plugins-skills-and-connectors-from-one-plugins-page",
+      "checkedAt": "2026-11-25"
+    },
+    {
+      "app": "Holistiplan",
+      "kind": "feature",
+      "date": "2026-11-18",
+      "summary": "Holistiplan added an in-app AI Assistant that answers tax questions from the client's data, builds planning scenarios (Roth conversions, capital gains timing, current-year estimates) and can create or update Tax Letters from planning work. The release gives no pricing or plan-tier details.",
+      "sourceUrl": "https://www.holistiplan.com/news/holistiplan-introduces-ai-assistant-to-answer-tax-questions-build-planning-scenarios-and-compare-tax-impacts/",
+      "checkedAt": "2026-11-25"
     }
   ]
 }
