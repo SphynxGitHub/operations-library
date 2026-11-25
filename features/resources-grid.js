@@ -297,7 +297,8 @@ function _syncResourceLibraryFiltersImpl() {
 };
 
 // ── QUICK "NEEDS ATTENTION" FILTERS + ACTIVE CHIPS ───────────────────────────────────────────────────────────────
-const libNorm = (v) => String(v || '').replace(/\[discovered\]/i, '').trim().toLowerCase().replace(/\s+/g, ' ');
+// case, spacing and hyphens do not make a different name ("In-Person" and "In Person" are one event)
+const libNorm = (v) => String(v || '').replace(/\[discovered\]/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function libQuickFacts(source, client) {
     const pd = (client && client.projectData) || {};
     const live = source.filter(r => r && !r.isArchived);

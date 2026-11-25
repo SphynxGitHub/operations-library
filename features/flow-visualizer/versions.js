@@ -36,14 +36,27 @@ OL.versionGroups = function (list) {
 // (Built once so drawing the map stays fast; the cards just look their label up.)
 OL.fvBuildVersionLabels = function (resources) {
     const labels = new Map();
+    const groups = {};
     (resources || []).forEach((r) => {
         if (!live(r)) return;
         let label = r.versionGroup ? (r.versionLabel || '') : '';
-        if (!r.versionGroup && typeof OL.resourceInfo === 'function') { const i = OL.resourceInfo(r); if (i && i.versionKey) label = i.versionLabel || ''; else return; }
+        let key = r.versionGroup ? `g:${r.versionGroup}` : '';
+        if (!r.versionGroup && typeof OL.resourceInfo === 'function') { const i = OL.resourceInfo(r); if (i && i.versionKey) { label = i.versionLabel || ''; key = `c:${i.versionKey}`; } else return; }
         else if (!r.versionGroup) return;
         labels.set(String(r.id), label || 'Version');
+        (groups[key] = groups[key] || []).push({ id: String(r.id), label: label || 'Version' });
     });
     OL._fvVersionLabels = labels;
+    // A group with only one version on the map is drawn as one card for all of them: "N versions" instead of a person's name.
+    const placed = new Set();
+    ((OL.getCurrentProjectData() || {}).workflows || []).forEach((w) => (w.resourceIds || []).forEach((id) => placed.add(String(id))));
+    const stacks = new Map();
+    Object.values(groups).forEach((arr) => {
+        if (arr.length < 2) return;
+        const onMap = arr.filter((a) => placed.has(a.id));
+        if (onMap.length === 1) stacks.set(onMap[0].id, { count: arr.length, names: arr.map((a) => a.label) });
+    });
+    OL._fvVersionStacks = stacks;
     return labels;
 };
 
@@ -55,7 +68,10 @@ OL.fvWrapCardBuilder = function () {
         const html = OL._fvBuildCardRaw(res, ...rest);
         const label = OL._fvVersionLabels && res ? OL._fvVersionLabels.get(String(res.id)) : '';
         if (!label) return html;
-        const tag = `<span class="fv-card-source fv-card-person" title="This is ${esc(label)}'s version of this resource"><i data-lucide="user" style="width:9px;height:9px;"></i> ${esc(label)}</span>`;
+        const stack = OL._fvVersionStacks && OL._fvVersionStacks.get(String(res.id));
+        const tag = stack
+            ? `<span class="fv-card-source fv-card-person" title="${esc(stack.count)} versions, one per person: ${esc(stack.names.join(', '))}"><i data-lucide="users" style="width:9px;height:9px;"></i> ${esc(stack.count)} versions</span>`
+            : `<span class="fv-card-source fv-card-person" title="This is ${esc(label)}'s version of this resource"><i data-lucide="user" style="width:9px;height:9px;"></i> ${esc(label)}</span>`;
         return html.replace('<span class="fv-card-step-num">', `${tag}<span class="fv-card-step-num">`);
     };
 };
