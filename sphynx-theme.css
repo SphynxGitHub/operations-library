@@ -811,8 +811,8 @@ body.theme-accessible:not(.light-mode) {
   --tray-item-bg:    rgba(255, 255, 255, 0.04);
   --tray-item-hover: rgba(255, 255, 255, 0.09);
   --bg-main: #1b2027; --bg-panel: #232a33; --bg-card: #2a323d; --bg-card-hover: #323b47; --border: #566274;
-  --font-main: 'Atkinson Hyperlegible', 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif;
+  --font-main: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif;
   --shadow-sm: none; --shadow-md: none; --shadow-lg: 0 6px 20px rgba(0,0,0,.25); --shadow-brand: none;
   color-scheme: dark;
 }
@@ -831,3 +831,12 @@ body.theme-accessible .ol-email-body { background: var(--bg) !important; color: 
 /* no motion, pulsing or glow: common migraine triggers */
 body.theme-accessible *, body.theme-accessible *::before, body.theme-accessible *::after {
   animation: none !important; transition: none !important; text-shadow: none !important; }
+/* tone down saturated fills and heavy weights that are hard-coded elsewhere */
+body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
+body.theme-accessible [class*="avatar"], body.theme-accessible [class*="badge"] { filter: saturate(.55) brightness(.9); }
+body.theme-accessible, body.theme-accessible .btn, body.theme-accessible button, body.theme-accessible .pill,
+body.theme-accessible label, body.theme-accessible th { font-weight: 400 !important; }
+body.theme-accessible h1, body.theme-accessible h2, body.theme-accessible h3, body.theme-accessible .card-title,
+body.theme-accessible b, body.theme-accessible strong, body.theme-accessible .bold { font-weight: 600 !important; }
+body.theme-accessible .btn.primary, body.theme-accessible .btn.accent { font-weight: 500 !important; }
+body.theme-accessible input[type="date"], body.theme-accessible input { font-variant-numeric: normal; font-feature-settings: "zero" 0, "tnum" 0; }
