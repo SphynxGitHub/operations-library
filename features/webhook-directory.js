@@ -134,20 +134,41 @@ export function applyWebhookLinks() {
     resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s.logic && Array.isArray(s.logic.out)) s.logic.out = s.logic.out.filter((l) => !l._hookdir); }));
     resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => { if (s._hookHidden) { delete s.hideOnMap; delete s._hookHidden; } }));
     const posts = allPosts();
+    const isCallback = (c) => !!c.field && !/^url$/i.test(c.field);          // a postWebhook-style field: the hooked Zap posts there when it is done
+    const lineTo = (step, to, rule, key) => {
+        step.logic = step.logic || { in: [], out: [] }; step.logic.out = step.logic.out || [];
+        if (step.logic.out.some((l) => String(l.targetId) === String(to))) return false;
+        step.logic.out.push({ type: 'next', types: ['next'], targetId: to, rule, loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key });
+        delete step.noAutoNext; return true;
+    };
+    // 1) the address a step posts to starts that Zap
     Object.keys(map).forEach((key) => {
         const target = resources().find((r) => String(r.id) === String(map[key])); const trig = triggerOf(target);
         if (!target || !trig) return;
-        (posts[key] || []).forEach((c) => {
+        (posts[key] || []).filter((c) => !isCallback(c)).forEach((c) => {
             const card = cardOfZap(c.zapId); const step = stepOfZap(card, c.stepId);
             if (!step || String(card.id) === String(target.id)) return;
             const to = `${target.id}-${trig.id}`;
-            step.logic = step.logic || { in: [], out: [] }; step.logic.out = step.logic.out || [];
-            if (!step.logic.out.some((l) => String(l.targetId) === to)) {
-                step.logic.out.push({ type: 'next', types: ['next'], targetId: to, rule: `Starts “${clean(target.name)}” (catch hook)`, loopLimit: '', delayValue: '', delayUnit: 'days', _auto: true, _hookdir: key });
-                delete step.noAutoNext;
-                added++;
-            }
+            if (lineTo(step, to, `Starts “${clean(target.name)}” (catch hook)`, key)) added++;
             hideMerged(card, step, to, key, target, trig);
+        });
+    });
+    // 2) an address handed on in a field (postWebhook): the Zap that step started posts to it when it finishes, so the line runs from the
+    //    end of that Zap (its own POST step, or the last steps of its paths), not from the step that handed the address over
+    Object.keys(map).forEach((key) => {
+        const target = resources().find((r) => String(r.id) === String(map[key])); const trig = triggerOf(target);
+        if (!target || !trig) return;
+        (posts[key] || []).filter(isCallback).forEach((c) => {
+            const others = Object.keys(posts).filter((k2) => k2 !== key && map[k2] && (posts[k2] || []).some((x) => x.zapId === c.zapId && x.stepId === c.stepId && !isCallback(x)));
+            others.forEach((k2) => {
+                const hooked = resources().find((r) => String(r.id) === String(map[k2])); if (!hooked || String(hooked.id) === String(target.id)) return;
+                const own = (hooked.steps || []).filter((s) => s.zap && isPost(s) && !s.hideOnMap && !Object.keys(posts).some((k3) => (posts[k3] || []).some((x) => x.stepId === String(s.zap.stepId) && x.zapId === String(hooked.originalZapId) && !isCallback(x))));
+                const ends = own.length ? own : (hooked.steps || []).filter((s) => !s.hideOnMap && s.zap && s.zap.role !== 'trigger' && !((s.logic && s.logic.out) || []).some((l) => l.targetId));
+                const tsteps = target.steps || []; const ti = tsteps.indexOf(trig);
+                const next = ti > -1 && tsteps[ti + 1] && !trig.noAutoNext ? `${target.id}-${tsteps[ti + 1].id}` : `${target.id}-${trig.id}`;
+                ends.forEach((e) => { if (lineTo(e, next, `Then posts to “${clean(target.name)}” (${c.field})`, key)) added++; });
+                if (next !== `${target.id}-${trig.id}`) { trig.hideOnMap = true; trig._hookHidden = true; }
+            });
         });
     });
     return added;
