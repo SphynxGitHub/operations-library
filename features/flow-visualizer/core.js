@@ -2452,27 +2452,26 @@ function fvRenderOverview(canvas, svg, resources) {
   const tiles = stages.map(stage => {
     const sw = wfs.filter(w => String(w.stageId) === String(stage.id));
     const total = sw.reduce((a, w) => a + counts(w).n, 0);
-    const rows = sw.map(wf => { const k = counts(wf); return `
-      <button type="button" onclick="OL.fvOpenStage('${esc(wf.id)}')" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;cursor:pointer;">
+    const rows = sw.map((wf, i) => { const k = counts(wf); return `${i ? '<i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-muted);flex:0 0 auto;align-self:center;"></i>' : ''}
+      <button type="button" onclick="OL.fvOpenStage('${esc(wf.id)}')" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;flex:0 0 230px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-family:inherit;">
         <span style="display:flex;align-items:center;gap:6px;width:100%;"><span style="font-weight:600;font-size:13px;flex:1;">${esc(wf.name)}</span><span class="pill tiny soft">${k.n}</span></span>
         <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${chips(k.c) || '<span style="font-size:11px;color:var(--text-muted);">Empty</span>'}</span>
       </button>`; }).join('');
     return `
-      <div style="flex:0 0 300px;display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-card, transparent);">
-        <button type="button" onclick="OL.fvOpenStage('stage-${esc(stage.id)}')" style="display:flex;align-items:center;gap:8px;background:transparent;border:0;color:inherit;cursor:pointer;padding:0;text-align:left;">
+      <div style="display:flex;gap:14px;align-items:stretch;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-card, transparent);">
+        <button type="button" onclick="OL.fvOpenStage('stage-${esc(stage.id)}')" style="flex:0 0 190px;display:flex;align-items:center;gap:8px;background:transparent;border:0;color:inherit;cursor:pointer;padding:0;text-align:left;font-family:inherit;">
           <i data-lucide="layers" style="width:16px;height:16px;color:var(--accent);"></i>
           <span style="font-weight:700;font-size:14px;flex:1;">${esc(stage.name)}</span>
           <span class="pill tiny soft">${total}</span>
-          <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--text-muted);"></i>
         </button>
-        ${rows || '<div style="font-size:12px;color:var(--text-muted);">No workflows yet.</div>'}
+        <div style="display:flex;gap:8px;align-items:stretch;overflow-x:auto;flex:1;min-width:0;padding-bottom:2px;">${rows || '<div style="font-size:12px;color:var(--text-muted);align-self:center;">No workflows yet.</div>'}</div>
       </div>`;
   }).join('');
   svg.innerHTML = ''; svg.style.width = '0px'; svg.style.height = '0px';
   canvas.style.width = 'auto'; canvas.style.height = 'auto';
   canvas.innerHTML = `<div style="padding:24px;display:flex;flex-direction:column;gap:14px;">
       <div style="font-size:12px;color:var(--text-muted);">Click a stage or a workflow to open it. Pick "All stages &amp; workflows" in the filter to draw everything at once.</div>
-      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">${tiles || '<div style="color:var(--text-muted);">No stages yet.</div>'}</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">${tiles || '<div style="color:var(--text-muted);">No stages yet.</div>'}</div>
     </div>`;
   if (window.lucide) lucide.createIcons();
 }
