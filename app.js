@@ -33,6 +33,7 @@ import * as OLFlowStageManager from './features/flow-visualizer/stage-manager.js
 import * as OLFlowRename from './features/flow-visualizer/rename.js';
 import * as OLFlowVersions from './features/flow-visualizer/versions.js';
 import * as OLFlowViews2 from './features/flow-visualizer/views2.js';
+import * as OLWebhookDirectory from './features/webhook-directory.js';
 import * as OLResourceUsedBy from './features/resource-usedby.js';
 import * as OLJotformLogic from './features/jotform-logic.js';
 import * as OLFormBuilder from './features/form-builder.js';

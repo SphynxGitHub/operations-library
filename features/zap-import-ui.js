@@ -17,6 +17,7 @@
 //                   history is skipped, and the window says so.
 // ================================================================================================
 
+import { collectWebhookPosts, applyWebhookLinks } from './webhook-directory.js';
 import { planReorganize, applyReorganize, restoreBackup } from './zap-reorganize.js';
 import { planImport, zapToResource, mergeIntoExisting, tieExternalToZaps, discoverResources, fingerprint, findHookLinks, applyHookLinks, isInactiveZap, planGroups, placeZapCards } from './zap-import-core.js';
 
@@ -213,6 +214,8 @@ export function createZapImport(deps) {
     // connections between Zaps (a step that calls a catch hook -> the Zap that hook starts)
     const hookLinks = findHookLinks(model.zaps || []).links;
     if (opts.connectZaps !== false) summary.connections = applyHookLinks(library, hookLinks);
+    // every webhook address the steps post to, for the Webhook directory (Resources, Webhooks); lines chosen there are put back after an import
+    try { client.projectData.webhookPosts = collectWebhookPosts(model.zaps || []); summary.connections += applyWebhookLinks(); } catch (e) { console.warn('Webhook directory update failed:', e); }
 
     // Lines from Zap steps to the forms, event types and workflow templates pulled from outside services, and a note on any
     // Zap that points at something not found there (core/external-sync.js).
