@@ -2457,10 +2457,10 @@ function fvRenderOverview(canvas, svg, resources) {
         <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${chips(k.c) || '<span style="font-size:11px;color:var(--text-muted);">Empty</span>'}</span>
       </button>`; }).join('');
     return `
-      <div style="display:flex;gap:14px;align-items:stretch;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-card, transparent);">
-        <button type="button" onclick="OL.fvOpenStage('stage-${esc(stage.id)}')" style="flex:0 0 190px;display:flex;align-items:center;gap:8px;background:transparent;border:0;color:inherit;cursor:pointer;padding:0;text-align:left;font-family:inherit;">
+      <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-card, transparent);">
+        <button type="button" onclick="OL.fvOpenStage('stage-${esc(stage.id)}')" style="display:flex;align-items:center;gap:8px;background:transparent;border:0;color:inherit;cursor:pointer;padding:0;text-align:left;font-family:inherit;">
           <i data-lucide="layers" style="width:16px;height:16px;color:var(--accent);"></i>
-          <span style="font-weight:700;font-size:14px;flex:1;">${esc(stage.name)}</span>
+          <span style="font-weight:700;font-size:14px;">${esc(stage.name)}</span>
           <span class="pill tiny soft">${total}</span>
         </button>
         <div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;flex:1;min-width:0;">${rows || '<div style="font-size:12px;color:var(--text-muted);align-self:center;">No workflows yet.</div>'}</div>
