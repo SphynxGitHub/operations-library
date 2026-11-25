@@ -344,13 +344,21 @@ function libQuickFacts(source, client) {
     live.forEach(r => { const k = `${r.type}|${libNorm(r.name)}`; if (names[k] > 1) (groupsByKey[k] = groupsByKey[k] || []).push(r); });
     const versionOf = {};
     Object.entries(groupsByKey).forEach(([k, members]) => {
+        // Every copy joins the stack. A distinguishing word from the booking link ("Tommy") is the label when there is one;
+        // otherwise the whole link name ("Tblackburn"), and copies that still match get a number so each chip is unique.
         const slugs = members.map(slugOf);
-        if (slugs.some(x => !x) || new Set(slugs).size !== slugs.length) return;
+        if (slugs.some(x => !x)) return; // only copies that each come from a booking link are stacked
         const toks = slugs.map(x => x.split('-').filter(Boolean));
         const count = {}; toks.forEach(t => new Set(t).forEach(w => { count[w] = (count[w] || 0) + 1; }));
-        const labels = toks.map(t => t.find(w => count[w] === 1 && w.length > 1));
-        if (labels.some(x => !x)) return;
-        members.forEach((m, i) => { versionOf[String(m.id)] = { key: k, label: labels[i].charAt(0).toUpperCase() + labels[i].slice(1) }; });
+        const nice = (x) => { const t = String(x).replace(/[-_]+/g, ' ').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Other'; };
+        const used = {};
+        members.forEach((m, i) => {
+            const uniq = toks[i].find(w => count[w] === 1 && w.length > 1);
+            let label = uniq ? nice(uniq) : nice(slugs[i]);
+            used[label] = (used[label] || 0) + 1;
+            if (used[label] > 1) label += ' ' + used[label];
+            versionOf[String(m.id)] = { key: k, label };
+        });
     });
     const stages = pd.stages || [];
     const info = new Map();
