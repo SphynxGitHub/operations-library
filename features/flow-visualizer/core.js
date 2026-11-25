@@ -2492,6 +2492,19 @@ function fvRenderOverview(canvas, svg, resources) {
 export function fvShortRule(rule) {
   const t = String(rule || '').trim();
   const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  const nm = t.match(/^NOT\s*\((.+)\)$/i);
+  if (nm && /\sAND\s/.test(nm[1]) && !/\sOR\s/.test(nm[1])) {
+    const parts = nm[1].split(/\s+AND\s+/).map((x) => x.trim());
+    const one = (x, first) => {
+      const e = x.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+)$/i);
+      if (e) return `${cap(e[1].trim())} ${first ? '!=' : '='} ${e[2].trim()}`;
+      const k = x.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+contains\s+(.+)$/i);
+      if (k) return /^advisor$/i.test(k[1].trim()) && k[2].trim() === ',' ? '= Joint Call' : `${cap(k[1].trim())} contains ${k[2].trim()}`;
+      return null;
+    };
+    const out = parts.map((x, i) => one(x, i === 0));
+    if (out.every(Boolean)) return out.map((x, i) => (i ? `And ${x}` : x)).join(' ');
+  }
   let c = t.match(/^NOT\s*\(\s*["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+?)\)?$/i) || t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is not(?: exactly)?\s+(.+)$/i);
   if (c) return `${cap(c[1].trim())} != ${c[2].trim()}`;
   c = t.match(/^["\u201c][^"\u201d]*["\u201d]\s+(.+?)\s+is exactly\s+(.+)$/i);
