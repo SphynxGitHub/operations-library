@@ -174,6 +174,7 @@ function _renderResourceManagerImpl() {
                     ${sel('lib-group-by', 'Group by', RESOURCE_GROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceGroupBy(this.value)')}
                     ${sel('lib-subgroup-by', 'Then by', RESOURCE_SUBGROUP_MODES.map(m => `<option value="${m.key}" ${OL.getResourceSubGroupBy() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSubGroupBy(this.value)')}
                     ${sel('lib-versions', 'Same-name versions', `<option value="stack" ${state.libStack === false ? '' : 'selected'}>Stack into one</option><option value="each" ${state.libStack === false ? 'selected' : ''}>Show each</option>`, `state.libStack = this.value !== 'each'; OL.syncResourceLibraryFilters();`)}
+                    ${sel('lib-tuck', 'Calendly forms and emails', `<option value="own" ${state.libTuck ? '' : 'selected'}>Own cards</option><option value="tuck" ${state.libTuck ? 'selected' : ''}>Inside their event</option>`, `state.libTuck = this.value === 'tuck'; OL.syncResourceLibraryFilters();`)}
                     ${sel('lib-sort', 'Sort', RESOURCE_SORTS.map(m => `<option value="${m.key}" ${OL.getResourceSort() === m.key ? 'selected' : ''}>${m.label}</option>`).join(''), 'OL.setResourceSort(this.value)')}
                 </div>
             </div>
@@ -430,7 +431,30 @@ OL.resourcePillsHtml = function(res, info) {
     return out.join('');
 };
 // Same-name versions (one per team member) show as one row or card with a chip per version; nothing is hidden or merged.
+// Option: a Calendly event's booking form and two emails sit inside the event's card instead of being listed on their own.
+const TUCK_RE = /^cal-(form|confirm|reminder)-([0-9a-f-]{36})$/;
+OL._tuckedParts = {};
+OL.tuckParts = function(list) {
+    OL._tuckedParts = {};
+    if (!state.libTuck) return list;
+    const ids = new Set(list.map(r => String(r.id)));
+    return list.filter(r => {
+        const m = TUCK_RE.exec(String(r.id));
+        if (!m || !ids.has(`cal-${m[2]}`)) return true;
+        (OL._tuckedParts[`cal-${m[2]}`] = OL._tuckedParts[`cal-${m[2]}`] || []).push(r);
+        return false;
+    });
+};
+OL.tuckedPartsHtml = function(res, members) {
+    if (!state.libTuck) return '';
+    const ev = (members && members[0]) || res; const parts = OL._tuckedParts[String(ev.id)];
+    if (!parts || !parts.length) return '';
+    const word = (r) => (/^cal-form-/.test(r.id) ? 'Booking form' : /^cal-confirm-/.test(r.id) ? 'Confirmation email' : 'Reminder email');
+    const chips = parts.map(r => `<button type="button" class="btn tiny soft" style="border-radius:20px;padding:1px 10px;font-size:11px;" onclick="event.stopPropagation();OL.selectResourceCard('${esc(r.id)}')">${word(r)}</button>`).join('');
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text-muted);">Inside${members && members.length > 1 ? ' (first version)' : ''}</span>${chips}</div>`;
+};
 OL.collapseVersions = function(list) {
+    list = OL.tuckParts(list);
     if (state.libStack === false || !list.length) return list.map(res => ({ res, members: null }));
     OL.resourceInfo(list[0]);
     const infoOf = (r) => OL._resInfoCache && OL._resInfoCache.info.get(String(r.id));
@@ -446,8 +470,9 @@ OL.collapseVersions = function(list) {
 };
 OL.versionChipsHtml = function(members) {
     if (!members || members.length < 2) return '';
+    // collapsed to one small line by default so stacked cards stay short; the button opens the chips
     const chips = members.map(m => `<button type="button" class="btn tiny soft" style="border-radius:20px;padding:1px 10px;font-size:11px;" onclick="event.stopPropagation();OL.selectResourceCard('${esc(m.id)}')" title="Open ${esc(OL.resourceInfo(m).versionLabel)}'s version">${esc(OL.resourceInfo(m).versionLabel)}</button>`).join('');
-    return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text-muted);">${members.length} versions</span>${chips}</div>`;
+    return `<div style="margin-top:4px;"><button type="button" aria-expanded="false" class="btn tiny soft" style="border-radius:20px;padding:0 10px;font-size:11px;" onclick="event.stopPropagation();const w=this.nextElementSibling;const o=w.style.display==='none';w.style.display=o?'flex':'none';this.setAttribute('aria-expanded',o);this.querySelector('span').textContent=o?'\u25B4':'\u25BE';">${members.length} versions <span>\u25BE</span></button><div style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">${chips}</div></div>`;
 };
 OL.resourceStatusDot = function(res) {
     if (typeof OL.isReferenceResource === 'function' && OL.isReferenceResource(res)) return '';
@@ -1064,7 +1089,7 @@ export function _renderResourceListRow(res, members) {
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:600;font-size:13px;line-height:1.3;word-break:break-word;">${esc(res.name)}</div>
                 ${sub ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sub}</div>` : ''}
-                ${OL.versionChipsHtml(members)}
+                ${OL.versionChipsHtml(members)}${OL.tuckedPartsHtml(res, members)}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:46%;">
                 ${OL.resourcePillsHtml(res, members ? { ...info, flags: info.flags.filter(f => f.icon !== 'user') } : info)}

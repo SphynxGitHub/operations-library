@@ -315,6 +315,8 @@ export function zapToResource(zap, opts = {}) {
     originalZapId: String(zap.zapId),
     externalUrl: zapEditorUrl(zap.zapId),
     isExpanded: true,
+    // a Zap whose name starts with OFF is switched off in Zapier: archived on first import (unarchive by hand to keep it)
+    ...(/^\s*(?:⚡\s*)?off\b/i.test(String(zap.zapName || '')) ? { isArchived: true, autoArchived: true } : {}),
     steps,
     zapMeta: {
       editorState: zap.editorState || undefined,
