@@ -2425,13 +2425,18 @@ export function _fvRenderSteps(resources) {
     const stageWfs = wfAll.filter(w => String(w.stageId) === String(stage.id));
     const wfGroups = [];
     stageWfs.forEach(wf => {
+      // In the all-stages view a shared (global) resource is drawn once, in its first home; every other workflow gets a jump chip
+      // in its heading instead of another full copy. Filter to a stage or workflow and the copies come back (see fvInstanceOf).
+      const collapseShared = !stageFilter && !(OL._fv && OL._fv._printing);
+      const shared = [];
       const wfRes = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === String(id)))
         // A resource placed in several workflows is drawn in each of them (see fvInstanceOf).
         .filter(r => r && (r.steps || []).length > 0)
+        .filter(r => { if (collapseShared && r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) { shared.push(r); return false; } return true; })
         .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
-      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered }); }
+      if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered, shared }); }
     });
     if (wfGroups.length > 0 || !(OL._fv && OL._fv._printing)) stageGroups.push({ stage, wfGroups });
   });
@@ -2498,7 +2503,8 @@ export function _fvRenderSteps(resources) {
             cur.push(r); used += w;
           });
           if (cur.length) rows.push(cur);
-          return rows.map((rs, i) => ({ workflow: i === 0 ? g.workflow : { ...g.workflow, name: `${g.workflow.name} (cont.)` }, resources: rs }));
+          if (!rows.length) return [g];
+          return rows.map((rs, i) => ({ workflow: i === 0 ? g.workflow : { ...g.workflow, name: `${g.workflow.name} (cont.)` }, resources: rs, shared: i === 0 ? (g.shared || []) : [] }));
         });
       });
     }
@@ -2732,7 +2738,7 @@ export function _fvRenderSteps(resources) {
     let wfY = stageContentTop;
     const wfMetaList = [];
 
-    wfGroups.forEach(({ workflow, resources: wfRes }) => {
+    wfGroups.forEach(({ workflow, resources: wfRes, shared: sharedHere }) => {
       const { sequence, laneGroupSet } = buildMergedFlow(wfRes);
 
       // Compute x positions for each resource
@@ -2796,6 +2802,19 @@ export function _fvRenderSteps(resources) {
       wfLblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${wfY + 9}px;display:flex;align-items:center;gap:6px;z-index:5;`;
       wfLblEl.addEventListener('mousedown', (e) => e.stopPropagation());
       wfLblEl.appendChild(wfName);
+      if ((sharedHere || []).length) {
+        const homeName = (r) => { const h = (OL.getWorkflows() || []).find(w => String(w.id) === fvFirstHome(r, OL.getWorkflows() || [])); return h ? h.name : 'its first workflow'; };
+        const shown = sharedHere.slice(0, 3);
+        shown.forEach(r => {
+          const ch = document.createElement('button'); ch.type = 'button';
+          ch.title = `Shared: ${r.name} is drawn once, in ${homeName(r)}. Click to jump to it. Pick just this workflow in the filter to see its steps here too.`;
+          ch.textContent = `↗ ${r.name.length > 30 ? r.name.slice(0, 29) + '…' : r.name}`;
+          ch.style.cssText = 'padding:1px 8px;font-size:10px;line-height:14px;border-radius:99px;cursor:pointer;background:var(--panel-soft);border:1px solid #7c3aed;color:var(--text-main);white-space:nowrap;';
+          ch.addEventListener('click', (e) => { e.stopPropagation(); OL.fvJumpToPlacement(r.id, fvFirstHome(r, OL.getWorkflows() || [])); });
+          wfLblEl.appendChild(ch);
+        });
+        if (sharedHere.length > shown.length) { const more = document.createElement('span'); more.className = 'tiny muted'; more.textContent = `+${sharedHere.length - shown.length} more shared`; more.title = sharedHere.slice(3).map(r => r.name).join('\n'); wfLblEl.appendChild(more); }
+      }
       if (!PRINTING && ((OL.getCurrentProjectData() || {}).workflows || []).some(w => String(w.id) === String(workflow.id))) {
         const mk = (label, title, fn, danger) => {
           const bt = document.createElement('button'); bt.type = 'button'; bt.title = title; if (label === 'trash') bt.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>'; else bt.textContent = label;
@@ -3493,6 +3512,14 @@ export function _fvDrawStepConnections(resources) {
           if (_myCopies.length > 1 && _myCopies.some(c => tw.has(copyWf(c))) && !tw.has(copyWf(sourceRes))) return;   // another copy of this resource leads there
           const tc2 = (copiesOf.get(String(tResId)) || []).find(c => copyWf(c) === copyWf(sourceRes));
           if (tc2) _toKey = fvDomKey(tc2);
+        }
+        // All-stages view draws a shared resource once; the chip in each other workflow stands for its lines there.
+        if (!(OL._fv && OL._fv.stageFilter) && !(OL._fv && OL._fv._printing) && String(tResId) !== String(sourceRes.id)) {
+          const tRes0 = (copiesOf.get(String(tResId)) || [])[0];
+          if (tRes0 && (sourceRes.isGlobal || tRes0.isGlobal)) {
+            const sw0 = wfsHolding.get(String(sourceRes.id)) || new Set(), tw0 = wfsHolding.get(String(tResId)) || new Set();
+            if ((sourceRes.isGlobal && !tw0.has(fvFirstHome(sourceRes, _wfs))) || (tRes0.isGlobal && !sw0.has(fvFirstHome(tRes0, _wfs)))) return;
+          }
         }
         const fromElRaw = elById.get(`fv-step-${_myKey}-${sourceStep.id}`);
         // If fromEl is a consolidated anchor (tiny proxy div), use the real card for exit coords
