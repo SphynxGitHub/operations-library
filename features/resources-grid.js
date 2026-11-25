@@ -437,13 +437,14 @@ OL._tuckedParts = {};
 OL.tuckParts = function(list) {
     OL._tuckedParts = {};
     if (!state.libTuck) return list;
-    const ids = new Set(list.map(r => String(r.id)));
-    return list.filter(r => {
-        const m = TUCK_RE.exec(String(r.id));
-        if (!m || !ids.has(`cal-${m[2]}`)) return true;
-        (OL._tuckedParts[`cal-${m[2]}`] = OL._tuckedParts[`cal-${m[2]}`] || []).push(r);
-        return false;
+    // the event and its form/emails usually sit in different groups (grouped by type, say), so look at the whole project
+    const all = (OL.getCurrentProjectData() || {}).resources || [];
+    const events = new Set(all.filter(r => r && /^cal-[0-9a-f-]{36}$/.test(String(r.id)) && (state.showArchivedResources || !r.isArchived)).map(r => String(r.id)));
+    all.forEach(r => {
+        const m = r && TUCK_RE.exec(String(r.id));
+        if (m && events.has(`cal-${m[2]}`) && (state.showArchivedResources || !r.isArchived)) (OL._tuckedParts[`cal-${m[2]}`] = OL._tuckedParts[`cal-${m[2]}`] || []).push(r);
     });
+    return list.filter(r => { const m = TUCK_RE.exec(String(r.id)); return !(m && OL._tuckedParts[`cal-${m[2]}`]); });
 };
 OL.tuckedPartsHtml = function(res, members) {
     if (!state.libTuck) return '';
