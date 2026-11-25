@@ -3513,7 +3513,7 @@ export function _fvRenderSteps(resources) {
             if (!lowest) return;
             const L0 = parseFloat(lowest.el.style.left) || 0;
             if (xT - L0 < CARD_W / 2) return;
-            const shift = Math.round((xT - L0) / 2);
+            const shift = Math.round(Math.min((xT - L0) / 2, (CARD_W + COL_GAP) / 2));   // never more than half a column, however far off the next flow sits
             canvas.querySelectorAll('.fv-step-card, [id^="fv-consol-"]').forEach((el) => {
               if (_moved.has(el) || Math.abs((parseFloat(el.style.left) || 0) - L0) > 2) return;
               const _t = parseFloat(el.style.top) || 0;
