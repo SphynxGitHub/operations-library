@@ -929,7 +929,7 @@ export function renderVisualizer() {
           <input id="fv-search" type="text"
                  placeholder="Search steps…"
                  value="${esc(OL._fv._searchQuery || '')}"
-                 oninput="OL.fvSearch(this.value)"
+                 oninput="const v=this.value;clearTimeout(OL._fvSearchT);OL._fvSearchT=setTimeout(()=>OL.fvSearch(v),180)"
                  autocomplete="off">
         </div>
         <div id="fv-search-nav"
@@ -5723,16 +5723,20 @@ export function fvSearch(query) {
       el.classList.toggle('dimmed', !hit);
     });
   } else {
-    resources.forEach(r => {
-      (r.steps || []).forEach(s => {
-        if ((s.name||'').toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q)) {
-          matches.push({ type: 'step', id: s.id, resId: r.id });
-        }
-      });
+    // Match what is drawn: every card on screen is checked once. (Checking every step in the library found steps that are not
+    // on the map, so a search could stop on a hit that does not exist on screen, and each card was compared with every hit.)
+    const nameOf = new Map(resources.map(r => [String(r.id), (r.name || '').toLowerCase()]));
+    const seen = new Set(); const hitKeys = new Set();
+    const cards = document.querySelectorAll('.fv-step-card, .fv-list-item');
+    cards.forEach(el => {
+      const stepId = String(el.dataset.stepId || ''); const resId = String(el.dataset.resId || '');
+      const key = `${resId}|${stepId}`;
+      const nameEl = el.querySelector('.fv-step-name, .fv-list-step-name');
+      const hit = ((nameEl ? nameEl.textContent : '').toLowerCase().includes(q)) || (nameOf.get(resId) || '').includes(q);
+      if (hit) { hitKeys.add(key); if (!seen.has(key)) { seen.add(key); matches.push({ type: 'step', id: stepId, resId }); } }
     });
-    // Steps map cards and List rows both carry data-step-id (and data-res-id), so one pass covers either view.
-    document.querySelectorAll('.fv-step-card, .fv-list-item').forEach(el => {
-      const hit = matches.some(m => String(m.id) === String(el.dataset.stepId) && (!el.dataset.resId || String(m.resId) === String(el.dataset.resId)));
+    cards.forEach(el => {
+      const hit = hitKeys.has(`${String(el.dataset.resId || '')}|${String(el.dataset.stepId || '')}`);
       el.classList.toggle('search-match', hit);
       el.classList.toggle('dimmed', !hit);
     });

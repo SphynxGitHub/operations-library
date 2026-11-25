@@ -35,29 +35,35 @@ OL.versionGroups = function (list) {
 // One pass per map render: id -> person label, for every resource that is a version of another.
 // (Built once so drawing the map stays fast; the cards just look their label up.)
 OL.fvBuildVersionLabels = function (resources) {
-    const labels = new Map();
-    const groups = {};
-    (resources || []).forEach((r) => {
-        if (!live(r)) return;
-        let label = r.versionGroup ? (r.versionLabel || '') : '';
-        let key = r.versionGroup ? `g:${r.versionGroup}` : '';
-        if (!r.versionGroup && typeof OL.resourceInfo === 'function') { const i = OL.resourceInfo(r); if (i && i.versionKey) { label = i.versionLabel || ''; key = `c:${i.versionKey}`; } else return; }
-        else if (!r.versionGroup) return;
-        labels.set(String(r.id), label || 'Version');
-        (groups[key] = groups[key] || []).push({ id: String(r.id), label: label || 'Version' });
-    });
-    OL._fvVersionLabels = labels;
+    // The version groups only change when a name, link, archive flag or explicit link changes, so they are rebuilt only then.
+    // (Rebuilding them costs a pass over the whole library, and the map is redrawn after every edit.)
+    const sig = (resources || []).map((r) => `${r.id}|${r.name}|${r.isArchived ? 1 : 0}|${r.versionGroup || ''}|${r.versionLabel || ''}|${r.externalUrl || ''}`).join('\n');
+    if (OL._fvGroupsSig !== sig || !OL._fvGroups) {
+        const labels = new Map();
+        const groups = {};
+        (resources || []).forEach((r) => {
+            if (!live(r)) return;
+            let label = r.versionGroup ? (r.versionLabel || '') : '';
+            let key = r.versionGroup ? `g:${r.versionGroup}` : '';
+            if (!r.versionGroup && typeof OL.resourceInfo === 'function') { const i = OL.resourceInfo(r); if (i && i.versionKey) { label = i.versionLabel || ''; key = `c:${i.versionKey}`; } else return; }
+            else if (!r.versionGroup) return;
+            labels.set(String(r.id), label || 'Version');
+            (groups[key] = groups[key] || []).push({ id: String(r.id), label: label || 'Version' });
+        });
+        OL._fvVersionLabels = labels;
+        OL._fvGroups = Object.values(groups).filter((arr) => arr.length > 1);
+        OL._fvGroupsSig = sig;
+    }
     // A group with only one version on the map is drawn as one card for all of them: "N versions" instead of a person's name.
     const placed = new Set();
     ((OL.getCurrentProjectData() || {}).workflows || []).forEach((w) => (w.resourceIds || []).forEach((id) => placed.add(String(id))));
     const stacks = new Map();
-    Object.values(groups).forEach((arr) => {
-        if (arr.length < 2) return;
+    OL._fvGroups.forEach((arr) => {
         const onMap = arr.filter((a) => placed.has(a.id));
         if (onMap.length === 1) stacks.set(onMap[0].id, { count: arr.length, names: arr.map((a) => a.label) });
     });
     OL._fvVersionStacks = stacks;
-    return labels;
+    return OL._fvVersionLabels;
 };
 
 // the person tag on each version card on the map, same idea as the Resources tab
