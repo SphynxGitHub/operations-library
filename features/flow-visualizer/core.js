@@ -3440,7 +3440,7 @@ export function _fvRenderSteps(resources) {
         if (wfBgEl) wfBgEl.style.height = actualWfH + 'px';
         if (wfBgEl && wfBgEl.parentNode && !OL.fvShowResNames()) {
           // column names are hidden: draw a thin divider between neighbouring resources so the columns still read as separate
-          const xs = (resMeta || []).map(m => m.colX).sort((a, b) => a - b);
+          const xs = [...new Set((resMeta || []).map(m => m.colX))].sort((a, b) => a - b);
           for (let i = 1; i < xs.length; i++) {
             const dv = document.createElement('div');
             dv.className = 'fv-res-divider';
