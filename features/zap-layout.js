@@ -89,6 +89,64 @@ export function layoutLanes(res, opts = {}) {
     hid.forEach((id) => { lay[id] = { colOffset: 0, row: 0, parentId: null, laneMode: true }; });
     return lay;
   }
+  // MAP SECTIONS: a step marked "start a new map section here" (step.mapSection = the section's name) begins a section of its own. The Zap's
+  // steps are split into sections (each marker takes everything that follows it until the next marker; what is left stays with the first
+  // section), each is laid out by itself, and the sections are stacked one under the other. Only how the map reads changes: the Zap
+  // itself, and the lines between its steps, are untouched.
+  if (!opts._sec) {
+    const all = res.steps || [];
+    const isMark = (st) => st && typeof st.mapSection === 'string' && st.mapSection.trim();
+    if (all.some(isMark)) {
+      const ids = all.map((st) => String(st.id)); const byId0 = new Map(all.map((st) => [String(st.id), st]));
+      const succ = (st, i) => {
+        const outs = ((st.logic && st.logic.out) || []).map((l) => (l && l.targetId ? stepIdOf(res, l.targetId) : null)).filter((t) => t !== null && byId0.has(t) && t !== String(st.id));
+        if (outs.length) return outs;
+        return !st.noAutoNext && all[i + 1] ? [String(all[i + 1].id)] : [];
+      };
+      const idx0 = new Map(ids.map((x, i) => [x, i]));
+      const starts = [ids[0]].concat(all.filter((st) => isMark(st) && String(st.id) !== ids[0]).map((st) => String(st.id)));
+      const startSet = new Set(starts);
+      const owner = new Map();
+      starts.forEach((sid, k) => {
+        const q = [sid];
+        while (q.length) {
+          const x = q.shift();
+          if (owner.has(x)) continue;
+          if (x !== sid && startSet.has(x)) continue;                       // another section begins here
+          owner.set(x, k);
+          succ(byId0.get(x), idx0.get(x)).forEach((y) => q.push(y));
+        }
+      });
+      ids.forEach((x) => { if (!owner.has(x)) owner.set(x, 0); });
+      const parts = starts.map(() => []);
+      all.forEach((st) => parts[owner.get(String(st.id))].push(st));
+      const out = {}; let rowBase = 0; let before = [];
+      parts.forEach((members, k) => {
+        if (!members.length) return;
+        const mine = new Set(members.map((st) => String(st.id)));
+        const vis = members.map((st) => {
+          const c = Object.create(st);
+          Object.defineProperty(c, 'logic', { value: Object.assign({}, st.logic, { out: ((st.logic && st.logic.out) || []).filter((l) => { if (!l || !l.targetId) return true; const t = stepIdOf(res, l.targetId); return t === null || mine.has(t); }) }), enumerable: true });
+          return c;
+        });
+        const v = Object.create(res); Object.defineProperty(v, 'steps', { value: vis, enumerable: true });
+        const lay = layoutLanes(v, { ...opts, _sec: true });
+        let maxRow = 0;
+        members.forEach((st) => {
+          const id = String(st.id); const e = Object.assign({}, lay[id] || { colOffset: 0, row: 0, parentId: null });
+          e.row = (e.row || 0) + rowBase; maxRow = Math.max(maxRow, e.row);
+          if (k > 0 || isMark(st)) {
+            if (k > 0) { e.after = (e.after || []).concat(before); e.extraGap = Math.max(e.extraGap || 0, 34); }
+            if (isMark(st) && String(st.id) === starts[k]) e.sectionStart = st.mapSection.trim();
+          }
+          out[id] = e;
+        });
+        before = before.concat([...mine]);
+        rowBase = maxRow + 2;
+      });
+      return out;
+    }
+  }
   // Steps that share a group name are drawn as ONE combined card (the Steps view). The lanes are laid out as if each group were a
   // single step, standing where its first member stands, so the lanes keep their own columns side by side instead of being
   // pulled apart and stacked one after another around the cards. A member's position is its card's position.

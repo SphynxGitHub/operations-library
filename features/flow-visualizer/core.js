@@ -3372,6 +3372,12 @@ export function _fvRenderSteps(resources) {
                          const top = out.tops.get(el);
                           { el.style.top = top + 'px'; step.coords.y = top; }   // pins are ignored here: the layout always decides
                           if (laneItem) { laneItem.anchors.forEach(a => { a.style.top = top + 'px'; }); laneItem.members.forEach(m => { m.step.coords.y = top; }); }
+                          const _sec = (lay[String(step.id)] || {}).sectionStart;     // a map section starts here: its title sits above the card
+                          if (_sec && el.parentNode) {
+                              const t = document.createElement('div'); t.className = 'fv-map-section-title';
+                              t.style.cssText = `position:absolute;left:${el.style.left};top:${top - 28}px;width:${CARD_W}px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent,#3dd9c5);border-bottom:1px solid var(--accent,#3dd9c5);padding-bottom:3px;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+                              t.textContent = _sec; el.parentNode.appendChild(t);
+                          }
                     });
                 maxBottom = Math.max(maxBottom, out.bottom);
                 return;
@@ -8210,6 +8216,13 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                     <input type="text" class="inspector-name-input" style="margin-top:6px;" value="${esc(step.milestoneName || '')}" placeholder="Milestone name (optional, defaults to the step name)"
                            onblur="OL.updateAtomicStep('${resId}','${step.id}','milestoneName',this.value)">
                 </div>
+                ${(res.type === 'Zap') ? `<div class="inspector-section">
+                    <label class="section-label"><i data-lucide="split" style="width:11px;height:11px;"></i> MAP SECTION</label>
+                    <div class="tiny muted" style="margin-bottom:6px;">Start a new section of this Zap here. The map shows it as its own flow under a title; the Zap itself is unchanged. Leave blank for no section.</div>
+                    <input type="text" class="inspector-name-input" value="${esc(step.mapSection || '')}" placeholder="Section name, e.g. Find household"
+                           onblur="OL.updateAtomicStep('${resId}','${step.id}','mapSection',this.value.trim())">
+                    <button class="btn tiny" style="margin-top:6px;" onclick="OL.fvSuggestSections('${resId}')">Suggest sections for this Zap</button>
+                </div>` : ''}
                 <div class="inspector-section">
                     <label class="section-label">
                         <i data-lucide="users" style="width:11px;height:11px;"></i> ASSIGNEES (WHO?)
@@ -8499,6 +8512,28 @@ export function renderStepResources(resId, step) {
     }).join('');
 };
 
+// Suggest where to split a Zap into map sections: each path that leaves a search step ("Find ... by Email", "Found" / "Not found" paths)
+// starts a stage of its own. Shows the proposal; nothing changes until it is accepted.
+export function fvSuggestSections(resId) {
+  const data = OL.getCurrentProjectData();
+  const res = (data.resources || data.localResources || []).find((r) => String(r.id) === String(resId));
+  if (!res) return;
+  const steps = res.steps || [];
+  const byId = new Map(steps.map((st) => [`${res.id}-${st.id}`, st]));
+  const picks = [];
+  steps.forEach((st, i) => {
+    const role = st.zap && st.zap.role; const isSearch = role === 'search' || /^\s*find\b/i.test(st.name || '');
+    if (!isSearch) return;
+    ((st.logic && st.logic.out) || []).forEach((l) => { const t = l && l.targetId && byId.get(String(l.targetId)); if (t && t !== steps[0] && !picks.includes(t)) picks.push(t); });
+  });
+  const named = picks.filter((st) => !st.hideOnMap);
+  if (!named.length) { alert('No split points found: this Zap has no search step with paths leaving it. Set a section name on a step by hand instead.'); return; }
+  const list = named.map((st) => `  • ${st.name}`).join('\n');
+  if (!confirm(`Start a new map section at these ${named.length} steps (each named after its step)?\n\n${list}\n\nThe Zap itself is not changed. You can rename or clear any of them on the step.`)) return;
+  OL.updateAndSync(() => { named.forEach((st) => { if (!st.mapSection) st.mapSection = String(st.name || '').trim(); }); });
+  refreshFlowMap(resId, named[0].id);
+}
+
 export function updateAtomicStep(resId, stepId, field, value) {
     const data = OL.getCurrentProjectData(); 
     const projectResources = data.resources || [];
@@ -8531,6 +8566,12 @@ export function updateAtomicStep(resId, stepId, field, value) {
         if (cardStep) cardStep.textContent = value;
         // The map's step cards have no hook for the surgical update above: redraw the map (and come back to this step)
         if (window.location.hash.includes('visualizer')) refreshFlowMap(resId, stepId);
+    }
+    else if (field === 'mapSection') {
+        if (!value) delete step.mapSection;
+        OL.persist();
+        if (window.location.hash.includes('visualizer') || window.location.hash.includes('flow')) refreshFlowMap(resId, stepId);
+        else OL._fvRefreshInspector(resId, stepId);
     }
     // For all other fields, refresh just the inspector content
     // preserving scroll position
@@ -10318,7 +10359,7 @@ Object.assign(window.OL, {
     updateQuickAddPreview, showSlashMenu, insertCommand, handleQuickAddKeys,
     updateStepPreview, showSubMenu, selectMultiLink, selectTargetResource,
     selectMultiAssignee, exitSubMenu, completeSubMenuValue, selectMenuOption,
-    commitQuickStep, updateStepName, deleteStep, toggleSteps,
+    commitQuickStep, updateStepName, deleteStep, toggleSteps, fvSuggestSections,
     splitCardAtStep, highlightFamily, toggleScopingStatus, getAppByFunction,
     getResourceIcon, openInspector, _buildInspectorContent, executeStepMove,
     _fvToggleLogicType, _fvOpenTargetPicker, renderStepResources, updateAtomicStep,
