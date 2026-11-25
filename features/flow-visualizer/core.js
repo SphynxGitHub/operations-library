@@ -672,6 +672,7 @@ export function _fvLayoutResource(res, opts) {
             const id = String(l.targetId.substring(k + 1));
             const ti = stepIdx.get(id);
             if (ti === undefined || ti <= stepIdx.get(String(step.id)) || seen.has(id)) return;
+            if (steps[ti] && steps[ti].hideOnMap && !OL._fv.showHiddenSteps) return;   // a hidden step is not a path of its own
             seen.add(id); found.push(ti);
         });
         return found.sort((a, b) => a - b);
