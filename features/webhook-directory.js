@@ -150,7 +150,13 @@ export function webhookSet(key, cardId) { if (cardId) draft[key] = String(cardId
 export function webhookFilter(q) {
     const t = String(q || '').trim().toLowerCase();
     if (view === 'zaps') { document.querySelectorAll('[data-whz-row]').forEach((row) => { row.style.display = !t || row.getAttribute('data-whz-name').includes(t) ? '' : 'none'; }); return; }
-    document.querySelectorAll('[data-whd-row] select option').forEach((o) => { o.hidden = !!t && !!o.value && !o.selected && !o.textContent.toLowerCase().includes(t); });
+    // one row per address: it shows when the address, a posting Zap or step, or the Zap chosen for it contains the text
+    document.querySelectorAll('[data-whd-row]').forEach((row) => {
+        const sel = row.querySelector('select'); const chosen = sel && sel.selectedOptions[0] && sel.value ? sel.selectedOptions[0].textContent.toLowerCase() : '';
+        const hit = !t || row.getAttribute('data-whd-text').includes(t) || chosen.includes(t);
+        row.style.display = hit ? '' : 'none';
+        row.style.outline = t && hit ? '2px solid var(--accent, #3dd9c5)' : ''; row.style.outlineOffset = '-2px';
+    });
 }
 const keysOf = (cardId) => Object.keys(draft).filter((k) => String(draft[k]) === String(cardId));
 const callersHtml = (key) => {
@@ -205,7 +211,7 @@ export function openWebhookDirectory(keep) {
     const rows = list.map((a) => {
         const names = a.callers.slice(0, 4).map((x) => `${esc(clean(x.zapName))}: ${esc(x.stepTitle)}${x.step ? '' : ' (not in this project)'}`).join('<br>');
         const more = a.callers.length > 4 ? `<br>and ${a.callers.length - 4} more` : '';
-        return `<div data-whd-row="${esc(a.key)}" style="display:grid;grid-template-columns:110px 300px minmax(0,1fr);gap:14px;padding:10px 14px;border-top:1px solid var(--line, rgba(127,127,127,.25));align-items:start;${draft[a.key] ? '' : 'background:var(--bg-warning);'}">
+        return `<div data-whd-row="${esc(a.key)}" data-whd-text="${esc((a.key + ' ' + a.callers.map((x) => clean(x.zapName) + ' ' + x.stepTitle).join(' ')).toLowerCase())}" style="display:grid;grid-template-columns:110px 300px minmax(0,1fr);gap:14px;padding:10px 14px;border-top:1px solid var(--line, rgba(127,127,127,.25));align-items:start;${draft[a.key] ? '' : 'background:var(--bg-warning);'}">
             <span style="font-family:monospace;font-size:13px;">${a.key.startsWith('step-') ? 'no address in export' : `…/${esc(a.key)}/`}</span>
             <div style="min-width:0;"><select class="modal-input" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;" onchange="OL.webhookSet('${esc(a.key)}', this.value)">${opts(a.key)}</select>${draft[a.key] ? '' : (() => { const l = likelyZaps(a.callers, recv.hook.concat(recv.hookOff)); return l.length ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted);">Likely: ${l.map((r) => `<a href="#" onclick="OL.webhookPick('${esc(a.key)}','${esc(r.id)}');return false;">${esc(clean(r.name))}</a>`).join(' or ')}</div>` : ''; })()}</div>
             <div style="font-size:13px;line-height:1.5;">${a.callers.length} step${a.callers.length === 1 ? '' : 's'}<br><span style="color:var(--text-muted);">${names}${more}</span></div>
