@@ -33,6 +33,15 @@ if (!document.getElementById('res-modal-style')) {
     [data-res-pane] .modal-input:focus, [data-res-pane] .modal-select:focus, [data-res-pane] .modal-textarea:focus { border-color:var(--accent) !important; }
     [data-res-pane] .ol-email-body { background:var(--bg) !important; border:1px solid var(--panel-border) !important; border-radius:8px !important; padding:14px 16px !important; }
     [data-res-pane] .btn.tiny { height:30px; padding:0 12px; border-radius:8px; font-size:12px; }
+    .modal-head { text-align:left !important; }
+    .modal-head .res-head-row { display:flex; align-items:center; justify-content:flex-start; gap:8px; flex-wrap:wrap; }
+    .modal-head .res-chip { display:inline-flex !important; align-items:center; gap:6px; height:28px; padding:0 12px !important; box-sizing:border-box; flex-shrink:0;
+        border-radius:99px !important; font-size:11px !important; font-weight:600 !important; text-transform:none !important; letter-spacing:0 !important; line-height:1;
+        border:1px solid var(--panel-border) !important; background:var(--panel-soft) !important; color:var(--text-muted) !important; cursor:pointer; text-decoration:none; }
+    .modal-head .res-chip svg, .modal-head .res-chip i { width:13px !important; height:13px !important; }
+    .modal-head .res-chip-icon { width:28px; padding:0 !important; justify-content:center; }
+    .modal-head .res-chip-warn { border-color:#f59e0b !important; background:rgba(245,158,11,.12) !important; color:#b45309 !important; }
+    .modal-head .res-chip:hover { border-color:var(--accent) !important; color:var(--text-main) !important; }
     [data-res-pane] label.tiny.muted { font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px !important; }
     `;
     document.head.appendChild(st);
@@ -515,17 +524,16 @@ export function openResourceModal(targetId, draftObj = null) {
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
     const originPill = `
-        <span class="pill tiny ${isAlreadyMaster ? 'vault' : 'local' }" 
-              style="display:flex; align-items:center; gap:4px; font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
+        <span class="pill tiny res-chip">
             <i data-lucide="${isAlreadyMaster ? 'shield-check' : 'map-pin'}" style="width:10px; height:10px;"></i>
             ${isAlreadyMaster ? 'Master' : 'Local' }
         </span>`;
     
     const typePill = `
         <div style="position: relative; display: inline-block;">
-            <span class="pill tiny soft is-clickable" 
+            <span class="pill tiny soft is-clickable res-chip"
                   onclick="document.getElementById('res-type-selector').click()"
-                  style="display:flex; align-items:center; gap:4px; font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                  style="cursor:pointer;">
                 <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:10px; height:10px;"></i>
                 ${esc(res.type || 'General')} <i data-lucide="chevron-down" style="width:10px; height:10px;"></i>
             </span>
@@ -1610,21 +1618,14 @@ export function openResourceModal(targetId, draftObj = null) {
                     ${esc(res.name)}
                 </div>
                 ${hasHistory ? `
-                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
-                            onclick="OL.navigateBack()">
+                    <button class="res-chip" onclick="OL.navigateBack()">
                         <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
                     </button>` : ''}
                 ${res.externalUrl ? `
-                    <a href="${res.externalUrl}" target="_blank"
-                       style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
-                              border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-soft);
-                              color:var(--text-dim);flex-shrink:0;text-decoration:none;" title="Open link">
+                    <a href="${res.externalUrl}" target="_blank" class="res-chip res-chip-icon" title="Open link">
                         <i data-lucide="external-link" style="width:12px;height:12px;"></i>
                     </a>` : ''}
-                <button onclick="OL.promptEditLink('${res.id}')"
-                        style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
-                               border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-soft);
-                               color:var(--text-dim);cursor:pointer;flex-shrink:0;"
+                <button class="res-chip res-chip-icon" onclick="OL.promptEditLink('${res.id}')"
                         title="${res.externalUrl ? 'Edit link' : 'Add link'}">
                     <i data-lucide="pencil" style="width:12px;height:12px;"></i>
                 </button>
@@ -1632,11 +1633,10 @@ export function openResourceModal(targetId, draftObj = null) {
         
         
             <!-- Row 2: Stage + workflow + archive + pricing + promote — ALL ONE LINE -->
-            <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+            <div class="res-head-row">
                 ${originPill} ${typePill}
-                <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;"></div>
                 ${!isVaultMode ? `
-                <button onclick="OL.setResourceBuildState('${res.id}', '${res.isShell ? 'built' : 'planned'}')"
+                <button class="res-chip ${res.isShell ? 'res-chip-warn' : ''}" onclick="OL.setResourceBuildState('${res.id}', '${res.isShell ? 'built' : 'planned'}')"
                         title="${res.isShell ? 'Planned: not built yet. Click to mark it built.' : 'Built. Click to mark it planned again.'}"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
                                display:flex;align-items:center;gap:4px;
@@ -1647,13 +1647,12 @@ export function openResourceModal(targetId, draftObj = null) {
                     ${res.isShell ? 'Planned' : 'Built'}
                 </button>` : ''}
                 ${canPromote ? `
-                    <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                                   background:#fbbf24;color:#000;border:none;display:flex;align-items:center;gap:4px;"
+                    <button class="res-chip res-chip-warn"
                             onclick="OL.pushToMaster('${res.id}')">
                         <i data-lucide="star" style="width:11px;height:11px;"></i> Promote
                     </button>` : ''}
                 <details class="res-more" style="position:relative;">
-                    <summary class="btn tiny soft" style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:4px;" title="More actions" aria-label="More actions">
+                    <summary class="res-chip res-chip-icon" style="list-style:none;cursor:pointer;" title="More actions" aria-label="More actions">
                         <i data-lucide="more-horizontal" style="width:14px;height:14px;"></i>
                     </summary>
                     <div style="position:absolute;right:0;top:34px;z-index:30;min-width:170px;display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-dark);box-shadow:0 8px 24px rgba(0,0,0,0.25);">
