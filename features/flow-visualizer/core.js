@@ -1047,6 +1047,7 @@ export function renderVisualizer() {
             <i data-lucide="merge" style="width:13px;height:13px;"></i><span>Merge repeats</span>
         </button>
 
+        ${OL._fv.onlyRes ? `<button class="fv-toggle-btn on" title="Back to the whole map" onclick="OL._fv.onlyRes=''; OL.renderVisualizer();"><i data-lucide="x"></i><span>Only: ${esc(String(((OL.getCurrentProjectData && OL.getCurrentProjectData().resources) || []).find(r => String(r.id) === String(OL._fv.onlyRes))?.name || 'this Zap').slice(0, 30))}</span></button>` : ''}
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; try{localStorage.setItem('fv_stage_filter_${client ? esc(client.id) : ''}', this.value)}catch(e){} OL.renderVisualizer();">
@@ -2719,9 +2720,10 @@ export function _fvRenderSteps(resources) {
     const stageWfs = wfAll.filter(w => String(w.stageId) === String(stage.id) && (!_fWf || String(w.id) === _fWf));
     const wfGroups = [];
     stageWfs.forEach(wf => {
+      const _only = OL._fv.onlyRes ? String(OL._fv.onlyRes) : '';   // set from a "part of ..." tag: show just that Zap, every path
       // In the all-stages view a shared (global) resource is drawn once, in its first home; every other workflow gets a jump chip
       // in its heading instead of another full copy. Filter to a stage or workflow and the copies come back (see fvInstanceOf).
-      const collapseShared = !stageFilter && !(OL._fv && OL._fv._printing);
+      const collapseShared = !stageFilter && !_only && !(OL._fv && OL._fv._printing);
       // A process another process of this workflow calls out to ("See NEW Find or Create Contact...") is drawn in full only when this
       // one workflow is open; on a stage or All stages it is just the teal callout beside the step that calls it.
       const calledIds = new Set();
@@ -2737,7 +2739,7 @@ export function _fvRenderSteps(resources) {
         .map(id => resources.find(r => String(r.id) === String(id)))
         // A resource placed in several workflows is drawn in each of them (see fvInstanceOf).
         .filter(r => r && (r.steps || []).length > 0)
-        .filter(r => !calledIds.has(String(r.id)))
+        .filter(r => _only || !calledIds.has(String(r.id)))
         .filter(r => { if (collapseShared && r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) { shared.push(r); return false; } return true; })
         .map(r => (r.isGlobal && fvFirstHome(r, wfAll) !== String(wf.id)) ? fvInstanceOf(r, wf.id) : r);
       // a Zap with map sections stands here as the sections that belong in this workflow; sections chosen for this workflow from a Zap that lives elsewhere join the end
@@ -2756,6 +2758,7 @@ export function _fvRenderSteps(resources) {
           wfRes.push(inst);
         } });
       });
+      if (_only) { for (let i = wfRes.length - 1; i >= 0; i--) if (String(wfRes[i].id) !== _only) wfRes.splice(i, 1); if (!wfRes.length) return; }
       // Empty workflows and stages are kept on screen (not in print) so they can be renamed, deleted or added to.
       if (wfRes.length > 0 || !(OL._fv && OL._fv._printing)) { const ordered = wf.lockColumnOrder ? wfRes : fvOrderColumns(wfRes); (OL._fv._shown = OL._fv._shown || {})[wf.id] = ordered.map(r => String(r.id)); wfGroups.push({ workflow: wf, resources: ordered, shared }); }
     });
@@ -4133,7 +4136,7 @@ export function _fvDrawStepConnections(resources) {
           const fr = rectOf(fromEl), tr = rectOf(toEl);   // (a hand-off to another Zap far below is a tag too: a line down the whole map crosses everything between)
           if (String(tResId) !== String(sourceRes.id) || Math.hypot(tr.left - fr.left, tr.top - fr.top) > 520 || ((OL._fv._nonTree || new Set()).has(fromEl.id + '>' + toEl.id) && Math.hypot(tr.left - fr.left, tr.top - fr.top) > 300)) {
             const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
-            const label = 'also part of ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
+            const label = 'part of ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
             const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
             const x = fr.left - cRect.left + fr.width / 2 + ((_busRank.get(tStepId) || 0) * 14), y0 = fr.bottom - cRect.top;
             const pth = document.createElementNS(ns3, 'path');
@@ -4141,7 +4144,9 @@ export function _fvDrawStepConnections(resources) {
             pth.setAttribute('stroke-width', '1.6'); pth.setAttribute('stroke-dasharray', '4 3'); pth.style.pointerEvents = 'none'; g3.appendChild(pth);
             const tx3 = document.createElementNS(ns3, 'text');
             tx3.setAttribute('x', x + 5); tx3.setAttribute('y', y0 + 18); tx3.setAttribute('font-size', '10'); tx3.setAttribute('fill', '#0f9d8c');
-            tx3.style.pointerEvents = 'none'; tx3.textContent = label; g3.appendChild(tx3);
+            tx3.textContent = label; tx3.style.pointerEvents = 'all'; tx3.style.cursor = 'pointer'; tx3.setAttribute('text-decoration', 'underline');
+            tx3.addEventListener('click', (ev) => { ev.stopPropagation(); OL._fv.onlyRes = String(tResId); OL.renderVisualizer(); });
+            g3.appendChild(tx3);
             return;
           }
         }
