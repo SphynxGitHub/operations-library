@@ -4316,6 +4316,25 @@ export function _fvDrawStepConnections(resources) {
           }
         }
 
+        // Any link that goes back UP the map (the target is above the step): out of the side of the step, up a lane beside the cards, and into the
+        // side of the target. A line from the bottom up through the cards between read as pointing the wrong way.
+        if (!draftRoute && !isSelfLink && tRect.top < fRect.top - 10 && ty_center < fy_center - 30 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(isCrossResource && /^Then posts to/i.test(outRule.rule || ''))) {
+          const sy = fRect.top - cRect.top + Math.min(fRect.height / 2, 40), ey = tRect.top - cRect.top + Math.min(tRect.height / 2, 40);
+          const tryLane = (side) => {
+            const sx = (side < 0 ? fRect.left : fRect.right) - cRect.left, ex = (side < 0 ? tRect.left : tRect.right) - cRect.left;
+            const gx = side < 0 ? Math.min(sx, ex) - 26 : Math.max(sx, ex) + 26;
+            if (gx < 14) return null;
+            const R = Math.min(18, Math.abs(gx - sx) / 2, Math.abs(gx - ex) / 2, (sy - ey) / 2);
+            const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 0);
+            if (hit(sx + side * 3, sy, gx, sy) || hit(gx, ey, gx, sy) || hit(gx, ey, ex + side * 3, ey)) return null;
+            return { pts: [[sx, sy], [gx, sy], [gx, ey], [ex, ey]],
+              d: `M ${sx} ${sy} L ${gx - side * R} ${sy} Q ${gx} ${sy} ${gx} ${sy - R} L ${gx} ${ey + R} Q ${gx} ${ey} ${gx - side * R} ${ey} L ${ex} ${ey}` };
+          };
+          const first = dx < 0 ? -1 : 1;
+          const lane = tryLane(first) || tryLane(-first);
+          if (lane) { d = lane.d; draftRoute = { kind: 'loop-back', points: lane.pts }; }
+        }
+
         // A line back UP to another flow (a "then posts to" callback): out of the card's right side, up the right-hand margin past every card,
         // and into the target's right side, rather than a straight diagonal across the map.
         if (!draftRoute && isCrossResource && !isSelfLink && dy < -60 && /^Then posts to/i.test(outRule.rule || '')) {
