@@ -2824,7 +2824,7 @@ export function _fvRenderSteps(resources) {
             // a Zap that a step in this row starts (a webhook hand-off) stays in the row, beside the Zap that starts it, so it reads as the
             // next step of that flow rather than being sent to a row of its own below
             const _calledHere = cur.some((c) => String(c.id) !== String(r.id) && (c.steps || []).some((st) => ((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(r.id) + '-'))));
-            if (cur.length && used + w > maxCols && !_calledHere) { rows.push(cur); cur = []; used = 0; }
+            if (cur.length && used + w > maxCols && !_calledHere && !(OL._fv.timeRows !== false && OL._fv.treeLayout !== false && !PRINTING)) { rows.push(cur); cur = []; used = 0; }   // the tree lays a whole workflow out at once, so it is not cut into rows
             cur.push(r); used += w;
           });
           if (cur.length) rows.push(cur);
