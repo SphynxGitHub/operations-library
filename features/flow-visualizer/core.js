@@ -2970,11 +2970,23 @@ export function _fvRenderSteps(resources) {
           resGap.set(r, COL_GAP);
           return;
         }
-        resBaseX.set(r, cumX);
+        // A process that a step of an earlier process hands off to (a webhook call) starts straight below that step, in its column,
+        // instead of in a new column to the right.
+        let _baseX = cumX, _under = false;
+        if (OL._fv.timeRows !== false && !PRINTING) {
+          for (const c of wfRes) {
+            if (c === r || !resBaseX.has(c) || String(c.id) === String(r.id)) continue;
+            const hit = (c.steps || []).find((st) => ((st.logic && st.logic.out) || []).some((l) => l && l._hookdir && l.targetId && String(l.targetId).startsWith(String(r.id) + '-')
+              && (r.steps || []).some((ts) => String(ts.id) === String(l.targetId).slice(String(r.id).length + 1) && !(ts.hideOnMap && !OL._fv.showHiddenSteps))));
+            if (hit) { _baseX = resBaseX.get(c) + (((resLayouts.get(c) || {})[hit.id] || {}).colOffset || 0) * (CARD_W + (resGap.get(c) || COL_GAP)); _under = true; break; }
+          }
+        }
+        resBaseX.set(r, _baseX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
         const g = gapFor(r, rLayout) + sideOfRes(r);
         resGap.set(r, g);
-        cumX += maxOff * (CARD_W + g) + CARD_W + COL_GAP + sideOfRes(r);
+        const _span = maxOff * (CARD_W + g) + CARD_W + COL_GAP + sideOfRes(r);
+        if (_under) cumX = Math.max(cumX, _baseX + _span); else cumX += _span;
       });
       const wfWidth = Math.max(cumX - PAD_X - COL_GAP + 28, 60);
       const wfRight = PAD_X + wfWidth;
