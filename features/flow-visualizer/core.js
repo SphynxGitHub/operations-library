@@ -3779,7 +3779,7 @@ export function _fvRenderSteps(resources) {
               let sh = NEG; for (let d = 0; d < Math.min(cur.R.length, sub.L.length); d++) sh = Math.max(sh, cur.R[d] - sub.L[d] + GAP);
               const x = sh === NEG ? cur.R[0] + GAP - sub.L[0] : sh;
               const extent = Math.max(...cur.R, ...sub.R.map((r) => r + x)) - Math.min(...cur.L, ...sub.L.map((l) => l + x));
-              if (extent <= availW) {
+              if (extent <= availW || n.kids.length < 3) {   // only a real fan-out wraps onto shelves; two branches always share a row, so a row of dead-end steps never sits across the trunk
                 cur.kids.push({ k, x }); sub.R.forEach((r, d) => { cur.R[d] = Math.max(cur.R[d] === undefined ? NEG : cur.R[d], r + x); }); sub.L.forEach((l, d) => { cur.L[d] = Math.min(cur.L[d] === undefined ? POS : cur.L[d], l + x); });
                 return;
               }
