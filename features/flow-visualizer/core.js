@@ -2596,6 +2596,7 @@ function fvTreeLayoutWf(scope, resList, startY, PAD_X, CARD_W, SIDE_W, SIDE_GAP,
     if (best) { best.jumps.push(j); best.side = Math.max(best.side, lf(j) + (parseFloat(j.style.width) || SIDE_W) - (lf(best.el) + CARD_W)); }
   });
   nodes.forEach((n) => { n.w = CARD_W + n.side; });
+  OL._fv._dbgInfo = { res: resList.length, ids: byId.size, nodes: nodes.size, startY };
   const hasIn = new Set(); nodes.forEach((n) => n.tgts.forEach((t) => hasIn.add(t)));
   const all = Array.from(nodes.values());
   const roots0 = all.filter((n) => !hasIn.has(n.el)).sort((a, b) => tp(a.el) - tp(b.el) || lf(a.el) - lf(b.el));
