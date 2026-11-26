@@ -4133,7 +4133,7 @@ export function _fvDrawStepConnections(resources) {
           const fr = rectOf(fromEl), tr = rectOf(toEl);   // (a hand-off to another Zap far below is a tag too: a line down the whole map crosses everything between)
           if (String(tResId) !== String(sourceRes.id) || Math.hypot(tr.left - fr.left, tr.top - fr.top) > 520 || ((OL._fv._nonTree || new Set()).has(fromEl.id + '>' + toEl.id) && Math.hypot(tr.left - fr.left, tr.top - fr.top) > 300)) {
             const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
-            const label = 'see ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
+            const label = 'also part of ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
             const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
             const x = fr.left - cRect.left + fr.width / 2 + ((_busRank.get(tStepId) || 0) * 14), y0 = fr.bottom - cRect.top;
             const pth = document.createElementNS(ns3, 'path');
