@@ -3586,8 +3586,8 @@ export function _fvRenderSteps(resources) {
 
         const actualWfH = wfBottom - wfTop + WF_PAD * 2;
         if (wfBgEl) wfBgEl.style.height = actualWfH + 'px';
-        if (wfBgEl && wfBgEl.parentNode && !OL.fvShowResNames()) {
-          // column names are hidden: draw a thin divider between neighbouring resources so the columns still read as separate
+        if (false && wfBgEl && wfBgEl.parentNode) {   // the dashed column dividers are gone: steps are one flow, not one column per process
+          // (was: column names are hidden: draw a thin divider between neighbouring resources so the columns still read as separate
           const xs = [...new Set((resMeta || []).map(m => m.colX))].sort((a, b) => a - b);
           for (let i = 1; i < xs.length; i++) {
             const dv = document.createElement('div');
