@@ -3704,6 +3704,124 @@ export function _fvRenderSteps(resources) {
       }));
     } catch (e) { console.warn('Fork centring skipped:', e); }
 
+    // One flow, laid out as a tree: start in the middle, go down until a step branches, spread its branches out from the middle (centred
+    // under it, each as wide as it needs), and tuck short dead-end branches in as a row beside it. A branch that will not fit across the
+    // window starts a new shelf below. A link that is not part of the tree (to a different section) is drawn as a jump-out tag.
+    OL._fv._nonTree = new Set();
+    try {
+      if (OL._fv.timeRows !== false && OL._fv.treeLayout !== false && !PRINTING && OL._fv.stageFilter && OL._fv.stageFilter !== '__overview') {
+        const byId = new Map(); canvas.querySelectorAll('[id^="fv-step-"]').forEach((e) => byId.set(e.id, e));
+        const cardOf = (e) => (e && e.dataset.consolCardId && document.getElementById(e.dataset.consolCardId)) || e;
+        const lf = (el) => parseFloat(el.style.left) || 0, tp = (el) => parseFloat(el.style.top) || 0;
+        const nodes = new Map();
+        const mk = (el) => { if (!nodes.has(el)) nodes.set(el, { el, kids: [], parent: null, tgts: [], w: CARD_W, h: hOf(el), side: 0, jumps: [], strip: null, x: 0, ds: 0 }); return nodes.get(el); };
+        const copies = new Map(); allActiveResources.forEach((r) => { const k = String(r.id); if (!copies.has(k)) copies.set(k, []); copies.get(k).push(r); });
+        allActiveResources.forEach((sres) => {
+          const myKey = fvDomKey(sres);
+          (sres.steps || []).forEach((sst) => {
+            const fe = cardOf(byId.get(`fv-step-${myKey}-${sst.id}`)); if (!fe) return;
+            const n = mk(fe);
+            OL._fvGetEffectiveOut(sst, sres).forEach((o) => {
+              if (!o.targetId || o._implicit) return;
+              const k = OL._refSplitIdx(String(o.targetId)); if (k === -1) return;
+              const tr = o.targetId.substring(0, k), ts = o.targetId.substring(k + 1);
+              let te = null;
+              if (String(tr) === String(sres.id)) te = byId.get(`fv-step-${myKey}-${ts}`);
+              if (!te) for (const c of (copies.get(String(tr)) || [])) { const e = byId.get(`fv-step-${fvDomKey(c)}-${ts}`); if (e) { te = e; break; } }
+              te = cardOf(te); if (!te || te === fe) return;
+              if (!n.tgts.includes(te)) n.tgts.push(te);
+            });
+          });
+        });
+        canvas.querySelectorAll('.fv-step-card').forEach((e) => mk(e));
+        nodes.forEach((n) => n.tgts.forEach((t) => { if (!nodes.has(t)) mk(t); }));
+        // small cards beside a step travel with it
+        const jc = Array.from(canvas.querySelectorAll('.fv-jump-card'));
+        jc.forEach((j) => {
+          const jl = lf(j), jt = tp(j); let best = null, bd = 1e9;
+          nodes.forEach((n) => { const nl = lf(n.el), nt = tp(n.el); if (jl >= nl + CARD_W - 20 && jl <= nl + CARD_W + SIDE_W + SIDE_GAP + 60 && jt >= nt - 14 && jt <= nt + n.h) { const d = Math.abs(jt - nt) + (jl - nl); if (d < bd) { bd = d; best = n; } } });
+          if (best) { best.jumps.push(j); best.side = Math.max(best.side, lf(j) + (parseFloat(j.style.width) || SIDE_W) - (lf(best.el) + CARD_W)); }
+        });
+        nodes.forEach((n) => { n.w = CARD_W + n.side; });
+        const hasIn = new Set(); nodes.forEach((n) => n.tgts.forEach((t) => hasIn.add(t)));
+        const all = Array.from(nodes.values());
+        const roots0 = all.filter((n) => !hasIn.has(n.el)).sort((a, b) => tp(a.el) - tp(b.el) || lf(a.el) - lf(b.el));
+        const seen = new Set(), q = [];
+        const begin = (n) => { seen.add(n.el); q.push(n); };
+        roots0.forEach(begin);
+        for (;;) {
+          while (q.length) { const n = q.shift(); n.tgts.slice().sort((a, b) => lf(a) - lf(b) || tp(a) - tp(b)).forEach((t) => { const c = nodes.get(t); if (seen.has(t)) { OL._fv._nonTree.add(n.el.id + '>' + t.id); return; } seen.add(t); c.parent = n; n.kids.push(c); q.push(c); }); }
+          const rest = all.find((n) => !seen.has(n.el)); if (!rest) break; begin(rest);
+        }
+        const roots = all.filter((n) => !n.parent);
+        // a short dead-end branch beside others becomes a row of its own
+        all.forEach((n) => {
+          if (n.kids.length < 2) return;
+          n.kids.forEach((k) => {
+            const chain = [k]; let c = k;
+            while (c.kids.length === 1 && chain.length < 4) { c = c.kids[0]; chain.push(c); }
+            if (chain.length >= 2 && chain.length <= 3 && c.kids.length === 0) { k.strip = chain; chain.slice(1).forEach((m) => { m.parent = k; }); k.kids = []; }
+          });
+        });
+        const GAP = 56, ROW = 84;
+        const availW = Math.max(320, fvLayoutWidth() - 2 * PAD_X);
+        const wOf = (n) => (n.strip ? n.strip.reduce((sum, m) => sum + m.w, 0) + (n.strip.length - 1) * GAP : n.w);
+        const NEG = -1e9, POS = 1e9;
+        const lay = (n) => {
+          const w = wOf(n);
+          if (!n.kids.length) return { L: [-w / 2], R: [w / 2] };
+          const subs = n.kids.map((k) => lay(k));
+          // shelves of branches across the available width
+          const shelves = []; let cur = null;
+          n.kids.forEach((k, i) => {
+            const sub = subs[i];
+            if (cur) {
+              let sh = NEG; for (let d = 0; d < Math.min(cur.R.length, sub.L.length); d++) sh = Math.max(sh, cur.R[d] - sub.L[d] + GAP);
+              const x = sh === NEG ? cur.R[0] + GAP - sub.L[0] : sh;
+              const extent = Math.max(...cur.R, ...sub.R.map((r) => r + x)) - Math.min(...cur.L, ...sub.L.map((l) => l + x));
+              if (extent <= availW) {
+                cur.kids.push({ k, x }); sub.R.forEach((r, d) => { cur.R[d] = Math.max(cur.R[d] === undefined ? NEG : cur.R[d], r + x); }); sub.L.forEach((l, d) => { cur.L[d] = Math.min(cur.L[d] === undefined ? POS : cur.L[d], l + x); });
+                return;
+              }
+            }
+            cur = { kids: [{ k, x: 0 }], L: sub.L.slice(), R: sub.R.slice() }; shelves.push(cur);
+          });
+          const L = [-w / 2], R = [w / 2]; let dOff = 1;
+          shelves.forEach((sh) => {
+            const xs = sh.kids.map((e) => e.x); const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+            sh.kids.forEach((e) => { e.k.x = e.x - mid; e.k.ds = dOff - 1; });
+            for (let d = 0; d < sh.L.length; d++) { L[dOff + d] = Math.min(L[dOff + d] === undefined ? POS : L[dOff + d], sh.L[d] - mid); R[dOff + d] = Math.max(R[dOff + d] === undefined ? NEG : R[dOff + d], sh.R[d] - mid); }
+            dOff += sh.L.length;
+          });
+          return { L, R };
+        };
+        const place = (n, cx, depth, out) => { n.cx = cx; n.depth = depth; out.push(n); n.kids.forEach((k) => place(k, cx + k.x, depth + 1 + k.ds, out)); };
+        let blockTop = PAD_Y_TREE();
+        function PAD_Y_TREE() { const tops = all.map((n) => tp(n.el)); return Math.min(...tops); }
+        let blockLeft = PAD_X;
+        const moves = [];
+        roots.forEach((root) => {
+          const c = lay(root);
+          const out = []; place(root, 0, 0, out);
+          const minX = Math.min(...c.L), maxX = Math.max(...c.R);
+          const rowH = []; out.forEach((n) => { const hs = n.strip ? n.strip.map((m) => m.h) : [n.h]; rowH[n.depth] = Math.max(rowH[n.depth] || 0, ...hs); });
+          const rowTop = []; let y = blockTop; for (let d = 0; d < rowH.length; d++) { rowTop[d] = y; y += (rowH[d] || 0) + ROW; }
+          out.forEach((n) => {
+            if (n.strip) { let x = blockLeft + (n.cx - wOf(n) / 2 - minX); n.strip.forEach((m) => { moves.push({ n: m, left: x, top: rowTop[n.depth] }); x += m.w + GAP; }); }
+            else moves.push({ n, left: blockLeft + (n.cx - n.w / 2 - minX), top: rowTop[n.depth] });
+          });
+          blockTop = y + 20;
+        });
+        const titles = Array.from(canvas.querySelectorAll('.fv-map-section-title'));
+        moves.forEach(({ n, left, top }) => {
+          const ol = lf(n.el), ot = tp(n.el), dx = left - ol, dy = top - ot;
+          titles.forEach((t) => { const tl = parseFloat(t.style.left) || 0, tt = parseFloat(t.style.top) || 0; if (Math.abs(tl - ol) < 2 && Math.abs(tt - (ot - 28)) < 4) { t.style.left = (tl + dx) + 'px'; t.style.top = (tt + dy) + 'px'; } });
+          n.jumps.forEach((j) => { j.style.left = ((parseFloat(j.style.left) || 0) + dx) + 'px'; j.style.top = ((parseFloat(j.style.top) || 0) + dy) + 'px'; });
+          n.el.style.left = left + 'px'; n.el.style.top = top + 'px';
+        });
+      }
+    } catch (e) { console.warn('Tree layout skipped:', e); }
+
     // Steps are one flow, not one column per process: a stack of cards (a lane) that would sit on another process's cards moves sideways into a
     // column that is free at its height, preferring the column of whatever sits straight above it, then the left-most free column.
     try {
@@ -4001,7 +4119,7 @@ export function _fvDrawStepConnections(resources) {
         // a path that goes to another section of the same Zap: a short stub and a "continues in" tag instead of a line across the map
         if (String(tResId) === String(sourceRes.id) && _toKey !== _myKey) {
           const fr = rectOf(fromEl), tr = rectOf(toEl);
-          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 1600) {
+          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 1600 || ((OL._fv._nonTree || new Set()).has(fromEl.id + '>' + toEl.id) && Math.hypot(tr.left - fr.left, tr.top - fr.top) > 300)) {
             const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
             const label = 'continues in ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
             const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
