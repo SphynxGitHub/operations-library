@@ -2596,7 +2596,6 @@ function fvTreeLayoutWf(scope, resList, startY, PAD_X, CARD_W, SIDE_W, SIDE_GAP,
     if (best) { best.jumps.push(j); best.side = Math.max(best.side, lf(j) + (parseFloat(j.style.width) || SIDE_W) - (lf(best.el) + CARD_W)); }
   });
   nodes.forEach((n) => { n.w = CARD_W + n.side; });
-  OL._fv._dbgInfo = { res: resList.length, ids: byId.size, nodes: nodes.size, startY };
   const hasIn = new Set(); nodes.forEach((n) => n.tgts.forEach((t) => hasIn.add(t)));
   const all = Array.from(nodes.values());
   const roots0 = all.filter((n) => !hasIn.has(n.el)).sort((a, b) => tp(a.el) - tp(b.el) || lf(a.el) - lf(b.el));
@@ -2679,7 +2678,6 @@ function fvTreeLayoutWf(scope, resList, startY, PAD_X, CARD_W, SIDE_W, SIDE_GAP,
     n.jumps.forEach((j) => { j.style.left = ((parseFloat(j.style.left) || 0) + dx) + 'px'; j.style.top = ((parseFloat(j.style.top) || 0) + dy) + 'px'; });
     n.el.style.left = left + 'px'; n.el.style.top = top + 'px';
   });
-  OL._fv._dbgTree = all.map((n) => ((n.el.innerText || n.el.id || '').slice(0, 16).replace(/\n/g, ' ')) + ' < ' + (n.parent ? (n.parent.el.innerText || n.parent.el.id || '').slice(0, 14).replace(/\n/g, ' ') : 'ROOT') + ' d' + n.depth + ' k' + n.kids.length);
   return Math.max(...moves.map(({ n, top }) => top + n.h));
 }
 
