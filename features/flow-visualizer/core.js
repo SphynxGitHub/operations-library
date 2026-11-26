@@ -3705,6 +3705,35 @@ export function _fvRenderSteps(resources) {
       }));
     } catch (e) { console.warn('Fork centring skipped:', e); }
 
+    // Steps are one flow, not one column per process: a stack of cards (a lane) that would sit on another process's cards moves sideways into a
+    // column that is free at its height, preferring the column of whatever sits straight above it, then the left-most free column.
+    try {
+      if (OL._fv.timeRows !== false && !PRINTING) {
+        const cs = Array.from(canvas.querySelectorAll('.fv-step-card'));
+        const mt = (el) => ({ l: parseFloat(el.style.left) || 0, t: parseFloat(el.style.top) || 0, w: parseFloat(el.style.width) || CARD_W, h: hOf(el) });
+        const lanes = new Map();
+        cs.forEach((el) => { const m = mt(el); const k = (el.dataset.resId || '') + '|' + (el.dataset.inst || '') + '|' + Math.round(m.l / 2); if (!lanes.has(k)) lanes.set(k, []); lanes.get(k).push(el); });
+        const L = Array.from(lanes.values()).map((els) => { const ms = els.map(mt); return { els, l: ms[0].l, w: ms[0].w, top: Math.min(...ms.map(m => m.t)), bot: Math.max(...ms.map(m => m.t + m.h)) }; }).sort((x, y) => x.top - y.top || x.l - y.l);
+        const lefts = Array.from(new Set(L.map(x => Math.round(x.l)))).sort((x, y) => x - y);
+        const placed = [];
+        const free = (l, w, top, bot) => !placed.some((q) => l < q.l + q.w - 2 && q.l < l + w - 2 && top < q.bot + 24 && q.top < bot + 24);
+        L.forEach((ln) => {
+          if (!free(ln.l, ln.w, ln.top, ln.bot)) {
+            const above = placed.filter((q) => q.bot <= ln.top + 1).sort((x, y) => y.bot - x.bot)[0];
+            const tries = (above ? [above.l] : []).concat(lefts);
+            const to = tries.find((c) => free(c, ln.w, ln.top, ln.bot));
+            if (to !== undefined && to !== ln.l) {
+              const d = to - ln.l;
+              ln.els.forEach((el) => { el.style.left = ((parseFloat(el.style.left) || 0) + d) + 'px'; });
+              canvas.querySelectorAll('.fv-map-section-title').forEach((t) => { const tl = parseFloat(t.style.left) || 0, tt = parseFloat(t.style.top) || 0; if (Math.abs(tl - ln.l) < 2 && tt >= ln.top - 40 && tt <= ln.bot) t.style.left = (tl + d) + 'px'; });
+              ln.l = to;
+            }
+          }
+          placed.push(ln);
+        });
+      }
+    } catch (e) { console.warn('Column packing skipped:', e); }
+
     // Cards of different processes that share a column (a hand-off stacked under its caller, paths side by side) must not sit on one another:
     // push the lower one, and the rest of its column, down until it clears.
     try {
