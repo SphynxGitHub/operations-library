@@ -889,7 +889,7 @@ export function renderVisualizer() {
   if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._clampExtra = 0; OL._fv._clampTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
   if (OL._fv && !OL._fv._fitRetry && OL._fv.layout === 'steps' && !OL._fv._colsOverride) {
     const kept = fvFitStore()[fvFitKey()];
-    if (kept && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._clampExtra = kept.extra || 0; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
+    if (kept && kept.extra !== undefined && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._clampExtra = kept.extra || 0; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
   }
   if (OL._fv) OL._fv._fitRetry = false;
   const wasOpen = OL._fv._lastInspectorResId;
