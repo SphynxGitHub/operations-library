@@ -2458,9 +2458,9 @@ function fvInstanceOf(res, wfId) {
 // MAP SECTIONS: a Zap whose steps carry section names is drawn as one column group per section, each a light copy of the real Zap that
 // shows only that section's steps (the others are hidden in the copy). The Zap itself is untouched. A section can be shown in another
 // workflow (res.sectionWf[firstStepId] = workflow id). Copies share the real id, so selecting, editing and the step panel work as usual.
-function fvSectionInstance(res, part, k) {
+function fvSectionInstance(res, part, k, wfKey) {
   const inst = Object.create(res);
-  Object.defineProperty(inst, '_inst', { value: `sec${k}`, enumerable: true });
+  Object.defineProperty(inst, '_inst', { value: wfKey ? `sec${k}~${wfKey}` : `sec${k}`, enumerable: true });
   Object.defineProperty(inst, '_secStart', { value: String(part.startId), enumerable: true });
   Object.defineProperty(inst, 'name', { value: part.marked ? `${res.name} — ${part.name}` : res.name, enumerable: true, writable: true });
   Object.defineProperty(inst, 'steps', { value: (res.steps || []).map((st) => {
@@ -2472,7 +2472,9 @@ function fvSectionInstance(res, part, k) {
   return inst;
 }
 // the workflow a section is shown in: the one chosen for it, else the workflow that holds the Zap
-const fvSectionHome = (res, part, homeWf) => { const w = (res.sectionWf || {})[String(part.startId)]; return w ? String(w) : String(homeWf); };
+// the workflows a section is shown in: one id, or a list when the same section stands in several stages (a Zap that several processes call)
+const fvSectionHomes = (res, part, homeWf) => { const w = (res.sectionWf || {})[String(part.startId)]; const l = (Array.isArray(w) ? w : (w ? [w] : [])).map(String).filter(Boolean); return l.length ? l : [String(homeWf)]; };
+const fvSectionHome = (res, part, homeWf) => fvSectionHomes(res, part, homeWf)[0];
 
 const fvDomKey = (res) => (res && res._inst ? `${res.id}~${res._inst}` : String(res.id));
 // The workflow a multi-placement resource is drawn in on the steps map: its first placement, else the first workflow that holds it.
@@ -2606,13 +2608,13 @@ export function _fvRenderSteps(resources) {
       wfRes0.forEach(r => {
         const parts = _secOf(r);
         if (!parts.length) { wfRes.push(r); return; }
-        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, wf.id) === String(wf.id)) wfRes.push(fvSectionInstance(r, pt, k)); });
+        parts.forEach((pt, k) => { const hs = fvSectionHomes(r, pt, wf.id); if (hs.includes(String(wf.id))) wfRes.push(fvSectionInstance(r, pt, k, hs.length > 1 ? wf.id : '')); });
       });
       resources.forEach(r => {
         const parts = _secOf(r); if (!parts.length) return;
         const home = _homeOf(r); if (!home || home === String(wf.id)) return;
-        parts.forEach((pt, k) => { if (fvSectionHome(r, pt, home) === String(wf.id) && (r.sectionWf || {})[String(pt.startId)]) {
-          const inst = fvSectionInstance(r, pt, k); const hw = wfAll.find(x => String(x.id) === home);
+        parts.forEach((pt, k) => { const hs = fvSectionHomes(r, pt, home); if (hs.includes(String(wf.id)) && (r.sectionWf || {})[String(pt.startId)]) {
+          const inst = fvSectionInstance(r, pt, k, hs.length > 1 ? wf.id : ''); const hw = wfAll.find(x => String(x.id) === home);
           if (hw) inst.name = `${inst.name} (from ${hw.name || 'another workflow'})`;     // so a section moved here says where it came from
           wfRes.push(inst);
         } });
@@ -8336,8 +8338,8 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         const _where = (w) => { const x = _wf.find(q => String(q.id) === String(w)); const g = x && _sg.find(q => String(q.id) === String(x.stageId)); return x ? ((g ? g.name + ' › ' : '') + (x.name || 'Workflow')) : 'with the rest of this Zap'; };
                         return `<div class="tiny" style="margin:8px 0 2px;font-weight:700;">Sections of this Zap and where each is shown</div>` + _parts.map((pt, i) => {
                             const here = String(pt.startId) === String(step.id);
-                            const w = (res.sectionWf || {})[String(pt.startId)] || '';
-                            return `<div class="tiny" style="padding:2px 0;${here ? 'color:var(--accent);font-weight:700;' : ''}">${i + 1}. ${esc(pt.marked ? pt.name : 'Opening section')} <span class="muted">— ${esc(w ? _where(w) : 'with the rest of this Zap')}</span></div>`;
+                            const w0 = (res.sectionWf || {})[String(pt.startId)] || ''; const w = Array.isArray(w0) ? w0.join(', ') : w0;
+                            return `<div class="tiny" style="padding:2px 0;${here ? 'color:var(--accent);font-weight:700;' : ''}">${i + 1}. ${esc(pt.marked ? pt.name : 'Opening section')} <span class="muted">— ${esc(w ? (Array.isArray(w0) ? w0.map(_where).join(' + ') : _where(w)) : 'with the rest of this Zap')}</span></div>`;
                         }).join('');
                     })()}
                     ${step.mapSection ? `<button class="btn tiny" style="margin-top:6px;" onclick="OL.updateAtomicStep('${resId}','${step.id}','mapSection','')">Merge back into the section before it</button>` : ''}
