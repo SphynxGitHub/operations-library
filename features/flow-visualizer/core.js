@@ -2996,6 +2996,7 @@ export function _fvRenderSteps(resources) {
         if (_under && !OL._fv._colsOverride && OL._fv.flowShape !== 'wide') {
           const _room = fvLayoutWidth() - PAD_X - (_span - COL_GAP) - (OL._fv._clampExtra || 0);
           OL._fv._hadUnder = true;
+          (OL._fv._dbg = OL._fv._dbg || []).push({ id: String(r.id), inst: r._inst || '', base0: _baseX, span: _span, maxOff, g, room: _room });
           _baseX = Math.max(PAD_X, Math.min(_baseX, _room));
         }
         resBaseX.set(r, _baseX);
