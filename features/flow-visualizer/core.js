@@ -2981,11 +2981,16 @@ export function _fvRenderSteps(resources) {
             if (hit) { _baseX = resBaseX.get(c) + (((resLayouts.get(c) || {})[hit.id] || {}).colOffset || 0) * (CARD_W + (resGap.get(c) || COL_GAP)); _under = true; break; }
           }
         }
-        resBaseX.set(r, _baseX);
         const maxOff = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
         const g = gapFor(r, rLayout) + sideOfRes(r);
-        resGap.set(r, g);
         const _span = maxOff * (CARD_W + g) + CARD_W + COL_GAP + sideOfRes(r);
+        // a process stacked under its caller must still end inside the visible width: slide it left just enough, never past the left padding
+        if (_under && !OL._fv._colsOverride && OL._fv.flowShape !== 'wide') {
+          const _room = fvLayoutWidth() - PAD_X - (_span - COL_GAP);
+          _baseX = Math.max(PAD_X, Math.min(_baseX, _room));
+        }
+        resBaseX.set(r, _baseX);
+        resGap.set(r, g);
         if (_under) cumX = Math.max(cumX, _baseX + _span); else cumX += _span;
       });
       const wfWidth = Math.max(cumX - PAD_X - COL_GAP + 28, 60);
