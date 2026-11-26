@@ -3705,6 +3705,27 @@ export function _fvRenderSteps(resources) {
       }));
     } catch (e) { console.warn('Fork centring skipped:', e); }
 
+    // Cards of different processes that share a column (a hand-off stacked under its caller, paths side by side) must not sit on one another:
+    // push the lower one, and the rest of its column, down until it clears.
+    try {
+      if (OL._fv.timeRows !== false && !PRINTING) {
+        const cs = Array.from(canvas.querySelectorAll('.fv-step-card'));
+        const mt = (el) => ({ l: parseFloat(el.style.left) || 0, t: parseFloat(el.style.top) || 0, w: parseFloat(el.style.width) || CARD_W, h: hOf(el), k: (el.dataset.resId || '') + '|' + (el.dataset.inst || '') });
+        for (let n = 0; n < 120; n++) {
+          let hit = null;
+          for (let i = 0; i < cs.length && !hit; i++) for (let j = 0; j < cs.length && !hit; j++) {
+            if (i === j) continue;
+            const A = mt(cs[i]), B = mt(cs[j]);
+            if (A.k === B.k || A.t > B.t) continue;
+            if (A.l < B.l + B.w - 2 && B.l < A.l + A.w - 2 && B.t < A.t + A.h + 14) hit = { B, el: cs[j], to: A.t + A.h + 38 };
+          }
+          if (!hit) break;
+          const d = hit.to - hit.B.t;
+          cs.forEach((c) => { const m = mt(c); if (m.k === hit.B.k && Math.abs(m.l - hit.B.l) < 2 && m.t >= hit.B.t - 0.5) c.style.top = (m.t + d) + 'px'; });
+        }
+      }
+    } catch (e) { console.warn('Overlap clearing skipped:', e); }
+
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
     const maxY = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.top)||0) + (el.classList.contains('fv-jump-card') ? (parseFloat(el.style.height) || 0) : hOf(el)) + 60), 600);
