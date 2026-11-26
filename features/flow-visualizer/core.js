@@ -4001,7 +4001,7 @@ export function _fvDrawStepConnections(resources) {
         // a path that goes to another section of the same Zap: a short stub and a "continues in" tag instead of a line across the map
         if (String(tResId) === String(sourceRes.id) && _toKey !== _myKey) {
           const fr = rectOf(fromEl), tr = rectOf(toEl);
-          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 380) {
+          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 1600) {
             const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
             const label = 'continues in ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
             const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
@@ -4076,6 +4076,8 @@ export function _fvDrawStepConnections(resources) {
           isVert = false;
         }
 
+        // two cards nearly one above the other: a straight line down, not an S-curve between slightly different centres
+        if (isVert && !isSelfLink && Math.abs(tx - fx) < 60 && dy > 0) tx = fx;
         const tension = Math.max(50, Math.abs(isVert ? dy : dx) * 0.4);
         const cp1x = isSelfLink ? fx + 56 : isVert ? fx : fx + (dx > 0 ?  tension : -tension);
         const cp1y = isVert && !isSelfLink ? fy + (dy > 0 ?  tension : -tension) : fy;
