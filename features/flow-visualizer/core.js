@@ -4157,8 +4157,8 @@ export function _fvDrawStepConnections(resources) {
 
         let fx, fy, tx, ty, isVert;
         if (isCrossResource) {
-          // Cross-resource: always exit from bottom or right (never top/left) to read as "forward"
-          if (dx > 0) {
+          // Cross-resource: a target below leaves the bottom and enters the top; only a target level with the card or above it is reached from the side
+          if (dx > 0 && tRect.top < fRect.bottom - 2) {
             // Target is to the right — exit right, enter left
             fx = fRect.right - cRect.left; fy = fy_center;
             tx = tRect.left  - cRect.left; ty = ty_center;
@@ -4262,7 +4262,7 @@ export function _fvDrawStepConnections(resources) {
 
         // A step beside-and-below (the next path across): out of the card's right edge, down the gap beside the target, and into the
         // target's left side, when nothing is in the way. Otherwise the run-across line below.
-        if (!draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
+        if (false && !draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.right - cRect.left, ex = tRect.left - cRect.left;
           if (ex - sx >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
@@ -4278,7 +4278,7 @@ export function _fvDrawStepConnections(resources) {
 
         // The same for a step beside-and-below on the left: out of the card's left edge, down the gap beside the target, into the
         // target's right side. (Two paths that join the same steps then each arrive at a side of their own, not on one line.)
-        if (!draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
+        if (false && !draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.left - cRect.left, ex = tRect.right - cRect.left;
           if (sx - ex >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
