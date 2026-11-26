@@ -4111,9 +4111,35 @@ export function _fvDrawStepConnections(resources) {
           }
         } catch (err) { draftRoute = null; console.warn('Draft line routing skipped:', err); }
 
+        // A step that fans out to several paths (Parallel Paths, a decision): out of its bottom, one shared run across just above the row of
+        // targets, and down into each one. Side routes from its edges crossed the neighbouring paths and tangled the map.
+        const _fan = !isCrossResource && !isSelfLink && ((typeof _fvGetEffectiveOut === 'function' ? _fvGetEffectiveOut(sourceStep, sourceRes) : []) || []).filter((l) => l && l.targetId).length > 1;
+        if (!draftRoute && _fan && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout')) {
+          const sy = fRect.bottom - cRect.top, ey = tRect.top - cRect.top;
+          const my = Math.max(sy + 14, ey - 40);
+          if (Math.abs(tx - fx) < 24) { /* straight down */ }
+          else if (ey - sy > 30) {
+            const hit = (x1, y1, x2, y2) => hitsCard(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1) || 2, Math.abs(y2 - y1) || 2, 2);
+            if (!hit(fx, sy + 2, fx, my) && !hit(fx, my, tx, my) && !hit(tx, my, tx, ey - 4)) {
+              const pts = [[fx, sy], [fx, my], [tx, my], [tx, ey]];
+              const R = 18; let dd = `M ${pts[0][0]} ${pts[0][1]}`;
+              for (let i = 1; i < pts.length; i++) {
+                const [px, py] = pts[i - 1], [cx, cy] = pts[i];
+                if (i < pts.length - 1) {
+                  const [nx, ny] = pts[i + 1];
+                  const r = Math.min(R, Math.hypot(cx - px, cy - py) / 2, Math.hypot(nx - cx, ny - cy) / 2);
+                  const ux = Math.sign(cx - px), uy = Math.sign(cy - py), vx = Math.sign(nx - cx), vy = Math.sign(ny - cy);
+                  dd += ` L ${cx - ux * r} ${cy - uy * r} Q ${cx} ${cy} ${cx + vx * r} ${cy + vy * r}`;
+                } else dd += ` L ${cx} ${cy}`;
+              }
+              d = dd; draftRoute = { points: pts, kind: 'bus' };
+            }
+          }
+        }
+
         // A step beside-and-below (the next path across): out of the card's right edge, down the gap beside the target, and into the
         // target's left side, when nothing is in the way. Otherwise the run-across line below.
-        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
+        if (!draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.right - cRect.left, ex = tRect.left - cRect.left;
           if (ex - sx >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
@@ -4129,7 +4155,7 @@ export function _fvDrawStepConnections(resources) {
 
         // The same for a step beside-and-below on the left: out of the card's left edge, down the gap beside the target, into the
         // target's right side. (Two paths that join the same steps then each arrive at a side of their own, not on one line.)
-        if (!draftRoute && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
+        if (!draftRoute && !_fan && !isCrossResource && !isSelfLink && isVert && dy > 0 && !(sourceRes.isDraft && sourceRes.source === 'frameout') && !(fromEl && fromEl.dataset.forked)) {
           const sx = fRect.left - cRect.left, ex = tRect.right - cRect.left;
           if (sx - ex >= 60) {
             const fmid = fRect.top - cRect.top + fRect.height / 2, tmid = tRect.top - cRect.top + tRect.height / 2;
