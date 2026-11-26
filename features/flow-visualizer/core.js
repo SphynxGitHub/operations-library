@@ -885,10 +885,11 @@ function fvFitStore() {
 }
 
 export function renderVisualizer() {
-  if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
+  if (OL._fv) OL._fv._hadUnder = false;
+  if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._clampExtra = 0; OL._fv._clampTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
   if (OL._fv && !OL._fv._fitRetry && OL._fv.layout === 'steps' && !OL._fv._colsOverride) {
     const kept = fvFitStore()[fvFitKey()];
-    if (kept && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
+    if (kept && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._clampExtra = kept.extra || 0; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
   }
   if (OL._fv) OL._fv._fitRetry = false;
   const wasOpen = OL._fv._lastInspectorResId;
@@ -1248,6 +1249,13 @@ export function renderVisualizer() {
     const have = fvLayoutWidth();
     const cols = OL._fv._renderedCols;
     const prev = OL._fv._fitPrevNeed;
+    // a process stacked under its caller (see _fvRenderSteps) slides left by what is still over, up to three times, before columns are taken off
+    if (need > have + 2 && OL._fv._hadUnder && (OL._fv._clampTries || 0) < 3) {
+      OL._fv._clampTries = (OL._fv._clampTries || 0) + 1;
+      OL._fv._clampExtra = (OL._fv._clampExtra || 0) + (need - have);
+      OL._fv._fitRetry = true;
+      return OL.renderVisualizer();
+    }
     if (prev !== undefined && need >= prev - 1) {
       OL._fv._fitCapCols = cols + 1; OL._fv._fitDone = true; OL._fv._fitRetry = true; OL._fv._fitPrevNeed = undefined;
       fvFitStore()[fvFitKey()] = { cols: cols + 1 };
@@ -1262,7 +1270,7 @@ export function renderVisualizer() {
       return OL.renderVisualizer();
     }
     OL._fv._fitPrevNeed = undefined;
-    if (Number.isFinite(cols) && cols > 0) fvFitStore()[fvFitKey()] = { cols };       // it fits: keep this count for the next draw
+    if (Number.isFinite(cols) && cols > 0) fvFitStore()[fvFitKey()] = { cols, extra: OL._fv._clampExtra || 0 };       // it fits: keep this count for the next draw
   }
 
   // Populate workbench if open
@@ -2986,7 +2994,8 @@ export function _fvRenderSteps(resources) {
         const _span = maxOff * (CARD_W + g) + CARD_W + COL_GAP + sideOfRes(r);
         // a process stacked under its caller must still end inside the visible width: slide it left just enough, never past the left padding
         if (_under && !OL._fv._colsOverride && OL._fv.flowShape !== 'wide') {
-          const _room = fvLayoutWidth() - PAD_X - (_span - COL_GAP);
+          const _room = fvLayoutWidth() - PAD_X - (_span - COL_GAP) - (OL._fv._clampExtra || 0);
+          OL._fv._hadUnder = true;
           _baseX = Math.max(PAD_X, Math.min(_baseX, _room));
         }
         resBaseX.set(r, _baseX);
