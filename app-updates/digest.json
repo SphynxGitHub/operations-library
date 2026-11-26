@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-25T14:32:07Z",
+  "updatedAt": "2026-11-26T10:24:34Z",
   "items": [
     {
       "app": "Google Workspace",
@@ -272,6 +272,46 @@
       "summary": "Holistiplan added an in-app AI Assistant that answers tax questions from the client's data, builds planning scenarios (Roth conversions, capital gains timing, current-year estimates) and can create or update Tax Letters from planning work. The release gives no pricing or plan-tier details.",
       "sourceUrl": "https://www.holistiplan.com/news/holistiplan-introduces-ai-assistant-to-answer-tax-questions-build-planning-scenarios-and-compare-tax-impacts/",
       "checkedAt": "2026-11-25"
+    },
+    {
+      "app": "Google Workspace",
+      "kind": "feature",
+      "date": "2026-11-24",
+      "summary": "Google's Workspace MCP servers (Gmail, Drive, Docs, Sheets, Slides, Calendar, Chat, Tasks) and Workspace CLI are generally available. The Standard API usage tier is free within quotas; from April 1, 2027 Scaled-tier customers pay for usage above daily free allowances. From February 1, 2027 AI agents must use MCP instead of calling the REST APIs directly, so check any agent-based automations.",
+      "sourceUrl": "https://workspaceupdates.googleblog.com/2026/11/mcp-servers-cli-standardized-usage-tiers-now-available.html",
+      "checkedAt": "2026-11-26"
+    },
+    {
+      "app": "ChatGPT",
+      "kind": "feature",
+      "date": "2026-11-23",
+      "summary": "A GPT-6.2 version tuned for the Chat tab began a gradual rollout to Plus, Pro, Business and Enterprise (admin-controlled on Enterprise), with claimed gains in following detailed instructions and reading images. Free and Go are not included yet.",
+      "sourceUrl": "https://www.notebookcheck.net/GPT-6-2-comes-to-ChatGPT-s-Chat-tab-but-only-for-paid-plans.1458765.0.html",
+      "checkedAt": "2026-11-26"
+    },
+    {
+      "app": "ChatGPT",
+      "kind": "feature",
+      "date": "2026-11-21",
+      "summary": "ChatGPT Space is rolling out to Plus users: a collaborative workspace for building pages, slides and sites with ChatGPT that can stay updated from connected tools, with editing on mobile.",
+      "sourceUrl": "https://uctoday.com/in-brief/chatgpt-space-comes-to-plus-users-for-shared-pages-slides-and-sites",
+      "checkedAt": "2026-11-26"
+    },
+    {
+      "app": "ChatGPT",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Dots, OpenAI's always-on proactive agents that can use apps through its plugins, began coming to ChatGPT Business Standard users, with a limited test for some Plus users.",
+      "sourceUrl": "https://www.engadget.com/2322656/openai-is-testing-dots-personal-agents-on-its-20-per-month-plus-tier/",
+      "checkedAt": "2026-11-26"
+    },
+    {
+      "app": "Income Lab",
+      "kind": "feature",
+      "date": "2026-11-19",
+      "summary": "Income Lab can now build and refresh plans from real account data, including holdings from Schwab and Redtail. Custodian and CRM integrations are in Core and Pro; client account linking, the AI-assisted Plan Builder and the Penny digital paraplanner are in Pro. No prices were given.",
+      "sourceUrl": "https://www.globenewswire.com/news-release/2026/11/19/3406781/0/en/income-lab-connects-client-holdings-from-custodians-and-crm-to-one-financial-plan.html",
+      "checkedAt": "2026-11-26"
     }
   ]
 }
