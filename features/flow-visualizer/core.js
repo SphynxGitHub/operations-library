@@ -2565,7 +2565,7 @@ export function fvOpenStage(value) {
 // Lays out the cards of one workflow (resList) from startY down and returns the bottom of the lowest card, or null if it did nothing.
 function fvTreeLayoutWf(scope, resList, startY, PAD_X, CARD_W, SIDE_W, SIDE_GAP, hOf) {
   const byId = new Map(); scope.querySelectorAll('[id^="fv-step-"]').forEach((e) => byId.set(e.id, e));
-  const cardOf = (e) => (e && e.dataset.consolCardId && scope.querySelector('[id="' + e.dataset.consolCardId + '"]')) || e;
+  const cardOf = (e) => (e && e.dataset.consolCardId && (e._consolEl || scope.querySelector('[id="' + e.dataset.consolCardId + '"]'))) || e;   // (the combined card may not be on the page yet, so the stand-in keeps a reference to it)
   const lf = (el) => parseFloat(el.style.left) || 0, tp = (el) => parseFloat(el.style.top) || 0;
   const nodes = new Map();
   const mk = (el) => { if (!nodes.has(el)) nodes.set(el, { el, kids: [], parent: null, tgts: [], w: CARD_W, h: hOf(el), side: 0, jumps: [], strip: null, x: 0, ds: 0 }); return nodes.get(el); };
@@ -3380,7 +3380,7 @@ export function _fvRenderSteps(resources) {
             const anchor = document.createElement('div');
             anchor.id = `fv-step-${fvDomKey(m.res)}-${m.step.id}`;
             if (m.res._inst) anchor.dataset.inst = m.res._inst;
-            anchor.dataset.consolCardId = consolEl.id;
+            anchor.dataset.consolCardId = consolEl.id; anchor._consolEl = consolEl;
             anchor.style.cssText = `position:absolute;left:${Math.round(consolCenterX - 1)}px;top:${cardY}px;width:2px;height:1px;pointer-events:none;opacity:0;`;
             frag.appendChild(anchor);
             consolAnchors.push(anchor);
