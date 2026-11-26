@@ -2678,6 +2678,7 @@ function fvTreeLayoutWf(scope, resList, startY, PAD_X, CARD_W, SIDE_W, SIDE_GAP,
     n.jumps.forEach((j) => { j.style.left = ((parseFloat(j.style.left) || 0) + dx) + 'px'; j.style.top = ((parseFloat(j.style.top) || 0) + dy) + 'px'; });
     n.el.style.left = left + 'px'; n.el.style.top = top + 'px';
   });
+  OL._fv._dbgTree = all.map((n) => ((n.el.innerText || n.el.id || '').slice(0, 16).replace(/\n/g, ' ')) + ' < ' + (n.parent ? (n.parent.el.innerText || n.parent.el.id || '').slice(0, 14).replace(/\n/g, ' ') : 'ROOT') + ' d' + n.depth + ' k' + n.kids.length);
   return Math.max(...moves.map(({ n, top }) => top + n.h));
 }
 
