@@ -3095,7 +3095,6 @@ export function _fvRenderSteps(resources) {
             })()}
           </div>
           ${res.isDraft ? `<div style="margin-top:4px;"><span class="fo-draft-chip fo-draft-chip-link" role="button" tabindex="0" title="Open in Frame-out" style="display:inline-block;margin:0;white-space:nowrap;" onclick="event.stopPropagation(); OL.openFrameOut('${res.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); OL.openFrameOut('${res.id}')}">DRAFT · Open in Frame-out</span></div>` : ''}
-          ${typeof OL.fvUsedChip === 'function' && OL.fvUsedChip(res) ? `<div style="margin-top:4px;">${OL.fvUsedChip(res)}</div>` : ''}
           ${typeof OL.fvCalloutStrip === 'function' ? OL.fvCalloutStrip(res) : ''}`;
         {
           const _ic = (d) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
