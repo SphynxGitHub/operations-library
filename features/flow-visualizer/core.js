@@ -3760,7 +3760,7 @@ export function _fvRenderSteps(resources) {
           n.kids.forEach((k) => {
             const chain = [k]; let c = k;
             while (c.kids.length === 1 && chain.length < 4) { c = c.kids[0]; chain.push(c); }
-            if (chain.length >= 2 && chain.length <= 3 && c.kids.length === 0) { k.strip = chain; chain.slice(1).forEach((m) => { m.parent = k; }); k.kids = []; }
+            if (false && chain.length >= 2 && chain.length <= 3 && c.kids.length === 0) {   // rows of dead-end steps are off: a short branch stacks down beside the trunk instead k.strip = chain; chain.slice(1).forEach((m) => { m.parent = k; }); k.kids = []; }
           });
         });
         const GAP = 56, ROW = 84;
@@ -3788,7 +3788,12 @@ export function _fvRenderSteps(resources) {
           });
           const L = [-w / 2], R = [w / 2]; let dOff = 1;
           shelves.forEach((sh) => {
-            const xs = sh.kids.map((e) => e.x); const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+            const xs = sh.kids.map((e) => e.x);
+            // two branches: the bigger one (the trunk) runs straight down under the step and the small one stacks beside it
+            const _size = (m) => 1 + m.kids.reduce((t, c2) => t + _size(c2), 0);
+            const _trunk = n.kids.length === 2 ? (_size(n.kids[0]) >= _size(n.kids[1]) ? n.kids[0] : n.kids[1]) : null;
+            const _te = _trunk && sh.kids.find((e) => e.k === _trunk);
+            const mid = _te ? _te.x : (Math.min(...xs) + Math.max(...xs)) / 2;
             sh.kids.forEach((e) => { e.k.x = e.x - mid; e.k.ds = dOff - 1; });
             for (let d = 0; d < sh.L.length; d++) { L[dOff + d] = Math.min(L[dOff + d] === undefined ? POS : L[dOff + d], sh.L[d] - mid); R[dOff + d] = Math.max(R[dOff + d] === undefined ? NEG : R[dOff + d], sh.R[d] - mid); }
             dOff += sh.L.length;
