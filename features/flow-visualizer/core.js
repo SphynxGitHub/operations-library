@@ -3760,7 +3760,8 @@ export function _fvRenderSteps(resources) {
           n.kids.forEach((k) => {
             const chain = [k]; let c = k;
             while (c.kids.length === 1 && chain.length < 4) { c = c.kids[0]; chain.push(c); }
-            if (false && chain.length >= 2 && chain.length <= 3 && c.kids.length === 0) {   // rows of dead-end steps are off: a short branch stacks down beside the trunk instead k.strip = chain; chain.slice(1).forEach((m) => { m.parent = k; }); k.kids = []; }
+            // rows of dead-end steps are off: a short branch stacks down beside the trunk instead
+            if (false && chain.length >= 2 && chain.length <= 3 && c.kids.length === 0) { k.strip = chain; chain.slice(1).forEach((m) => { m.parent = k; }); k.kids = []; }
           });
         });
         const GAP = 56, ROW = 84;
