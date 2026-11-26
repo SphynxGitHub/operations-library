@@ -4123,9 +4123,9 @@ export function _fvDrawStepConnections(resources) {
         if (!fromEl || !toEl) return;
 
         // a path that goes to another section of the same Zap: a short stub and a "continues in" tag instead of a line across the map
-        if (String(tResId) === String(sourceRes.id) && _toKey !== _myKey) {
-          const fr = rectOf(fromEl), tr = rectOf(toEl);
-          if (Math.hypot(tr.left - fr.left, tr.top - fr.top) > 1600 || ((OL._fv._nonTree || new Set()).has(fromEl.id + '>' + toEl.id) && Math.hypot(tr.left - fr.left, tr.top - fr.top) > 300)) {
+        if ((String(tResId) === String(sourceRes.id) && _toKey !== _myKey) || (String(tResId) !== String(sourceRes.id) && rectOf(toEl).top - rectOf(fromEl).bottom > 450)) {
+          const fr = rectOf(fromEl), tr = rectOf(toEl);   // (a hand-off to another Zap far below is a tag too: a line down the whole map crosses everything between)
+          if (String(tResId) !== String(sourceRes.id) || Math.hypot(tr.left - fr.left, tr.top - fr.top) > 1600 || ((OL._fv._nonTree || new Set()).has(fromEl.id + '>' + toEl.id) && Math.hypot(tr.left - fr.left, tr.top - fr.top) > 300)) {
             const tCopy = (copiesOf.get(String(tResId)) || []).find(c => fvDomKey(c) === _toKey);
             const label = 'continues in ' + String((tCopy && tCopy.name) || 'another section').replace(/\s*\(from .*\)$/, '').slice(0, 34);
             const g3 = document.getElementById('fv-lines'), ns3 = 'http://www.w3.org/2000/svg';
