@@ -886,10 +886,10 @@ function fvFitStore() {
 
 export function renderVisualizer() {
   if (OL._fv) OL._fv._hadUnder = false;
-  if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._clampExtra = 0; OL._fv._clampTries = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
+  if (OL._fv && !OL._fv._fitRetry) { OL._fv._fitTries = 0; OL._fv._clampExtra = 0; OL._fv._clampTries = 0; OL._fv._gapShrink = 0; OL._fv._fitCapCols = undefined; OL._fv._fitPrevNeed = undefined; OL._fv._fitDone = false; }
   if (OL._fv && !OL._fv._fitRetry && OL._fv.layout === 'steps' && !OL._fv._colsOverride) {
     const kept = fvFitStore()[fvFitKey()];
-    if (kept && kept.extra !== undefined && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._clampExtra = kept.extra || 0; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
+    if (kept && kept.extra !== undefined && Number.isFinite(kept.cols) && kept.cols > 0) { OL._fv._fitCapCols = kept.cols; OL._fv._clampExtra = kept.extra || 0; OL._fv._gapShrink = kept.shrink || 0; OL._fv._fitDone = true; }      // the last fit ended here: draw it once (see fvFitKey)
   }
   if (OL._fv) OL._fv._fitRetry = false;
   const wasOpen = OL._fv._lastInspectorResId;
@@ -1249,6 +1249,12 @@ export function renderVisualizer() {
     const have = fvLayoutWidth();
     const cols = OL._fv._renderedCols;
     const prev = OL._fv._fitPrevNeed;
+    // still over the edge: narrow the gutters between columns a little (the over-hang is spread across about four columns), up to 32px
+    if (need > have + 2 && (OL._fv._gapShrink || 0) < 32) {
+      OL._fv._gapShrink = Math.min(32, (OL._fv._gapShrink || 0) + Math.ceil((need - have) / 4) + 1);
+      OL._fv._fitRetry = true;
+      return OL.renderVisualizer();
+    }
     // a process stacked under its caller (see _fvRenderSteps) slides left by what is still over, up to three times, before columns are taken off
     if (need > have + 2 && OL._fv._hadUnder && (OL._fv._clampTries || 0) < 3) {
       OL._fv._clampTries = (OL._fv._clampTries || 0) + 1;
@@ -1270,7 +1276,7 @@ export function renderVisualizer() {
       return OL.renderVisualizer();
     }
     OL._fv._fitPrevNeed = undefined;
-    if (Number.isFinite(cols) && cols > 0) fvFitStore()[fvFitKey()] = { cols, extra: OL._fv._clampExtra || 0 };       // it fits: keep this count for the next draw
+    if (Number.isFinite(cols) && cols > 0) fvFitStore()[fvFitKey()] = { cols, extra: OL._fv._clampExtra || 0, shrink: OL._fv._gapShrink || 0 };       // it fits: keep this count for the next draw
   }
 
   // Populate workbench if open
@@ -2636,7 +2642,7 @@ export function _fvRenderSteps(resources) {
   OL._fvAutoLinkSteps(resources);
 
   const CARD_W    = 180;
-  const COL_GAP   = 76;
+  const COL_GAP   = 76 - (OL._fv._gapShrink || 0);   // the fit check narrows the gutters (down to 44px) when the columns still run past the edge
   const SIDE_W    = 150;  // a step's jumps are drawn as small cards beside it (width) ...
   const SIDE_GAP  = 30;   // ... with room for the arrow between the step and them
   const ZONE_PAD  = 20;
@@ -2996,7 +3002,6 @@ export function _fvRenderSteps(resources) {
         if (_under && !OL._fv._colsOverride && OL._fv.flowShape !== 'wide') {
           const _room = fvLayoutWidth() - PAD_X - (_span - COL_GAP) - (OL._fv._clampExtra || 0);
           OL._fv._hadUnder = true;
-          (OL._fv._dbg = OL._fv._dbg || []).push({ id: String(r.id), inst: r._inst || '', base0: _baseX, span: _span, maxOff, g, room: _room });
           _baseX = Math.max(PAD_X, Math.min(_baseX, _room));
         }
         resBaseX.set(r, _baseX);
