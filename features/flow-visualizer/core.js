@@ -3711,7 +3711,7 @@ export function _fvRenderSteps(resources) {
 
         if (!PRINTING && OL._fv.timeRows !== false && OL._fv.treeLayout !== false) {
           try {
-            const _tb = fvTreeLayoutWf(frag, (resMeta || []).map((rm) => rm.res), actualColY, PAD_X, CARD_W, SIDE_W, SIDE_GAP, hOf);
+            const _tb = fvTreeLayoutWf(canvas, (resMeta || []).map((rm) => rm.res), actualColY, PAD_X, CARD_W, SIDE_W, SIDE_GAP, hOf);
             if (_tb !== null && Number.isFinite(_tb)) wfBottom = _tb;
           } catch (e) { console.warn('Tree layout skipped:', e); }
         }
