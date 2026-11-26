@@ -4197,6 +4197,8 @@ export function _fvDrawStepConnections(resources) {
             fx = fRect.left  - cRect.left; fy = fy_center;
             tx = tRect.right - cRect.left; ty = ty_center;
           }
+          // two cards side by side on one row: one level straight line at a height both of them cover, not a wiggle between their centres
+          if (Math.abs(fRect.top - tRect.top) < 24) { const sy = fRect.top - cRect.top + Math.min(fRect.height, tRect.height) / 2; fy = sy; ty = sy; }
           isVert = false;
         }
 
