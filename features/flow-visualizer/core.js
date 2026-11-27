@@ -8686,6 +8686,17 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                 </div>
 
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="webhook" style="width:11px;height:11px;"></i> WEBHOOK
+                    </label>
+                    <input class="modal-input" style="width:100%;font-family:monospace;font-size:11.5px;" placeholder="Catch hook URL or ID (hooks.zapier.com/hooks/catch/…)"
+                           value="${esc(step.hookUrl || '')}"
+                           onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'hookUrl', this.value.trim()); OL._fvHookNote('${step.id}', this.value)">
+                    <div id="fv-hook-note-${esc(step.id)}" class="tiny muted" style="margin-top:4px;">${esc(OL._fvHookNoteText ? OL._fvHookNoteText(step.hookUrl || '') : '')}</div>
+                    <div class="tiny muted" style="margin-top:2px;">The address this step posts to, or the one that starts this Zap.</div>
+                </div>
+
                 ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}
 
                 <div class="inspector-section">
@@ -8950,6 +8961,15 @@ export function fvSetSectionWorkflow(resId, stepId, wfId) {
   });
   refreshFlowMap(resId, stepId);
 }
+
+// The webhook box on the step inspector: the ID inside a pasted catch-hook URL (or the ID typed on its own)
+export function _fvHookNoteText(v) {
+    const t = String(v || '').trim(); if (!t) return '';
+    const m = t.match(/hooks\.zapier\.com\/hooks\/catch\/(\d+)\/(\w+)/);
+    if (m) return 'Account ' + m[1] + ' · Hook ID ' + m[2];
+    return /^\w{5,}$/.test(t) ? 'Hook ID ' + t : 'Not a Zapier catch-hook address (kept as typed)';
+}
+export function _fvHookNote(stepId, v) { const el = document.getElementById('fv-hook-note-' + stepId); if (el) el.textContent = _fvHookNoteText(v); }
 
 export function updateAtomicStep(resId, stepId, field, value) {
     const data = OL.getCurrentProjectData(); 
@@ -10760,7 +10780,7 @@ Object.assign(window.OL, {
     _fvToggleCardSteps, _fvRenderSteps, _fvToggleConsolidated, _fvSetStepGroup, fvSetFlowShape, printFlowDiagram,
     _fvDrawStepConnections, _fvEditStageName, _fvJumpToLane,
     _fvSyncRailHeights, _fvDrawConnections, _fvHighlightGlobalConnections,
-    _fvToggleWb, _fvPopulateWb,
+    _fvToggleWb, _fvPopulateWb, _fvHookNote, _fvHookNoteText,
     _fvRenderWbItems, _fvFilterWb, _fvWbDragStart, _fvSetupRailScroll,
     _fvUnmapResource, _fvHandleCanvasClick, closeInspectorPanel, _fvSelectStep,
     _fvBuildListShell, _fvOpenStepsList, _fvReturnToResource, _fvAssignStageAndWorkflow, _fvOpenStepCanvas, fvJumpToPlacement, placementsEditor, placementSet, placementAdd, placementRemove, placementLabel, placementWhen, placementPlace, placementWhenText, getPlacements,
