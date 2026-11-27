@@ -1047,6 +1047,10 @@ export function renderVisualizer() {
             <i data-lucide="merge" style="width:13px;height:13px;"></i><span>Merge repeats</span>
         </button>
 
+        <button class="fv-toggle-btn" onclick="OL.openGroupVersions()" title="Combine the matching steps of several versions of one flow (one per advisor, account...)">
+          <i data-lucide="git-merge" style="width:12px;height:12px;"></i> Group versions
+        </button>
+
         ${OL._fv.onlyRes ? `<button class="fv-toggle-btn on" title="Back to the whole map" onclick="OL._fv.onlyRes=''; OL.renderVisualizer();"><i data-lucide="x"></i><span>Only: ${esc(String(((OL.getCurrentProjectData && OL.getCurrentProjectData().resources) || []).find(r => String(r.id) === String(OL._fv.onlyRes))?.name || 'this Zap').slice(0, 30))}</span></button>` : ''}
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
