@@ -3744,17 +3744,21 @@ export function _fvRenderSteps(resources) {
 
     // place the side cards now that every card has its final position, and remember the arrows to them
     const jumpArrows = []; const jumpReturns = []; const jumpChains = []; const hideLines = new Set();
+    const sideFollow = [];   // what was drawn beside each card, so it can follow if a later pass moves the card
     sideInfo.forEach((info, el) => {
       const cl = parseFloat(el.style.left) || 0, ct = parseFloat(el.style.top) || 0;
       const sl = cl + CARD_W + SIDE_GAP;
       let prevCallout = null;
+      const mine = { el, cl, ct, cards: [], arrows: [], chains: [], returns: [] }; sideFollow.push(mine);
       info.items.forEach((it) => {
         const top = Math.round(ct + it.relY);
-        if (prevCallout) jumpChains.push({ x: sl + SIDE_W / 2, y1: prevCallout, y2: top });   // callout to callout, in the order they are listed
+        if (prevCallout) { jumpChains.push({ x: sl + SIDE_W / 2, y1: prevCallout, y2: top }); mine.chains.push(jumpChains[jumpChains.length - 1]); }   // callout to callout, in the order they are listed
         prevCallout = top + it.h;
         canvas.insertAdjacentHTML('beforeend', OL.fvJumpCardHtml(info.step, info.res, it.c, it.when, { left: sl, top, w: SIDE_W, h: it.h }));
+        mine.cards.push(canvas.lastElementChild);
         if (it.chip) it.chip.classList.add('fv-co-linked');
         jumpArrows.push({ x1: cl + CARD_W, y1: ct + it.anchorY, x2: sl, y2: top + it.h / 2 });
+        mine.arrows.push(jumpArrows[jumpArrows.length - 1]);
         // "Continue original flow": the callout draws the line on to the next step, and the step's own direct line to it is not drawn
         if (it.c.continues && !it.c.missing) {
           const sts = info.res.steps || []; const at = sts.findIndex((x) => String(x.id) === String(info.step.id));
@@ -3765,7 +3769,7 @@ export function _fvRenderSteps(resources) {
             if (!nextId && at >= 0 && sts[at + 1]) nextId = String(sts[at + 1].id);
           }
           const nEl = nextId ? canvas.querySelector(`[id="fv-step-${fvDomKey(info.res)}-${nextId}"]`) : null;
-          if (nEl && nEl !== el) { jumpReturns.push({ x1: sl + SIDE_W / 2, y1: top + it.h, nEl }); hideLines.add(`${info.res.id}|${info.step.id}|${nextId}`); }
+          if (nEl && nEl !== el) { jumpReturns.push({ x1: sl + SIDE_W / 2, y1: top + it.h, nEl }); mine.returns.push(jumpReturns[jumpReturns.length - 1]); hideLines.add(`${info.res.id}|${info.step.id}|${nextId}`); }
         }
       });
     });
@@ -3886,6 +3890,16 @@ export function _fvRenderSteps(resources) {
         }
       }
     } catch (e) { console.warn('Overlap clearing skipped:', e); }
+
+    // The passes above move step cards (centring, free columns, overlaps): the small cards beside them, and their lines, move with them
+    sideFollow.forEach((m) => {
+      const dx = (parseFloat(m.el.style.left) || 0) - m.cl, dy = (parseFloat(m.el.style.top) || 0) - m.ct;
+      if (!dx && !dy) return;
+      m.cards.forEach((c) => { if (!c) return; c.style.left = ((parseFloat(c.style.left) || 0) + dx) + 'px'; c.style.top = ((parseFloat(c.style.top) || 0) + dy) + 'px'; });
+      m.arrows.forEach((a) => { a.x1 += dx; a.x2 += dx; a.y1 += dy; a.y2 += dy; });
+      m.chains.forEach((a) => { a.x += dx; a.y1 += dy; a.y2 += dy; });
+      m.returns.forEach((a) => { a.x1 += dx; a.y1 += dy; });
+    });
 
     const allCards = Array.from(canvas.querySelectorAll('.fv-step-card, .fv-jump-card'));
     const maxX = allCards.reduce((m, el) => Math.max(m, (parseFloat(el.style.left)||0) + (parseFloat(el.style.width)||CARD_W)), 800);
