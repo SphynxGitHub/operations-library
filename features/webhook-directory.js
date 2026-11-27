@@ -85,6 +85,15 @@ function allPosts() {
         });
         if (keep.length) posts[k] = keep;
     });
+    // an address typed in the Webhook box of a webhook step counts, unless the import already has a real address for that step
+    const real = new Set(); Object.keys(posts).filter((k) => !k.startsWith('step-')).forEach((k) => posts[k].forEach((c) => real.add(`${c.zapId}:${c.stepId}`)));
+    resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => {
+        const id = hookIdOf(s.hookUrl); const z = s.zap;
+        if (!id || !z || isTriggerStep(r, s) || !/webhook/i.test(String(z.app || ''))) return;
+        const zapId = String(r.originalZapId || r.id); const stepId = String(z.stepId);
+        if (real.has(`${zapId}:${stepId}`)) return;
+        (posts[id] = posts[id] || []).push({ zapId, stepId, zapName: String(r.name || ''), stepTitle: String(s.name || z.summary || '') });
+    }));
     const known = new Set(); Object.values(posts).forEach((v) => v.forEach((c) => known.add(`${c.zapId}:${c.stepId}`)));
     resources().filter((r) => r.type === 'Zap' && r.originalZapId).forEach((r) => (r.steps || []).forEach((s) => {
         const z = s.zap; if (!z || z.role === 'trigger' || z.action !== 'post' || !/webhook/i.test(String(z.app || ''))) return;
@@ -336,8 +345,8 @@ export function stepHookInfo(resId, step) {
     const n = (allPosts()[id] || []).length;
     return `${m ? 'Account ' + m[1] + ' · ' : ''}Hook ID ${id} · ${z ? 'starts ' + clean(z.name) : 'no Zap chosen for it yet'}${n ? ` · ${n} step${n === 1 ? '' : 's'} post to it` : ''}`;
 }
-// Save the address on the step. This only ever ADDS to the table, and never changes the map's lines for steps the import already
-// knows about: on a Zap's trigger it names the Zap the address starts (if that address has no Zap yet); on any other step it is a note.
+// Save the address on the step. On a Zap's trigger it names the Zap the address starts (if that address has no Zap yet); on a webhook
+// step the import has no address for, it records where that step posts. It never replaces an address or Zap already in the table.
 export function stepHookSet(resId, stepId, value) {
     const card = resources().find((r) => String(r.id) === String(resId));
     const step = card && (card.steps || []).find((s) => String(s.id) === String(stepId)); if (!step) return;
@@ -345,7 +354,8 @@ export function stepHookSet(resId, stepId, value) {
     OL.updateAndSync(() => {
         const d = data(); d.webhookMap = d.webhookMap || {};
         step.hookUrl = String(value || '').trim();
-        if (id && isTriggerStep(card, step) && !d.webhookMap[id]) { d.webhookMap[id] = String(card.id); OL.__whAdded = applyWebhookLinks(); }
+        if (id && isTriggerStep(card, step) && !d.webhookMap[id]) d.webhookMap[id] = String(card.id);
+        if (id && d.webhookMap[id]) OL.__whAdded = applyWebhookLinks();
     });
     if (typeof OL.renderVisualizer === 'function' && OL._fv) { try { OL.renderVisualizer(); } catch (e) { console.warn(e); } }
     if (typeof OL._fvRefreshInspector === 'function') requestAnimationFrame(() => requestAnimationFrame(() => OL._fvRefreshInspector(resId, stepId)));
