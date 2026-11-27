@@ -110,6 +110,8 @@ function hideMerged(card, step, to, key, target, trig) {
     const me = `${card.id}-${step.id}`;
     const explicit = (s) => ((s.logic && s.logic.out) || []).filter((l) => l.targetId);
     const preds = steps.filter((p, i) => p !== step && (explicit(p).some((l) => String(l.targetId) === me) || (i === idx - 1 && !explicit(p).length && !p.noAutoNext)));
+    // nothing links in and the step above has no lines of its own: it is still the step before, even if its default next link is off
+    if (!preds.length && !explicit(steps[idx - 1]).length) preds.push(steps[idx - 1]);
     if (!preds.length) return;
     const after = explicit(step).filter((l) => !l._hookdir);
     const onward = after.length ? after.map((l) => ({ id: String(l.targetId), l })) : (steps[idx + 1] && !step.noAutoNext ? [{ id: `${card.id}-${steps[idx + 1].id}`, l: {} }] : []);
@@ -200,6 +202,20 @@ export function applyWebhookLinks() {
                 ends.forEach((e) => { if (lineTo(e, next, `Then posts to “${clean(target.name)}” (${c.field})`, key)) added++; });
                 if (next !== `${target.id}-${trig.id}`) { trig.hideOnMap = true; trig._hookHidden = true; }
             });
+        });
+    });
+    // a posting step that stays on the map, but whose catch hook was hidden for another caller, gets its line to the step after the hook
+    const byRef = new Map(); resources().filter((r) => r.type === 'Zap').forEach((r) => (r.steps || []).forEach((s) => byRef.set(`${r.id}-${s.id}`, s)));
+    byRef.forEach((s) => {
+        if (s.hideOnMap) return;
+        ((s.logic && s.logic.out) || []).slice().forEach((l) => {
+            const t = byRef.get(String(l.targetId));
+            if (!t || !t._hookHidden || !(t.zap && t.zap.role === 'trigger')) return;
+            const cardId = String(l.targetId).slice(0, -(String(t.id).length + 1));
+            const card = resources().find((r) => String(r.id) === cardId); const ts = (card && card.steps) || [];
+            const outs = ((t.logic && t.logic.out) || []).filter((o) => o.targetId && !o._hookdir).map((o) => String(o.targetId));
+            const next = ts[ts.indexOf(t) + 1];
+            (outs.length ? outs : (next && !t.noAutoNext ? [`${cardId}-${next.id}`] : [])).forEach((to) => { if (lineTo(s, to, `Starts “${clean(card.name)}” (catch hook)`, l._hookdir || 'hidden-hook')) added++; });
         });
     });
     try { orderWorkflows(); } catch (e) { console.warn('Ordering Zaps by hand-off failed:', e); }
