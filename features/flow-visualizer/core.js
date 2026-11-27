@@ -8691,10 +8691,11 @@ export function _buildInspectorContent(resId, stepTarget, mode, panel, content, 
                         <i data-lucide="webhook" style="width:11px;height:11px;"></i> WEBHOOK
                     </label>
                     <input class="modal-input" style="width:100%;font-family:monospace;font-size:11.5px;" placeholder="Catch hook URL or ID (hooks.zapier.com/hooks/catch/…)"
-                           value="${esc(step.hookUrl || '')}"
-                           onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'hookUrl', this.value.trim()); OL._fvHookNote('${step.id}', this.value)">
-                    <div id="fv-hook-note-${esc(step.id)}" class="tiny muted" style="margin-top:4px;">${esc(OL._fvHookNoteText ? OL._fvHookNoteText(step.hookUrl || '') : '')}</div>
-                    <div class="tiny muted" style="margin-top:2px;">The address this step posts to, or the one that starts this Zap.</div>
+                           list="fv-hook-list" value="${esc(step.hookUrl || '')}"
+                           onchange="OL.fvStepHookSet('${resId}', '${step.id}', this.value)">
+                    <datalist id="fv-hook-list">${typeof OL.fvStepHookOptions === 'function' ? OL.fvStepHookOptions() : ''}</datalist>
+                    <div class="tiny muted" style="margin-top:4px;">${esc(typeof OL.fvStepHookInfo === 'function' ? OL.fvStepHookInfo(resId, step) : '')}</div>
+                    <div class="tiny muted" style="margin-top:2px;">The address this step posts to, or on a trigger the one that starts this Zap. It is added to the webhook table, and the map draws the lines.</div>
                 </div>
 
                 ${typeof OL.fvStepCalloutInspector === 'function' ? OL.fvStepCalloutInspector(resId, step) : ''}

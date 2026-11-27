@@ -44,8 +44,8 @@ const isPost = (s) => String(s.action || (s.zap && s.zap.action) || '').toLowerC
 
 const data = () => OL.getCurrentProjectData();
 const resources = () => (data().resources || data().localResources || []).filter((r) => r && !r.isDeleted);
-const cardOfZap = (zapId) => resources().find((r) => r.type === 'Zap' && String(r.originalZapId) === String(zapId));
-const stepOfZap = (card, stepId) => card && (card.steps || []).find((s) => s.zap && String(s.zap.stepId) === String(stepId));
+const cardOfZap = (zapId) => resources().find((r) => r.type === 'Zap' && (String(r.originalZapId) === String(zapId) || String(r.id) === String(zapId)));
+const stepOfZap = (card, stepId) => card && (card.steps || []).find((s) => (s.zap && String(s.zap.stepId) === String(stepId)) || String(s.id) === String(stepId));
 const triggerOf = (card) => card && ((card.steps || []).find((s) => s.zap && s.zap.role === 'trigger') || (card.steps || [])[0]);
 const clean = (n) => String(n || '').replace(/^\s*(?:⚡\s*)?/, '').trim();
 
@@ -77,6 +77,7 @@ function allPosts() {
     const stored = data().webhookPosts || {};
     Object.keys(stored).forEach((k) => {
         const keep = stored[k].filter((c) => {
+            if (c._manual) return true;                                      // typed in on the step inspector
             const st = stepOfZap(cardOfZap(c.zapId), c.stepId);
             if (st && st.zap && !isPost(st)) return false;                 // a Code step or other step that merely contains the address
             if (c.field && !HOOK_FIELD.test(c.field)) return false;         // a data field that is not about a webhook
@@ -300,4 +301,44 @@ export function openWebhookDirectory(keep) {
     if (window.lucide) lucide.createIcons();
 }
 
-Object.assign(OL, { webhookPick, openWebhookDirectory, webhookSetZap, webhookView, webhookSet, webhookFilter, webhookSave, applyWebhookLinks, collectWebhookPosts });
+// ---------- the Webhook box on the step inspector (kept in step with the full table above) ----------
+const hookIdOf = (v) => { const t = String(v || '').trim(); const m = t.match(/catch\/\d+\/(\w+)/); return m ? m[1] : (/^\w{5,}$/.test(t) ? t : ''); };
+const isTriggerStep = (card, step) => (step.zap ? step.zap.role === 'trigger' : (card.steps || [])[0] === step);
+
+// Every address in the table (posted to by a step, or already given to a Zap), for the box's drop-down list
+export function stepHookOptionsHtml() {
+    const d = data(); const map = d.webhookMap || {}; const posts = allPosts();
+    const keys = new Set(Object.keys(map)); Object.keys(posts).forEach((k) => { if (!k.startsWith('step-')) keys.add(k); });
+    return [...keys].sort().map((k) => { const z = resources().find((r) => String(r.id) === String(map[k])); return `<option value="${esc(k)}" label="${esc(z ? 'starts ' + clean(z.name) : 'no Zap chosen yet')}"></option>`; }).join('');
+}
+// What the table says about the address in this step's box
+export function stepHookInfo(resId, step) {
+    const t = String(step.hookUrl || '').trim(); if (!t) return '';
+    const m = t.match(/catch\/(\d+)\/(\w+)/); const id = hookIdOf(t);
+    if (!id) return 'Not a Zapier catch-hook address (kept as typed)';
+    const d = data(); const z = resources().find((r) => String(r.id) === String((d.webhookMap || {})[id]));
+    const n = (allPosts()[id] || []).length;
+    return `${m ? 'Account ' + m[1] + ' · ' : ''}Hook ID ${id} · ${z ? 'starts ' + clean(z.name) : 'no Zap chosen for it yet'}${n ? ` · ${n} step${n === 1 ? '' : 's'} post to it` : ''}`;
+}
+// Save the address on the step and put it in the table: on a Zap's trigger it names the Zap the address starts; on any other step it records that the step posts there
+export function stepHookSet(resId, stepId, value) {
+    const card = resources().find((r) => String(r.id) === String(resId));
+    const step = card && (card.steps || []).find((s) => String(s.id) === String(stepId)); if (!step) return;
+    const id = hookIdOf(value);
+    OL.updateAndSync(() => {
+        const d = data(); d.webhookMap = d.webhookMap || {}; d.webhookPosts = d.webhookPosts || {};
+        step.hookUrl = String(value || '').trim();
+        const trig = isTriggerStep(card, step);
+        if (trig) Object.keys(d.webhookMap).forEach((k) => { if (String(d.webhookMap[k]) === String(card.id) && k !== id) delete d.webhookMap[k]; });
+        else Object.keys(d.webhookPosts).forEach((k) => { d.webhookPosts[k] = d.webhookPosts[k].filter((c) => !(c._manual && c.cardId === String(card.id) && c.stepId === String(step.id))); if (!d.webhookPosts[k].length) delete d.webhookPosts[k]; });
+        if (id) {
+            if (trig) d.webhookMap[id] = String(card.id);
+            else (d.webhookPosts[id] = d.webhookPosts[id] || []).push({ zapId: String(card.originalZapId || card.id), stepId: String(step.zap ? step.zap.stepId : step.id), cardId: String(card.id), zapName: String(card.name || ''), stepTitle: String(step.name || ''), _manual: true });
+        }
+        OL.__whAdded = applyWebhookLinks();
+    });
+    if (typeof OL.renderVisualizer === 'function' && OL._fv) { try { OL.renderVisualizer(); } catch (e) { console.warn(e); } }
+    if (typeof OL._fvRefreshInspector === 'function') requestAnimationFrame(() => requestAnimationFrame(() => OL._fvRefreshInspector(resId, stepId)));
+}
+
+Object.assign(OL, { fvStepHookSet: stepHookSet, fvStepHookInfo: stepHookInfo, fvStepHookOptions: stepHookOptionsHtml, webhookPick, openWebhookDirectory, webhookSetZap, webhookView, webhookSet, webhookFilter, webhookSave, applyWebhookLinks, collectWebhookPosts });
