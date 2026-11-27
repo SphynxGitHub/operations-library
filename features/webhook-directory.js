@@ -320,22 +320,16 @@ export function stepHookInfo(resId, step) {
     const n = (allPosts()[id] || []).length;
     return `${m ? 'Account ' + m[1] + ' · ' : ''}Hook ID ${id} · ${z ? 'starts ' + clean(z.name) : 'no Zap chosen for it yet'}${n ? ` · ${n} step${n === 1 ? '' : 's'} post to it` : ''}`;
 }
-// Save the address on the step and put it in the table: on a Zap's trigger it names the Zap the address starts; on any other step it records that the step posts there
+// Save the address on the step. This only ever ADDS to the table, and never changes the map's lines for steps the import already
+// knows about: on a Zap's trigger it names the Zap the address starts (if that address has no Zap yet); on any other step it is a note.
 export function stepHookSet(resId, stepId, value) {
     const card = resources().find((r) => String(r.id) === String(resId));
     const step = card && (card.steps || []).find((s) => String(s.id) === String(stepId)); if (!step) return;
     const id = hookIdOf(value);
     OL.updateAndSync(() => {
-        const d = data(); d.webhookMap = d.webhookMap || {}; d.webhookPosts = d.webhookPosts || {};
+        const d = data(); d.webhookMap = d.webhookMap || {};
         step.hookUrl = String(value || '').trim();
-        const trig = isTriggerStep(card, step);
-        if (trig) Object.keys(d.webhookMap).forEach((k) => { if (String(d.webhookMap[k]) === String(card.id) && k !== id) delete d.webhookMap[k]; });
-        else Object.keys(d.webhookPosts).forEach((k) => { d.webhookPosts[k] = d.webhookPosts[k].filter((c) => !(c._manual && c.cardId === String(card.id) && c.stepId === String(step.id))); if (!d.webhookPosts[k].length) delete d.webhookPosts[k]; });
-        if (id) {
-            if (trig) d.webhookMap[id] = String(card.id);
-            else (d.webhookPosts[id] = d.webhookPosts[id] || []).push({ zapId: String(card.originalZapId || card.id), stepId: String(step.zap ? step.zap.stepId : step.id), cardId: String(card.id), zapName: String(card.name || ''), stepTitle: String(step.name || ''), _manual: true });
-        }
-        OL.__whAdded = applyWebhookLinks();
+        if (id && isTriggerStep(card, step) && !d.webhookMap[id]) { d.webhookMap[id] = String(card.id); OL.__whAdded = applyWebhookLinks(); }
     });
     if (typeof OL.renderVisualizer === 'function' && OL._fv) { try { OL.renderVisualizer(); } catch (e) { console.warn(e); } }
     if (typeof OL._fvRefreshInspector === 'function') requestAnimationFrame(() => requestAnimationFrame(() => OL._fvRefreshInspector(resId, stepId)));
